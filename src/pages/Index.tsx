@@ -4,7 +4,7 @@ import { ExpenseSummary } from "@/components/expense-summary";
 import { ExpenseForm } from "@/components/expense-form";
 import { ExpenseList } from "@/components/expense-list";
 import { ExpenseFilters, ExpenseFilters as ExpenseFiltersType } from "@/components/expense-filters";
-import { Expense, PaymentMethod } from "@/types/expense";
+import { Expense, PaymentMethod, ExpenseFormData } from "@/types/expense";
 import { toast } from "@/hooks/use-toast";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/hooks/use-auth";
@@ -75,29 +75,66 @@ export default function Index() {
     }
   };
 
-  const addExpense = async (description: string, amount: number, paymentMethod: PaymentMethod, expenseDate: Date) => {
+  const addExpense = async (data: ExpenseFormData) => {
     if (!user) return;
 
     try {
-      const { data, error } = await supabase
-        .from("expenses")
-        .insert({
-          description,
-          amount,
-          payment_method: paymentMethod,
-          user_id: user.id,
-          expense_date: expenseDate.toISOString().split('T')[0], // Format as YYYY-MM-DD
-        })
-        .select()
-        .single();
+      const { description, amount, paymentMethod, expenseDate, installments = 1 } = data;
+      
+      if (installments === 1) {
+        // Single expense
+        const { data: insertedData, error } = await supabase
+          .from("expenses")
+          .insert({
+            description,
+            amount,
+            payment_method: paymentMethod,
+            user_id: user.id,
+            expense_date: expenseDate.toISOString().split('T')[0],
+            total_installments: 1,
+            installment_number: 1,
+          })
+          .select()
+          .single();
 
-      if (error) throw error;
+        if (error) throw error;
+        setExpenses(prev => [insertedData, ...prev]);
+      } else {
+        // Multiple installments
+        const installmentGroupId = crypto.randomUUID();
+        const installmentAmount = amount / installments;
+        const expensesToInsert = [];
 
-      setExpenses(prev => [data, ...prev]);
+        for (let i = 1; i <= installments; i++) {
+          const installmentDate = new Date(expenseDate);
+          installmentDate.setMonth(installmentDate.getMonth() + (i - 1));
+          
+          expensesToInsert.push({
+            description: `${description} (${i}/${installments})`,
+            amount: installmentAmount,
+            payment_method: paymentMethod,
+            user_id: user.id,
+            expense_date: installmentDate.toISOString().split('T')[0],
+            total_installments: installments,
+            installment_number: i,
+            installment_group_id: installmentGroupId,
+          });
+        }
+
+        const { data: insertedData, error } = await supabase
+          .from("expenses")
+          .insert(expensesToInsert)
+          .select();
+
+        if (error) throw error;
+        setExpenses(prev => [...(insertedData || []), ...prev]);
+      }
       
       toast({
-        title: "Gasto adicionado!",
-        description: `${description} - R$ ${amount.toFixed(2)}`,
+        title: installments === 1 ? "Gasto adicionado!" : "Gasto parcelado adicionado!",
+        description: installments === 1 
+          ? `${description} - R$ ${amount.toFixed(2)}` 
+          : `${description} - ${installments}x de R$ ${(amount / installments).toFixed(2)}`,
       });
     } catch (error) {
       console.error("Error adding expense:", error);

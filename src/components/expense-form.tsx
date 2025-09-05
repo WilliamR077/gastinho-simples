@@ -8,11 +8,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { PlusCircle, CalendarIcon } from "lucide-react"
-import { PaymentMethod } from "@/types/expense"
+import { PaymentMethod, ExpenseFormData } from "@/types/expense"
 import { cn } from "@/lib/utils"
 
 interface ExpenseFormProps {
-  onAddExpense: (description: string, amount: number, paymentMethod: PaymentMethod, expenseDate: Date) => void
+  onAddExpense: (data: ExpenseFormData) => void
 }
 
 export function ExpenseForm({ onAddExpense }: ExpenseFormProps) {
@@ -20,6 +20,7 @@ export function ExpenseForm({ onAddExpense }: ExpenseFormProps) {
   const [amount, setAmount] = useState("")
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("")
   const [expenseDate, setExpenseDate] = useState<Date>(new Date())
+  const [installments, setInstallments] = useState("1")
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -33,13 +34,22 @@ export function ExpenseForm({ onAddExpense }: ExpenseFormProps) {
       return
     }
 
-    onAddExpense(description.trim(), numericAmount, paymentMethod, expenseDate)
+    const installmentCount = paymentMethod === "credit" ? parseInt(installments) : 1
+    
+    onAddExpense({
+      description: description.trim(),
+      amount: numericAmount,
+      paymentMethod,
+      expenseDate,
+      installments: installmentCount
+    })
     
     // Reset form
     setDescription("")
     setAmount("")
     setPaymentMethod("")
     setExpenseDate(new Date())
+    setInstallments("1")
   }
 
   return (
@@ -118,6 +128,24 @@ export function ExpenseForm({ onAddExpense }: ExpenseFormProps) {
               </SelectContent>
             </Select>
           </div>
+          
+          {paymentMethod === "credit" && (
+            <div className="space-y-2">
+              <Label htmlFor="installments">Número de Parcelas</Label>
+              <Select value={installments} onValueChange={setInstallments}>
+                <SelectTrigger className="transition-all duration-300 focus:shadow-elegant">
+                  <SelectValue placeholder="Selecione o número de parcelas" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map((num) => (
+                    <SelectItem key={num} value={num.toString()}>
+                      {num}x de R$ {(parseFloat(amount || "0") / num).toFixed(2).replace(".", ",")}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           
           <Button 
             type="submit" 

@@ -48,7 +48,10 @@ export type Database = {
           description: string
           expense_date: string
           id: string
+          installment_group_id: string | null
+          installment_number: number | null
           payment_method: Database["public"]["Enums"]["payment_method"]
+          total_installments: number | null
           updated_at: string
           user_id: string
         }
@@ -58,7 +61,10 @@ export type Database = {
           description: string
           expense_date?: string
           id?: string
+          installment_group_id?: string | null
+          installment_number?: number | null
           payment_method: Database["public"]["Enums"]["payment_method"]
+          total_installments?: number | null
           updated_at?: string
           user_id: string
         }
@@ -68,7 +74,10 @@ export type Database = {
           description?: string
           expense_date?: string
           id?: string
+          installment_group_id?: string | null
+          installment_number?: number | null
           payment_method?: Database["public"]["Enums"]["payment_method"]
+          total_installments?: number | null
           updated_at?: string
           user_id?: string
         }

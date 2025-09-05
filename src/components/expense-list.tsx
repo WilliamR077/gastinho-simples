@@ -66,6 +66,14 @@ export function ExpenseList({ expenses, onDeleteExpense }: ExpenseListProps) {
                           minute: '2-digit'
                         })}
                       </span>
+                      {expense.total_installments > 1 && (
+                        <>
+                          <span className="hidden sm:inline">•</span>
+                          <span className="font-medium text-primary">
+                            {expense.installment_number}/{expense.total_installments}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
