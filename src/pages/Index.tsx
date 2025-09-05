@@ -255,7 +255,7 @@ export default function Index() {
             <img 
               src="/lovable-uploads/06a1acc2-f553-41f0-8d87-32d25b4e425e.png" 
               alt="Gastinho Simples - Controle de Gastos" 
-              className="h-30 w-auto"
+              className="h-25 w-auto"
             />
           </div>
           <div className="flex items-center gap-2 w-full sm:w-auto">
