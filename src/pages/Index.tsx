@@ -252,13 +252,11 @@ export default function Index() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
           <div className="flex items-center gap-3">
-            <div className="p-3 rounded-full bg-gradient-primary shadow-elegant">
-              <Wallet className="h-6 w-6 text-primary-foreground" />
-            </div>
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Controle de Gastos</h1>
-              <p className="text-sm sm:text-base text-muted-foreground">Gerencie suas despesas de forma simples e eficiente</p>
-            </div>
+            <img 
+              src="/lovable-uploads/06a1acc2-f553-41f0-8d87-32d25b4e425e.png" 
+              alt="Gastinho Simples - Controle de Gastos" 
+              className="h-12 w-auto"
+            />
           </div>
           <div className="flex items-center gap-2 w-full sm:w-auto">
             <Button
