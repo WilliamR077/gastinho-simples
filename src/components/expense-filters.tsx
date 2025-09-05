@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { CalendarIcon, FilterX, ChevronDown } from "lucide-react";
-import { format } from "date-fns";
+import { format, startOfMonth, endOfMonth } from "date-fns";
 import { cn } from "@/lib/utils";
 import { PaymentMethod } from "@/types/expense";
 
@@ -29,8 +29,35 @@ interface ExpenseFiltersProps {
 }
 
 export function ExpenseFilters({ filters, onFiltersChange, billingPeriods = [] }: ExpenseFiltersProps) {
-  const [localFilters, setLocalFilters] = useState<ExpenseFilters>(filters);
+  const [localFilters, setLocalFilters] = useState<ExpenseFilters>(() => {
+    const currentDate = new Date();
+    const monthStart = startOfMonth(currentDate);
+    const monthEnd = endOfMonth(currentDate);
+    
+    return {
+      ...filters,
+      startDate: filters.startDate || monthStart,
+      endDate: filters.endDate || monthEnd,
+    };
+  });
   const [isOpen, setIsOpen] = useState(false);
+
+  // Atualiza os filtros quando o componente é montado com as datas padrão
+  useEffect(() => {
+    if (!filters.startDate && !filters.endDate) {
+      const currentDate = new Date();
+      const monthStart = startOfMonth(currentDate);
+      const monthEnd = endOfMonth(currentDate);
+      
+      const defaultFilters = {
+        ...filters,
+        startDate: monthStart,
+        endDate: monthEnd,
+      };
+      
+      onFiltersChange(defaultFilters);
+    }
+  }, []);
 
   const handleFilterChange = (key: keyof ExpenseFilters, value: any) => {
     const newFilters = { ...localFilters, [key]: value };
@@ -42,9 +69,16 @@ export function ExpenseFilters({ filters, onFiltersChange, billingPeriods = [] }
   };
 
   const clearFilters = () => {
-    const emptyFilters: ExpenseFilters = {};
-    setLocalFilters(emptyFilters);
-    onFiltersChange(emptyFilters);
+    const currentDate = new Date();
+    const monthStart = startOfMonth(currentDate);
+    const monthEnd = endOfMonth(currentDate);
+    
+    const defaultFilters: ExpenseFilters = {
+      startDate: monthStart,
+      endDate: monthEnd,
+    };
+    setLocalFilters(defaultFilters);
+    onFiltersChange(defaultFilters);
   };
 
   return (
