@@ -17,7 +17,7 @@ export default function Index() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<ExpenseFiltersType>({});
-  const [creditCardConfig, setCreditCardConfig] = useState<{opening_day: number; closing_day: number} | null>(null);
+  const [creditCardConfig, setCreditCardConfig] = useState<{ opening_day: number; closing_day: number } | null>(null);
   const { user, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
 
@@ -66,7 +66,7 @@ export default function Index() {
         .maybeSingle();
 
       if (error) throw error;
-      
+
       if (data) {
         setCreditCardConfig(data);
       }
@@ -78,9 +78,17 @@ export default function Index() {
   const addExpense = async (data: ExpenseFormData) => {
     if (!user) return;
 
+    // Função para formatar a data em YYYY-MM-DD no fuso local
+    const formatDateLocal = (date: Date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    };
+
     try {
       const { description, amount, paymentMethod, expenseDate, installments = 1 } = data;
-      
+
       if (installments === 1) {
         // Single expense
         const { data: insertedData, error } = await supabase
@@ -90,7 +98,7 @@ export default function Index() {
             amount,
             payment_method: paymentMethod,
             user_id: user.id,
-            expense_date: expenseDate.toISOString().split('T')[0],
+            expense_date: formatDateLocal(expenseDate),
             total_installments: 1,
             installment_number: 1,
           })
@@ -108,13 +116,13 @@ export default function Index() {
         for (let i = 1; i <= installments; i++) {
           const installmentDate = new Date(expenseDate);
           installmentDate.setMonth(installmentDate.getMonth() + (i - 1));
-          
+
           expensesToInsert.push({
             description: `${description} (${i}/${installments})`,
             amount: installmentAmount,
             payment_method: paymentMethod,
             user_id: user.id,
-            expense_date: installmentDate.toISOString().split('T')[0],
+            expense_date: formatDateLocal(installmentDate),
             total_installments: installments,
             installment_number: i,
             installment_group_id: installmentGroupId,
@@ -129,11 +137,11 @@ export default function Index() {
         if (error) throw error;
         setExpenses(prev => [...(insertedData || []), ...prev]);
       }
-      
+
       toast({
         title: installments === 1 ? "Gasto adicionado!" : "Gasto parcelado adicionado!",
-        description: installments === 1 
-          ? `${description} - R$ ${amount.toFixed(2)}` 
+        description: installments === 1
+          ? `${description} - R$ ${amount.toFixed(2)}`
           : `${description} - ${installments}x de R$ ${(amount / installments).toFixed(2)}`,
       });
     } catch (error) {
@@ -156,7 +164,7 @@ export default function Index() {
       if (error) throw error;
 
       setExpenses(prev => prev.filter(expense => expense.id !== id));
-      
+
       toast({
         title: "Gasto removido",
         description: "O gasto foi excluído com sucesso.",
@@ -218,8 +226,8 @@ export default function Index() {
       // Filtro de período de faturamento (apenas para crédito)
       if (filters.billingPeriod && creditCardConfig) {
         const billingExpenses = filterExpensesByBillingPeriod(
-          [expense], 
-          filters.billingPeriod, 
+          [expense],
+          filters.billingPeriod,
           creditCardConfig
         );
         if (billingExpenses.length === 0) return false;
@@ -252,9 +260,9 @@ export default function Index() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
           <div className="flex items-center gap-3">
-            <img 
-              src="/lovable-uploads/06a1acc2-f553-41f0-8d87-32d25b4e425e.png" 
-              alt="Gastinho Simples - Controle de Gastos" 
+            <img
+              src="/lovable-uploads/06a1acc2-f553-41f0-8d87-32d25b4e425e.png"
+              alt="Gastinho Simples - Controle de Gastos"
               className="h-20 w-auto"
             />
           </div>
@@ -283,7 +291,7 @@ export default function Index() {
 
         {/* Filtros */}
         <div className="mb-8">
-          <ExpenseFilters 
+          <ExpenseFilters
             filters={filters}
             onFiltersChange={setFilters}
             billingPeriods={billingPeriods}
@@ -304,8 +312,8 @@ export default function Index() {
 
           {/* Expense List */}
           <div className="space-y-6">
-            <ExpenseList 
-              expenses={filteredExpenses} 
+            <ExpenseList
+              expenses={filteredExpenses}
               onDeleteExpense={deleteExpense}
             />
           </div>
