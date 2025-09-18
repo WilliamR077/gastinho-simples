@@ -1,10 +1,15 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'app.lovable.a1f2a0b138be48118b362e341ccca268',
+  appId: 'com.gastinhosimples.app',
   appName: 'Gastinho Simples',
   webDir: 'dist',
-  bundledWebRuntime: false
+  bundledWebRuntime: false,
+  plugins: {
+    AdMob: {
+      appIdAndroid: "ca-app-pub-3940256099942544~3347511713" // ID de teste
+    }
+  }
 };
 
 export default config;

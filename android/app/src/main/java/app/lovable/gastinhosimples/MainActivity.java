@@ -1,4 +1,4 @@
-package app.lovable.a1f2a0b138be48118b362e341ccca268;
+package com.gastinhosimples.app;
 
 import com.getcapacitor.BridgeActivity;
 
