@@ -1,21 +1,21 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace "app.lovable.a1f2a0b138be48118b362e341ccca268"
-    compileSdk rootProject.ext.compileSdkVersion
+    namespace "com.gastinhosimples.app"
+    compileSdkVersion 35
+
     defaultConfig {
-        applicationId "app.lovable.a1f2a0b138be48118b362e341ccca268"
-        minSdkVersion rootProject.ext.minSdkVersion
-        targetSdkVersion rootProject.ext.targetSdkVersion
+        applicationId "com.gastinhosimples.app"
+        minSdkVersion 23
+        targetSdkVersion 34
         versionCode 1
-        versionName "1.0"
+        versionName "1.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
-             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
-             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+
     buildTypes {
         release {
             minifyEnabled false
@@ -25,10 +25,11 @@ android {
 }
 
 repositories {
-    flatDir{
+    flatDir {
         dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
     }
 }
+
 
 dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
