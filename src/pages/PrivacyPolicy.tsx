@@ -56,8 +56,8 @@ export default function PrivacyPolicy() {
           <h2>1. Quem é o controlador dos dados</h2>
           <p>
             Nome do serviço: <strong>Gastinho Simples</strong><br />
-            Site / domínio: <strong>https://seudominio.com</strong><br />
-            Contato: <strong>seu.email@seudominio.com</strong>
+            Site / domínio: <strong>https://gastinho-simples.lovable.app</strong><br />
+            Contato: <strong>gastinhosimples@gmail.com</strong>
           </p>
 
           <h2>2. Quais dados coletamos</h2>
@@ -109,7 +109,7 @@ export default function PrivacyPolicy() {
           <p>
             Você tem direito de acessar, corrigir, excluir, limitar o uso ou solicitar
             portabilidade dos seus dados. Para exercer, entre em contato em
-            <strong> seu.email@seudominio.com</strong>.
+            <strong> gastinhosimples@gmail.com</strong>.
           </p>
 
           <h2>9. Exclusão da conta</h2>
@@ -126,7 +126,7 @@ export default function PrivacyPolicy() {
 
           <h2>11. Contato</h2>
           <p>
-            Dúvidas? Entre em contato pelo e-mail: <strong>seu.email@seudominio.com</strong>
+            Dúvidas? Entre em contato pelo e-mail: <strong>gastinhosimples@gmail.com</strong>
           </p>
         </div>
       </div>
