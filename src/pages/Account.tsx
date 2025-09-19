@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, User, Mail, Lock, Trash2, Save } from "lucide-react";
+import { ArrowLeft, User, Mail, Lock, Trash2, Save, Shield } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { validatePasswordStrength, sanitizeErrorMessage, isEmailValid } from "@/utils/security";
 import { Progress } from "@/components/ui/progress";
@@ -20,7 +20,7 @@ export default function Account() {
   const [loading, setLoading] = useState(false);
   const [emailLoading, setEmailLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
-  
+
   // Form states
   const [newEmail, setNewEmail] = useState(user?.email || "");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -148,12 +148,12 @@ export default function Account() {
 
       // Sign out the user (Supabase Auth requires admin privileges to delete users)
       await signOut();
-      
+
       toast({
         title: "Dados removidos",
         description: "Seus dados de gastos foram removidos. Sua conta de acesso permanece ativa.",
       });
-      
+
       navigate("/auth");
     } catch (error: any) {
       toast({
@@ -225,6 +225,20 @@ export default function Account() {
                     disabled
                   />
                 </div>
+              </div>
+
+
+              {/* Botão de Política de Privacidade */}
+              <div className="pt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate("/privacy")}
+                  className="flex items-center gap-2"
+                >
+                  <Shield className="w-4 h-4" />
+                  Política de Privacidade
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -298,11 +312,11 @@ export default function Account() {
                       <span>Força da senha:</span>
                       <span className={
                         passwordStrength.score >= 4 ? "text-green-600" :
-                        passwordStrength.score >= 3 ? "text-yellow-600" :
-                        "text-red-600"
+                          passwordStrength.score >= 3 ? "text-yellow-600" :
+                            "text-red-600"
                       }>
                         {passwordStrength.score >= 4 ? "Forte" :
-                         passwordStrength.score >= 3 ? "Média" : "Fraca"}
+                          passwordStrength.score >= 3 ? "Média" : "Fraca"}
                       </span>
                     </div>
                     <Progress value={(passwordStrength.score / 5) * 100} className="h-2" />
@@ -354,7 +368,7 @@ export default function Account() {
                 <div>
                   <h3 className="font-semibold text-destructive mb-2">Excluir Conta</h3>
                   <p className="text-sm text-muted-foreground mb-4">
-                    Esta ação excluirá permanentemente sua conta e todos os dados associados. 
+                    Esta ação excluirá permanentemente sua conta e todos os dados associados.
                     Esta ação não pode ser desfeita.
                   </p>
                   <AlertDialog>
