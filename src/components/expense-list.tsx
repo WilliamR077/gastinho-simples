@@ -55,7 +55,7 @@ export function ExpenseList({ expenses, onDeleteExpense }: ExpenseListProps) {
                     <p className="font-medium text-foreground truncate">{expense.description}</p>
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-xs sm:text-sm text-muted-foreground">
                       <span>
-                        Data: {new Date(expense.expense_date).toLocaleDateString('pt-BR')}
+                        Data: {expense.expense_date.split('-').reverse().join('/')}
                       </span>
                       <span className="hidden sm:inline">•</span>
                       <span>
