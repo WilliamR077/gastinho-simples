@@ -83,6 +83,42 @@ export type Database = {
         }
         Relationships: []
       }
+      recurring_expenses: {
+        Row: {
+          amount: number
+          created_at: string
+          day_of_month: number
+          description: string
+          id: string
+          is_active: boolean
+          payment_method: Database["public"]["Enums"]["payment_method"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          day_of_month: number
+          description: string
+          id?: string
+          is_active?: boolean
+          payment_method: Database["public"]["Enums"]["payment_method"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          day_of_month?: number
+          description?: string
+          id?: string
+          is_active?: boolean
+          payment_method?: Database["public"]["Enums"]["payment_method"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

@@ -5,16 +5,22 @@ import { ExpenseForm } from "@/components/expense-form";
 import { ExpenseList } from "@/components/expense-list";
 import { ExpenseFilters, ExpenseFilters as ExpenseFiltersType } from "@/components/expense-filters";
 import { Expense, PaymentMethod, ExpenseFormData } from "@/types/expense";
+import { RecurringExpense } from "@/types/recurring-expense";
+import { RecurringExpenseForm } from "@/components/recurring-expense-form";
+import { RecurringExpenseList } from "@/components/recurring-expense-list";
+import { RecurringExpenseFormData } from "@/types/recurring-expense";
 import { toast } from "@/hooks/use-toast";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LogOut, Wallet, User } from "lucide-react";
 import { generateBillingPeriods, filterExpensesByBillingPeriod } from "@/utils/billing-period";
 
 export default function Index() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<ExpenseFiltersType>({});
   const [creditCardConfig, setCreditCardConfig] = useState<{opening_day: number; closing_day: number} | null>(null);
@@ -32,6 +38,7 @@ export default function Index() {
   useEffect(() => {
     if (user) {
       loadExpenses();
+      loadRecurringExpenses();
       loadCreditCardConfig();
     }
   }, [user]);
@@ -54,6 +61,25 @@ export default function Index() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadRecurringExpenses = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("recurring_expenses")
+        .select("*")
+        .order("day_of_month", { ascending: true });
+
+      if (error) throw error;
+      setRecurringExpenses(data || []);
+    } catch (error) {
+      console.error("Error loading recurring expenses:", error);
+      toast({
+        title: "Erro ao carregar despesas fixas",
+        description: "Não foi possível carregar as despesas fixas.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -175,6 +201,96 @@ export default function Index() {
       toast({
         title: "Erro ao remover gasto",
         description: "Não foi possível remover o gasto.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const addRecurringExpense = async (data: RecurringExpenseFormData) => {
+    if (!user) return;
+
+    try {
+      const { data: insertedData, error } = await supabase
+        .from("recurring_expenses")
+        .insert({
+          description: data.description,
+          amount: data.amount,
+          payment_method: data.paymentMethod,
+          day_of_month: data.dayOfMonth,
+          user_id: user.id,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      setRecurringExpenses(prev => [...prev, insertedData].sort((a, b) => a.day_of_month - b.day_of_month));
+      
+      toast({
+        title: "Despesa fixa adicionada!",
+        description: `${data.description} - R$ ${data.amount.toFixed(2)} (Dia ${data.dayOfMonth})`,
+      });
+    } catch (error) {
+      console.error("Error adding recurring expense:", error);
+      toast({
+        title: "Erro ao adicionar despesa fixa",
+        description: "Não foi possível adicionar a despesa fixa.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const deleteRecurringExpense = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from("recurring_expenses")
+        .delete()
+        .eq("id", id);
+
+      if (error) throw error;
+
+      setRecurringExpenses(prev => prev.filter(expense => expense.id !== id));
+      
+      toast({
+        title: "Despesa fixa removida",
+        description: "A despesa fixa foi excluída com sucesso.",
+        variant: "destructive",
+      });
+    } catch (error) {
+      console.error("Error deleting recurring expense:", error);
+      toast({
+        title: "Erro ao remover despesa fixa",
+        description: "Não foi possível remover a despesa fixa.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const toggleRecurringExpenseActive = async (id: string, isActive: boolean) => {
+    try {
+      const { error } = await supabase
+        .from("recurring_expenses")
+        .update({ is_active: isActive })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      setRecurringExpenses(prev => 
+        prev.map(expense => 
+          expense.id === id ? { ...expense, is_active: isActive } : expense
+        )
+      );
+      
+      toast({
+        title: isActive ? "Despesa fixa ativada" : "Despesa fixa desativada",
+        description: isActive 
+          ? "A despesa fixa foi ativada e será considerada nos cálculos." 
+          : "A despesa fixa foi desativada e não será mais considerada.",
+      });
+    } catch (error) {
+      console.error("Error toggling recurring expense:", error);
+      toast({
+        title: "Erro ao atualizar despesa fixa",
+        description: "Não foi possível atualizar a despesa fixa.",
         variant: "destructive",
       });
     }
@@ -304,20 +420,47 @@ export default function Index() {
         </div>
 
         {/* Main Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Expense Form */}
-          <div className="space-y-6">
-            <ExpenseForm onAddExpense={addExpense} />
-          </div>
+        <Tabs defaultValue="expenses" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 mb-8">
+            <TabsTrigger value="expenses">Despesas</TabsTrigger>
+            <TabsTrigger value="recurring">Despesas Fixas</TabsTrigger>
+          </TabsList>
 
-          {/* Expense List */}
-          <div className="space-y-6">
-            <ExpenseList 
-              expenses={filteredExpenses} 
-              onDeleteExpense={deleteExpense}
-            />
-          </div>
-        </div>
+          <TabsContent value="expenses">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Expense Form */}
+              <div className="space-y-6">
+                <ExpenseForm onAddExpense={addExpense} />
+              </div>
+
+              {/* Expense List */}
+              <div className="space-y-6">
+                <ExpenseList 
+                  expenses={filteredExpenses} 
+                  onDeleteExpense={deleteExpense}
+                />
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="recurring">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Recurring Expense Form */}
+              <div className="space-y-6">
+                <RecurringExpenseForm onAddRecurringExpense={addRecurringExpense} />
+              </div>
+
+              {/* Recurring Expense List */}
+              <div className="space-y-6">
+                <RecurringExpenseList 
+                  expenses={recurringExpenses}
+                  onDeleteExpense={deleteRecurringExpense}
+                  onToggleActive={toggleRecurringExpenseActive}
+                />
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
