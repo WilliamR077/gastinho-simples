@@ -81,6 +81,14 @@ export default function Index() {
     try {
       const { description, amount, paymentMethod, expenseDate, installments = 1 } = data;
       
+      // Format date to YYYY-MM-DD in local timezone (avoid UTC conversion issues)
+      const formatDateLocal = (date: Date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
+      
       if (installments === 1) {
         // Single expense
         const { data: insertedData, error } = await supabase
@@ -90,7 +98,7 @@ export default function Index() {
             amount,
             payment_method: paymentMethod,
             user_id: user.id,
-            expense_date: expenseDate.toISOString().split('T')[0],
+            expense_date: formatDateLocal(expenseDate),
             total_installments: 1,
             installment_number: 1,
           })
@@ -114,7 +122,7 @@ export default function Index() {
             amount: installmentAmount,
             payment_method: paymentMethod,
             user_id: user.id,
-            expense_date: installmentDate.toISOString().split('T')[0],
+            expense_date: formatDateLocal(installmentDate),
             total_installments: installments,
             installment_number: i,
             installment_group_id: installmentGroupId,
