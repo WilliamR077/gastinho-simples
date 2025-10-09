@@ -2,13 +2,25 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { CreditCard, Smartphone, TrendingUp } from "lucide-react"
 import { Expense } from "@/types/expense"
 import { RecurringExpense } from "@/types/recurring-expense"
+import { calculateBillingPeriod } from "@/utils/billing-period"
 
 interface ExpenseSummaryProps {
   expenses: Expense[]
   recurringExpenses?: RecurringExpense[]
+  billingPeriod?: string
+  startDate?: Date
+  endDate?: Date
+  creditCardConfig?: { opening_day: number; closing_day: number }
 }
 
-export function ExpenseSummary({ expenses, recurringExpenses = [] }: ExpenseSummaryProps) {
+export function ExpenseSummary({ 
+  expenses, 
+  recurringExpenses = [],
+  billingPeriod,
+  startDate,
+  endDate,
+  creditCardConfig
+}: ExpenseSummaryProps) {
   const totals = expenses.reduce(
     (acc, expense) => {
       acc[expense.payment_method] += expense.amount
@@ -18,8 +30,55 @@ export function ExpenseSummary({ expenses, recurringExpenses = [] }: ExpenseSumm
     { pix: 0, debit: 0, credit: 0, total: 0 }
   )
 
-  // Add active recurring expenses to totals
-  const activeRecurringExpenses = recurringExpenses.filter(e => e.is_active)
+  // Filter and add active recurring expenses that apply to the current period
+  const activeRecurringExpenses = recurringExpenses.filter(expense => {
+    if (!expense.is_active) return false
+
+    // If there's a billing period filter (for credit cards)
+    if (billingPeriod && creditCardConfig) {
+      const [year, month] = billingPeriod.split('-').map(Number)
+      const { opening_day, closing_day } = creditCardConfig
+      
+      // Calculate the date range for this billing period
+      let periodStart: Date
+      let periodEnd: Date
+      
+      if (closing_day >= opening_day) {
+        periodStart = new Date(year, month - 1, opening_day)
+        periodEnd = new Date(year, month - 1, closing_day)
+      } else {
+        periodStart = new Date(year, month - 1, opening_day)
+        periodEnd = new Date(year, month, closing_day)
+      }
+      
+      // Check if the recurring expense day falls within this period
+      const expenseDay = expense.day_of_month
+      const startDay = periodStart.getDate()
+      const endDay = periodEnd.getDate()
+      
+      if (closing_day >= opening_day) {
+        return expenseDay >= startDay && expenseDay <= endDay
+      } else {
+        return expenseDay >= startDay || expenseDay <= endDay
+      }
+    }
+    
+    // If there are date filters
+    if (startDate && endDate) {
+      const currentYear = startDate.getFullYear()
+      const currentMonth = startDate.getMonth()
+      
+      // Create a date for this recurring expense in the current filtered month
+      const recurringDate = new Date(currentYear, currentMonth, expense.day_of_month)
+      
+      // Check if this date falls within the filter range
+      return recurringDate >= startDate && recurringDate <= endDate
+    }
+    
+    // If no filters, include all active recurring expenses
+    return true
+  })
+
   activeRecurringExpenses.forEach(expense => {
     totals[expense.payment_method] += expense.amount
     totals.total += expense.amount

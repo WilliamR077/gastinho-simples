@@ -416,7 +416,14 @@ export default function Index() {
 
         {/* Summary Cards */}
         <div className="mb-8">
-          <ExpenseSummary expenses={filteredExpenses} recurringExpenses={recurringExpenses} />
+          <ExpenseSummary 
+            expenses={filteredExpenses} 
+            recurringExpenses={recurringExpenses}
+            billingPeriod={filters.billingPeriod}
+            startDate={filters.startDate}
+            endDate={filters.endDate}
+            creditCardConfig={creditCardConfig || undefined}
+          />
         </div>
 
         {/* Main Content */}
