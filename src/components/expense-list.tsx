@@ -1,8 +1,18 @@
+import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { CreditCard, Smartphone, Trash2, Receipt } from "lucide-react"
 import { Expense } from "@/types/expense"
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination"
 
 interface ExpenseListProps {
   expenses: Expense[]
@@ -16,6 +26,19 @@ const paymentMethodConfig = {
 }
 
 export function ExpenseList({ expenses, onDeleteExpense }: ExpenseListProps) {
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
+
+  const totalPages = Math.ceil(expenses.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const currentExpenses = expenses.slice(startIndex, endIndex)
+
+  // Reset to page 1 when expenses change
+  if (currentPage > totalPages && totalPages > 0) {
+    setCurrentPage(1)
+  }
+
   if (expenses.length === 0) {
     return (
       <Card className="bg-gradient-card border-border/50 shadow-card backdrop-blur-sm">
@@ -38,7 +61,7 @@ export function ExpenseList({ expenses, onDeleteExpense }: ExpenseListProps) {
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
-          {expenses.map((expense) => {
+          {currentExpenses.map((expense) => {
             const config = paymentMethodConfig[expense.payment_method]
             const Icon = config.icon
             
@@ -100,6 +123,60 @@ export function ExpenseList({ expenses, onDeleteExpense }: ExpenseListProps) {
             )
           })}
         </div>
+
+        {totalPages > 1 && (
+          <div className="mt-6">
+            <Pagination>
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious 
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                  />
+                </PaginationItem>
+                
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                  // Show first page, last page, current page, and pages around current
+                  const showPage = 
+                    page === 1 || 
+                    page === totalPages || 
+                    Math.abs(page - currentPage) <= 1
+
+                  if (!showPage) {
+                    // Show ellipsis
+                    if (page === currentPage - 2 || page === currentPage + 2) {
+                      return (
+                        <PaginationItem key={page}>
+                          <PaginationEllipsis />
+                        </PaginationItem>
+                      )
+                    }
+                    return null
+                  }
+
+                  return (
+                    <PaginationItem key={page}>
+                      <PaginationLink
+                        onClick={() => setCurrentPage(page)}
+                        isActive={currentPage === page}
+                        className="cursor-pointer"
+                      >
+                        {page}
+                      </PaginationLink>
+                    </PaginationItem>
+                  )
+                })}
+
+                <PaginationItem>
+                  <PaginationNext 
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          </div>
+        )}
       </CardContent>
     </Card>
   )

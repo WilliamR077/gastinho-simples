@@ -2,6 +2,8 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { LogOut, User } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 export default function PrivacyPolicy() {
   const navigate = useNavigate();
@@ -44,7 +46,7 @@ export default function PrivacyPolicy() {
         {/* Privacy Policy Content */}
         <div className="prose dark:prose-invert max-w-none">
           <h1>Política de Privacidade — Gastinho Simples</h1>
-          <p><strong>Última atualização: 18 de setembro de 2025</strong></p>
+          <p><strong>Última atualização: {format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}</strong></p>
 
           <p>
             Esta Política de Privacidade explica como o aplicativo e site <strong>Gastinho
