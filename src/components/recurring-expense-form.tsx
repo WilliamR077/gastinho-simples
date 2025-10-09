@@ -74,7 +74,7 @@ export function RecurringExpenseForm({ onAddRecurringExpense }: RecurringExpense
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="recurring-day">Dia do Vencimento</Label>
+            <Label htmlFor="recurring-day">Dia da Cobrança</Label>
             <Select value={dayOfMonth} onValueChange={setDayOfMonth}>
               <SelectTrigger id="recurring-day" className="bg-background/50">
                 <SelectValue />

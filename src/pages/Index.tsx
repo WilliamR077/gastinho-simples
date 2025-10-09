@@ -416,7 +416,7 @@ export default function Index() {
 
         {/* Summary Cards */}
         <div className="mb-8">
-          <ExpenseSummary expenses={filteredExpenses} />
+          <ExpenseSummary expenses={filteredExpenses} recurringExpenses={recurringExpenses} />
         </div>
 
         {/* Main Content */}

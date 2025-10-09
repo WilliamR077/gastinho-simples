@@ -1,12 +1,14 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { CreditCard, Smartphone, TrendingUp } from "lucide-react"
 import { Expense } from "@/types/expense"
+import { RecurringExpense } from "@/types/recurring-expense"
 
 interface ExpenseSummaryProps {
   expenses: Expense[]
+  recurringExpenses?: RecurringExpense[]
 }
 
-export function ExpenseSummary({ expenses }: ExpenseSummaryProps) {
+export function ExpenseSummary({ expenses, recurringExpenses = [] }: ExpenseSummaryProps) {
   const totals = expenses.reduce(
     (acc, expense) => {
       acc[expense.payment_method] += expense.amount
@@ -15,6 +17,13 @@ export function ExpenseSummary({ expenses }: ExpenseSummaryProps) {
     },
     { pix: 0, debit: 0, credit: 0, total: 0 }
   )
+
+  // Add active recurring expenses to totals
+  const activeRecurringExpenses = recurringExpenses.filter(e => e.is_active)
+  activeRecurringExpenses.forEach(expense => {
+    totals[expense.payment_method] += expense.amount
+    totals.total += expense.amount
+  })
 
   const formatCurrency = (value: number) => 
     `R$ ${value.toFixed(2).replace('.', ',')}`

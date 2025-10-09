@@ -58,7 +58,7 @@ export function RecurringExpenseList({ expenses, onDeleteExpense, onToggleActive
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-foreground truncate">{expense.description}</p>
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-xs sm:text-sm text-muted-foreground">
-                      <span>Vencimento: Dia {expense.day_of_month}</span>
+                      <span>Cobrança: Dia {expense.day_of_month}</span>
                       <span className="hidden sm:inline">•</span>
                       <Badge variant="outline" className={`${config.color} text-xs w-fit`}>
                         {config.label}
