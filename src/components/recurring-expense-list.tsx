@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { CreditCard, Smartphone, Trash2, Calendar } from "lucide-react"
 import { RecurringExpense } from "@/types/recurring-expense"
+import { categoryLabels, categoryIcons } from "@/types/expense"
 
 interface RecurringExpenseListProps {
   expenses: RecurringExpense[]
@@ -56,8 +57,13 @@ export function RecurringExpenseList({ expenses, onDeleteExpense, onToggleActive
                     <Icon className="h-4 w-4" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-foreground truncate">{expense.description}</p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">{categoryIcons[expense.category]}</span>
+                      <p className="font-medium text-foreground truncate">{expense.description}</p>
+                    </div>
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-xs sm:text-sm text-muted-foreground">
+                      <span>{categoryLabels[expense.category]}</span>
+                      <span className="hidden sm:inline">•</span>
                       <span>Cobrança: Dia {expense.day_of_month}</span>
                       <span className="hidden sm:inline">•</span>
                       <Badge variant="outline" className={`${config.color} text-xs w-fit`}>

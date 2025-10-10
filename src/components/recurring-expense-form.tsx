@@ -4,8 +4,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { RecurringExpenseFormData } from "@/types/recurring-expense"
-import { PaymentMethod } from "@/types/expense"
+import { RecurringExpenseFormData, PaymentMethod, ExpenseCategory } from "@/types/recurring-expense"
+import { categoryLabels, categoryIcons } from "@/types/expense"
 import { Calendar } from "lucide-react"
 
 interface RecurringExpenseFormProps {
@@ -17,6 +17,7 @@ export function RecurringExpenseForm({ onAddRecurringExpense }: RecurringExpense
   const [amount, setAmount] = useState("")
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("credit")
   const [dayOfMonth, setDayOfMonth] = useState("1")
+  const [category, setCategory] = useState<ExpenseCategory>("outros")
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -29,13 +30,15 @@ export function RecurringExpenseForm({ onAddRecurringExpense }: RecurringExpense
       description,
       amount: parseFloat(amount),
       paymentMethod,
-      dayOfMonth: parseInt(dayOfMonth)
+      dayOfMonth: parseInt(dayOfMonth),
+      category
     })
 
     setDescription("")
     setAmount("")
     setPaymentMethod("credit")
     setDayOfMonth("1")
+    setCategory("outros")
   }
 
   return (
@@ -83,6 +86,22 @@ export function RecurringExpenseForm({ onAddRecurringExpense }: RecurringExpense
                 {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
                   <SelectItem key={day} value={day.toString()}>
                     Dia {day}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="recurring-category">Categoria</Label>
+            <Select value={category} onValueChange={(value) => setCategory(value as ExpenseCategory)}>
+              <SelectTrigger id="recurring-category" className="bg-background/50">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(categoryLabels).map(([key, label]) => (
+                  <SelectItem key={key} value={key}>
+                    {categoryIcons[key as ExpenseCategory]} {label}
                   </SelectItem>
                 ))}
               </SelectContent>

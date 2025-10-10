@@ -44,6 +44,7 @@ export type Database = {
       expenses: {
         Row: {
           amount: number
+          category: Database["public"]["Enums"]["expense_category"]
           created_at: string
           description: string
           expense_date: string
@@ -57,6 +58,7 @@ export type Database = {
         }
         Insert: {
           amount: number
+          category?: Database["public"]["Enums"]["expense_category"]
           created_at?: string
           description: string
           expense_date?: string
@@ -70,6 +72,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          category?: Database["public"]["Enums"]["expense_category"]
           created_at?: string
           description?: string
           expense_date?: string
@@ -86,6 +89,7 @@ export type Database = {
       recurring_expenses: {
         Row: {
           amount: number
+          category: Database["public"]["Enums"]["expense_category"]
           created_at: string
           day_of_month: number
           description: string
@@ -97,6 +101,7 @@ export type Database = {
         }
         Insert: {
           amount: number
+          category?: Database["public"]["Enums"]["expense_category"]
           created_at?: string
           day_of_month: number
           description: string
@@ -108,6 +113,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          category?: Database["public"]["Enums"]["expense_category"]
           created_at?: string
           day_of_month?: number
           description?: string
@@ -127,6 +133,16 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
+      expense_category:
+        | "alimentacao"
+        | "transporte"
+        | "lazer"
+        | "saude"
+        | "educacao"
+        | "moradia"
+        | "vestuario"
+        | "servicos"
+        | "outros"
       payment_method: "pix" | "credit" | "debit"
     }
     CompositeTypes: {
@@ -255,6 +271,17 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      expense_category: [
+        "alimentacao",
+        "transporte",
+        "lazer",
+        "saude",
+        "educacao",
+        "moradia",
+        "vestuario",
+        "servicos",
+        "outros",
+      ],
       payment_method: ["pix", "credit", "debit"],
     },
   },

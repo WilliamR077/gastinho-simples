@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { CreditCard, Smartphone, Trash2, Receipt } from "lucide-react"
-import { Expense } from "@/types/expense"
+import { Expense, categoryLabels, categoryIcons } from "@/types/expense"
 import {
   Pagination,
   PaginationContent,
@@ -75,8 +75,13 @@ export function ExpenseList({ expenses, onDeleteExpense }: ExpenseListProps) {
                     <Icon className="h-4 w-4" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-foreground truncate">{expense.description}</p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">{categoryIcons[expense.category]}</span>
+                      <p className="font-medium text-foreground truncate">{expense.description}</p>
+                    </div>
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-xs sm:text-sm text-muted-foreground">
+                      <span>{categoryLabels[expense.category]}</span>
+                      <span className="hidden sm:inline">•</span>
                       <span>
                         Data: {expense.expense_date.substring(0, 10).split('-').reverse().join('/')}
                       </span>

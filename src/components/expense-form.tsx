@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { PlusCircle, CalendarIcon } from "lucide-react"
-import { PaymentMethod, ExpenseFormData } from "@/types/expense"
+import { PaymentMethod, ExpenseFormData, ExpenseCategory, categoryLabels, categoryIcons } from "@/types/expense"
 import { cn } from "@/lib/utils"
 
 interface ExpenseFormProps {
@@ -21,6 +21,7 @@ export function ExpenseForm({ onAddExpense }: ExpenseFormProps) {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("")
   const [expenseDate, setExpenseDate] = useState<Date>(new Date())
   const [installments, setInstallments] = useState("1")
+  const [category, setCategory] = useState<ExpenseCategory>("outros")
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -41,7 +42,8 @@ export function ExpenseForm({ onAddExpense }: ExpenseFormProps) {
       amount: numericAmount,
       paymentMethod,
       expenseDate,
-      installments: installmentCount
+      installments: installmentCount,
+      category
     })
     
     // Reset form
@@ -50,6 +52,7 @@ export function ExpenseForm({ onAddExpense }: ExpenseFormProps) {
     setPaymentMethod("")
     setExpenseDate(new Date())
     setInstallments("1")
+    setCategory("outros")
   }
 
   return (
@@ -115,6 +118,22 @@ export function ExpenseForm({ onAddExpense }: ExpenseFormProps) {
             </Popover>
           </div>
           
+          <div className="space-y-2">
+            <Label htmlFor="category">Categoria</Label>
+            <Select value={category} onValueChange={(value: ExpenseCategory) => setCategory(value)}>
+              <SelectTrigger className="transition-all duration-300 focus:shadow-elegant">
+                <SelectValue placeholder="Selecione a categoria" />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(categoryLabels).map(([key, label]) => (
+                  <SelectItem key={key} value={key}>
+                    {categoryIcons[key as ExpenseCategory]} {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="payment-method">Forma de Pagamento</Label>
             <Select value={paymentMethod} onValueChange={(value: PaymentMethod) => setPaymentMethod(value)}>

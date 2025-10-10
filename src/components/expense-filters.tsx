@@ -10,7 +10,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { CalendarIcon, FilterX, ChevronDown } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { cn } from "@/lib/utils";
-import { PaymentMethod } from "@/types/expense";
+import { PaymentMethod, ExpenseCategory, categoryLabels, categoryIcons } from "@/types/expense";
 
 export interface ExpenseFilters {
   startDate?: Date;
@@ -20,6 +20,7 @@ export interface ExpenseFilters {
   maxAmount?: number;
   paymentMethod?: PaymentMethod;
   billingPeriod?: string;
+  category?: ExpenseCategory;
 }
 
 interface ExpenseFiltersProps {
@@ -187,6 +188,27 @@ export function ExpenseFilters({ filters, onFiltersChange, billingPeriods = [] }
                   value={localFilters.maxAmount || ''}
                   onChange={(e) => handleFilterChange('maxAmount', parseFloat(e.target.value) || undefined)}
                 />
+              </div>
+
+              {/* Filtro de Categoria */}
+              <div className="space-y-2">
+                <Label>Categoria</Label>
+                <Select 
+                  value={localFilters.category || 'all'} 
+                  onValueChange={(value) => handleFilterChange('category', value === 'all' ? undefined : value as ExpenseCategory)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todas as categorias" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas as categorias</SelectItem>
+                    {Object.entries(categoryLabels).map(([key, label]) => (
+                      <SelectItem key={key} value={key}>
+                        {categoryIcons[key as ExpenseCategory]} {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* Filtro de Forma de Pagamento */}
