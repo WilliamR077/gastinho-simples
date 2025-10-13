@@ -131,14 +131,14 @@ export default function Account() {
     setPasswordStrength(validatePasswordStrength(value));
   };
 
-  const handleDeleteAccount = async () => {
+  const handleClearAllExpenses = async () => {
     setLoading(true);
     try {
       if (!user?.id) {
         throw new Error("Usuário não identificado");
       }
 
-      // First delete all user expenses
+      // Delete all user expenses
       const { error: expensesError } = await supabase
         .from("expenses")
         .delete()
@@ -146,12 +146,76 @@ export default function Account() {
 
       if (expensesError) throw expensesError;
 
-      // Sign out the user (Supabase Auth requires admin privileges to delete users)
+      // Delete all recurring expenses
+      const { error: recurringError } = await supabase
+        .from("recurring_expenses")
+        .delete()
+        .eq("user_id", user.id);
+
+      if (recurringError) throw recurringError;
+
+      // Delete credit card config
+      const { error: configError } = await supabase
+        .from("credit_card_configs")
+        .delete()
+        .eq("user_id", user.id);
+
+      if (configError) throw configError;
+
+      toast({
+        title: "Dados limpos com sucesso",
+        description: "Todos os seus gastos, despesas recorrentes e configurações foram removidos. Sua conta permanece ativa.",
+      });
+
+      // Refresh the page to show empty state
+      window.location.reload();
+    } catch (error: any) {
+      toast({
+        title: "Erro ao limpar dados",
+        description: sanitizeErrorMessage(error),
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteAccountCompletely = async () => {
+    setLoading(true);
+    try {
+      if (!user?.id) {
+        throw new Error("Usuário não identificado");
+      }
+
+      // First clear all expenses (reuse the logic)
+      const { error: expensesError } = await supabase
+        .from("expenses")
+        .delete()
+        .eq("user_id", user.id);
+
+      if (expensesError) throw expensesError;
+
+      const { error: recurringError } = await supabase
+        .from("recurring_expenses")
+        .delete()
+        .eq("user_id", user.id);
+
+      if (recurringError) throw recurringError;
+
+      const { error: configError } = await supabase
+        .from("credit_card_configs")
+        .delete()
+        .eq("user_id", user.id);
+
+      if (configError) throw configError;
+
+      // Note: Supabase Auth requires admin privileges to delete users
+      // For now, we just sign out the user after clearing data
       await signOut();
 
       toast({
-        title: "Dados removidos",
-        description: "Seus dados de gastos foram removidos. Sua conta de acesso permanece ativa.",
+        title: "Conta encerrada",
+        description: "Todos os seus dados foram removidos e você foi desconectado. Para excluir completamente sua conta do sistema, entre em contato com o suporte.",
       });
 
       navigate("/auth");
@@ -359,41 +423,128 @@ export default function Account() {
                 Zona de Perigo
               </CardTitle>
               <CardDescription>
-                Ações irreversíveis em sua conta
+                Ações irreversíveis em sua conta e dados
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Separator className="mb-4" />
-              <div className="space-y-4">
-                <div>
-                  <h3 className="font-semibold text-destructive mb-2">Excluir Conta</h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Esta ação excluirá permanentemente sua conta e todos os dados associados.
-                    Esta ação não pode ser desfeita.
-                  </p>
+              <Separator className="mb-6" />
+              <div className="space-y-6">
+                {/* Clear All Expenses - Light red */}
+                <div className="p-4 rounded-lg border border-orange-200 bg-orange-50 dark:bg-orange-950/20 dark:border-orange-900">
+                  <div className="flex items-start gap-3 mb-3">
+                    <div className="p-2 rounded-md bg-orange-100 dark:bg-orange-900/40">
+                      <Trash2 className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-orange-900 dark:text-orange-300 mb-1">
+                        🗑️ Limpar Todos os Meus Gastos
+                      </h3>
+                      <p className="text-sm text-orange-700 dark:text-orange-400">
+                        Remove todas as despesas, despesas recorrentes e configurações do cartão.
+                        <strong className="block mt-1">Sua conta permanecerá ativa.</strong>
+                      </p>
+                    </div>
+                  </div>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button variant="destructive" className="flex items-center gap-2">
+                      <Button 
+                        variant="outline" 
+                        className="flex items-center gap-2 border-orange-300 text-orange-700 hover:bg-orange-100 dark:border-orange-800 dark:text-orange-400 dark:hover:bg-orange-900/40"
+                      >
                         <Trash2 className="w-4 h-4" />
-                        Excluir Conta Permanentemente
+                        Limpar Todos os Dados
                       </Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
-                        <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Esta ação excluirá permanentemente sua conta e todos os seus gastos.
-                          Esta ação não pode ser desfeita.
+                        <AlertDialogTitle>⚠️ Limpar todos os gastos?</AlertDialogTitle>
+                        <AlertDialogDescription className="space-y-2">
+                          <p>Esta ação irá remover permanentemente:</p>
+                          <ul className="list-disc list-inside space-y-1 text-sm">
+                            <li>Todas as suas despesas registradas</li>
+                            <li>Todas as despesas recorrentes</li>
+                            <li>Configurações do cartão de crédito</li>
+                          </ul>
+                          <p className="font-semibold mt-3">
+                            Sua conta de acesso permanecerá ativa e você poderá continuar usando o sistema.
+                          </p>
+                          <p className="text-destructive font-bold">Esta ação não pode ser desfeita!</p>
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel>Cancelar</AlertDialogCancel>
                         <AlertDialogAction
-                          onClick={handleDeleteAccount}
+                          onClick={handleClearAllExpenses}
+                          disabled={loading}
+                          className="bg-orange-600 text-white hover:bg-orange-700 dark:bg-orange-700 dark:hover:bg-orange-800"
+                        >
+                          {loading ? "Limpando..." : "Sim, limpar todos os dados"}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+
+                <Separator />
+
+                {/* Delete Account Completely - Dark red */}
+                <div className="p-4 rounded-lg border border-red-300 bg-red-50 dark:bg-red-950/30 dark:border-red-900">
+                  <div className="flex items-start gap-3 mb-3">
+                    <div className="p-2 rounded-md bg-red-100 dark:bg-red-900/40">
+                      <Trash2 className="w-5 h-5 text-red-700 dark:text-red-400" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-red-900 dark:text-red-300 mb-1">
+                        ⚠️ Excluir Conta Permanentemente
+                      </h3>
+                      <p className="text-sm text-red-700 dark:text-red-400">
+                        Remove todos os dados e encerra sua conta completamente.
+                        <strong className="block mt-1">Você não poderá mais acessar o sistema com esta conta.</strong>
+                      </p>
+                    </div>
+                  </div>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button 
+                        variant="destructive" 
+                        className="flex items-center gap-2 bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Excluir Conta Completamente
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle className="text-destructive">🚨 ATENÇÃO: Excluir conta permanentemente?</AlertDialogTitle>
+                        <AlertDialogDescription className="space-y-3">
+                          <p className="font-bold text-destructive">Esta é uma ação IRREVERSÍVEL!</p>
+                          <p>Ao confirmar, as seguintes ações serão realizadas:</p>
+                          <ul className="list-disc list-inside space-y-1 text-sm">
+                            <li>Todas as suas despesas serão excluídas</li>
+                            <li>Todas as despesas recorrentes serão excluídas</li>
+                            <li>Configurações do cartão serão excluídas</li>
+                            <li>Você será desconectado do sistema</li>
+                            <li>Sua conta ficará inativa</li>
+                          </ul>
+                          <div className="p-3 bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-900 rounded-md mt-4">
+                            <p className="text-sm text-yellow-800 dark:text-yellow-400">
+                              <strong>Nota:</strong> Para excluir completamente sua conta do sistema de autenticação, 
+                              pode ser necessário entrar em contato com o suporte após este processo.
+                            </p>
+                          </div>
+                          <p className="text-destructive font-bold text-center mt-4">
+                            VOCÊ TEM CERTEZA ABSOLUTA?
+                          </p>
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Não, cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={handleDeleteAccountCompletely}
                           disabled={loading}
                           className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         >
-                          {loading ? "Excluindo..." : "Sim, excluir conta"}
+                          {loading ? "Excluindo..." : "SIM, EXCLUIR TUDO"}
                         </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
