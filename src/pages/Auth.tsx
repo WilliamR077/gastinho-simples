@@ -137,7 +137,7 @@ export default function Auth() {
     setIsResetLoading(true);
 
     const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: 'https://gastinho-simples.lovable.app/reset-password',
     });
 
     if (error) {
