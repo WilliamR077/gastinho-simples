@@ -27,6 +27,11 @@ export default function Account() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordStrength, setPasswordStrength] = useState(validatePasswordStrength(""));
+  
+  // Confirmation states for danger zone
+  const [clearDataConfirmation, setClearDataConfirmation] = useState("");
+  const [deleteAccountPassword, setDeleteAccountPassword] = useState("");
+  const [deleteAccountConfirmation, setDeleteAccountConfirmation] = useState("");
 
   const handleUpdateEmail = async () => {
     if (!newEmail || newEmail === user?.email) {
@@ -59,6 +64,9 @@ export default function Account() {
         title: "Email atualizado!",
         description: "Verifique seu novo email para confirmar a alteração.",
       });
+      
+      // Log audit action
+      await logAuditAction("email_change", { old_email: user?.email, new_email: newEmail });
     } catch (error: any) {
       toast({
         title: "Erro ao atualizar email",
@@ -115,6 +123,9 @@ export default function Account() {
         title: "Senha atualizada!",
         description: "Sua senha foi alterada com sucesso.",
       });
+      
+      // Log audit action
+      await logAuditAction("password_change");
     } catch (error: any) {
       toast({
         title: "Erro ao atualizar senha",
@@ -129,6 +140,22 @@ export default function Account() {
   const handlePasswordChange = (value: string) => {
     setNewPassword(value);
     setPasswordStrength(validatePasswordStrength(value));
+  };
+
+  // Audit log helper function
+  const logAuditAction = async (action: string, details?: any) => {
+    try {
+      if (!user?.id) return;
+      
+      await supabase.from("audit_log").insert({
+        user_id: user.id,
+        action,
+        details,
+        user_agent: navigator.userAgent,
+      });
+    } catch (error) {
+      console.error("Failed to log audit action:", error);
+    }
   };
 
   const handleClearAllExpenses = async () => {
@@ -162,11 +189,19 @@ export default function Account() {
 
       if (configError) throw configError;
 
+      // Log audit action before showing success
+      await logAuditAction("data_cleared", { 
+        message: "All expenses, recurring expenses, and credit card config cleared" 
+      });
+
       toast({
         title: "Dados limpos com sucesso",
         description: "Todos os seus gastos, despesas recorrentes e configurações foram removidos. Sua conta permanece ativa.",
       });
 
+      // Reset confirmation field
+      setClearDataConfirmation("");
+      
       // Refresh the page to show empty state
       window.location.reload();
     } catch (error: any) {
@@ -208,6 +243,11 @@ export default function Account() {
         .eq("user_id", user.id);
 
       if (configError) throw configError;
+
+      // Log audit action before sign out
+      await logAuditAction("account_deletion_requested", {
+        message: "User requested full account deletion"
+      });
 
       // Note: Supabase Auth requires admin privileges to delete users
       // For now, we just sign out the user after clearing data
@@ -458,7 +498,7 @@ export default function Account() {
                     <AlertDialogContent>
                       <AlertDialogHeader>
                         <AlertDialogTitle>⚠️ Limpar todos os gastos?</AlertDialogTitle>
-                        <AlertDialogDescription className="space-y-2">
+                        <AlertDialogDescription className="space-y-3">
                           <p>Esta ação irá remover permanentemente:</p>
                           <ul className="list-disc list-inside space-y-1 text-sm">
                             <li>Todas as suas despesas registradas</li>
@@ -469,14 +509,29 @@ export default function Account() {
                             Sua conta de acesso permanecerá ativa e você poderá continuar usando o sistema.
                           </p>
                           <p className="text-destructive font-bold">Esta ação não pode ser desfeita!</p>
+                          
+                          <div className="space-y-2 mt-4">
+                            <Label htmlFor="clearConfirmation">
+                              Para confirmar, digite <strong>CONFIRMAR</strong> abaixo:
+                            </Label>
+                            <Input
+                              id="clearConfirmation"
+                              value={clearDataConfirmation}
+                              onChange={(e) => setClearDataConfirmation(e.target.value)}
+                              placeholder="Digite CONFIRMAR"
+                              className="font-mono"
+                            />
+                          </div>
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
-                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogCancel onClick={() => setClearDataConfirmation("")}>
+                          Cancelar
+                        </AlertDialogCancel>
                         <AlertDialogAction
                           onClick={handleClearAllExpenses}
-                          disabled={loading}
-                          className="bg-orange-600 text-white hover:bg-orange-700 dark:bg-orange-700 dark:hover:bg-orange-800"
+                          disabled={loading || clearDataConfirmation !== "CONFIRMAR"}
+                          className="bg-orange-600 text-white hover:bg-orange-700 dark:bg-orange-700 dark:hover:bg-orange-800 disabled:opacity-50"
                         >
                           {loading ? "Limpando..." : "Sim, limpar todos os dados"}
                         </AlertDialogAction>
@@ -513,38 +568,54 @@ export default function Account() {
                         Excluir Conta Completamente
                       </Button>
                     </AlertDialogTrigger>
-                    <AlertDialogContent>
+                    <AlertDialogContent className="max-w-md">
                       <AlertDialogHeader>
-                        <AlertDialogTitle className="text-destructive">🚨 ATENÇÃO: Excluir conta permanentemente?</AlertDialogTitle>
+                        <AlertDialogTitle className="text-destructive">🚨 EXCLUIR CONTA PERMANENTEMENTE?</AlertDialogTitle>
                         <AlertDialogDescription className="space-y-3">
-                          <p className="font-bold text-destructive">Esta é uma ação IRREVERSÍVEL!</p>
-                          <p>Ao confirmar, as seguintes ações serão realizadas:</p>
+                          <p className="font-bold text-destructive">ATENÇÃO: Esta é uma ação IRREVERSÍVEL!</p>
+                          <p>Esta ação irá:</p>
                           <ul className="list-disc list-inside space-y-1 text-sm">
-                            <li>Todas as suas despesas serão excluídas</li>
-                            <li>Todas as despesas recorrentes serão excluídas</li>
-                            <li>Configurações do cartão serão excluídas</li>
-                            <li>Você será desconectado do sistema</li>
-                            <li>Sua conta ficará inativa</li>
+                            <li>Remover TODAS as suas despesas</li>
+                            <li>Remover TODAS as despesas recorrentes</li>
+                            <li>Remover suas configurações</li>
+                            <li>Encerrar sua conta de acesso</li>
                           </ul>
-                          <div className="p-3 bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-900 rounded-md mt-4">
-                            <p className="text-sm text-yellow-800 dark:text-yellow-400">
-                              <strong>Nota:</strong> Para excluir completamente sua conta do sistema de autenticação, 
-                              pode ser necessário entrar em contato com o suporte após este processo.
-                            </p>
+                          <p className="font-semibold mt-3 text-destructive">
+                            Você será desconectado e não poderá mais acessar o sistema com esta conta.
+                          </p>
+                          
+                          <div className="space-y-3 mt-4 p-3 bg-destructive/10 rounded-md">
+                            <div className="space-y-2">
+                              <Label htmlFor="deleteAccountConfirmation">
+                                Digite <strong>DELETAR MINHA CONTA</strong> para confirmar:
+                              </Label>
+                              <Input
+                                id="deleteAccountConfirmation"
+                                value={deleteAccountConfirmation}
+                                onChange={(e) => setDeleteAccountConfirmation(e.target.value)}
+                                placeholder="Digite DELETAR MINHA CONTA"
+                                className="font-mono text-xs"
+                              />
+                            </div>
                           </div>
-                          <p className="text-destructive font-bold text-center mt-4">
-                            VOCÊ TEM CERTEZA ABSOLUTA?
+                          
+                          <p className="text-xs text-muted-foreground mt-3">
+                            Nota: Para exclusão completa dos dados de autenticação do Supabase, entre em contato com o suporte após esta ação.
                           </p>
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
-                        <AlertDialogCancel>Não, cancelar</AlertDialogCancel>
+                        <AlertDialogCancel onClick={() => {
+                          setDeleteAccountConfirmation("");
+                        }}>
+                          Cancelar
+                        </AlertDialogCancel>
                         <AlertDialogAction
                           onClick={handleDeleteAccountCompletely}
-                          disabled={loading}
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          disabled={loading || deleteAccountConfirmation !== "DELETAR MINHA CONTA"}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
                         >
-                          {loading ? "Excluindo..." : "SIM, EXCLUIR TUDO"}
+                          {loading ? "Excluindo..." : "Sim, EXCLUIR MINHA CONTA"}
                         </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>

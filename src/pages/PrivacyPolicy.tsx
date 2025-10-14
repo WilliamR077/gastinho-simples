@@ -64,13 +64,22 @@ export default function PrivacyPolicy() {
 
           <h2>2. Quais dados coletamos</h2>
           <ul>
-            <li>E-mail e senha (armazenada de forma segura) para autenticação.</li>
+            <li>E-mail e senha (armazenada de forma segura e criptografada) para autenticação.</li>
             <li>Dados financeiros inseridos voluntariamente: despesas com descrição, valor,
                 método de pagamento (débito, crédito, PIX), parcelas e notas.</li>
             <li>Configurações como dia de fechamento da fatura e filtros.</li>
-            <li>Identificadores técnicos e dados mínimos de diagnóstico (quando habilitado).
-            </li>
+            <li>Identificadores técnicos e dados mínimos de diagnóstico (quando habilitado).</li>
+            <li><strong>Logs de auditoria:</strong> Registramos ações críticas (login, alteração de 
+                senha/email, exclusão de dados) incluindo data/hora e agente de usuário (navegador) 
+                para fins de segurança e conformidade com a LGPD.</li>
           </ul>
+          
+          <h3>Cookies e armazenamento local</h3>
+          <p>
+            Utilizamos armazenamento local do navegador (localStorage) para manter sua sessão ativa 
+            e preferências de tema. Não utilizamos cookies de terceiros para rastreamento. Os dados 
+            armazenados localmente incluem apenas tokens de autenticação e configurações de interface.
+          </p>
 
           <h2>3. Como usamos os dados</h2>
           <ul>
@@ -106,6 +115,11 @@ export default function PrivacyPolicy() {
             Mantemos seus dados enquanto sua conta existir. Ao excluir a conta, todos os dados
             pessoais e financeiros associados serão removidos em até 30 dias.
           </p>
+          <p>
+            <strong>Dados de auditoria:</strong> Registramos ações críticas (login, alterações de senha, 
+            exclusão de dados) em logs de auditoria para fins de segurança. Esses logs são mantidos 
+            por até 90 dias após a exclusão da conta.
+          </p>
 
           <h2>8. Seus direitos</h2>
           <p>
@@ -114,10 +128,21 @@ export default function PrivacyPolicy() {
             <strong> gastinhosimples@gmail.com</strong>.
           </p>
 
-          <h2>9. Exclusão da conta</h2>
+          <h2>9. Exclusão da conta e dos dados</h2>
           <p>
-            Pelo App, em <em>Minha Conta</em>, você pode excluir sua conta e todos os dados
-            associados de forma permanente.
+            Pelo App, em <em>Minha Conta</em>, você tem duas opções:
+          </p>
+          <ul>
+            <li><strong>Limpar dados:</strong> Remove todos os gastos, despesas recorrentes e 
+            configurações, mas mantém sua conta ativa para continuar usando o sistema.</li>
+            <li><strong>Excluir conta permanentemente:</strong> Remove todos os dados e encerra 
+            sua conta de acesso. Esta ação é irreversível.</li>
+          </ul>
+          <p>
+            <strong>Processo de exclusão de dados:</strong> Quando você solicita a exclusão da conta, 
+            todos os dados financeiros são removidos imediatamente. Os logs de auditoria são mantidos 
+            por até 90 dias para conformidade com a LGPD. Para excluir completamente os dados de 
+            autenticação do Supabase, entre em contato com <strong>gastinhosimples@gmail.com</strong>.
           </p>
 
           <h2>10. Alterações nesta Política</h2>
