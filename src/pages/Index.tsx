@@ -5,7 +5,7 @@ import { ExpenseForm } from "@/components/expense-form";
 import { ExpenseList } from "@/components/expense-list";
 import { ExpenseFilters, ExpenseFilters as ExpenseFiltersType } from "@/components/expense-filters";
 import { CategorySummary } from "@/components/category-summary";
-import { ExpenseCharts } from "@/components/expense-charts";
+
 import { Expense, PaymentMethod, ExpenseFormData } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
 import { RecurringExpenseForm } from "@/components/recurring-expense-form";
@@ -13,6 +13,7 @@ import { RecurringExpenseList } from "@/components/recurring-expense-list";
 import { RecurringExpenseFormData } from "@/types/recurring-expense";
 import { toast } from "@/hooks/use-toast";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { BarChart3 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -448,15 +449,6 @@ export default function Index() {
           />
         </div>
 
-        {/* Charts and Reports */}
-        <ExpenseCharts 
-          expenses={filteredExpenses}
-          recurringExpenses={recurringExpenses}
-          billingPeriod={filters.billingPeriod}
-          startDate={filters.startDate}
-          endDate={filters.endDate}
-          creditCardConfig={creditCardConfig || undefined}
-        />
 
         {/* Main Content */}
         <Tabs defaultValue="expenses" className="w-full">
