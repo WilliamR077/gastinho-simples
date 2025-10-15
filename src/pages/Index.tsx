@@ -397,6 +397,15 @@ export default function Index() {
             <Button
               variant="outline"
               size="sm"
+              onClick={() => navigate("/reports")}
+              className="flex items-center gap-2 text-xs sm:text-sm"
+            >
+              <BarChart3 className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Relatórios</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => navigate("/account")}
               className="flex items-center gap-2 text-xs sm:text-sm"
             >
