@@ -44,6 +44,36 @@ export type Database = {
         }
         Relationships: []
       }
+      budget_goals: {
+        Row: {
+          category: Database["public"]["Enums"]["expense_category"] | null
+          created_at: string
+          id: string
+          limit_amount: number
+          type: Database["public"]["Enums"]["budget_goal_type"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category?: Database["public"]["Enums"]["expense_category"] | null
+          created_at?: string
+          id?: string
+          limit_amount: number
+          type: Database["public"]["Enums"]["budget_goal_type"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: Database["public"]["Enums"]["expense_category"] | null
+          created_at?: string
+          id?: string
+          limit_amount?: number
+          type?: Database["public"]["Enums"]["budget_goal_type"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       credit_card_configs: {
         Row: {
           closing_day: number
@@ -163,6 +193,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
+      budget_goal_type: "monthly_total" | "category"
       expense_category:
         | "alimentacao"
         | "transporte"
@@ -301,6 +332,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      budget_goal_type: ["monthly_total", "category"],
       expense_category: [
         "alimentacao",
         "transporte",

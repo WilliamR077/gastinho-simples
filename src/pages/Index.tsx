@@ -11,6 +11,9 @@ import { RecurringExpense } from "@/types/recurring-expense";
 import { RecurringExpenseForm } from "@/components/recurring-expense-form";
 import { RecurringExpenseList } from "@/components/recurring-expense-list";
 import { RecurringExpenseFormData } from "@/types/recurring-expense";
+import { BudgetGoal } from "@/types/budget-goal";
+import { BudgetGoalsForm } from "@/components/budget-goals-form";
+import { BudgetProgress } from "@/components/budget-progress";
 import { toast } from "@/hooks/use-toast";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { BarChart3 } from "lucide-react";
@@ -24,6 +27,7 @@ import { generateBillingPeriods, filterExpensesByBillingPeriod } from "@/utils/b
 export default function Index() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>([]);
+  const [budgetGoals, setBudgetGoals] = useState<BudgetGoal[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<ExpenseFiltersType>({});
   const [creditCardConfig, setCreditCardConfig] = useState<{opening_day: number; closing_day: number} | null>(null);
@@ -43,6 +47,7 @@ export default function Index() {
       loadExpenses();
       loadRecurringExpenses();
       loadCreditCardConfig();
+      loadBudgetGoals();
     }
   }, [user]);
 
@@ -101,6 +106,25 @@ export default function Index() {
       }
     } catch (error) {
       console.error("Error loading credit card config:", error);
+    }
+  };
+
+  const loadBudgetGoals = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("budget_goals")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setBudgetGoals(data || []);
+    } catch (error) {
+      console.error("Error loading budget goals:", error);
+      toast({
+        title: "Erro ao carregar metas",
+        description: "Não foi possível carregar as metas de gastos.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -302,6 +326,65 @@ export default function Index() {
     }
   };
 
+  const addBudgetGoal = async (data: { type: string; category?: string; limitAmount: number }) => {
+    if (!user) return;
+
+    try {
+      const { data: insertedData, error } = await supabase
+        .from("budget_goals")
+        .insert([{
+          user_id: user.id,
+          type: data.type as any,
+          category: data.category as any || null,
+          limit_amount: data.limitAmount,
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setBudgetGoals(prev => [insertedData, ...prev]);
+      
+      toast({
+        title: "Meta adicionada!",
+        description: "Sua meta de gastos foi criada com sucesso.",
+      });
+    } catch (error) {
+      console.error("Error adding budget goal:", error);
+      toast({
+        title: "Erro ao adicionar meta",
+        description: "Não foi possível adicionar a meta de gastos.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const deleteBudgetGoal = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from("budget_goals")
+        .delete()
+        .eq("id", id);
+
+      if (error) throw error;
+
+      setBudgetGoals(prev => prev.filter(goal => goal.id !== id));
+      
+      toast({
+        title: "Meta removida",
+        description: "A meta de gastos foi excluída com sucesso.",
+        variant: "destructive",
+      });
+    } catch (error) {
+      console.error("Error deleting budget goal:", error);
+      toast({
+        title: "Erro ao remover meta",
+        description: "Não foi possível remover a meta de gastos.",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Gerar períodos de faturamento disponíveis
   const billingPeriods = useMemo(() => {
     if (!creditCardConfig) return [];
@@ -461,9 +544,10 @@ export default function Index() {
 
         {/* Main Content */}
         <Tabs defaultValue="expenses" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-8">
+          <TabsList className="grid w-full grid-cols-3 mb-8">
             <TabsTrigger value="expenses">Despesas</TabsTrigger>
             <TabsTrigger value="recurring">Despesas Fixas</TabsTrigger>
+            <TabsTrigger value="goals">Metas</TabsTrigger>
           </TabsList>
 
           <TabsContent value="expenses">
@@ -496,6 +580,25 @@ export default function Index() {
                   expenses={recurringExpenses}
                   onDeleteExpense={deleteRecurringExpense}
                   onToggleActive={toggleRecurringExpenseActive}
+                />
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="goals">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Budget Goals Form */}
+              <div className="space-y-6">
+                <BudgetGoalsForm onSubmit={addBudgetGoal} />
+              </div>
+
+              {/* Budget Progress */}
+              <div className="space-y-6">
+                <BudgetProgress
+                  goals={budgetGoals}
+                  expenses={expenses}
+                  recurringExpenses={recurringExpenses}
+                  onDelete={deleteBudgetGoal}
                 />
               </div>
             </div>
