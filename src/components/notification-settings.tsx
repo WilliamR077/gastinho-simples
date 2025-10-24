@@ -79,19 +79,14 @@ export function NotificationSettings() {
       });
 
       // Reschedule notifications with new settings
-      if (newSettings.is_enabled) {
-        const { data: recurringExpenses } = await supabase
-          .from("recurring_expenses")
-          .select("*")
-          .eq("user_id", user.id)
-          .eq("is_active", true);
+      const { data: recurringExpenses } = await supabase
+        .from("recurring_expenses")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("is_active", true);
 
-        if (recurringExpenses) {
-          await NotificationService.rescheduleAllNotifications(recurringExpenses);
-        }
-      } else {
-        // Cancel all notifications if disabled
-        await LocalNotifications.cancel({ notifications: [] });
+      if (recurringExpenses) {
+        await NotificationService.rescheduleAllNotifications(recurringExpenses, newSettings);
       }
     } catch (error: any) {
       toast({

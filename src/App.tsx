@@ -12,6 +12,7 @@ import Account from "./pages/Account";
 import Reports from "./pages/Reports";
 import NotFound from "./pages/NotFound";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
+import NotificationDebug from "./pages/NotificationDebug";
 
 const queryClient = new QueryClient();
 
@@ -30,6 +31,7 @@ const App = () => (
               <Route path="/account" element={<Account />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/privacy" element={<PrivacyPolicy />} />
+              <Route path="/notification-debug" element={<NotificationDebug />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, User, Mail, Lock, Trash2, Save, Shield, FileDown, FileSpreadsheet } from "lucide-react";
+import { ArrowLeft, User, Mail, Lock, Trash2, Save, Shield, FileDown, FileSpreadsheet, Bug } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { validatePasswordStrength, sanitizeErrorMessage, isEmailValid } from "@/utils/security";
 import { Progress } from "@/components/ui/progress";
@@ -541,6 +541,32 @@ export default function Account() {
 
           {/* Notification Settings */}
           <NotificationSettings />
+
+          {/* Debug Notifications */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bug className="w-5 h-5" />
+                Debug de Notificações
+              </CardTitle>
+              <CardDescription>
+                Ferramentas avançadas para gerenciar notificações
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button
+                variant="outline"
+                onClick={() => navigate("/notification-debug")}
+                className="w-full"
+              >
+                <Bug className="w-4 h-4 mr-2" />
+                Abrir Painel de Debug
+              </Button>
+              <p className="text-xs text-muted-foreground mt-2">
+                Visualize estatísticas, force ressincronização e gerencie notificações agendadas
+              </p>
+            </CardContent>
+          </Card>
 
           {/* Export Data Section */}
           <Card>

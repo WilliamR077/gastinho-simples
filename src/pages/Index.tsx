@@ -25,6 +25,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LogOut, Wallet, User } from "lucide-react";
 import { generateBillingPeriods, filterExpensesByBillingPeriod } from "@/utils/billing-period";
 import { NotificationService } from "@/services/notification-service";
+import { App as CapacitorApp } from '@capacitor/app';
 
 export default function Index() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -33,6 +34,8 @@ export default function Index() {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<ExpenseFiltersType>({});
   const [creditCardConfig, setCreditCardConfig] = useState<{opening_day: number; closing_day: number} | null>(null);
+  const [notificationSettings, setNotificationSettings] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState("expenses");
   const { user, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
 
@@ -45,16 +48,98 @@ export default function Index() {
 
   // Initialize notifications when recurring expenses are loaded
   useEffect(() => {
-    if (recurringExpenses.length > 0) {
+    if (recurringExpenses.length > 0 && notificationSettings) {
       NotificationService.requestPermissions().then(granted => {
         if (granted) {
           NotificationService.rescheduleAllNotifications(
-            recurringExpenses.filter(e => e.is_active)
+            recurringExpenses.filter(e => e.is_active),
+            notificationSettings
           );
         }
       });
     }
-  }, [recurringExpenses]);
+  }, [recurringExpenses, notificationSettings]);
+
+  // Load notification settings
+  useEffect(() => {
+    if (user) {
+      loadNotificationSettings();
+    }
+  }, [user]);
+
+  const loadNotificationSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("notification_settings")
+        .select("*")
+        .eq("user_id", user?.id)
+        .maybeSingle();
+
+      if (error) throw error;
+      
+      if (data) {
+        setNotificationSettings(data);
+      } else {
+        // Configurações padrão
+        setNotificationSettings({
+          is_enabled: true,
+          notify_3_days_before: true,
+          notify_1_day_before: true,
+          notify_on_day: true,
+        });
+      }
+    } catch (error) {
+      console.error("Error loading notification settings:", error);
+    }
+  };
+
+  // Setup notification click listener
+  useEffect(() => {
+    NotificationService.addNotificationClickListener((notification) => {
+      // Navega para a tab de lembretes quando clicar na notificação
+      setActiveTab("recurring");
+      
+      toast({
+        title: "📱 Notificação recebida",
+        description: "Verifique suas despesas fixas",
+      });
+    });
+
+    return () => {
+      NotificationService.removeAllListeners();
+    };
+  }, []);
+
+  // Setup app state listener for automatic resync
+  useEffect(() => {
+    let listenerHandle: any;
+    
+    const setupListener = async () => {
+      listenerHandle = await CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+        if (isActive && user) {
+          console.log('🔄 App voltou para foreground - sincronizando notificações');
+          
+          // Recarrega despesas e sincroniza notificações
+          loadRecurringExpenses().then(() => {
+            if (notificationSettings) {
+              NotificationService.syncNotifications(
+                recurringExpenses.filter(e => e.is_active),
+                notificationSettings
+              );
+            }
+          });
+        }
+      });
+    };
+
+    setupListener();
+
+    return () => {
+      if (listenerHandle) {
+        listenerHandle.remove();
+      }
+    };
+  }, [user, recurringExpenses, notificationSettings]);
 
   // Load expenses and credit card config from Supabase
   useEffect(() => {
@@ -271,7 +356,7 @@ export default function Index() {
       setRecurringExpenses(prev => [...prev, insertedData].sort((a, b) => a.day_of_month - b.day_of_month));
       
       // Agendar notificações para a nova despesa
-      await NotificationService.scheduleNotificationsForExpense(insertedData);
+      await NotificationService.scheduleNotificationsForExpense(insertedData, notificationSettings);
       
       toast({
         title: "Despesa fixa adicionada!",
@@ -337,7 +422,10 @@ export default function Index() {
       if (updatedExpense) {
         if (isActive) {
           // Ativar: agendar notificações
-          await NotificationService.scheduleNotificationsForExpense({ ...updatedExpense, is_active: isActive });
+          await NotificationService.scheduleNotificationsForExpense(
+            { ...updatedExpense, is_active: isActive }, 
+            notificationSettings
+          );
         } else {
           // Desativar: cancelar notificações
           await NotificationService.cancelNotificationsForExpense(id);
@@ -580,7 +668,7 @@ export default function Index() {
 
 
         {/* Main Content */}
-        <Tabs defaultValue="expenses" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3 mb-8">
             <TabsTrigger value="expenses">Despesas</TabsTrigger>
             <TabsTrigger value="recurring">Despesas Fixas</TabsTrigger>
