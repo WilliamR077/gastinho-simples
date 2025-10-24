@@ -682,20 +682,6 @@ export default function Index() {
           />
         </div>
 
-        {/* Summary Cards */}
-        <div className="mb-8">
-          <ExpenseSummary 
-            expenses={filteredExpenses} 
-            recurringExpenses={recurringExpenses}
-            billingPeriod={filters.billingPeriod}
-            startDate={filters.startDate}
-            endDate={filters.endDate}
-            creditCardConfig={creditCardConfig || undefined}
-            onPaymentMethodClick={handlePaymentMethodFilter}
-            activePaymentMethod={filters.paymentMethod}
-          />
-        </div>
-
         {/* Category Summary */}
         <div className="mb-8">
           <CategorySummary 
@@ -707,6 +693,20 @@ export default function Index() {
             creditCardConfig={creditCardConfig || undefined}
             onCategoryClick={handleCategoryFilter}
             activeCategory={filters.category}
+          />
+        </div>
+
+        {/* Summary Cards */}
+        <div className="mb-8">
+          <ExpenseSummary 
+            expenses={filteredExpenses} 
+            recurringExpenses={recurringExpenses}
+            billingPeriod={filters.billingPeriod}
+            startDate={filters.startDate}
+            endDate={filters.endDate}
+            creditCardConfig={creditCardConfig || undefined}
+            onPaymentMethodClick={handlePaymentMethodFilter}
+            activePaymentMethod={filters.paymentMethod}
           />
         </div>
 
