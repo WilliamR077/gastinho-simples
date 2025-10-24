@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { CreditCard, Smartphone, TrendingUp } from "lucide-react"
-import { Expense } from "@/types/expense"
+import { Expense, PaymentMethod } from "@/types/expense"
 import { RecurringExpense } from "@/types/recurring-expense"
 import { calculateBillingPeriod } from "@/utils/billing-period"
 
@@ -11,6 +11,7 @@ interface ExpenseSummaryProps {
   startDate?: Date
   endDate?: Date
   creditCardConfig?: { opening_day: number; closing_day: number }
+  onPaymentMethodClick?: (method: PaymentMethod) => void
 }
 
 export function ExpenseSummary({ 
@@ -19,7 +20,8 @@ export function ExpenseSummary({
   billingPeriod,
   startDate,
   endDate,
-  creditCardConfig
+  creditCardConfig,
+  onPaymentMethodClick
 }: ExpenseSummaryProps) {
   const totals = expenses.reduce(
     (acc, expense) => {
@@ -89,7 +91,10 @@ export function ExpenseSummary({
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-      <Card className="bg-gradient-success border-border/50 shadow-elegant">
+      <Card 
+        className="bg-gradient-success border-border/50 shadow-elegant cursor-pointer hover:shadow-glow transition-all"
+        onClick={() => onPaymentMethodClick?.('pix')}
+      >
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium text-success-foreground">PIX</CardTitle>
           <Smartphone className="h-4 w-4 text-success-foreground/80" />
@@ -104,7 +109,10 @@ export function ExpenseSummary({
         </CardContent>
       </Card>
 
-      <Card className="bg-gradient-primary border-border/50 shadow-elegant">
+      <Card 
+        className="bg-gradient-primary border-border/50 shadow-elegant cursor-pointer hover:shadow-glow transition-all"
+        onClick={() => onPaymentMethodClick?.('debit')}
+      >
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium text-primary-foreground">Débito</CardTitle>
           <CreditCard className="h-4 w-4 text-primary-foreground/80" />
@@ -119,7 +127,10 @@ export function ExpenseSummary({
         </CardContent>
       </Card>
 
-      <Card className="bg-gradient-card border-warning/50 shadow-elegant">
+      <Card 
+        className="bg-gradient-card border-warning/50 shadow-elegant cursor-pointer hover:shadow-glow transition-all"
+        onClick={() => onPaymentMethodClick?.('credit')}
+      >
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium text-foreground">Crédito</CardTitle>
           <CreditCard className="h-4 w-4 text-muted-foreground" />

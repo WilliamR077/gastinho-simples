@@ -574,6 +574,17 @@ export default function Index() {
     navigate("/auth");
   };
 
+  const handlePaymentMethodFilter = (method: PaymentMethod) => {
+    setFilters(prev => ({
+      ...prev,
+      paymentMethod: method
+    }));
+    toast({
+      title: "Filtro aplicado",
+      description: `Exibindo apenas ${method === 'pix' ? 'PIX' : method === 'debit' ? 'Débito' : 'Crédito'}`,
+    });
+  };
+
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -651,6 +662,7 @@ export default function Index() {
             startDate={filters.startDate}
             endDate={filters.endDate}
             creditCardConfig={creditCardConfig || undefined}
+            onPaymentMethodClick={handlePaymentMethodFilter}
           />
         </div>
 
