@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { validatePasswordStrength, sanitizeErrorMessage } from "@/utils/security";
 import { Progress } from "@/components/ui/progress";
+import { Eye, EyeOff } from "lucide-react";
 
 export default function ResetPassword() {
   const [isLoading, setIsLoading] = useState(false);
@@ -15,6 +16,8 @@ export default function ResetPassword() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordStrength, setPasswordStrength] = useState(validatePasswordStrength(""));
   const [hasValidToken, setHasValidToken] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -100,15 +103,25 @@ export default function ResetPassword() {
           <form onSubmit={handleResetPassword} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="password">Nova Senha</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => handlePasswordChange(e.target.value)}
-                required
-                minLength={8}
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => handlePasswordChange(e.target.value)}
+                  required
+                  minLength={8}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
               {password && (
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
@@ -136,15 +149,25 @@ export default function ResetPassword() {
             
             <div className="space-y-2">
               <Label htmlFor="confirm-password">Confirmar Nova Senha</Label>
-              <Input
-                id="confirm-password"
-                type="password"
-                placeholder="••••••••"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                minLength={8}
-              />
+              <div className="relative">
+                <Input
+                  id="confirm-password"
+                  type={showConfirmPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  minLength={8}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </div>
 
             <Button type="submit" className="w-full" disabled={isLoading}>
