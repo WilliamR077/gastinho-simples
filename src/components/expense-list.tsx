@@ -2,8 +2,9 @@ import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { CreditCard, Smartphone, Trash2, Receipt } from "lucide-react"
+import { CreditCard, Smartphone, Trash2, Receipt, MoreVertical, Pencil } from "lucide-react"
 import { Expense, categoryLabels, categoryIcons } from "@/types/expense"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
   Pagination,
   PaginationContent,
@@ -17,6 +18,7 @@ import {
 interface ExpenseListProps {
   expenses: Expense[]
   onDeleteExpense: (id: string) => void
+  onEditExpense: (expense: Expense) => void
 }
 
 const paymentMethodConfig = {
@@ -25,7 +27,7 @@ const paymentMethodConfig = {
   credit: { label: "Crédito", icon: CreditCard, color: "bg-warning text-warning-foreground" }
 }
 
-export function ExpenseList({ expenses, onDeleteExpense }: ExpenseListProps) {
+export function ExpenseList({ expenses, onDeleteExpense, onEditExpense }: ExpenseListProps) {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
 
@@ -116,14 +118,27 @@ export function ExpenseList({ expenses, onDeleteExpense }: ExpenseListProps) {
                   <p className="font-bold text-base sm:text-lg text-primary whitespace-nowrap">
                     R$ {expense.amount.toFixed(2).replace('.', ',')}
                   </p>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => onDeleteExpense(expense.id)}
-                    className="text-destructive hover:text-destructive hover:bg-destructive/10 transition-all duration-300 h-8 w-8"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="bg-background">
+                      <DropdownMenuItem onClick={() => onEditExpense(expense)}>
+                        <Pencil className="mr-2 h-4 w-4" />
+                        Editar
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => onDeleteExpense(expense.id)}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Apagar
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
             )

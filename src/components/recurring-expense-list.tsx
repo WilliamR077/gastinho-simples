@@ -2,14 +2,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
-import { CreditCard, Smartphone, Trash2, Calendar } from "lucide-react"
+import { CreditCard, Smartphone, Trash2, Calendar, MoreVertical, Pencil } from "lucide-react"
 import { RecurringExpense } from "@/types/recurring-expense"
 import { categoryLabels, categoryIcons } from "@/types/expense"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 interface RecurringExpenseListProps {
   expenses: RecurringExpense[]
   onDeleteExpense: (id: string) => void
   onToggleActive: (id: string, isActive: boolean) => void
+  onEditRecurringExpense: (expense: RecurringExpense) => void
 }
 
 const paymentMethodConfig = {
@@ -18,7 +20,7 @@ const paymentMethodConfig = {
   credit: { label: "Crédito", icon: CreditCard, color: "bg-warning text-warning-foreground" }
 }
 
-export function RecurringExpenseList({ expenses, onDeleteExpense, onToggleActive }: RecurringExpenseListProps) {
+export function RecurringExpenseList({ expenses, onDeleteExpense, onToggleActive, onEditRecurringExpense }: RecurringExpenseListProps) {
   if (expenses.length === 0) {
     return (
       <Card className="bg-gradient-card border-border/50 shadow-card backdrop-blur-sm">
@@ -77,20 +79,36 @@ export function RecurringExpenseList({ expenses, onDeleteExpense, onToggleActive
                   <p className="font-bold text-base sm:text-lg text-primary whitespace-nowrap">
                     R$ {expense.amount.toFixed(2).replace('.', ',')}
                   </p>
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      checked={expense.is_active}
-                      onCheckedChange={(checked) => onToggleActive(expense.id, checked)}
-                    />
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onDeleteExpense(expense.id)}
-                      className="text-destructive hover:text-destructive hover:bg-destructive/10 transition-all duration-300 shrink-0"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="bg-background">
+                      <DropdownMenuItem onClick={() => onEditRecurringExpense(expense)}>
+                        <Pencil className="mr-2 h-4 w-4" />
+                        Editar
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <div className="flex items-center justify-between px-2 py-2 text-sm">
+                        <span className="mr-2">Ativo</span>
+                        <Switch
+                          checked={expense.is_active}
+                          onCheckedChange={(checked) => onToggleActive(expense.id, checked)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </div>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => onDeleteExpense(expense.id)}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Apagar
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
             )

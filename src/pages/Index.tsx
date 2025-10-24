@@ -5,6 +5,9 @@ import { ExpenseForm } from "@/components/expense-form";
 import { ExpenseList } from "@/components/expense-list";
 import { ExpenseFilters, ExpenseFilters as ExpenseFiltersType } from "@/components/expense-filters";
 import { CategorySummary } from "@/components/category-summary";
+import { ExpenseEditDialog } from "@/components/expense-edit-dialog";
+import { RecurringExpenseEditDialog } from "@/components/recurring-expense-edit-dialog";
+import { BudgetGoalEditDialog } from "@/components/budget-goal-edit-dialog";
 
 import { Expense, PaymentMethod, ExpenseFormData, ExpenseCategory, categoryLabels } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
@@ -36,6 +39,15 @@ export default function Index() {
   const [creditCardConfig, setCreditCardConfig] = useState<{opening_day: number; closing_day: number} | null>(null);
   const [notificationSettings, setNotificationSettings] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("expenses");
+  
+  // Estados para os modais de edição
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
+  const [editingRecurringExpense, setEditingRecurringExpense] = useState<RecurringExpense | null>(null);
+  const [recurringExpenseDialogOpen, setRecurringExpenseDialogOpen] = useState(false);
+  const [editingBudgetGoal, setEditingBudgetGoal] = useState<BudgetGoal | null>(null);
+  const [budgetGoalDialogOpen, setBudgetGoalDialogOpen] = useState(false);
+  
   const { user, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
 
@@ -507,6 +519,167 @@ export default function Index() {
     }
   };
 
+  // Funções de edição
+  const handleEditExpense = (expense: Expense) => {
+    setEditingExpense(expense);
+    setExpenseDialogOpen(true);
+  };
+
+  const updateExpense = async (id: string, data: ExpenseFormData) => {
+    try {
+      const formatDateLocal = (date: Date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
+
+      const { error } = await supabase
+        .from("expenses")
+        .update({
+          description: data.description,
+          amount: data.amount,
+          payment_method: data.paymentMethod,
+          expense_date: formatDateLocal(data.expenseDate),
+          category: data.category,
+        })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      setExpenses(prev => prev.map(e => 
+        e.id === id 
+          ? { 
+              ...e, 
+              description: data.description, 
+              amount: data.amount, 
+              payment_method: data.paymentMethod, 
+              expense_date: formatDateLocal(data.expenseDate), 
+              category: data.category 
+            }
+          : e
+      ));
+
+      setExpenseDialogOpen(false);
+      setEditingExpense(null);
+
+      toast({
+        title: "Despesa atualizada!",
+        description: "As alterações foram salvas com sucesso.",
+      });
+    } catch (error) {
+      console.error("Error updating expense:", error);
+      toast({
+        title: "Erro ao atualizar despesa",
+        description: "Não foi possível atualizar a despesa.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleEditRecurringExpense = (expense: RecurringExpense) => {
+    setEditingRecurringExpense(expense);
+    setRecurringExpenseDialogOpen(true);
+  };
+
+  const updateRecurringExpense = async (id: string, data: RecurringExpenseFormData) => {
+    try {
+      const { error } = await supabase
+        .from("recurring_expenses")
+        .update({
+          description: data.description,
+          amount: data.amount,
+          payment_method: data.paymentMethod,
+          day_of_month: data.dayOfMonth,
+          category: data.category,
+        })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      const updatedExpense = {
+        ...recurringExpenses.find(e => e.id === id)!,
+        description: data.description,
+        amount: data.amount,
+        payment_method: data.paymentMethod,
+        day_of_month: data.dayOfMonth,
+        category: data.category,
+      };
+
+      setRecurringExpenses(prev => 
+        prev.map(e => e.id === id ? updatedExpense : e).sort((a, b) => a.day_of_month - b.day_of_month)
+      );
+
+      // Re-agendar notificações se estiver ativa
+      if (updatedExpense.is_active) {
+        await NotificationService.cancelNotificationsForExpense(id);
+        await NotificationService.scheduleNotificationsForExpense(updatedExpense, notificationSettings);
+      }
+
+      setRecurringExpenseDialogOpen(false);
+      setEditingRecurringExpense(null);
+
+      toast({
+        title: "Despesa fixa atualizada!",
+        description: "As alterações foram salvas com sucesso.",
+      });
+    } catch (error) {
+      console.error("Error updating recurring expense:", error);
+      toast({
+        title: "Erro ao atualizar despesa fixa",
+        description: "Não foi possível atualizar a despesa fixa.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleEditBudgetGoal = (goal: BudgetGoal) => {
+    setEditingBudgetGoal(goal);
+    setBudgetGoalDialogOpen(true);
+  };
+
+  const updateBudgetGoal = async (id: string, data: { type: string; category?: string; limitAmount: number }) => {
+    try {
+      const { error } = await supabase
+        .from("budget_goals")
+        .update({
+          type: data.type as "monthly_total" | "category",
+          category: (data.category as any) || null,
+          limit_amount: data.limitAmount,
+        })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      setBudgetGoals(prev => prev.map(g => {
+        if (g.id === id) {
+          return {
+            ...g,
+            type: data.type as "monthly_total" | "category",
+            category: (data.category as any) || null,
+            limit_amount: data.limitAmount
+          };
+        }
+        return g;
+      }));
+
+      setBudgetGoalDialogOpen(false);
+      setEditingBudgetGoal(null);
+
+      toast({
+        title: "Meta atualizada!",
+        description: "As alterações foram salvas com sucesso.",
+      });
+    } catch (error) {
+      console.error("Error updating budget goal:", error);
+      toast({
+        title: "Erro ao atualizar meta",
+        description: "Não foi possível atualizar a meta.",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Gerar períodos de faturamento disponíveis
   const billingPeriods = useMemo(() => {
     if (!creditCardConfig) return [];
@@ -731,6 +904,7 @@ export default function Index() {
                 <ExpenseList 
                   expenses={filteredExpenses} 
                   onDeleteExpense={deleteExpense}
+                  onEditExpense={handleEditExpense}
                 />
               </div>
             </div>
@@ -749,6 +923,7 @@ export default function Index() {
                   expenses={recurringExpenses}
                   onDeleteExpense={deleteRecurringExpense}
                   onToggleActive={toggleRecurringExpenseActive}
+                  onEditRecurringExpense={handleEditRecurringExpense}
                 />
               </div>
             </div>
@@ -768,11 +943,34 @@ export default function Index() {
                   expenses={expenses}
                   recurringExpenses={recurringExpenses}
                   onDelete={deleteBudgetGoal}
+                  onEdit={handleEditBudgetGoal}
                 />
               </div>
             </div>
           </TabsContent>
         </Tabs>
+
+        {/* Modais de Edição */}
+        <ExpenseEditDialog
+          expense={editingExpense}
+          open={expenseDialogOpen}
+          onOpenChange={setExpenseDialogOpen}
+          onSave={updateExpense}
+        />
+        
+        <RecurringExpenseEditDialog
+          expense={editingRecurringExpense}
+          open={recurringExpenseDialogOpen}
+          onOpenChange={setRecurringExpenseDialogOpen}
+          onSave={updateRecurringExpense}
+        />
+        
+        <BudgetGoalEditDialog
+          goal={editingBudgetGoal}
+          open={budgetGoalDialogOpen}
+          onOpenChange={setBudgetGoalDialogOpen}
+          onSave={updateBudgetGoal}
+        />
       </div>
     </div>
   );

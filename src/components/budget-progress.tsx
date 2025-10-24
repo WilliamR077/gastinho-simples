@@ -6,18 +6,19 @@ import { BudgetGoal } from "@/types/budget-goal";
 import { Expense } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
 import { categoryLabels, categoryIcons } from "@/types/expense";
-import { AlertTriangle, TrendingDown, TrendingUp } from "lucide-react";
+import { AlertTriangle, TrendingDown, TrendingUp, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Trash2 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 interface BudgetProgressProps {
   goals: BudgetGoal[];
   expenses: Expense[];
   recurringExpenses: RecurringExpense[];
   onDelete: (id: string) => void;
+  onEdit: (goal: BudgetGoal) => void;
 }
 
-export function BudgetProgress({ goals, expenses, recurringExpenses, onDelete }: BudgetProgressProps) {
+export function BudgetProgress({ goals, expenses, recurringExpenses, onDelete, onEdit }: BudgetProgressProps) {
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("pt-BR", {
       style: "currency",
@@ -102,14 +103,27 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, onDelete }:
                     Meta: {formatCurrency(limit)}
                   </CardDescription>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => onDelete(goal.id)}
-                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="bg-background">
+                    <DropdownMenuItem onClick={() => onEdit(goal)}>
+                      <Pencil className="mr-2 h-4 w-4" />
+                      Editar
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => onDelete(goal.id)}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Apagar
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
