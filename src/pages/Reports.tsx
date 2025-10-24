@@ -1,19 +1,23 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Expense } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
 import { ExpenseCharts } from "@/components/expense-charts";
+import { ExpenseFilters, ExpenseFilters as ExpenseFiltersType } from "@/components/expense-filters";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, LogOut, User } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { generateBillingPeriods } from "@/utils/billing-period";
 
 const Reports = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>([]);
+  const [filters, setFilters] = useState<ExpenseFiltersType>({});
+  const [creditCardConfig, setCreditCardConfig] = useState<{ opening_day: number; closing_day: number } | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -23,6 +27,7 @@ const Reports = () => {
     
     fetchExpenses();
     fetchRecurringExpenses();
+    fetchCreditCardConfig();
   }, [user, navigate]);
 
   const fetchExpenses = async () => {
@@ -59,6 +64,28 @@ const Reports = () => {
 
     setRecurringExpenses(data || []);
   };
+
+  const fetchCreditCardConfig = async () => {
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from("credit_card_configs")
+      .select("*")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Error fetching credit card config:", error);
+      return;
+    }
+
+    setCreditCardConfig(data);
+  };
+
+  const billingPeriods = useMemo(() => {
+    if (!creditCardConfig) return [];
+    return generateBillingPeriods(expenses, creditCardConfig);
+  }, [expenses, creditCardConfig]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -104,7 +131,26 @@ const Reports = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        <ExpenseCharts expenses={expenses} recurringExpenses={recurringExpenses} />
+        {/* Filtros */}
+        <div className="mb-8">
+          <ExpenseFilters 
+            filters={filters}
+            onFiltersChange={setFilters}
+            billingPeriods={billingPeriods}
+          />
+        </div>
+
+        {/* Gráficos */}
+        <ExpenseCharts 
+          expenses={expenses} 
+          recurringExpenses={recurringExpenses}
+          billingPeriod={filters.billingPeriod}
+          startDate={filters.startDate}
+          endDate={filters.endDate}
+          creditCardConfig={creditCardConfig || undefined}
+          paymentMethod={filters.paymentMethod}
+          category={filters.category}
+        />
       </main>
     </div>
   );

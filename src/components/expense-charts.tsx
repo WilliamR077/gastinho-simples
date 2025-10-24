@@ -18,6 +18,8 @@ interface ExpenseChartsProps {
     opening_day: number;
     closing_day: number;
   };
+  paymentMethod?: PaymentMethod;
+  category?: ExpenseCategory;
 }
 
 const COLORS = {
@@ -45,7 +47,9 @@ export function ExpenseCharts({
   billingPeriod,
   startDate,
   endDate,
-  creditCardConfig
+  creditCardConfig,
+  paymentMethod,
+  category
 }: ExpenseChartsProps) {
   
   // Filtrar despesas para o período selecionado
@@ -63,8 +67,17 @@ export function ExpenseCharts({
       }
     }
 
+    // Aplicar filtros adicionais
+    if (paymentMethod) {
+      filtered = filtered.filter(e => e.payment_method === paymentMethod);
+    }
+
+    if (category) {
+      filtered = filtered.filter(e => e.category === category);
+    }
+
     return filtered;
-  }, [expenses, billingPeriod, startDate, endDate, creditCardConfig]);
+  }, [expenses, billingPeriod, startDate, endDate, creditCardConfig, paymentMethod, category]);
 
   // Dados para gráfico de pizza - Por forma de pagamento
   const paymentMethodData = useMemo(() => {
