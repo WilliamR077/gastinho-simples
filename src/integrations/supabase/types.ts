@@ -146,6 +146,39 @@ export type Database = {
         }
         Relationships: []
       }
+      notification_settings: {
+        Row: {
+          created_at: string
+          id: string
+          is_enabled: boolean
+          notify_1_day_before: boolean
+          notify_3_days_before: boolean
+          notify_on_day: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          notify_1_day_before?: boolean
+          notify_3_days_before?: boolean
+          notify_on_day?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          notify_1_day_before?: boolean
+          notify_3_days_before?: boolean
+          notify_on_day?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       recurring_expenses: {
         Row: {
           amount: number

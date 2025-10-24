@@ -13,6 +13,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { validatePasswordStrength, sanitizeErrorMessage, isEmailValid } from "@/utils/security";
 import { Progress } from "@/components/ui/progress";
 import { CreditCardConfig } from "@/components/credit-card-config";
+import { NotificationSettings } from "@/components/notification-settings";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -537,6 +538,9 @@ export default function Account() {
         <div className="grid gap-6">
           {/* Credit Card Configuration */}
           <CreditCardConfig />
+
+          {/* Notification Settings */}
+          <NotificationSettings />
 
           {/* Export Data Section */}
           <Card>
