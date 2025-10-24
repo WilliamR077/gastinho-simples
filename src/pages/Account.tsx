@@ -228,44 +228,37 @@ export default function Account() {
         throw new Error("Usuário não identificado");
       }
 
-      // First clear all expenses (reuse the logic)
-      const { error: expensesError } = await supabase
-        .from("expenses")
-        .delete()
-        .eq("user_id", user.id);
-
-      if (expensesError) throw expensesError;
-
-      const { error: recurringError } = await supabase
-        .from("recurring_expenses")
-        .delete()
-        .eq("user_id", user.id);
-
-      if (recurringError) throw recurringError;
-
-      const { error: configError } = await supabase
-        .from("credit_card_configs")
-        .delete()
-        .eq("user_id", user.id);
-
-      if (configError) throw configError;
-
-      // Log audit action before sign out
+      // Log audit action before deletion
       await logAuditAction("account_deletion_requested", {
         message: "User requested full account deletion"
       });
 
-      // Note: Supabase Auth requires admin privileges to delete users
-      // For now, we just sign out the user after clearing data
+      // Call the Edge Function to delete the account permanently
+      const { data, error } = await supabase.functions.invoke('delete-user-account', {
+        method: 'POST',
+      });
+
+      if (error) {
+        console.error('Error calling delete-user-account function:', error);
+        throw new Error(error.message || 'Erro ao deletar conta');
+      }
+
+      if (data?.error) {
+        console.error('Error from delete-user-account function:', data.error);
+        throw new Error(data.error);
+      }
+
+      // Sign out the user
       await signOut();
 
       toast({
-        title: "Conta encerrada",
-        description: "Todos os seus dados foram removidos e você foi desconectado. Para excluir completamente sua conta do sistema, entre em contato com o suporte.",
+        title: "Conta excluída permanentemente",
+        description: "Sua conta e todos os seus dados foram removidos do sistema.",
       });
 
       navigate("/auth");
     } catch (error: any) {
+      console.error('Error in handleDeleteAccountCompletely:', error);
       toast({
         title: "Erro ao excluir conta",
         description: sanitizeErrorMessage(error),
