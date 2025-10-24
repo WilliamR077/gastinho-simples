@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LogOut, Wallet, User } from "lucide-react";
 import { generateBillingPeriods, filterExpensesByBillingPeriod } from "@/utils/billing-period";
+import { NotificationService } from "@/services/notification-service";
 
 export default function Index() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -41,6 +42,19 @@ export default function Index() {
       navigate("/auth");
     }
   }, [user, authLoading, navigate]);
+
+  // Initialize notifications when recurring expenses are loaded
+  useEffect(() => {
+    if (recurringExpenses.length > 0) {
+      NotificationService.requestPermissions().then(granted => {
+        if (granted) {
+          NotificationService.rescheduleAllNotifications(
+            recurringExpenses.filter(e => e.is_active)
+          );
+        }
+      });
+    }
+  }, [recurringExpenses]);
 
   // Load expenses and credit card config from Supabase
   useEffect(() => {
@@ -256,6 +270,9 @@ export default function Index() {
       if (error) throw error;
       setRecurringExpenses(prev => [...prev, insertedData].sort((a, b) => a.day_of_month - b.day_of_month));
       
+      // Agendar notificações para a nova despesa
+      await NotificationService.scheduleNotificationsForExpense(insertedData);
+      
       toast({
         title: "Despesa fixa adicionada!",
         description: `${data.description} - R$ ${data.amount.toFixed(2)} (Dia ${data.dayOfMonth})`,
@@ -272,6 +289,9 @@ export default function Index() {
 
   const deleteRecurringExpense = async (id: string) => {
     try {
+      // Cancelar notificações antes de deletar
+      await NotificationService.cancelNotificationsForExpense(id);
+      
       const { error } = await supabase
         .from("recurring_expenses")
         .delete()
@@ -305,11 +325,24 @@ export default function Index() {
 
       if (error) throw error;
 
+      const updatedExpense = recurringExpenses.find(e => e.id === id);
+      
       setRecurringExpenses(prev => 
         prev.map(expense => 
           expense.id === id ? { ...expense, is_active: isActive } : expense
         )
       );
+      
+      // Gerenciar notificações baseado no status
+      if (updatedExpense) {
+        if (isActive) {
+          // Ativar: agendar notificações
+          await NotificationService.scheduleNotificationsForExpense({ ...updatedExpense, is_active: isActive });
+        } else {
+          // Desativar: cancelar notificações
+          await NotificationService.cancelNotificationsForExpense(id);
+        }
+      }
       
       toast({
         title: isActive ? "Despesa fixa ativada" : "Despesa fixa desativada",
