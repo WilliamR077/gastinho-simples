@@ -1,5 +1,7 @@
+import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { TrendingUp } from "lucide-react"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { TrendingUp, ChevronDown } from "lucide-react"
 import { Expense } from "@/types/expense"
 import { RecurringExpense } from "@/types/recurring-expense"
 import { categoryLabels, categoryIcons, ExpenseCategory } from "@/types/expense"
@@ -29,6 +31,8 @@ export function CategorySummary({
   onCategoryClick,
   activeCategory
 }: CategorySummaryProps) {
+  
+  const [isOpen, setIsOpen] = useState(false)
   
   // Calculate totals by category from regular expenses
   const categoryTotals: Record<ExpenseCategory, number> = {
@@ -133,57 +137,68 @@ export function CategorySummary({
   }
 
   return (
-    <Card className="bg-gradient-card border-border/50 shadow-card backdrop-blur-sm">
-      <CardHeader>
-        <CardTitle className="text-primary flex items-center gap-2">
-          <TrendingUp className="h-5 w-5" />
-          Gastos por Categoria
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          {sortedCategories.map(([category, total]) => {
-            const percentage = totalAmount > 0 ? (total / totalAmount) * 100 : 0
-            const categoryKey = category as ExpenseCategory
-            
-            return (
-              <div 
-                key={category} 
-                className={`space-y-2 cursor-pointer hover:bg-muted/50 transition-colors rounded-lg p-2 ${
-                  activeCategory === categoryKey ? 'bg-muted ring-2 ring-primary ring-offset-2 ring-offset-background' : ''
-                }`}
-                onClick={() => onCategoryClick?.(categoryKey)}
-              >
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <Card className="bg-gradient-card border-border/50 shadow-card backdrop-blur-sm">
+        <CollapsibleTrigger asChild>
+          <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+            <CardTitle className="text-primary flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5" />
+                Gastos por Categoria
+              </div>
+              <ChevronDown 
+                className={`h-5 w-5 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+              />
+            </CardTitle>
+          </CardHeader>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <CardContent>
+            <div className="space-y-4">
+              {sortedCategories.map(([category, total]) => {
+                const percentage = totalAmount > 0 ? (total / totalAmount) * 100 : 0
+                const categoryKey = category as ExpenseCategory
+                
+                return (
+                  <div 
+                    key={category} 
+                    className={`space-y-2 cursor-pointer hover:bg-muted/50 transition-colors rounded-lg p-2 ${
+                      activeCategory === categoryKey ? 'bg-muted ring-2 ring-primary ring-offset-2 ring-offset-background' : ''
+                    }`}
+                    onClick={() => onCategoryClick?.(categoryKey)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">{categoryIcons[categoryKey]}</span>
+                        <span className="font-medium text-foreground">
+                          {categoryLabels[categoryKey]}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-primary">{formatCurrency(total)}</p>
+                        <p className="text-xs text-muted-foreground">{percentage.toFixed(1)}%</p>
+                      </div>
+                    </div>
+                    <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                      <div
+                        className="bg-gradient-primary h-full transition-all duration-500 rounded-full"
+                        style={{ width: `${percentage}%` }}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+              
+              <div className="pt-4 border-t border-border">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-2xl">{categoryIcons[categoryKey]}</span>
-                    <span className="font-medium text-foreground">
-                      {categoryLabels[categoryKey]}
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold text-primary">{formatCurrency(total)}</p>
-                    <p className="text-xs text-muted-foreground">{percentage.toFixed(1)}%</p>
-                  </div>
-                </div>
-                <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-                  <div
-                    className="bg-gradient-primary h-full transition-all duration-500 rounded-full"
-                    style={{ width: `${percentage}%` }}
-                  />
+                  <span className="font-bold text-foreground">Total</span>
+                  <span className="font-bold text-lg text-primary">{formatCurrency(totalAmount)}</span>
                 </div>
               </div>
-            )
-          })}
-          
-          <div className="pt-4 border-t border-border">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-foreground">Total</span>
-              <span className="font-bold text-lg text-primary">{formatCurrency(totalAmount)}</span>
             </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
   )
 }
