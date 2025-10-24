@@ -138,15 +138,6 @@ export default function Auth() {
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!isEmailValid(resetEmail)) {
-      toast({
-        title: "Email inválido",
-        description: "Digite um email válido",
-        variant: "destructive",
-      });
-      return;
-    }
 
     setIsResetLoading(true);
 
