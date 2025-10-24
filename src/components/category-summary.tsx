@@ -15,6 +15,8 @@ interface CategorySummaryProps {
     opening_day: number
     closing_day: number
   }
+  onCategoryClick?: (category: ExpenseCategory) => void
+  activeCategory?: ExpenseCategory
 }
 
 export function CategorySummary({
@@ -23,7 +25,9 @@ export function CategorySummary({
   startDate,
   endDate,
   billingPeriod,
-  creditCardConfig
+  creditCardConfig,
+  onCategoryClick,
+  activeCategory
 }: CategorySummaryProps) {
   
   // Calculate totals by category from regular expenses
@@ -143,7 +147,13 @@ export function CategorySummary({
             const categoryKey = category as ExpenseCategory
             
             return (
-              <div key={category} className="space-y-2">
+              <div 
+                key={category} 
+                className={`space-y-2 cursor-pointer hover:bg-muted/50 transition-colors rounded-lg p-2 ${
+                  activeCategory === categoryKey ? 'bg-muted ring-2 ring-primary ring-offset-2 ring-offset-background' : ''
+                }`}
+                onClick={() => onCategoryClick?.(categoryKey)}
+              >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-2xl">{categoryIcons[categoryKey]}</span>

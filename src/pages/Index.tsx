@@ -6,7 +6,7 @@ import { ExpenseList } from "@/components/expense-list";
 import { ExpenseFilters, ExpenseFilters as ExpenseFiltersType } from "@/components/expense-filters";
 import { CategorySummary } from "@/components/category-summary";
 
-import { Expense, PaymentMethod, ExpenseFormData } from "@/types/expense";
+import { Expense, PaymentMethod, ExpenseFormData, ExpenseCategory, categoryLabels } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
 import { RecurringExpenseForm } from "@/components/recurring-expense-form";
 import { RecurringExpenseList } from "@/components/recurring-expense-list";
@@ -594,6 +594,26 @@ export default function Index() {
     });
   };
 
+  const handleCategoryFilter = (category: ExpenseCategory) => {
+    setFilters(prev => {
+      const isActive = prev.category === category;
+      if (isActive) {
+        const { category: _, ...rest } = prev;
+        toast({
+          title: "Filtro removido",
+          description: "Exibindo todas as categorias",
+        });
+        return rest;
+      } else {
+        toast({
+          title: "Filtro aplicado",
+          description: `Exibindo apenas ${categoryLabels[category]}`,
+        });
+        return { ...prev, category };
+      }
+    });
+  };
+
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -685,6 +705,8 @@ export default function Index() {
             startDate={filters.startDate}
             endDate={filters.endDate}
             creditCardConfig={creditCardConfig || undefined}
+            onCategoryClick={handleCategoryFilter}
+            activeCategory={filters.category}
           />
         </div>
 
