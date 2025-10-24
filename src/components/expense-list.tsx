@@ -68,44 +68,48 @@ export function ExpenseList({ expenses, onDeleteExpense }: ExpenseListProps) {
             return (
               <div
                 key={expense.id}
-                className="flex items-center gap-3 p-4 rounded-lg border bg-card/50 hover:bg-card/80 transition-all duration-300 hover:shadow-card"
+                className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-lg border bg-card/50 hover:bg-card/80 transition-all duration-300 hover:shadow-card"
               >
-                <div className={`p-2 rounded-full ${config.color} shrink-0`}>
-                  <Icon className="h-4 w-4" />
+                {/* Linha superior - Mobile e Desktop */}
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className={`p-2 rounded-full ${config.color} shrink-0`}>
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-lg shrink-0">{categoryIcons[expense.category]}</span>
+                      <p className="font-medium text-foreground truncate">{expense.description}</p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1 sm:gap-2 text-xs sm:text-sm text-muted-foreground">
+                      <span>{categoryLabels[expense.category]}</span>
+                      <span className="hidden sm:inline">•</span>
+                      <span className="whitespace-nowrap">
+                        Data: {expense.expense_date.substring(0, 10).split('-').reverse().join('/')}
+                      </span>
+                      <span className="hidden sm:inline">•</span>
+                      <span className="whitespace-nowrap">
+                        Criado: {new Date(expense.created_at).toLocaleDateString('pt-BR', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </span>
+                      {expense.total_installments > 1 && (
+                        <>
+                          <span className="hidden sm:inline">•</span>
+                          <span className="font-medium text-primary whitespace-nowrap">
+                            {expense.installment_number}/{expense.total_installments}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </div>
                 
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-lg shrink-0">{categoryIcons[expense.category]}</span>
-                    <p className="font-medium text-foreground truncate">{expense.description}</p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-1 sm:gap-2 text-xs sm:text-sm text-muted-foreground">
-                    <span>{categoryLabels[expense.category]}</span>
-                    <span className="hidden sm:inline">•</span>
-                    <span>
-                      Data: {expense.expense_date.substring(0, 10).split('-').reverse().join('/')}
-                    </span>
-                    <span className="hidden sm:inline">•</span>
-                    <span>
-                      Criado: {new Date(expense.created_at).toLocaleDateString('pt-BR', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </span>
-                    {expense.total_installments > 1 && (
-                      <>
-                        <span className="hidden sm:inline">•</span>
-                        <span className="font-medium text-primary">
-                          {expense.installment_number}/{expense.total_installments}
-                        </span>
-                      </>
-                    )}
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                {/* Linha inferior - Mobile | Mesma linha no Desktop */}
+                <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3 shrink-0 pl-11 sm:pl-0">
                   <Badge variant="outline" className={`${config.color} text-xs whitespace-nowrap`}>
                     {config.label}
                   </Badge>
