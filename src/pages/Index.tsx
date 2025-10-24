@@ -14,6 +14,7 @@ import { RecurringExpenseFormData } from "@/types/recurring-expense";
 import { BudgetGoal } from "@/types/budget-goal";
 import { BudgetGoalsForm } from "@/components/budget-goals-form";
 import { BudgetProgress } from "@/components/budget-progress";
+import { RemindersPanel } from "@/components/reminders-panel";
 import { toast } from "@/hooks/use-toast";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { BarChart3 } from "lucide-react";
@@ -507,6 +508,9 @@ export default function Index() {
             <ThemeToggle />
           </div>
         </div>
+
+        {/* Lembretes */}
+        <RemindersPanel recurringExpenses={recurringExpenses} />
 
         {/* Filtros */}
         <div className="mb-8">
