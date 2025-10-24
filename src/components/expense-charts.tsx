@@ -234,7 +234,13 @@ export function ExpenseCharts({
                 </Pie>
                 <Tooltip 
                   formatter={(value: number) => `R$ ${value.toFixed(2)}`}
-                  contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
+                  contentStyle={{ 
+                    backgroundColor: 'hsl(var(--card))', 
+                    border: '1px solid hsl(var(--border))',
+                    color: 'hsl(var(--foreground))'
+                  }}
+                  labelStyle={{ color: 'hsl(var(--foreground))' }}
+                  itemStyle={{ color: 'hsl(var(--foreground))' }}
                 />
                 <Legend />
               </PieChart>
@@ -278,7 +284,13 @@ export function ExpenseCharts({
                 </Pie>
                 <Tooltip 
                   formatter={(value: number) => `R$ ${value.toFixed(2)}`}
-                  contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
+                  contentStyle={{ 
+                    backgroundColor: 'hsl(var(--card))', 
+                    border: '1px solid hsl(var(--border))',
+                    color: 'hsl(var(--foreground))'
+                  }}
+                  labelStyle={{ color: 'hsl(var(--foreground))' }}
+                  itemStyle={{ color: 'hsl(var(--foreground))' }}
                 />
                 <Legend />
               </PieChart>
@@ -321,7 +333,13 @@ export function ExpenseCharts({
                   <Tooltip 
                     formatter={(value: number) => [`R$ ${value.toFixed(2)}`, 'Total']}
                     labelFormatter={(label) => `Mês: ${label}`}
-                    contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--card))', 
+                      border: '1px solid hsl(var(--border))',
+                      color: 'hsl(var(--foreground))'
+                    }}
+                    labelStyle={{ color: 'hsl(var(--foreground))' }}
+                    itemStyle={{ color: 'hsl(var(--foreground))' }}
                   />
                   <Legend />
                   <Line 
