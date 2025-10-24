@@ -50,9 +50,9 @@ export function BudgetGoalsForm({ onSubmit }: BudgetGoalsFormProps) {
   };
 
   return (
-    <Card>
+    <Card className="bg-gradient-card border-border/50 shadow-card backdrop-blur-sm">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+        <CardTitle className="flex items-center gap-2 text-primary">
           <Target className="h-5 w-5" />
           Definir Nova Meta
         </CardTitle>
@@ -118,7 +118,7 @@ export function BudgetGoalsForm({ onSubmit }: BudgetGoalsFormProps) {
             )}
           </div>
 
-          <Button type="submit" className="w-full">
+          <Button type="submit" className="w-full bg-gradient-primary hover:scale-105 transition-all duration-300 shadow-elegant">
             Adicionar Meta
           </Button>
         </form>
