@@ -12,16 +12,18 @@ interface ExpenseSummaryProps {
   endDate?: Date
   creditCardConfig?: { opening_day: number; closing_day: number }
   onPaymentMethodClick?: (method: PaymentMethod) => void
+  activePaymentMethod?: PaymentMethod
 }
 
 export function ExpenseSummary({ 
-  expenses, 
+  expenses,
   recurringExpenses = [],
   billingPeriod,
   startDate,
   endDate,
   creditCardConfig,
-  onPaymentMethodClick
+  onPaymentMethodClick,
+  activePaymentMethod
 }: ExpenseSummaryProps) {
   const totals = expenses.reduce(
     (acc, expense) => {
@@ -92,7 +94,9 @@ export function ExpenseSummary({
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
       <Card 
-        className="bg-gradient-success border-border/50 shadow-elegant cursor-pointer hover:shadow-glow transition-all"
+        className={`bg-gradient-success border-border/50 shadow-elegant cursor-pointer hover:shadow-glow transition-all ${
+          activePaymentMethod === 'pix' ? 'ring-2 ring-success ring-offset-2 ring-offset-background' : ''
+        }`}
         onClick={() => onPaymentMethodClick?.('pix')}
       >
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -110,7 +114,9 @@ export function ExpenseSummary({
       </Card>
 
       <Card 
-        className="bg-gradient-primary border-border/50 shadow-elegant cursor-pointer hover:shadow-glow transition-all"
+        className={`bg-gradient-primary border-border/50 shadow-elegant cursor-pointer hover:shadow-glow transition-all ${
+          activePaymentMethod === 'debit' ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''
+        }`}
         onClick={() => onPaymentMethodClick?.('debit')}
       >
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -128,7 +134,9 @@ export function ExpenseSummary({
       </Card>
 
       <Card 
-        className="bg-gradient-card border-warning/50 shadow-elegant cursor-pointer hover:shadow-glow transition-all"
+        className={`bg-gradient-card border-warning/50 shadow-elegant cursor-pointer hover:shadow-glow transition-all ${
+          activePaymentMethod === 'credit' ? 'ring-2 ring-warning ring-offset-2 ring-offset-background' : ''
+        }`}
         onClick={() => onPaymentMethodClick?.('credit')}
       >
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

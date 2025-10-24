@@ -575,13 +575,22 @@ export default function Index() {
   };
 
   const handlePaymentMethodFilter = (method: PaymentMethod) => {
-    setFilters(prev => ({
-      ...prev,
-      paymentMethod: method
-    }));
-    toast({
-      title: "Filtro aplicado",
-      description: `Exibindo apenas ${method === 'pix' ? 'PIX' : method === 'debit' ? 'Débito' : 'Crédito'}`,
+    setFilters(prev => {
+      const isActive = prev.paymentMethod === method;
+      if (isActive) {
+        const { paymentMethod, ...rest } = prev;
+        toast({
+          title: "Filtro removido",
+          description: "Exibindo todas as formas de pagamento",
+        });
+        return rest;
+      } else {
+        toast({
+          title: "Filtro aplicado",
+          description: `Exibindo apenas ${method === 'pix' ? 'PIX' : method === 'debit' ? 'Débito' : 'Crédito'}`,
+        });
+        return { ...prev, paymentMethod: method };
+      }
     });
   };
 
@@ -663,6 +672,7 @@ export default function Index() {
             endDate={filters.endDate}
             creditCardConfig={creditCardConfig || undefined}
             onPaymentMethodClick={handlePaymentMethodFilter}
+            activePaymentMethod={filters.paymentMethod}
           />
         </div>
 
