@@ -156,40 +156,6 @@ export function ExpenseFilters({ filters, onFiltersChange, billingPeriods = [] }
                 </Popover>
               </div>
 
-              {/* Filtro de Descrição */}
-              <div className="space-y-2">
-                <Label>Descrição</Label>
-                <Input
-                  placeholder="Ex: Almoço, Gasolina..."
-                  value={localFilters.description || ''}
-                  onChange={(e) => handleFilterChange('description', e.target.value)}
-                />
-              </div>
-
-              {/* Filtro de Valor Mínimo */}
-              <div className="space-y-2">
-                <Label>Valor Mínimo (R$)</Label>
-                <Input
-                  type="number"
-                  placeholder="0,00"
-                  step="0.01"
-                  value={localFilters.minAmount || ''}
-                  onChange={(e) => handleFilterChange('minAmount', parseFloat(e.target.value) || undefined)}
-                />
-              </div>
-
-              {/* Filtro de Valor Máximo */}
-              <div className="space-y-2">
-                <Label>Valor Máximo (R$)</Label>
-                <Input
-                  type="number"
-                  placeholder="0,00"
-                  step="0.01"
-                  value={localFilters.maxAmount || ''}
-                  onChange={(e) => handleFilterChange('maxAmount', parseFloat(e.target.value) || undefined)}
-                />
-              </div>
-
               {/* Filtro de Categoria */}
               <div className="space-y-2">
                 <Label>Categoria</Label>

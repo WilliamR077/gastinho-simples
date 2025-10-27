@@ -688,7 +688,7 @@ export default function Index() {
 
   // Filtrar despesas baseado nos filtros aplicados
   const filteredExpenses = useMemo(() => {
-    return expenses.filter(expense => {
+    let filtered = expenses.filter(expense => {
       // Filtro de data início
       if (filters.startDate) {
         const expenseDate = new Date(expense.expense_date);
@@ -740,6 +740,8 @@ export default function Index() {
 
       return true;
     });
+
+    return filtered;
   }, [expenses, filters, creditCardConfig]);
 
   const handleSignOut = async () => {

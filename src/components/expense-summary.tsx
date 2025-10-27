@@ -48,14 +48,16 @@ export function ExpenseSummary({
       let periodEnd: Date
       
       if (closing_day >= opening_day) {
+        // Normal case: billing period within same month (e.g., day 1 to 30)
         periodStart = new Date(year, month - 1, opening_day)
         periodEnd = new Date(year, month - 1, closing_day)
       } else {
-        periodStart = new Date(year, month - 1, opening_day)
-        periodEnd = new Date(year, month, closing_day)
+        // Period crosses month boundary (e.g., day 30 to day 29 next month)
+        periodStart = new Date(year, month - 2, opening_day)
+        periodEnd = new Date(year, month - 1, closing_day)
       }
       
-      // Check if the recurring expense day falls within this period
+      // Check if the recurring expense day falls within this billing period
       const expenseDay = expense.day_of_month
       const startDay = periodStart.getDate()
       const endDay = periodEnd.getDate()
@@ -63,7 +65,8 @@ export function ExpenseSummary({
       if (closing_day >= opening_day) {
         return expenseDay >= startDay && expenseDay <= endDay
       } else {
-        return expenseDay >= startDay || expenseDay <= endDay
+        // Period crosses month, so check both months
+        return (expenseDay >= startDay) || (expenseDay <= endDay)
       }
     }
     

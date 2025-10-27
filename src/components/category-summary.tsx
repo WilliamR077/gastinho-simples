@@ -61,22 +61,35 @@ export function CategorySummary({
       if (billingPeriod && creditCardConfig) {
         // If we have billing period filter, only include if expense falls within it
         const [year, month] = billingPeriod.split('-').map(Number)
-        const openingDay = creditCardConfig.opening_day
-        const closingDay = creditCardConfig.closing_day
+        const { opening_day, closing_day } = creditCardConfig
 
+        // Calculate the date range for this billing period
         let periodStart: Date
         let periodEnd: Date
 
-        if (closingDay >= openingDay) {
-          periodStart = new Date(year, month - 1, openingDay)
-          periodEnd = new Date(year, month - 1, closingDay)
+        if (closing_day >= opening_day) {
+          // Normal case: billing period within same month (e.g., day 1 to 30)
+          periodStart = new Date(year, month - 1, opening_day)
+          periodEnd = new Date(year, month - 1, closing_day)
         } else {
-          periodStart = new Date(year, month - 1, openingDay)
-          periodEnd = new Date(year, month, closingDay)
+          // Period crosses month boundary (e.g., day 30 to day 29 next month)
+          periodStart = new Date(year, month - 2, opening_day)
+          periodEnd = new Date(year, month - 1, closing_day)
         }
 
-        const expenseDate = new Date(year, month - 1, expense.day_of_month)
-        shouldInclude = isWithinInterval(expenseDate, { start: periodStart, end: periodEnd })
+        const expenseDay = expense.day_of_month
+        const startDay = periodStart.getDate()
+        const endDay = periodEnd.getDate()
+        const startMonth = periodStart.getMonth()
+        const endMonth = periodEnd.getMonth()
+        
+        // Check if the recurring expense day falls within this billing period
+        if (closing_day >= opening_day) {
+          shouldInclude = expenseDay >= startDay && expenseDay <= endDay
+        } else {
+          // Period crosses month, so check both months
+          shouldInclude = (expenseDay >= startDay) || (expenseDay <= endDay)
+        }
       } else if (startDate && endDate) {
         // If we have date range filter, check if day_of_month falls within the range
         const currentDate = new Date(startDate)
