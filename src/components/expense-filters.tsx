@@ -34,7 +34,7 @@ export function ExpenseFilters({ filters, onFiltersChange, billingPeriods = [] }
     const currentDate = new Date();
     const monthStart = startOfMonth(currentDate);
     const monthEnd = endOfMonth(currentDate);
-    
+
     return {
       ...filters,
       startDate: filters.startDate || monthStart,
@@ -49,13 +49,13 @@ export function ExpenseFilters({ filters, onFiltersChange, billingPeriods = [] }
       const currentDate = new Date();
       const monthStart = startOfMonth(currentDate);
       const monthEnd = endOfMonth(currentDate);
-      
+
       const defaultFilters = {
         ...filters,
         startDate: monthStart,
         endDate: monthEnd,
       };
-      
+
       onFiltersChange(defaultFilters);
     }
   }, []);
@@ -73,7 +73,7 @@ export function ExpenseFilters({ filters, onFiltersChange, billingPeriods = [] }
     const currentDate = new Date();
     const monthStart = startOfMonth(currentDate);
     const monthEnd = endOfMonth(currentDate);
-    
+
     const defaultFilters: ExpenseFilters = {
       startDate: monthStart,
       endDate: monthEnd,
@@ -96,7 +96,7 @@ export function ExpenseFilters({ filters, onFiltersChange, billingPeriods = [] }
             </CardTitle>
           </CardHeader>
         </CollapsibleTrigger>
-        
+
         <CollapsibleContent>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
@@ -156,11 +156,45 @@ export function ExpenseFilters({ filters, onFiltersChange, billingPeriods = [] }
                 </Popover>
               </div>
 
+              {/* Filtro de Descrição */}
+              <div className="space-y-2">
+                <Label>Descrição</Label>
+                <Input
+                  placeholder="Ex: Almoço, Gasolina..."
+                  value={localFilters.description || ''}
+                  onChange={(e) => handleFilterChange('description', e.target.value)}
+                />
+              </div>
+
+              {/* Filtro de Valor Mínimo */}
+              <div className="space-y-2">
+                <Label>Valor Mínimo (R$)</Label>
+                <Input
+                  type="number"
+                  placeholder="0,00"
+                  step="0.01"
+                  value={localFilters.minAmount || ''}
+                  onChange={(e) => handleFilterChange('minAmount', parseFloat(e.target.value) || undefined)}
+                />
+              </div>
+
+              {/* Filtro de Valor Máximo */}
+              <div className="space-y-2">
+                <Label>Valor Máximo (R$)</Label>
+                <Input
+                  type="number"
+                  placeholder="0,00"
+                  step="0.01"
+                  value={localFilters.maxAmount || ''}
+                  onChange={(e) => handleFilterChange('maxAmount', parseFloat(e.target.value) || undefined)}
+                />
+              </div>
+
               {/* Filtro de Categoria */}
               <div className="space-y-2">
                 <Label>Categoria</Label>
-                <Select 
-                  value={localFilters.category || 'all'} 
+                <Select
+                  value={localFilters.category || 'all'}
                   onValueChange={(value) => handleFilterChange('category', value === 'all' ? undefined : value as ExpenseCategory)}
                 >
                   <SelectTrigger>
@@ -180,8 +214,8 @@ export function ExpenseFilters({ filters, onFiltersChange, billingPeriods = [] }
               {/* Filtro de Forma de Pagamento */}
               <div className="space-y-2">
                 <Label>Forma de Pagamento</Label>
-                <Select 
-                  value={localFilters.paymentMethod || 'all'} 
+                <Select
+                  value={localFilters.paymentMethod || 'all'}
                   onValueChange={(value) => handleFilterChange('paymentMethod', value === 'all' ? undefined : value as PaymentMethod)}
                 >
                   <SelectTrigger>
@@ -200,8 +234,8 @@ export function ExpenseFilters({ filters, onFiltersChange, billingPeriods = [] }
               {billingPeriods.length > 0 && (
                 <div className="space-y-2">
                   <Label>Fatura do Cartão</Label>
-                  <Select 
-                    value={localFilters.billingPeriod || 'all'} 
+                  <Select
+                    value={localFilters.billingPeriod || 'all'}
                     onValueChange={(value) => handleFilterChange('billingPeriod', value === 'all' ? undefined : value)}
                   >
                     <SelectTrigger>

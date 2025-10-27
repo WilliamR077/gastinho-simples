@@ -31,9 +31,9 @@ export function CategorySummary({
   onCategoryClick,
   activeCategory
 }: CategorySummaryProps) {
-  
+
   const [isOpen, setIsOpen] = useState(false)
-  
+
   // Calculate totals by category from regular expenses
   const categoryTotals: Record<ExpenseCategory, number> = {
     alimentacao: 0,
@@ -61,35 +61,22 @@ export function CategorySummary({
       if (billingPeriod && creditCardConfig) {
         // If we have billing period filter, only include if expense falls within it
         const [year, month] = billingPeriod.split('-').map(Number)
-        const { opening_day, closing_day } = creditCardConfig
+        const openingDay = creditCardConfig.opening_day
+        const closingDay = creditCardConfig.closing_day
 
-        // Calculate the date range for this billing period
         let periodStart: Date
         let periodEnd: Date
 
-        if (closing_day >= opening_day) {
-          // Normal case: billing period within same month (e.g., day 1 to 30)
-          periodStart = new Date(year, month - 1, opening_day)
-          periodEnd = new Date(year, month - 1, closing_day)
+        if (closingDay >= openingDay) {
+          periodStart = new Date(year, month - 1, openingDay)
+          periodEnd = new Date(year, month - 1, closingDay)
         } else {
-          // Period crosses month boundary (e.g., day 30 to day 29 next month)
-          periodStart = new Date(year, month - 2, opening_day)
-          periodEnd = new Date(year, month - 1, closing_day)
+          periodStart = new Date(year, month - 1, openingDay)
+          periodEnd = new Date(year, month, closingDay)
         }
 
-        const expenseDay = expense.day_of_month
-        const startDay = periodStart.getDate()
-        const endDay = periodEnd.getDate()
-        const startMonth = periodStart.getMonth()
-        const endMonth = periodEnd.getMonth()
-        
-        // Check if the recurring expense day falls within this billing period
-        if (closing_day >= opening_day) {
-          shouldInclude = expenseDay >= startDay && expenseDay <= endDay
-        } else {
-          // Period crosses month, so check both months
-          shouldInclude = (expenseDay >= startDay) || (expenseDay <= endDay)
-        }
+        const expenseDate = new Date(year, month - 1, expense.day_of_month)
+        shouldInclude = isWithinInterval(expenseDate, { start: periodStart, end: periodEnd })
       } else if (startDate && endDate) {
         // If we have date range filter, check if day_of_month falls within the range
         const currentDate = new Date(startDate)
@@ -99,7 +86,7 @@ export function CategorySummary({
             currentDate.getMonth(),
             expense.day_of_month
           )
-          
+
           if (isWithinInterval(expenseDate, { start: startDate, end: endDate })) {
             shouldInclude = true
             break
@@ -159,7 +146,7 @@ export function CategorySummary({
                 <TrendingUp className="h-5 w-5" />
                 Gastos por Categoria
               </div>
-              <ChevronDown 
+              <ChevronDown
                 className={`h-5 w-5 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
               />
             </CardTitle>
@@ -171,13 +158,12 @@ export function CategorySummary({
               {sortedCategories.map(([category, total]) => {
                 const percentage = totalAmount > 0 ? (total / totalAmount) * 100 : 0
                 const categoryKey = category as ExpenseCategory
-                
+
                 return (
-                  <div 
-                    key={category} 
-                    className={`space-y-2 cursor-pointer hover:bg-muted/50 transition-colors rounded-lg p-2 ${
-                      activeCategory === categoryKey ? 'bg-muted ring-2 ring-primary ring-offset-2 ring-offset-background' : ''
-                    }`}
+                  <div
+                    key={category}
+                    className={`space-y-2 cursor-pointer hover:bg-muted/50 transition-colors rounded-lg p-2 ${activeCategory === categoryKey ? 'bg-muted ring-2 ring-primary ring-offset-2 ring-offset-background' : ''
+                      }`}
                     onClick={() => onCategoryClick?.(categoryKey)}
                   >
                     <div className="flex items-center justify-between">
@@ -201,7 +187,7 @@ export function CategorySummary({
                   </div>
                 )
               })}
-              
+
               <div className="pt-4 border-t border-border">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-foreground">Total</span>

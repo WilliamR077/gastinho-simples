@@ -36,10 +36,10 @@ export default function Index() {
   const [budgetGoals, setBudgetGoals] = useState<BudgetGoal[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<ExpenseFiltersType>({});
-  const [creditCardConfig, setCreditCardConfig] = useState<{opening_day: number; closing_day: number} | null>(null);
+  const [creditCardConfig, setCreditCardConfig] = useState<{ opening_day: number; closing_day: number } | null>(null);
   const [notificationSettings, setNotificationSettings] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("expenses");
-  
+
   // Estados para os modais de edição
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
@@ -47,7 +47,7 @@ export default function Index() {
   const [recurringExpenseDialogOpen, setRecurringExpenseDialogOpen] = useState(false);
   const [editingBudgetGoal, setEditingBudgetGoal] = useState<BudgetGoal | null>(null);
   const [budgetGoalDialogOpen, setBudgetGoalDialogOpen] = useState(false);
-  
+
   const { user, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
 
@@ -88,7 +88,7 @@ export default function Index() {
         .maybeSingle();
 
       if (error) throw error;
-      
+
       if (data) {
         setNotificationSettings(data);
       } else {
@@ -110,7 +110,7 @@ export default function Index() {
     NotificationService.addNotificationClickListener((notification) => {
       // Navega para a tab de lembretes quando clicar na notificação
       setActiveTab("recurring");
-      
+
       toast({
         title: "📱 Notificação recebida",
         description: "Verifique suas despesas fixas",
@@ -125,12 +125,12 @@ export default function Index() {
   // Setup app state listener for automatic resync
   useEffect(() => {
     let listenerHandle: any;
-    
+
     const setupListener = async () => {
       listenerHandle = await CapacitorApp.addListener('appStateChange', ({ isActive }) => {
         if (isActive && user) {
           console.log('🔄 App voltou para foreground - sincronizando notificações');
-          
+
           // Recarrega despesas e sincroniza notificações
           loadRecurringExpenses().then(() => {
             if (notificationSettings) {
@@ -212,7 +212,7 @@ export default function Index() {
         .maybeSingle();
 
       if (error) throw error;
-      
+
       if (data) {
         setCreditCardConfig(data);
       }
@@ -245,7 +245,7 @@ export default function Index() {
 
     try {
       const { description, amount, paymentMethod, expenseDate, installments = 1, category } = data;
-      
+
       // Format date to YYYY-MM-DD in local timezone (avoid UTC conversion issues)
       const formatDateLocal = (date: Date) => {
         const year = date.getFullYear();
@@ -253,7 +253,7 @@ export default function Index() {
         const day = String(date.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
       };
-      
+
       if (installments === 1) {
         // Single expense
         const { data: insertedData, error } = await supabase
@@ -282,7 +282,7 @@ export default function Index() {
         for (let i = 1; i <= installments; i++) {
           const installmentDate = new Date(expenseDate);
           installmentDate.setMonth(installmentDate.getMonth() + (i - 1));
-          
+
           expensesToInsert.push({
             description: `${description} (${i}/${installments})`,
             amount: installmentAmount,
@@ -304,11 +304,11 @@ export default function Index() {
         if (error) throw error;
         setExpenses(prev => [...(insertedData || []), ...prev]);
       }
-      
+
       toast({
         title: installments === 1 ? "Gasto adicionado!" : "Gasto parcelado adicionado!",
-        description: installments === 1 
-          ? `${description} - R$ ${amount.toFixed(2)}` 
+        description: installments === 1
+          ? `${description} - R$ ${amount.toFixed(2)}`
           : `${description} - ${installments}x de R$ ${(amount / installments).toFixed(2)}`,
       });
     } catch (error) {
@@ -331,7 +331,7 @@ export default function Index() {
       if (error) throw error;
 
       setExpenses(prev => prev.filter(expense => expense.id !== id));
-      
+
       toast({
         title: "Gasto removido",
         description: "O gasto foi excluído com sucesso.",
@@ -366,10 +366,10 @@ export default function Index() {
 
       if (error) throw error;
       setRecurringExpenses(prev => [...prev, insertedData].sort((a, b) => a.day_of_month - b.day_of_month));
-      
+
       // Agendar notificações para a nova despesa
       await NotificationService.scheduleNotificationsForExpense(insertedData, notificationSettings);
-      
+
       toast({
         title: "Despesa fixa adicionada!",
         description: `${data.description} - R$ ${data.amount.toFixed(2)} (Dia ${data.dayOfMonth})`,
@@ -388,7 +388,7 @@ export default function Index() {
     try {
       // Cancelar notificações antes de deletar
       await NotificationService.cancelNotificationsForExpense(id);
-      
+
       const { error } = await supabase
         .from("recurring_expenses")
         .delete()
@@ -397,7 +397,7 @@ export default function Index() {
       if (error) throw error;
 
       setRecurringExpenses(prev => prev.filter(expense => expense.id !== id));
-      
+
       toast({
         title: "Despesa fixa removida",
         description: "A despesa fixa foi excluída com sucesso.",
@@ -423,19 +423,19 @@ export default function Index() {
       if (error) throw error;
 
       const updatedExpense = recurringExpenses.find(e => e.id === id);
-      
-      setRecurringExpenses(prev => 
-        prev.map(expense => 
+
+      setRecurringExpenses(prev =>
+        prev.map(expense =>
           expense.id === id ? { ...expense, is_active: isActive } : expense
         )
       );
-      
+
       // Gerenciar notificações baseado no status
       if (updatedExpense) {
         if (isActive) {
           // Ativar: agendar notificações
           await NotificationService.scheduleNotificationsForExpense(
-            { ...updatedExpense, is_active: isActive }, 
+            { ...updatedExpense, is_active: isActive },
             notificationSettings
           );
         } else {
@@ -443,11 +443,11 @@ export default function Index() {
           await NotificationService.cancelNotificationsForExpense(id);
         }
       }
-      
+
       toast({
         title: isActive ? "Despesa fixa ativada" : "Despesa fixa desativada",
-        description: isActive 
-          ? "A despesa fixa foi ativada e será considerada nos cálculos." 
+        description: isActive
+          ? "A despesa fixa foi ativada e será considerada nos cálculos."
           : "A despesa fixa foi desativada e não será mais considerada.",
       });
     } catch (error) {
@@ -478,7 +478,7 @@ export default function Index() {
       if (error) throw error;
 
       setBudgetGoals(prev => [insertedData, ...prev]);
-      
+
       toast({
         title: "Meta adicionada!",
         description: "Sua meta de gastos foi criada com sucesso.",
@@ -503,7 +503,7 @@ export default function Index() {
       if (error) throw error;
 
       setBudgetGoals(prev => prev.filter(goal => goal.id !== id));
-      
+
       toast({
         title: "Meta removida",
         description: "A meta de gastos foi excluída com sucesso.",
@@ -547,16 +547,16 @@ export default function Index() {
 
       if (error) throw error;
 
-      setExpenses(prev => prev.map(e => 
-        e.id === id 
-          ? { 
-              ...e, 
-              description: data.description, 
-              amount: data.amount, 
-              payment_method: data.paymentMethod, 
-              expense_date: formatDateLocal(data.expenseDate), 
-              category: data.category 
-            }
+      setExpenses(prev => prev.map(e =>
+        e.id === id
+          ? {
+            ...e,
+            description: data.description,
+            amount: data.amount,
+            payment_method: data.paymentMethod,
+            expense_date: formatDateLocal(data.expenseDate),
+            category: data.category
+          }
           : e
       ));
 
@@ -606,7 +606,7 @@ export default function Index() {
         category: data.category,
       };
 
-      setRecurringExpenses(prev => 
+      setRecurringExpenses(prev =>
         prev.map(e => e.id === id ? updatedExpense : e).sort((a, b) => a.day_of_month - b.day_of_month)
       );
 
@@ -688,7 +688,7 @@ export default function Index() {
 
   // Filtrar despesas baseado nos filtros aplicados
   const filteredExpenses = useMemo(() => {
-    let filtered = expenses.filter(expense => {
+    return expenses.filter(expense => {
       // Filtro de data início
       if (filters.startDate) {
         const expenseDate = new Date(expense.expense_date);
@@ -731,8 +731,8 @@ export default function Index() {
       // Filtro de período de faturamento (apenas para crédito)
       if (filters.billingPeriod && creditCardConfig) {
         const billingExpenses = filterExpensesByBillingPeriod(
-          [expense], 
-          filters.billingPeriod, 
+          [expense],
+          filters.billingPeriod,
           creditCardConfig
         );
         if (billingExpenses.length === 0) return false;
@@ -740,8 +740,6 @@ export default function Index() {
 
       return true;
     });
-
-    return filtered;
   }, [expenses, filters, creditCardConfig]);
 
   const handleSignOut = async () => {
@@ -807,9 +805,9 @@ export default function Index() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
           <div className="flex items-center gap-3">
-            <img 
-              src="/lovable-uploads/06a1acc2-f553-41f0-8d87-32d25b4e425e.png" 
-              alt="Gastinho Simples - Controle de Gastos" 
+            <img
+              src="/lovable-uploads/06a1acc2-f553-41f0-8d87-32d25b4e425e.png"
+              alt="Gastinho Simples - Controle de Gastos"
               className="h-20 w-auto"
             />
           </div>
@@ -850,7 +848,7 @@ export default function Index() {
 
         {/* Filtros */}
         <div className="mb-8">
-          <ExpenseFilters 
+          <ExpenseFilters
             filters={filters}
             onFiltersChange={setFilters}
             billingPeriods={billingPeriods}
@@ -859,7 +857,7 @@ export default function Index() {
 
         {/* Category Summary */}
         <div className="mb-8">
-          <CategorySummary 
+          <CategorySummary
             expenses={filteredExpenses}
             recurringExpenses={recurringExpenses}
             billingPeriod={filters.billingPeriod}
@@ -873,8 +871,8 @@ export default function Index() {
 
         {/* Summary Cards */}
         <div className="mb-8">
-          <ExpenseSummary 
-            expenses={filteredExpenses} 
+          <ExpenseSummary
+            expenses={filteredExpenses}
             recurringExpenses={recurringExpenses}
             billingPeriod={filters.billingPeriod}
             startDate={filters.startDate}
@@ -903,8 +901,8 @@ export default function Index() {
 
               {/* Expense List */}
               <div className="space-y-6">
-                <ExpenseList 
-                  expenses={filteredExpenses} 
+                <ExpenseList
+                  expenses={filteredExpenses}
                   onDeleteExpense={deleteExpense}
                   onEditExpense={handleEditExpense}
                 />
@@ -921,7 +919,7 @@ export default function Index() {
 
               {/* Recurring Expense List */}
               <div className="space-y-6">
-                <RecurringExpenseList 
+                <RecurringExpenseList
                   expenses={recurringExpenses}
                   onDeleteExpense={deleteRecurringExpense}
                   onToggleActive={toggleRecurringExpenseActive}
@@ -959,14 +957,14 @@ export default function Index() {
           onOpenChange={setExpenseDialogOpen}
           onSave={updateExpense}
         />
-        
+
         <RecurringExpenseEditDialog
           expense={editingRecurringExpense}
           open={recurringExpenseDialogOpen}
           onOpenChange={setRecurringExpenseDialogOpen}
           onSave={updateRecurringExpense}
         />
-        
+
         <BudgetGoalEditDialog
           goal={editingBudgetGoal}
           open={budgetGoalDialogOpen}
