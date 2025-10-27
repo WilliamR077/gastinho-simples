@@ -79,6 +79,24 @@ export function ExpenseCharts({
     return filtered;
   }, [expenses, billingPeriod, startDate, endDate, creditCardConfig, paymentMethod, category]);
 
+  // Filtrar despesas recorrentes ativas para o período
+  const activeRecurringExpenses = useMemo(() => {
+    return recurringExpenses.filter(re => {
+      if (!re.is_active) return false;
+
+      // Aplicar filtros adicionais
+      if (paymentMethod && re.payment_method !== paymentMethod) {
+        return false;
+      }
+
+      if (category && re.category !== category) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [recurringExpenses, paymentMethod, category]);
+
   // Dados para gráfico de pizza - Por forma de pagamento
   const paymentMethodData = useMemo(() => {
     const totals: Record<PaymentMethod, number> = {
@@ -91,6 +109,11 @@ export function ExpenseCharts({
       totals[expense.payment_method] += Number(expense.amount);
     });
 
+    // Adicionar despesas recorrentes
+    activeRecurringExpenses.forEach(recurring => {
+      totals[recurring.payment_method] += Number(recurring.amount);
+    });
+
     return Object.entries(totals)
       .filter(([_, value]) => value > 0)
       .map(([method, value]) => ({
@@ -98,7 +121,7 @@ export function ExpenseCharts({
         value: Number(value.toFixed(2)),
         percentage: 0 // Será calculado depois
       }));
-  }, [filteredExpenses]);
+  }, [filteredExpenses, activeRecurringExpenses]);
 
   // Calcular percentuais
   const paymentMethodDataWithPercentage = useMemo(() => {
@@ -118,6 +141,12 @@ export function ExpenseCharts({
       totals[category] = (totals[category] || 0) + Number(expense.amount);
     });
 
+    // Adicionar despesas recorrentes
+    activeRecurringExpenses.forEach(recurring => {
+      const category = recurring.category || 'outros';
+      totals[category] = (totals[category] || 0) + Number(recurring.amount);
+    });
+
     const total = Object.values(totals).reduce((sum, value) => sum + value, 0);
 
     return Object.entries(totals)
@@ -128,7 +157,7 @@ export function ExpenseCharts({
         percentage: total > 0 ? ((value / total) * 100).toFixed(1) : 0
       }))
       .sort((a, b) => b.value - a.value);
-  }, [filteredExpenses]);
+  }, [filteredExpenses, activeRecurringExpenses]);
 
   // Dados para gráfico de linha - Gastos ao longo dos meses
   const monthlyData = useMemo(() => {
@@ -146,15 +175,22 @@ export function ExpenseCharts({
         return expenseDate >= monthStart && expenseDate <= monthEnd;
       });
 
-      const total = monthExpenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
+      let total = monthExpenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
+      
+      // Adicionar despesas recorrentes ativas
+      const recurringTotal = recurringExpenses
+        .filter(re => re.is_active)
+        .reduce((sum, recurring) => sum + Number(recurring.amount), 0);
+      
+      total += recurringTotal;
 
       return {
         month: format(month, "MMM/yy", { locale: ptBR }),
         total: Number(total.toFixed(2)),
-        count: monthExpenses.length
+        count: monthExpenses.length + recurringExpenses.filter(re => re.is_active).length
       };
     });
-  }, [expenses]);
+  }, [expenses, recurringExpenses]);
 
   // Dados para comparação mês a mês
   const monthComparison = useMemo(() => {
