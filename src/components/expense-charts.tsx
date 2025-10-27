@@ -170,16 +170,15 @@ export function ExpenseCharts({
       const monthStart = startOfMonth(month);
       const monthEnd = endOfMonth(month);
 
-      const monthExpenses = expenses.filter(expense => {
+      const monthExpenses = filteredExpenses.filter(expense => {
         const expenseDate = new Date(expense.expense_date);
         return expenseDate >= monthStart && expenseDate <= monthEnd;
       });
 
       let total = monthExpenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
       
-      // Adicionar despesas recorrentes ativas
-      const recurringTotal = recurringExpenses
-        .filter(re => re.is_active)
+      // Adicionar despesas recorrentes ativas já filtradas
+      const recurringTotal = activeRecurringExpenses
         .reduce((sum, recurring) => sum + Number(recurring.amount), 0);
       
       total += recurringTotal;
@@ -187,10 +186,10 @@ export function ExpenseCharts({
       return {
         month: format(month, "MMM/yy", { locale: ptBR }),
         total: Number(total.toFixed(2)),
-        count: monthExpenses.length + recurringExpenses.filter(re => re.is_active).length
+        count: monthExpenses.length + activeRecurringExpenses.length
       };
     });
-  }, [expenses, recurringExpenses]);
+  }, [filteredExpenses, activeRecurringExpenses]);
 
   // Dados para comparação mês a mês
   const monthComparison = useMemo(() => {
