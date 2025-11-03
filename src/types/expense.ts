@@ -12,6 +12,7 @@ export interface ExpenseFormData {
   expenseDate: Date;
   installments?: number;
   category: ExpenseCategory;
+  cardId?: string;
 }
 
 export const categoryLabels: Record<ExpenseCategory, string> = {

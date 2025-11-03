@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RecurringExpense, RecurringExpenseFormData } from "@/types/recurring-expense";
 import { categoryLabels } from "@/types/expense";
+import { supabase } from "@/integrations/supabase/client";
+import { Card as CardType } from "@/types/card";
 
 const recurringExpenseEditSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
@@ -16,6 +18,7 @@ const recurringExpenseEditSchema = z.object({
   paymentMethod: z.enum(["pix", "debit", "credit"] as const),
   dayOfMonth: z.number().min(1, "Dia deve ser entre 1 e 31").max(31, "Dia deve ser entre 1 e 31"),
   category: z.enum(["alimentacao", "transporte", "lazer", "saude", "educacao", "moradia", "vestuario", "servicos", "outros"] as const),
+  cardId: z.string().optional(),
 });
 
 type RecurringExpenseEditFormData = z.infer<typeof recurringExpenseEditSchema>;
@@ -28,6 +31,8 @@ interface RecurringExpenseEditDialogProps {
 }
 
 export function RecurringExpenseEditDialog({ expense, open, onOpenChange, onSave }: RecurringExpenseEditDialogProps) {
+  const [cards, setCards] = useState<CardType[]>([]);
+
   const form = useForm<RecurringExpenseEditFormData>({
     resolver: zodResolver(recurringExpenseEditSchema),
     defaultValues: {
@@ -36,8 +41,32 @@ export function RecurringExpenseEditDialog({ expense, open, onOpenChange, onSave
       paymentMethod: "pix",
       dayOfMonth: 1,
       category: "outros",
+      cardId: "",
     },
   });
+
+  useEffect(() => {
+    loadCards();
+  }, []);
+
+  const loadCards = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("cards")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setCards(data || []);
+    } catch (error) {
+      console.error("Erro ao carregar cartões:", error);
+    }
+  };
 
   // Preencher formulário quando a despesa mudar
   useEffect(() => {
@@ -48,6 +77,7 @@ export function RecurringExpenseEditDialog({ expense, open, onOpenChange, onSave
         paymentMethod: expense.payment_method,
         dayOfMonth: expense.day_of_month,
         category: expense.category,
+        cardId: expense.card_id || "",
       });
     }
   }, [expense, form]);
@@ -60,6 +90,7 @@ export function RecurringExpenseEditDialog({ expense, open, onOpenChange, onSave
       paymentMethod: data.paymentMethod,
       dayOfMonth: data.dayOfMonth,
       category: data.category,
+      cardId: data.cardId || undefined,
     };
     onSave(expense.id, formData);
     onOpenChange(false);
@@ -154,6 +185,35 @@ export function RecurringExpenseEditDialog({ expense, open, onOpenChange, onSave
                 </FormItem>
               )}
             />
+
+            {(form.watch("paymentMethod") === "credit" || form.watch("paymentMethod") === "debit") && (
+              <FormField
+                control={form.control}
+                name="cardId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Cartão</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione o cartão" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent className="bg-background">
+                        {cards
+                          .filter(card => card.card_type === form.watch("paymentMethod"))
+                          .map((card) => (
+                            <SelectItem key={card.id} value={card.id}>
+                              {card.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <FormField
               control={form.control}

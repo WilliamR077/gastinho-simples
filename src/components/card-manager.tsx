@@ -1,0 +1,348 @@
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { Card, CardFormData, cardTypeLabels } from "@/types/card";
+import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
+import { Card as CardUI, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus, CreditCard, Pencil, Trash2 } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+
+export function CardManager() {
+  const [cards, setCards] = useState<Card[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editingCard, setEditingCard] = useState<Card | null>(null);
+  const [deleteCardId, setDeleteCardId] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const [formData, setFormData] = useState<CardFormData>({
+    name: "",
+    card_type: "credit",
+    opening_day: undefined,
+    closing_day: undefined,
+    card_limit: undefined,
+  });
+
+  useEffect(() => {
+    loadCards();
+  }, []);
+
+  const loadCards = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("cards")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setCards(data || []);
+    } catch (error) {
+      console.error("Erro ao carregar cartões:", error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar os cartões.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!formData.name.trim()) {
+      toast({
+        title: "Erro",
+        description: "Por favor, informe o nome do cartão.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (formData.card_type === "credit" && (!formData.closing_day || formData.closing_day < 1 || formData.closing_day > 31)) {
+      toast({
+        title: "Erro",
+        description: "Por favor, informe um dia de fechamento válido (1-31).",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const cardData: any = {
+        name: formData.name.trim(),
+        card_type: formData.card_type,
+        user_id: user.id,
+      };
+
+      if (formData.card_type === "credit") {
+        const closingDay = formData.closing_day!;
+        const openingDay = closingDay === 1 ? 31 : closingDay - 1;
+        cardData.closing_day = closingDay;
+        cardData.opening_day = openingDay;
+      }
+
+      if (formData.card_limit && formData.card_limit > 0) {
+        cardData.card_limit = formData.card_limit;
+      }
+
+      if (editingCard) {
+        const { error } = await supabase
+          .from("cards")
+          .update(cardData)
+          .eq("id", editingCard.id);
+
+        if (error) throw error;
+
+        toast({
+          title: "Sucesso",
+          description: "Cartão atualizado com sucesso!",
+        });
+      } else {
+        const { error } = await supabase
+          .from("cards")
+          .insert([cardData]);
+
+        if (error) throw error;
+
+        toast({
+          title: "Sucesso",
+          description: "Cartão adicionado com sucesso!",
+        });
+      }
+
+      resetForm();
+      loadCards();
+    } catch (error) {
+      console.error("Erro ao salvar cartão:", error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível salvar o cartão.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleEdit = (card: Card) => {
+    setEditingCard(card);
+    setFormData({
+      name: card.name,
+      card_type: card.card_type as "credit" | "debit",
+      opening_day: card.opening_day || undefined,
+      closing_day: card.closing_day || undefined,
+      card_limit: card.card_limit ? Number(card.card_limit) : undefined,
+    });
+    setShowForm(true);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteCardId) return;
+
+    try {
+      const { error } = await supabase
+        .from("cards")
+        .update({ is_active: false })
+        .eq("id", deleteCardId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Sucesso",
+        description: "Cartão removido com sucesso!",
+      });
+
+      setDeleteCardId(null);
+      loadCards();
+    } catch (error) {
+      console.error("Erro ao remover cartão:", error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível remover o cartão.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      name: "",
+      card_type: "credit",
+      opening_day: undefined,
+      closing_day: undefined,
+      card_limit: undefined,
+    });
+    setEditingCard(null);
+    setShowForm(false);
+  };
+
+  if (loading) {
+    return <div className="text-center py-4">Carregando...</div>;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-semibold">Meus Cartões</h2>
+        <Button onClick={() => setShowForm(!showForm)} size="sm">
+          <Plus className="h-4 w-4 mr-2" />
+          Adicionar Cartão
+        </Button>
+      </div>
+
+      {showForm && (
+        <CardUI>
+          <CardHeader>
+            <CardTitle>{editingCard ? "Editar Cartão" : "Novo Cartão"}</CardTitle>
+            <CardDescription>
+              {editingCard ? "Atualize as informações do seu cartão" : "Adicione um novo cartão de crédito ou débito"}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Nome do Cartão</Label>
+                <Input
+                  id="name"
+                  placeholder="Ex: Nubank, Inter Débito"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="card_type">Tipo</Label>
+                <Select
+                  value={formData.card_type}
+                  onValueChange={(value) => setFormData({ ...formData, card_type: value as "credit" | "debit" })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="credit">Crédito</SelectItem>
+                    <SelectItem value="debit">Débito</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {formData.card_type === "credit" && (
+                <div className="space-y-2">
+                  <Label htmlFor="closing_day">Dia de Fechamento da Fatura</Label>
+                  <Input
+                    id="closing_day"
+                    type="number"
+                    min="1"
+                    max="31"
+                    placeholder="Ex: 15"
+                    value={formData.closing_day || ""}
+                    onChange={(e) => setFormData({ ...formData, closing_day: parseInt(e.target.value) || undefined })}
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    O período de abertura será calculado automaticamente (dia anterior ao fechamento)
+                  </p>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="card_limit">Limite do Cartão (Opcional)</Label>
+                <Input
+                  id="card_limit"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="Ex: 5000.00"
+                  value={formData.card_limit || ""}
+                  onChange={(e) => setFormData({ ...formData, card_limit: parseFloat(e.target.value) || undefined })}
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <Button type="submit">{editingCard ? "Atualizar" : "Adicionar"}</Button>
+                <Button type="button" variant="outline" onClick={resetForm}>
+                  Cancelar
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </CardUI>
+      )}
+
+      <div className="grid gap-4 md:grid-cols-2">
+        {cards.map((card) => (
+          <CardUI key={card.id}>
+            <CardHeader>
+              <div className="flex justify-between items-start">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="h-5 w-5" />
+                  <CardTitle className="text-lg">{card.name}</CardTitle>
+                </div>
+                <div className="flex gap-1">
+                  <Button size="icon" variant="ghost" onClick={() => handleEdit(card)}>
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button size="icon" variant="ghost" onClick={() => setDeleteCardId(card.id)}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              <CardDescription>{cardTypeLabels[card.card_type as "credit" | "debit"]}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {card.card_type === "credit" && (
+                <div className="text-sm">
+                  <span className="font-medium">Fechamento:</span> Dia {card.closing_day}
+                  <br />
+                  <span className="font-medium">Abertura:</span> Dia {card.opening_day}
+                </div>
+              )}
+              {card.card_limit && (
+                <div className="text-sm">
+                  <span className="font-medium">Limite:</span> R$ {Number(card.card_limit).toFixed(2)}
+                </div>
+              )}
+            </CardContent>
+          </CardUI>
+        ))}
+      </div>
+
+      {cards.length === 0 && !showForm && (
+        <CardUI>
+          <CardContent className="text-center py-8">
+            <CreditCard className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+            <p className="text-muted-foreground">Nenhum cartão cadastrado</p>
+            <p className="text-sm text-muted-foreground mt-2">
+              Clique em "Adicionar Cartão" para começar
+            </p>
+          </CardContent>
+        </CardUI>
+      )}
+
+      <AlertDialog open={!!deleteCardId} onOpenChange={(open) => !open && setDeleteCardId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja remover este cartão? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete}>Remover</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}

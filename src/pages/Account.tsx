@@ -14,6 +14,7 @@ import { validatePasswordStrength, sanitizeErrorMessage, isEmailValid } from "@/
 import { Progress } from "@/components/ui/progress";
 import { CreditCardConfig } from "@/components/credit-card-config";
 import { NotificationSettings } from "@/components/notification-settings";
+import { CardManager } from "@/components/card-manager";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -529,6 +530,9 @@ export default function Account() {
         </div>
 
         <div className="grid gap-6">
+          {/* Card Manager */}
+          <CardManager />
+
           {/* Credit Card Configuration */}
           <CreditCardConfig />
 

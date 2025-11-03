@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { format } from "date-fns"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,6 +10,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { PlusCircle, CalendarIcon } from "lucide-react"
 import { PaymentMethod, ExpenseFormData, ExpenseCategory, categoryLabels, categoryIcons } from "@/types/expense"
 import { cn } from "@/lib/utils"
+import { supabase } from "@/integrations/supabase/client"
+import { Card as CardType } from "@/types/card"
 
 interface ExpenseFormProps {
   onAddExpense: (data: ExpenseFormData) => void
@@ -22,6 +24,31 @@ export function ExpenseForm({ onAddExpense }: ExpenseFormProps) {
   const [expenseDate, setExpenseDate] = useState<Date>(new Date())
   const [installments, setInstallments] = useState("1")
   const [category, setCategory] = useState<ExpenseCategory>("outros")
+  const [cardId, setCardId] = useState<string>("")
+  const [cards, setCards] = useState<CardType[]>([])
+
+  useEffect(() => {
+    loadCards()
+  }, [])
+
+  const loadCards = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data, error } = await supabase
+        .from("cards")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .order("created_at", { ascending: false })
+
+      if (error) throw error
+      setCards(data || [])
+    } catch (error) {
+      console.error("Erro ao carregar cartões:", error)
+    }
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -43,7 +70,8 @@ export function ExpenseForm({ onAddExpense }: ExpenseFormProps) {
       paymentMethod,
       expenseDate,
       installments: installmentCount,
-      category
+      category,
+      cardId: cardId || undefined
     })
     
     // Reset form
@@ -53,6 +81,7 @@ export function ExpenseForm({ onAddExpense }: ExpenseFormProps) {
     setExpenseDate(new Date())
     setInstallments("1")
     setCategory("outros")
+    setCardId("")
   }
 
   return (
@@ -147,6 +176,26 @@ export function ExpenseForm({ onAddExpense }: ExpenseFormProps) {
               </SelectContent>
             </Select>
           </div>
+
+          {(paymentMethod === "credit" || paymentMethod === "debit") && (
+            <div className="space-y-2">
+              <Label htmlFor="card">Selecione o Cartão</Label>
+              <Select value={cardId} onValueChange={setCardId}>
+                <SelectTrigger className="transition-all duration-300 focus:shadow-elegant">
+                  <SelectValue placeholder="Selecione o cartão" />
+                </SelectTrigger>
+                <SelectContent>
+                  {cards
+                    .filter(card => card.card_type === paymentMethod)
+                    .map((card) => (
+                      <SelectItem key={card.id} value={card.id}>
+                        {card.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           
           {paymentMethod === "credit" && (
             <div className="space-y-2">

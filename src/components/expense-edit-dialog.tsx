@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -14,6 +14,8 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Expense, PaymentMethod, ExpenseCategory, categoryLabels, ExpenseFormData } from "@/types/expense";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { Card as CardType } from "@/types/card";
 
 const expenseEditSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
@@ -21,6 +23,7 @@ const expenseEditSchema = z.object({
   paymentMethod: z.enum(["pix", "debit", "credit"] as const),
   expenseDate: z.date(),
   category: z.enum(["alimentacao", "transporte", "lazer", "saude", "educacao", "moradia", "vestuario", "servicos", "outros"] as const),
+  cardId: z.string().optional(),
 });
 
 type ExpenseEditFormData = z.infer<typeof expenseEditSchema>;
@@ -33,6 +36,8 @@ interface ExpenseEditDialogProps {
 }
 
 export function ExpenseEditDialog({ expense, open, onOpenChange, onSave }: ExpenseEditDialogProps) {
+  const [cards, setCards] = useState<CardType[]>([]);
+
   const form = useForm<ExpenseEditFormData>({
     resolver: zodResolver(expenseEditSchema),
     defaultValues: {
@@ -41,8 +46,32 @@ export function ExpenseEditDialog({ expense, open, onOpenChange, onSave }: Expen
       paymentMethod: "pix",
       expenseDate: new Date(),
       category: "outros",
+      cardId: "",
     },
   });
+
+  useEffect(() => {
+    loadCards();
+  }, []);
+
+  const loadCards = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("cards")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setCards(data || []);
+    } catch (error) {
+      console.error("Erro ao carregar cartões:", error);
+    }
+  };
 
   // Preencher formulário quando a despesa mudar
   useEffect(() => {
@@ -53,6 +82,7 @@ export function ExpenseEditDialog({ expense, open, onOpenChange, onSave }: Expen
         paymentMethod: expense.payment_method as PaymentMethod,
         expenseDate: new Date(expense.expense_date),
         category: expense.category as ExpenseCategory,
+        cardId: expense.card_id || "",
       });
     }
   }, [expense, form]);
@@ -65,6 +95,7 @@ export function ExpenseEditDialog({ expense, open, onOpenChange, onSave }: Expen
       paymentMethod: data.paymentMethod,
       expenseDate: data.expenseDate,
       category: data.category,
+      cardId: data.cardId || undefined,
     };
     onSave(expense.id, formData);
     onOpenChange(false);
@@ -159,6 +190,35 @@ export function ExpenseEditDialog({ expense, open, onOpenChange, onSave }: Expen
                 </FormItem>
               )}
             />
+
+            {(form.watch("paymentMethod") === "credit" || form.watch("paymentMethod") === "debit") && (
+              <FormField
+                control={form.control}
+                name="cardId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Cartão</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione o cartão" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent className="bg-background">
+                        {cards
+                          .filter(card => card.card_type === form.watch("paymentMethod"))
+                          .map((card) => (
+                            <SelectItem key={card.id} value={card.id}>
+                              {card.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <FormField
               control={form.control}

@@ -244,7 +244,7 @@ export default function Index() {
     if (!user) return;
 
     try {
-      const { description, amount, paymentMethod, expenseDate, installments = 1, category } = data;
+      const { description, amount, paymentMethod, expenseDate, installments = 1, category, cardId } = data;
 
       // Format date to YYYY-MM-DD in local timezone (avoid UTC conversion issues)
       const formatDateLocal = (date: Date) => {
@@ -267,6 +267,7 @@ export default function Index() {
             total_installments: 1,
             installment_number: 1,
             category,
+            ...(cardId && { card_id: cardId }),
           })
           .select()
           .single();
@@ -293,6 +294,7 @@ export default function Index() {
             installment_number: i,
             installment_group_id: installmentGroupId,
             category,
+            ...(cardId && { card_id: cardId }),
           });
         }
 
@@ -360,6 +362,7 @@ export default function Index() {
           day_of_month: data.dayOfMonth,
           user_id: user.id,
           category: data.category,
+          ...(data.cardId && { card_id: data.cardId }),
         })
         .select()
         .single();
@@ -542,6 +545,7 @@ export default function Index() {
           payment_method: data.paymentMethod,
           expense_date: formatDateLocal(data.expenseDate),
           category: data.category,
+          ...(data.cardId && { card_id: data.cardId }),
         })
         .eq("id", id);
 
@@ -592,6 +596,7 @@ export default function Index() {
           payment_method: data.paymentMethod,
           day_of_month: data.dayOfMonth,
           category: data.category,
+          ...(data.cardId && { card_id: data.cardId }),
         })
         .eq("id", id);
 
@@ -604,6 +609,7 @@ export default function Index() {
         payment_method: data.paymentMethod,
         day_of_month: data.dayOfMonth,
         category: data.category,
+        ...(data.cardId && { card_id: data.cardId }),
       };
 
       setRecurringExpenses(prev =>

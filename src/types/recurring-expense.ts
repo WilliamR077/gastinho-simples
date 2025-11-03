@@ -11,4 +11,5 @@ export interface RecurringExpenseFormData {
   paymentMethod: PaymentMethod;
   dayOfMonth: number;
   category: ExpenseCategory;
+  cardId?: string;
 }

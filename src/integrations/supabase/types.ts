@@ -74,6 +74,45 @@ export type Database = {
         }
         Relationships: []
       }
+      cards: {
+        Row: {
+          card_limit: number | null
+          card_type: string
+          closing_day: number | null
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          opening_day: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          card_limit?: number | null
+          card_type: string
+          closing_day?: number | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          opening_day?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          card_limit?: number | null
+          card_type?: string
+          closing_day?: number | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          opening_day?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       credit_card_configs: {
         Row: {
           closing_day: number
@@ -104,6 +143,7 @@ export type Database = {
       expenses: {
         Row: {
           amount: number
+          card_id: string | null
           category: Database["public"]["Enums"]["expense_category"]
           created_at: string
           description: string
@@ -118,6 +158,7 @@ export type Database = {
         }
         Insert: {
           amount: number
+          card_id?: string | null
           category?: Database["public"]["Enums"]["expense_category"]
           created_at?: string
           description: string
@@ -132,6 +173,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          card_id?: string | null
           category?: Database["public"]["Enums"]["expense_category"]
           created_at?: string
           description?: string
@@ -144,7 +186,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "expenses_card_id_fkey"
+            columns: ["card_id"]
+            isOneToOne: false
+            referencedRelation: "cards"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notification_settings: {
         Row: {
@@ -182,6 +232,7 @@ export type Database = {
       recurring_expenses: {
         Row: {
           amount: number
+          card_id: string | null
           category: Database["public"]["Enums"]["expense_category"]
           created_at: string
           day_of_month: number
@@ -194,6 +245,7 @@ export type Database = {
         }
         Insert: {
           amount: number
+          card_id?: string | null
           category?: Database["public"]["Enums"]["expense_category"]
           created_at?: string
           day_of_month: number
@@ -206,6 +258,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          card_id?: string | null
           category?: Database["public"]["Enums"]["expense_category"]
           created_at?: string
           day_of_month?: number
@@ -216,14 +269,22 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "recurring_expenses_card_id_fkey"
+            columns: ["card_id"]
+            isOneToOne: false
+            referencedRelation: "cards"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      migrate_credit_card_config: { Args: never; Returns: undefined }
     }
     Enums: {
       budget_goal_type: "monthly_total" | "category"

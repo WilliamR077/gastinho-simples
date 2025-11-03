@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -7,6 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RecurringExpenseFormData, PaymentMethod, ExpenseCategory } from "@/types/recurring-expense"
 import { categoryLabels, categoryIcons } from "@/types/expense"
 import { Calendar } from "lucide-react"
+import { supabase } from "@/integrations/supabase/client"
+import { Card as CardType } from "@/types/card"
 
 interface RecurringExpenseFormProps {
   onAddRecurringExpense: (data: RecurringExpenseFormData) => void
@@ -18,6 +20,31 @@ export function RecurringExpenseForm({ onAddRecurringExpense }: RecurringExpense
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("credit")
   const [dayOfMonth, setDayOfMonth] = useState("1")
   const [category, setCategory] = useState<ExpenseCategory>("outros")
+  const [cardId, setCardId] = useState<string>("")
+  const [cards, setCards] = useState<CardType[]>([])
+
+  useEffect(() => {
+    loadCards()
+  }, [])
+
+  const loadCards = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data, error } = await supabase
+        .from("cards")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .order("created_at", { ascending: false })
+
+      if (error) throw error
+      setCards(data || [])
+    } catch (error) {
+      console.error("Erro ao carregar cartões:", error)
+    }
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -31,7 +58,8 @@ export function RecurringExpenseForm({ onAddRecurringExpense }: RecurringExpense
       amount: parseFloat(amount),
       paymentMethod,
       dayOfMonth: parseInt(dayOfMonth),
-      category
+      category,
+      cardId: cardId || undefined
     })
 
     setDescription("")
@@ -39,6 +67,7 @@ export function RecurringExpenseForm({ onAddRecurringExpense }: RecurringExpense
     setPaymentMethod("credit")
     setDayOfMonth("1")
     setCategory("outros")
+    setCardId("")
   }
 
   return (
@@ -121,6 +150,26 @@ export function RecurringExpenseForm({ onAddRecurringExpense }: RecurringExpense
               </SelectContent>
             </Select>
           </div>
+
+          {(paymentMethod === "credit" || paymentMethod === "debit") && (
+            <div className="space-y-2">
+              <Label htmlFor="recurring-card">Selecione o Cartão</Label>
+              <Select value={cardId} onValueChange={setCardId}>
+                <SelectTrigger id="recurring-card" className="bg-background/50">
+                  <SelectValue placeholder="Selecione o cartão" />
+                </SelectTrigger>
+                <SelectContent>
+                  {cards
+                    .filter(card => card.card_type === paymentMethod)
+                    .map((card) => (
+                      <SelectItem key={card.id} value={card.id}>
+                        {card.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           <Button type="submit" className="w-full">
             Adicionar Despesa Fixa
