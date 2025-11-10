@@ -10,6 +10,7 @@ export interface CardFormData {
   opening_day?: number;
   closing_day?: number;
   card_limit?: number;
+  color?: string;
 }
 
 export const cardTypeLabels: Record<CardType, string> = {

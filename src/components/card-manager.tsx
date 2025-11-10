@@ -24,7 +24,19 @@ export function CardManager() {
     opening_day: undefined,
     closing_day: undefined,
     card_limit: undefined,
+    color: "#FFA500",
   });
+
+  const availableColors = [
+    { name: "Amarelo", value: "#FFA500" },
+    { name: "Roxo", value: "#9333EA" },
+    { name: "Azul", value: "#3B82F6" },
+    { name: "Verde", value: "#10B981" },
+    { name: "Vermelho", value: "#EF4444" },
+    { name: "Laranja", value: "#F97316" },
+    { name: "Rosa", value: "#EC4899" },
+    { name: "Índigo", value: "#6366F1" },
+  ];
 
   useEffect(() => {
     loadCards();
@@ -85,6 +97,7 @@ export function CardManager() {
         name: formData.name.trim(),
         card_type: formData.card_type,
         user_id: user.id,
+        color: formData.color || "#FFA500",
       };
 
       if (formData.card_type === "credit") {
@@ -143,6 +156,7 @@ export function CardManager() {
       opening_day: card.opening_day || undefined,
       closing_day: card.closing_day || undefined,
       card_limit: card.card_limit ? Number(card.card_limit) : undefined,
+      color: card.color || "#FFA500",
     });
     setShowForm(true);
   };
@@ -182,6 +196,7 @@ export function CardManager() {
       opening_day: undefined,
       closing_day: undefined,
       card_limit: undefined,
+      color: "#FFA500",
     });
     setEditingCard(null);
     setShowForm(false);
@@ -268,6 +283,30 @@ export function CardManager() {
                 />
               </div>
 
+              <div className="space-y-2">
+                <Label>Cor do Cartão</Label>
+                <div className="grid grid-cols-4 gap-2">
+                  {availableColors.map((color) => (
+                    <button
+                      key={color.value}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, color: color.value })}
+                      className={`h-10 rounded-lg border-2 transition-all ${
+                        formData.color === color.value
+                          ? "border-primary ring-2 ring-primary/20 scale-105"
+                          : "border-border hover:border-primary/50"
+                      }`}
+                      style={{ backgroundColor: color.value }}
+                      title={color.name}
+                    >
+                      {formData.color === color.value && (
+                        <span className="text-white text-xl">✓</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="flex gap-2">
                 <Button type="submit">{editingCard ? "Atualizar" : "Adicionar"}</Button>
                 <Button type="button" variant="outline" onClick={resetForm}>
@@ -284,9 +323,17 @@ export function CardManager() {
           <CardUI key={card.id}>
             <CardHeader>
               <div className="flex justify-between items-start">
-                <div className="flex items-center gap-2">
-                  <CreditCard className="h-5 w-5" />
-                  <CardTitle className="text-lg">{card.name}</CardTitle>
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-10 h-10 rounded-lg flex items-center justify-center"
+                    style={{ backgroundColor: card.color || "#FFA500" }}
+                  >
+                    <CreditCard className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg">{card.name}</CardTitle>
+                    <CardDescription>{cardTypeLabels[card.card_type as "credit" | "debit"]}</CardDescription>
+                  </div>
                 </div>
                 <div className="flex gap-1">
                   <Button size="icon" variant="ghost" onClick={() => handleEdit(card)}>
@@ -297,7 +344,6 @@ export function CardManager() {
                   </Button>
                 </div>
               </div>
-              <CardDescription>{cardTypeLabels[card.card_type as "credit" | "debit"]}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
               {card.card_type === "credit" && (

@@ -11,6 +11,9 @@ import { CalendarIcon, FilterX, ChevronDown } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { cn } from "@/lib/utils";
 import { PaymentMethod, ExpenseCategory, categoryLabels, categoryIcons } from "@/types/expense";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
+import { Card as CardType } from "@/types/card";
 
 export interface ExpenseFilters {
   startDate?: Date;
@@ -21,6 +24,7 @@ export interface ExpenseFilters {
   paymentMethod?: PaymentMethod;
   billingPeriod?: string;
   category?: ExpenseCategory;
+  cardId?: string;
 }
 
 interface ExpenseFiltersProps {
@@ -42,6 +46,30 @@ export function ExpenseFilters({ filters, onFiltersChange, billingPeriods = [] }
     };
   });
   const [isOpen, setIsOpen] = useState(false);
+  const [cards, setCards] = useState<CardType[]>([]);
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (user) {
+      loadCards();
+    }
+  }, [user]);
+
+  const loadCards = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("cards")
+        .select("*")
+        .eq("user_id", user?.id)
+        .eq("is_active", true)
+        .order("name");
+
+      if (error) throw error;
+      setCards(data || []);
+    } catch (error) {
+      console.error("Error loading cards:", error);
+    }
+  };
 
   // Atualiza os filtros quando o componente é montado com as datas padrão
   useEffect(() => {
@@ -226,6 +254,33 @@ export function ExpenseFilters({ filters, onFiltersChange, billingPeriods = [] }
                     <SelectItem value="pix">PIX</SelectItem>
                     <SelectItem value="debit">Débito</SelectItem>
                     <SelectItem value="credit">Crédito</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Filtro de Cartão */}
+              <div className="space-y-2">
+                <Label>Cartão</Label>
+                <Select
+                  value={localFilters.cardId || 'all'}
+                  onValueChange={(value) => handleFilterChange('cardId', value === 'all' ? undefined : value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos os cartões" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os cartões</SelectItem>
+                    {cards.map(card => (
+                      <SelectItem key={card.id} value={card.id}>
+                        <div className="flex items-center gap-2">
+                          <div 
+                            style={{ backgroundColor: card.color || "#FFA500" }} 
+                            className="w-3 h-3 rounded-full" 
+                          />
+                          {card.name}
+                        </div>
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

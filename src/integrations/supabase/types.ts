@@ -79,6 +79,7 @@ export type Database = {
           card_limit: number | null
           card_type: string
           closing_day: number | null
+          color: string
           created_at: string
           id: string
           is_active: boolean
@@ -91,6 +92,7 @@ export type Database = {
           card_limit?: number | null
           card_type: string
           closing_day?: number | null
+          color?: string
           created_at?: string
           id?: string
           is_active?: boolean
@@ -103,6 +105,7 @@ export type Database = {
           card_limit?: number | null
           card_type?: string
           closing_day?: number | null
+          color?: string
           created_at?: string
           id?: string
           is_active?: boolean

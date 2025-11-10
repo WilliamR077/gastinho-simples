@@ -66,6 +66,7 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense }: Expens
           {currentExpenses.map((expense) => {
             const config = paymentMethodConfig[expense.payment_method]
             const Icon = config.icon
+            const cardColor = expense.card?.color || (expense.payment_method === 'credit' ? '#FFA500' : expense.payment_method === 'debit' ? '#3B82F6' : undefined)
             
             return (
               <div
@@ -74,8 +75,11 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense }: Expens
               >
                 {/* Linha superior - Mobile e Desktop */}
                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className={`p-2 rounded-full ${config.color} shrink-0`}>
-                    <Icon className="h-4 w-4" />
+                  <div 
+                    className="p-2 rounded-full shrink-0" 
+                    style={cardColor ? { backgroundColor: cardColor } : {}}
+                  >
+                    <Icon className="h-4 w-4 text-white" />
                   </div>
                   
                   <div className="flex-1 min-w-0">
@@ -112,8 +116,13 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense }: Expens
                 
                 {/* Linha inferior - Mobile | Mesma linha no Desktop */}
                 <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3 shrink-0 pl-11 sm:pl-0">
-                  <Badge variant="outline" className={`${config.color} text-xs whitespace-nowrap`}>
+                  <Badge 
+                    variant="outline" 
+                    className="text-xs whitespace-nowrap border-0 text-white"
+                    style={cardColor ? { backgroundColor: cardColor } : {}}
+                  >
                     {config.label}
+                    {expense.card && ` - ${expense.card.name}`}
                   </Badge>
                   <p className="font-bold text-base sm:text-lg text-primary whitespace-nowrap">
                     R$ {expense.amount.toFixed(2).replace('.', ',')}

@@ -3,6 +3,7 @@ import { CreditCard, Smartphone, TrendingUp } from "lucide-react"
 import { Expense, PaymentMethod } from "@/types/expense"
 import { RecurringExpense } from "@/types/recurring-expense"
 import { calculateBillingPeriod } from "@/utils/billing-period"
+import { Card as CardType } from "@/types/card"
 
 interface ExpenseSummaryProps {
   expenses: Expense[]
@@ -88,6 +89,32 @@ export function ExpenseSummary({
     totals.total += expense.amount
   })
 
+  // Calcular totais por cartão para crédito
+  const creditCardTotals = expenses
+    .filter(e => e.payment_method === 'credit')
+    .reduce((acc, expense) => {
+      const cardName = expense.card?.name || 'Sem cartão';
+      const cardColor = expense.card?.color || '#FFA500';
+      if (!acc[cardName]) {
+        acc[cardName] = { total: 0, color: cardColor };
+      }
+      acc[cardName].total += expense.amount;
+      return acc;
+    }, {} as Record<string, { total: number; color: string }>);
+
+  // Calcular totais por cartão para débito
+  const debitCardTotals = expenses
+    .filter(e => e.payment_method === 'debit')
+    .reduce((acc, expense) => {
+      const cardName = expense.card?.name || 'Sem cartão';
+      const cardColor = expense.card?.color || '#3B82F6';
+      if (!acc[cardName]) {
+        acc[cardName] = { total: 0, color: cardColor };
+      }
+      acc[cardName].total += expense.amount;
+      return acc;
+    }, {} as Record<string, { total: number; color: string }>);
+
   const formatCurrency = (value: number) => 
     `R$ ${value.toFixed(2).replace('.', ',')}`
 
@@ -130,6 +157,21 @@ export function ExpenseSummary({
           <p className="text-xs text-primary-foreground/80">
             {expenses.filter(e => e.payment_method === 'debit').length} transações
           </p>
+          {Object.keys(debitCardTotals).length > 0 && (
+            <div className="mt-2 space-y-1 pt-2 border-t border-primary-foreground/20">
+              {Object.entries(debitCardTotals).map(([cardName, data]) => (
+                <div key={cardName} className="flex items-center gap-2 text-xs">
+                  <div 
+                    style={{ backgroundColor: data.color }} 
+                    className="w-2 h-2 rounded-full"
+                  />
+                  <span className="text-primary-foreground/80">
+                    {cardName}: {formatCurrency(data.total)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -150,6 +192,21 @@ export function ExpenseSummary({
           <p className="text-xs text-muted-foreground">
             {expenses.filter(e => e.payment_method === 'credit').length} transações
           </p>
+          {Object.keys(creditCardTotals).length > 0 && (
+            <div className="mt-2 space-y-1 pt-2 border-t border-border">
+              {Object.entries(creditCardTotals).map(([cardName, data]) => (
+                <div key={cardName} className="flex items-center gap-2 text-xs">
+                  <div 
+                    style={{ backgroundColor: data.color }} 
+                    className="w-2 h-2 rounded-full"
+                  />
+                  <span className="text-muted-foreground">
+                    {cardName}: {formatCurrency(data.total)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 

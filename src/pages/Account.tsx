@@ -12,7 +12,7 @@ import { ArrowLeft, User, Mail, Lock, Trash2, Save, Shield, FileDown, FileSpread
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { validatePasswordStrength, sanitizeErrorMessage, isEmailValid } from "@/utils/security";
 import { Progress } from "@/components/ui/progress";
-import { CreditCardConfig } from "@/components/credit-card-config";
+
 import { NotificationSettings } from "@/components/notification-settings";
 import { CardManager } from "@/components/card-manager";
 import * as XLSX from "xlsx";
@@ -532,9 +532,6 @@ export default function Account() {
         <div className="grid gap-6">
           {/* Card Manager */}
           <CardManager />
-
-          {/* Credit Card Configuration */}
-          <CreditCardConfig />
 
           {/* Notification Settings */}
           <NotificationSettings />

@@ -167,7 +167,10 @@ export default function Index() {
     try {
       const { data, error } = await supabase
         .from("expenses")
-        .select("*")
+        .select(`
+          *,
+          card:cards(id, name, color, card_type)
+        `)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -188,7 +191,10 @@ export default function Index() {
     try {
       const { data, error } = await supabase
         .from("recurring_expenses")
-        .select("*")
+        .select(`
+          *,
+          card:cards(id, name, color, card_type)
+        `)
         .order("day_of_month", { ascending: true });
 
       if (error) throw error;
@@ -732,6 +738,11 @@ export default function Index() {
       // Filtro de categoria
       if (filters.category) {
         if (expense.category !== filters.category) return false;
+      }
+
+      // Filtro de cartão
+      if (filters.cardId && expense.card_id !== filters.cardId) {
+        return false;
       }
 
       // Filtro de período de faturamento (apenas para crédito)

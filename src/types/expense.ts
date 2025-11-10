@@ -1,6 +1,9 @@
 import { Database } from "@/integrations/supabase/types";
+import { Card } from "./card";
 
-export type Expense = Database["public"]["Tables"]["expenses"]["Row"];
+export type Expense = Database["public"]["Tables"]["expenses"]["Row"] & {
+  card?: Pick<Card, 'id' | 'name' | 'color' | 'card_type'>;
+};
 export type ExpenseInsert = Database["public"]["Tables"]["expenses"]["Insert"];
 export type PaymentMethod = Database["public"]["Enums"]["payment_method"];
 export type ExpenseCategory = Database["public"]["Enums"]["expense_category"];
