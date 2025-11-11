@@ -262,21 +262,24 @@ export default function Index() {
 
       if (installments === 1) {
         // Single expense
-        const { data: insertedData, error } = await supabase
-          .from("expenses")
-          .insert({
-            description,
-            amount,
-            payment_method: paymentMethod,
-            user_id: user.id,
-            expense_date: formatDateLocal(expenseDate),
-            total_installments: 1,
-            installment_number: 1,
-            category,
-            ...(cardId && { card_id: cardId }),
-          })
-          .select()
-          .single();
+      const { data: insertedData, error } = await supabase
+        .from("expenses")
+        .insert({
+          description,
+          amount,
+          payment_method: paymentMethod,
+          user_id: user.id,
+          expense_date: formatDateLocal(expenseDate),
+          total_installments: 1,
+          installment_number: 1,
+          category,
+          ...(cardId && { card_id: cardId }),
+        })
+        .select(`
+          *,
+          card:cards(id, name, color, card_type)
+        `)
+        .single();
 
         if (error) throw error;
         setExpenses(prev => [insertedData, ...prev]);
@@ -304,10 +307,13 @@ export default function Index() {
           });
         }
 
-        const { data: insertedData, error } = await supabase
-          .from("expenses")
-          .insert(expensesToInsert)
-          .select();
+      const { data: insertedData, error } = await supabase
+        .from("expenses")
+        .insert(expensesToInsert)
+        .select(`
+          *,
+          card:cards(id, name, color, card_type)
+        `);
 
         if (error) throw error;
         setExpenses(prev => [...(insertedData || []), ...prev]);
@@ -359,19 +365,22 @@ export default function Index() {
     if (!user) return;
 
     try {
-      const { data: insertedData, error } = await supabase
-        .from("recurring_expenses")
-        .insert({
-          description: data.description,
-          amount: data.amount,
-          payment_method: data.paymentMethod,
-          day_of_month: data.dayOfMonth,
-          user_id: user.id,
-          category: data.category,
-          ...(data.cardId && { card_id: data.cardId }),
-        })
-        .select()
-        .single();
+    const { data: insertedData, error } = await supabase
+      .from("recurring_expenses")
+      .insert({
+        description: data.description,
+        amount: data.amount,
+        payment_method: data.paymentMethod,
+        day_of_month: data.dayOfMonth,
+        user_id: user.id,
+        category: data.category,
+        ...(data.cardId && { card_id: data.cardId }),
+      })
+      .select(`
+        *,
+        card:cards(id, name, color, card_type)
+      `)
+      .single();
 
       if (error) throw error;
       setRecurringExpenses(prev => [...prev, insertedData].sort((a, b) => a.day_of_month - b.day_of_month));
@@ -543,7 +552,7 @@ export default function Index() {
         return `${year}-${month}-${day}`;
       };
 
-      const { error } = await supabase
+      const { data: updatedData, error } = await supabase
         .from("expenses")
         .update({
           description: data.description,
@@ -553,22 +562,20 @@ export default function Index() {
           category: data.category,
           ...(data.cardId && { card_id: data.cardId }),
         })
-        .eq("id", id);
+        .eq("id", id)
+        .select(`
+          *,
+          card:cards(id, name, color, card_type)
+        `)
+        .single();
 
       if (error) throw error;
 
-      setExpenses(prev => prev.map(e =>
-        e.id === id
-          ? {
-            ...e,
-            description: data.description,
-            amount: data.amount,
-            payment_method: data.paymentMethod,
-            expense_date: formatDateLocal(data.expenseDate),
-            category: data.category
-          }
-          : e
-      ));
+      if (updatedData) {
+        setExpenses(prev => prev.map(e =>
+          e.id === id ? updatedData : e
+        ));
+      }
 
       setExpenseDialogOpen(false);
       setEditingExpense(null);
@@ -594,7 +601,7 @@ export default function Index() {
 
   const updateRecurringExpense = async (id: string, data: RecurringExpenseFormData) => {
     try {
-      const { error } = await supabase
+      const { data: updatedData, error } = await supabase
         .from("recurring_expenses")
         .update({
           description: data.description,
@@ -604,28 +611,25 @@ export default function Index() {
           category: data.category,
           ...(data.cardId && { card_id: data.cardId }),
         })
-        .eq("id", id);
+        .eq("id", id)
+        .select(`
+          *,
+          card:cards(id, name, color, card_type)
+        `)
+        .single();
 
       if (error) throw error;
 
-      const updatedExpense = {
-        ...recurringExpenses.find(e => e.id === id)!,
-        description: data.description,
-        amount: data.amount,
-        payment_method: data.paymentMethod,
-        day_of_month: data.dayOfMonth,
-        category: data.category,
-        ...(data.cardId && { card_id: data.cardId }),
-      };
-
-      setRecurringExpenses(prev =>
-        prev.map(e => e.id === id ? updatedExpense : e).sort((a, b) => a.day_of_month - b.day_of_month)
-      );
+      if (updatedData) {
+        setRecurringExpenses(prev =>
+          prev.map(e => e.id === id ? updatedData : e).sort((a, b) => a.day_of_month - b.day_of_month)
+        );
+      }
 
       // Re-agendar notificações se estiver ativa
-      if (updatedExpense.is_active) {
+      if (updatedData.is_active) {
         await NotificationService.cancelNotificationsForExpense(id);
-        await NotificationService.scheduleNotificationsForExpense(updatedExpense, notificationSettings);
+        await NotificationService.scheduleNotificationsForExpense(updatedData, notificationSettings);
       }
 
       setRecurringExpenseDialogOpen(false);
