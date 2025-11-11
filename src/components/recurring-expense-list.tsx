@@ -47,6 +47,15 @@ export function RecurringExpenseList({ expenses, onDeleteExpense, onToggleActive
             const config = paymentMethodConfig[expense.payment_method]
             const Icon = config.icon
             
+            // Buscar cor do cartão ou usar cor padrão
+            const cardColor = expense.card?.color || (
+              expense.payment_method === 'credit' 
+                ? '#FFA500' // Laranja para crédito sem cartão
+                : expense.payment_method === 'debit'
+                ? '#3B82F6' // Azul para débito sem cartão
+                : '#10B981' // Verde para PIX
+            );
+            
             return (
               <div
                 key={expense.id}
@@ -55,8 +64,8 @@ export function RecurringExpenseList({ expenses, onDeleteExpense, onToggleActive
                 }`}
               >
                 <div className="flex items-center gap-3 flex-1 w-full sm:w-auto">
-                  <div className={`p-2 rounded-full ${config.color} shrink-0`}>
-                    <Icon className="h-4 w-4" />
+                  <div className="p-2 rounded-full shrink-0" style={{ backgroundColor: cardColor }}>
+                    <Icon className="h-4 w-4 text-white" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
@@ -68,8 +77,17 @@ export function RecurringExpenseList({ expenses, onDeleteExpense, onToggleActive
                       <span className="hidden sm:inline">•</span>
                       <span>Cobrança: Dia {expense.day_of_month}</span>
                       <span className="hidden sm:inline">•</span>
-                      <Badge variant="outline" className={`${config.color} text-xs w-fit`}>
+                      <Badge 
+                        variant="outline" 
+                        className="text-xs w-fit"
+                        style={{ 
+                          backgroundColor: cardColor, 
+                          color: 'white',
+                          borderColor: cardColor 
+                        }}
+                      >
                         {config.label}
+                        {expense.card && ` - ${expense.card.name}`}
                       </Badge>
                     </div>
                   </div>

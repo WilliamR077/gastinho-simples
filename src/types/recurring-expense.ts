@@ -1,6 +1,13 @@
 import { Database } from "@/integrations/supabase/types";
 
-export type RecurringExpense = Database["public"]["Tables"]["recurring_expenses"]["Row"];
+export type RecurringExpense = Database["public"]["Tables"]["recurring_expenses"]["Row"] & {
+  card?: {
+    id: string;
+    name: string;
+    color: string;
+    card_type: string;
+  };
+};
 export type RecurringExpenseInsert = Database["public"]["Tables"]["recurring_expenses"]["Insert"];
 export type PaymentMethod = Database["public"]["Enums"]["payment_method"];
 export type ExpenseCategory = Database["public"]["Enums"]["expense_category"];
