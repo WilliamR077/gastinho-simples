@@ -79,7 +79,7 @@ export function RecurringExpenseList({ expenses, onDeleteExpense, onToggleActive
                       <span className="hidden sm:inline">•</span>
                       <Badge 
                         variant="outline" 
-                        className="text-xs w-fit"
+                        className="text-xs w-fit max-w-[150px] sm:max-w-none truncate"
                         style={{ 
                           backgroundColor: cardColor, 
                           color: 'white',
