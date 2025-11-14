@@ -247,8 +247,13 @@ export function ExpenseSummary({
             {formatCurrency(totals.total)}
           </div>
           <p className="text-xs text-muted-foreground">
-            {expenses.length} transações total
+            {expenses.length} despesa{expenses.length !== 1 ? 's' : ''}
           </p>
+          {activeRecurringExpenses.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {activeRecurringExpenses.length} despesa{activeRecurringExpenses.length !== 1 ? 's' : ''} fixa{activeRecurringExpenses.length !== 1 ? 's' : ''}
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>

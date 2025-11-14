@@ -46,6 +46,17 @@ export function RecurringExpenseForm({ onAddRecurringExpense }: RecurringExpense
     }
   }
 
+  const getAvailableCards = () => {
+    if (!paymentMethod) return [];
+    
+    return cards.filter(card => {
+      if (card.card_type === 'both') return true;
+      if (paymentMethod === 'credit') return card.card_type === 'credit';
+      if (paymentMethod === 'debit') return card.card_type === 'debit';
+      return false;
+    });
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -159,13 +170,17 @@ export function RecurringExpenseForm({ onAddRecurringExpense }: RecurringExpense
                   <SelectValue placeholder="Selecione o cartão" />
                 </SelectTrigger>
                 <SelectContent>
-                  {cards
-                    .filter(card => card.card_type === paymentMethod)
-                    .map((card) => (
-                      <SelectItem key={card.id} value={card.id}>
+                  {getAvailableCards().map((card) => (
+                    <SelectItem key={card.id} value={card.id}>
+                      <div className="flex items-center gap-2">
+                        <div 
+                          style={{ backgroundColor: card.color }} 
+                          className="w-3 h-3 rounded-full"
+                        />
                         {card.name}
-                      </SelectItem>
-                    ))}
+                      </div>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

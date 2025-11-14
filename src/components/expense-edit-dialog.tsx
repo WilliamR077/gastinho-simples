@@ -73,6 +73,18 @@ export function ExpenseEditDialog({ expense, open, onOpenChange, onSave }: Expen
     }
   };
 
+  const getAvailableCards = () => {
+    const paymentMethod = form.watch("paymentMethod");
+    if (!paymentMethod) return [];
+    
+    return cards.filter(card => {
+      if (card.card_type === 'both') return true;
+      if (paymentMethod === 'credit') return card.card_type === 'credit';
+      if (paymentMethod === 'debit') return card.card_type === 'debit';
+      return false;
+    });
+  };
+
   // Preencher formulário quando a despesa mudar
   useEffect(() => {
     if (expense) {
@@ -205,13 +217,17 @@ export function ExpenseEditDialog({ expense, open, onOpenChange, onSave }: Expen
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent className="bg-background">
-                        {cards
-                          .filter(card => card.card_type === form.watch("paymentMethod"))
-                          .map((card) => (
-                            <SelectItem key={card.id} value={card.id}>
+                        {getAvailableCards().map((card) => (
+                          <SelectItem key={card.id} value={card.id}>
+                            <div className="flex items-center gap-2">
+                              <div 
+                                style={{ backgroundColor: card.color }} 
+                                className="w-3 h-3 rounded-full"
+                              />
                               {card.name}
-                            </SelectItem>
-                          ))}
+                            </div>
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />
