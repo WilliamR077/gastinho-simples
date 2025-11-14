@@ -102,6 +102,18 @@ export function ExpenseSummary({
       return acc;
     }, {} as Record<string, { total: number; color: string }>);
 
+  // Adicionar despesas fixas ativas de crédito aos totais por cartão
+  activeRecurringExpenses
+    .filter(e => e.payment_method === 'credit')
+    .forEach(expense => {
+      const cardName = expense.card?.name || 'Sem cartão';
+      const cardColor = expense.card?.color || '#FFA500';
+      if (!creditCardTotals[cardName]) {
+        creditCardTotals[cardName] = { total: 0, color: cardColor };
+      }
+      creditCardTotals[cardName].total += expense.amount;
+    });
+
   // Calcular totais por cartão para débito
   const debitCardTotals = expenses
     .filter(e => e.payment_method === 'debit')
@@ -114,6 +126,18 @@ export function ExpenseSummary({
       acc[cardName].total += expense.amount;
       return acc;
     }, {} as Record<string, { total: number; color: string }>);
+
+  // Adicionar despesas fixas ativas de débito aos totais por cartão
+  activeRecurringExpenses
+    .filter(e => e.payment_method === 'debit')
+    .forEach(expense => {
+      const cardName = expense.card?.name || 'Sem cartão';
+      const cardColor = expense.card?.color || '#3B82F6';
+      if (!debitCardTotals[cardName]) {
+        debitCardTotals[cardName] = { total: 0, color: cardColor };
+      }
+      debitCardTotals[cardName].total += expense.amount;
+    });
 
   const formatCurrency = (value: number) => 
     `R$ ${value.toFixed(2).replace('.', ',')}`
@@ -135,7 +159,8 @@ export function ExpenseSummary({
             {formatCurrency(totals.pix)}
           </div>
           <p className="text-xs text-success-foreground/80">
-            {expenses.filter(e => e.payment_method === 'pix').length} transações
+            {expenses.filter(e => e.payment_method === 'pix').length + 
+             activeRecurringExpenses.filter(e => e.payment_method === 'pix').length} transações
           </p>
         </CardContent>
       </Card>
@@ -155,7 +180,8 @@ export function ExpenseSummary({
             {formatCurrency(totals.debit)}
           </div>
           <p className="text-xs text-primary-foreground/80">
-            {expenses.filter(e => e.payment_method === 'debit').length} transações
+            {expenses.filter(e => e.payment_method === 'debit').length + 
+             activeRecurringExpenses.filter(e => e.payment_method === 'debit').length} transações
           </p>
           {Object.keys(debitCardTotals).length > 0 && (
             <div className="mt-2 space-y-1 pt-2 border-t border-primary-foreground/20">
@@ -190,7 +216,8 @@ export function ExpenseSummary({
             {formatCurrency(totals.credit)}
           </div>
           <p className="text-xs text-muted-foreground">
-            {expenses.filter(e => e.payment_method === 'credit').length} transações
+            {expenses.filter(e => e.payment_method === 'credit').length + 
+             activeRecurringExpenses.filter(e => e.payment_method === 'credit').length} transações
           </p>
           {Object.keys(creditCardTotals).length > 0 && (
             <div className="mt-2 space-y-1 pt-2 border-t border-border">
