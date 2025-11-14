@@ -80,10 +80,10 @@ export function CardManager() {
       return;
     }
 
-    if (formData.card_type === "credit" && (!formData.closing_day || formData.closing_day < 1 || formData.closing_day > 31)) {
+    if ((formData.card_type === "credit" || formData.card_type === "both") && (!formData.closing_day || formData.closing_day < 1 || formData.closing_day > 31)) {
       toast({
         title: "Erro",
-        description: "Por favor, informe um dia de fechamento válido (1-31).",
+        description: "Por favor, informe um dia de fechamento válido (1-31) para cartões de crédito.",
         variant: "destructive",
       });
       return;
@@ -100,7 +100,7 @@ export function CardManager() {
         color: formData.color || "#FFA500",
       };
 
-      if (formData.card_type === "credit") {
+      if (formData.card_type === "credit" || formData.card_type === "both") {
         const closingDay = formData.closing_day!;
         const openingDay = closingDay === 1 ? 31 : closingDay - 1;
         cardData.closing_day = closingDay;

@@ -2,7 +2,7 @@ import { Database } from "@/integrations/supabase/types";
 
 export type Card = Database["public"]["Tables"]["cards"]["Row"];
 export type CardInsert = Database["public"]["Tables"]["cards"]["Insert"];
-export type CardType = "credit" | "debit";
+export type CardType = "credit" | "debit" | "both";
 
 export interface CardFormData {
   name: string;
@@ -15,5 +15,6 @@ export interface CardFormData {
 
 export const cardTypeLabels: Record<CardType, string> = {
   credit: "Crédito",
-  debit: "Débito"
+  debit: "Débito",
+  both: "Ambos (Crédito e Débito)"
 };
