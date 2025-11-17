@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardFormData, cardTypeLabels } from "@/types/card";
+import { Card, CardFormData, CardType, cardTypeLabels } from "@/types/card";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card as CardUI, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -240,19 +240,22 @@ export function CardManager() {
                 <Label htmlFor="card_type">Tipo</Label>
                 <Select
                   value={formData.card_type}
-                  onValueChange={(value) => setFormData({ ...formData, card_type: value as "credit" | "debit" })}
+                  onValueChange={(value) => setFormData({ ...formData, card_type: value as CardType })}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="credit">Crédito</SelectItem>
-                    <SelectItem value="debit">Débito</SelectItem>
+                    {Object.entries(cardTypeLabels).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              {formData.card_type === "credit" && (
+              {(formData.card_type === "credit" || formData.card_type === "both") && (
                 <div className="space-y-2">
                   <Label htmlFor="closing_day">Dia de Fechamento da Fatura</Label>
                   <Input
