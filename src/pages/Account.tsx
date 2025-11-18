@@ -8,18 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, User, Mail, Lock, Trash2, Save, Shield, FileDown, FileSpreadsheet, Bug } from "lucide-react";
+import { ArrowLeft, User, Mail, Lock, Trash2 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { validatePasswordStrength, sanitizeErrorMessage, isEmailValid } from "@/utils/security";
 import { Progress } from "@/components/ui/progress";
-
-import { NotificationSettings } from "@/components/notification-settings";
-import { CardManager } from "@/components/card-manager";
-import * as XLSX from "xlsx";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
-import { format } from "date-fns";
-import { categoryLabels } from "@/types/expense";
 
 export default function Account() {
   const { user, signOut } = useAuth();
@@ -241,266 +233,26 @@ export default function Account() {
 
       if (error) {
         console.error('Error calling delete-user-account function:', error);
-        throw new Error(error.message || 'Erro ao deletar conta');
+        throw new Error(`Falha ao deletar conta: ${error.message || 'Erro desconhecido'}`);
       }
-
-      if (data?.error) {
-        console.error('Error from delete-user-account function:', data.error);
-        throw new Error(data.error);
-      }
-
-      // Sign out the user
-      await signOut();
 
       toast({
-        title: "Conta excluída permanentemente",
-        description: "Sua conta e todos os seus dados foram removidos do sistema.",
+        title: "Conta deletada",
+        description: "Sua conta foi permanentemente deletada. Você será redirecionado para a página de login.",
       });
 
-      navigate("/auth");
+      // Sign out and redirect to auth page
+      await signOut();
+      navigate('/auth');
     } catch (error: any) {
-      console.error('Error in handleDeleteAccountCompletely:', error);
+      console.error('Delete account error:', error);
       toast({
-        title: "Erro ao excluir conta",
+        title: "Erro ao deletar conta",
         description: sanitizeErrorMessage(error),
         variant: "destructive",
       });
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleExportToExcel = async () => {
-    try {
-      if (!user?.id) {
-        throw new Error("Usuário não identificado");
-      }
-
-      // Fetch all data
-      const { data: expenses, error: expensesError } = await supabase
-        .from("expenses")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("expense_date", { ascending: false });
-
-      if (expensesError) throw expensesError;
-
-      const { data: recurringExpenses, error: recurringError } = await supabase
-        .from("recurring_expenses")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("day_of_month", { ascending: true });
-
-      if (recurringError) throw recurringError;
-
-      const { data: budgetGoals, error: budgetError } = await supabase
-        .from("budget_goals")
-        .select("*")
-        .eq("user_id", user.id);
-
-      if (budgetError) throw budgetError;
-
-      // Prepare data for Excel
-      const expensesData = expenses?.map((exp) => ({
-        Data: format(new Date(exp.expense_date), "dd/MM/yyyy"),
-        Descrição: exp.description,
-        Valor: `R$ ${Number(exp.amount).toFixed(2)}`,
-        Categoria: categoryLabels[exp.category as keyof typeof categoryLabels] || exp.category,
-        "Forma de Pagamento": exp.payment_method === "credit" ? "Cartão de Crédito" : 
-                              exp.payment_method === "debit" ? "Cartão de Débito" : "PIX",
-        Parcelas: exp.total_installments > 1 ? `${exp.installment_number}/${exp.total_installments}` : "À vista",
-      })) || [];
-
-      const recurringData = recurringExpenses?.map((rec) => ({
-        Descrição: rec.description,
-        Valor: `R$ ${Number(rec.amount).toFixed(2)}`,
-        Categoria: categoryLabels[rec.category as keyof typeof categoryLabels] || rec.category,
-        "Forma de Pagamento": rec.payment_method === "credit" ? "Cartão de Crédito" : 
-                              rec.payment_method === "debit" ? "Cartão de Débito" : "PIX",
-        "Dia do Mês": rec.day_of_month,
-        Status: rec.is_active ? "Ativa" : "Inativa",
-      })) || [];
-
-      const budgetData = budgetGoals?.map((goal) => ({
-        Tipo: goal.type === "monthly_total" ? "Total Mensal" : "Por Categoria",
-        Categoria: goal.category ? categoryLabels[goal.category as keyof typeof categoryLabels] : "N/A",
-        Limite: `R$ ${Number(goal.limit_amount).toFixed(2)}`,
-      })) || [];
-
-      // Create workbook
-      const wb = XLSX.utils.book_new();
-      
-      // Add sheets
-      const wsExpenses = XLSX.utils.json_to_sheet(expensesData);
-      const wsRecurring = XLSX.utils.json_to_sheet(recurringData);
-      const wsBudget = XLSX.utils.json_to_sheet(budgetData);
-      
-      XLSX.utils.book_append_sheet(wb, wsExpenses, "Despesas");
-      XLSX.utils.book_append_sheet(wb, wsRecurring, "Despesas Recorrentes");
-      XLSX.utils.book_append_sheet(wb, wsBudget, "Metas de Gastos");
-
-      // Download
-      XLSX.writeFile(wb, `gastinho-simples-${format(new Date(), "dd-MM-yyyy")}.xlsx`);
-
-      toast({
-        title: "Excel exportado!",
-        description: "Seus dados foram exportados com sucesso.",
-      });
-
-      // Log audit action
-      await logAuditAction("data_exported_excel");
-    } catch (error: any) {
-      toast({
-        title: "Erro ao exportar",
-        description: sanitizeErrorMessage(error),
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleExportToPDF = async () => {
-    try {
-      if (!user?.id) {
-        throw new Error("Usuário não identificado");
-      }
-
-      // Fetch all data
-      const { data: expenses, error: expensesError } = await supabase
-        .from("expenses")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("expense_date", { ascending: false });
-
-      if (expensesError) throw expensesError;
-
-      const { data: recurringExpenses, error: recurringError } = await supabase
-        .from("recurring_expenses")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("day_of_month", { ascending: true });
-
-      if (recurringError) throw recurringError;
-
-      const { data: budgetGoals, error: budgetError } = await supabase
-        .from("budget_goals")
-        .select("*")
-        .eq("user_id", user.id);
-
-      if (budgetError) throw budgetError;
-
-      // Create PDF
-      const doc = new jsPDF();
-      
-      // Title
-      doc.setFontSize(18);
-      doc.text("Gastinho Simples - Relatório de Dados", 14, 20);
-      doc.setFontSize(10);
-      doc.text(`Exportado em: ${format(new Date(), "dd/MM/yyyy HH:mm")}`, 14, 28);
-      doc.text(`Usuário: ${user.email}`, 14, 34);
-
-      let yPosition = 45;
-
-      // Expenses table
-      if (expenses && expenses.length > 0) {
-        doc.setFontSize(14);
-        doc.text("Despesas", 14, yPosition);
-        yPosition += 5;
-
-        const expensesData = expenses.map((exp) => [
-          format(new Date(exp.expense_date), "dd/MM/yyyy"),
-          exp.description,
-          `R$ ${Number(exp.amount).toFixed(2)}`,
-          categoryLabels[exp.category as keyof typeof categoryLabels] || exp.category,
-          exp.payment_method === "credit" ? "Cartão" : 
-          exp.payment_method === "debit" ? "Débito" : "PIX",
-        ]);
-
-        autoTable(doc, {
-          startY: yPosition,
-          head: [["Data", "Descrição", "Valor", "Categoria", "Pagamento"]],
-          body: expensesData,
-          theme: "grid",
-          styles: { fontSize: 8 },
-          headStyles: { fillColor: [59, 130, 246] },
-        });
-
-        yPosition = (doc as any).lastAutoTable.finalY + 10;
-      }
-
-      // Recurring Expenses table
-      if (recurringExpenses && recurringExpenses.length > 0) {
-        if (yPosition > 250) {
-          doc.addPage();
-          yPosition = 20;
-        }
-
-        doc.setFontSize(14);
-        doc.text("Despesas Recorrentes", 14, yPosition);
-        yPosition += 5;
-
-        const recurringData = recurringExpenses.map((rec) => [
-          rec.description,
-          `R$ ${Number(rec.amount).toFixed(2)}`,
-          categoryLabels[rec.category as keyof typeof categoryLabels] || rec.category,
-          rec.day_of_month.toString(),
-          rec.is_active ? "Ativa" : "Inativa",
-        ]);
-
-        autoTable(doc, {
-          startY: yPosition,
-          head: [["Descrição", "Valor", "Categoria", "Dia", "Status"]],
-          body: recurringData,
-          theme: "grid",
-          styles: { fontSize: 8 },
-          headStyles: { fillColor: [59, 130, 246] },
-        });
-
-        yPosition = (doc as any).lastAutoTable.finalY + 10;
-      }
-
-      // Budget Goals table
-      if (budgetGoals && budgetGoals.length > 0) {
-        if (yPosition > 250) {
-          doc.addPage();
-          yPosition = 20;
-        }
-
-        doc.setFontSize(14);
-        doc.text("Metas de Gastos", 14, yPosition);
-        yPosition += 5;
-
-        const budgetData = budgetGoals.map((goal) => [
-          goal.type === "monthly_total" ? "Total Mensal" : "Por Categoria",
-          goal.category ? categoryLabels[goal.category as keyof typeof categoryLabels] : "N/A",
-          `R$ ${Number(goal.limit_amount).toFixed(2)}`,
-        ]);
-
-        autoTable(doc, {
-          startY: yPosition,
-          head: [["Tipo", "Categoria", "Limite"]],
-          body: budgetData,
-          theme: "grid",
-          styles: { fontSize: 8 },
-          headStyles: { fillColor: [59, 130, 246] },
-        });
-      }
-
-      // Download
-      doc.save(`gastinho-simples-${format(new Date(), "dd-MM-yyyy")}.pdf`);
-
-      toast({
-        title: "PDF exportado!",
-        description: "Seus dados foram exportados com sucesso.",
-      });
-
-      // Log audit action
-      await logAuditAction("data_exported_pdf");
-    } catch (error: any) {
-      toast({
-        title: "Erro ao exportar",
-        description: sanitizeErrorMessage(error),
-        variant: "destructive",
-      });
     }
   };
 
@@ -524,80 +276,12 @@ export default function Account() {
             </div>
             <div>
               <h1 className="text-3xl font-bold text-foreground">Minha Conta</h1>
-              <p className="text-muted-foreground">Gerencie suas informações pessoais</p>
+              <p className="text-muted-foreground">Gerencie suas informações pessoais e segurança</p>
             </div>
           </div>
         </div>
 
         <div className="grid gap-6">
-          {/* Card Manager */}
-          <CardManager />
-
-          {/* Notification Settings */}
-          <NotificationSettings />
-
-          {/* Debug Notifications */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Bug className="w-5 h-5" />
-                Debug de Notificações
-              </CardTitle>
-              <CardDescription>
-                Ferramentas avançadas para gerenciar notificações
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button
-                variant="outline"
-                onClick={() => navigate("/notification-debug")}
-                className="w-full"
-              >
-                <Bug className="w-4 h-4 mr-2" />
-                Abrir Painel de Debug
-              </Button>
-              <p className="text-xs text-muted-foreground mt-2">
-                Visualize estatísticas, force ressincronização e gerencie notificações agendadas
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* Export Data Section */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileDown className="w-5 h-5" />
-                Exportar Dados
-              </CardTitle>
-              <CardDescription>
-                Baixe todos os seus dados em diferentes formatos
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Exporte suas despesas, despesas recorrentes e metas de gastos para Excel ou PDF.
-              </p>
-              <div className="flex flex-wrap gap-3">
-                <Button
-                  onClick={handleExportToExcel}
-                  variant="outline"
-                  className="flex items-center gap-2"
-                >
-                  <FileSpreadsheet className="w-4 h-4" />
-                  Exportar para Excel
-                </Button>
-                <Button
-                  onClick={handleExportToPDF}
-                  variant="outline"
-                  className="flex items-center gap-2"
-                >
-                  <FileDown className="w-4 h-4" />
-                  Exportar para PDF
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Account Info */}
           <Card>
             <CardHeader>
@@ -606,153 +290,133 @@ export default function Account() {
                 Informações da Conta
               </CardTitle>
               <CardDescription>
-                Dados básicos do seu perfil
+                Dados básicos da sua conta
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="userId">ID do Usuário</Label>
-                  <Input
-                    id="userId"
-                    value={user?.id || ""}
-                    disabled
-                    className="font-mono text-sm"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="createdAt">Membro desde</Label>
-                  <Input
-                    id="createdAt"
-                    value={user?.created_at ? new Date(user.created_at).toLocaleDateString('pt-BR') : ""}
-                    disabled
-                  />
-                </div>
+              <div>
+                <Label className="text-sm text-muted-foreground">ID do Usuário</Label>
+                <p className="text-sm font-mono bg-muted p-2 rounded mt-1 break-all">{user?.id}</p>
               </div>
-
-
-              {/* Botão de Política de Privacidade */}
-              <div className="pt-4">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate("/privacy")}
-                  className="flex items-center gap-2"
-                >
-                  <Shield className="w-4 h-4" />
-                  Política de Privacidade
-                </Button>
+              <div>
+                <Label className="text-sm text-muted-foreground">Conta criada em</Label>
+                <p className="text-sm font-mono bg-muted p-2 rounded mt-1">
+                  {user?.created_at ? new Date(user.created_at).toLocaleDateString('pt-BR', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  }) : 'N/A'}
+                </p>
               </div>
             </CardContent>
           </Card>
+
+          <Separator />
 
           {/* Email Management */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Mail className="w-5 h-5" />
-                Alterar Email
+                Gerenciamento de Email
               </CardTitle>
               <CardDescription>
-                Atualize seu endereço de email
+                Atualize o email associado à sua conta
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="currentEmail">Email Atual</Label>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email atual: {user?.email}</Label>
                 <Input
-                  id="currentEmail"
-                  value={user?.email || ""}
-                  disabled
-                  className="bg-muted"
-                />
-              </div>
-              <div>
-                <Label htmlFor="newEmail">Novo Email</Label>
-                <Input
-                  id="newEmail"
+                  id="email"
                   type="email"
+                  placeholder="Digite o novo email"
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
-                  placeholder="Digite seu novo email"
                 />
               </div>
-              <Button
+              <Button 
                 onClick={handleUpdateEmail}
-                disabled={emailLoading || !newEmail || newEmail === user?.email}
-                className="flex items-center gap-2"
+                disabled={emailLoading}
+                className="w-full"
               >
-                <Save className="w-4 h-4" />
                 {emailLoading ? "Atualizando..." : "Atualizar Email"}
               </Button>
+              <p className="text-xs text-muted-foreground">
+                Você receberá um email de confirmação no novo endereço
+              </p>
             </CardContent>
           </Card>
+
+          <Separator />
 
           {/* Password Management */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Lock className="w-5 h-5" />
-                Alterar Senha
+                Gerenciamento de Senha
               </CardTitle>
               <CardDescription>
-                Atualize sua senha de acesso
+                Altere sua senha de acesso
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="newPassword">Nova Senha</Label>
                 <Input
                   id="newPassword"
                   type="password"
+                  placeholder="Digite a nova senha"
                   value={newPassword}
                   onChange={(e) => handlePasswordChange(e.target.value)}
-                  placeholder="Digite sua nova senha"
                 />
                 {newPassword && (
-                  <div className="space-y-2 mt-2">
-                    <div className="flex justify-between text-sm">
-                      <span>Força da senha:</span>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Força da senha:</span>
                       <span className={
-                        passwordStrength.score >= 4 ? "text-green-600" :
-                          passwordStrength.score >= 3 ? "text-yellow-600" :
-                            "text-red-600"
+                        passwordStrength.score >= 80 ? "text-green-500" :
+                        passwordStrength.score >= 60 ? "text-yellow-500" :
+                        "text-red-500"
                       }>
-                        {passwordStrength.score >= 4 ? "Forte" :
-                          passwordStrength.score >= 3 ? "Média" : "Fraca"}
+                        {passwordStrength.score >= 80 ? "Forte" :
+                         passwordStrength.score >= 60 ? "Média" :
+                         "Fraca"}
                       </span>
                     </div>
-                    <Progress value={(passwordStrength.score / 5) * 100} className="h-2" />
-                    {passwordStrength.feedback.length > 0 && (
-                      <ul className="text-xs text-muted-foreground space-y-1">
-                        {passwordStrength.feedback.map((item, index) => (
-                          <li key={index}>• {item}</li>
-                        ))}
-                      </ul>
-                    )}
+                    <Progress value={passwordStrength.score} className="h-2" />
+                    <p className="text-xs text-muted-foreground">
+                      Mínimo 8 caracteres com letras maiúsculas, minúsculas, números e símbolos
+                    </p>
                   </div>
                 )}
               </div>
-              <div>
+
+              <div className="space-y-2">
                 <Label htmlFor="confirmPassword">Confirmar Nova Senha</Label>
                 <Input
                   id="confirmPassword"
                   type="password"
+                  placeholder="Confirme a nova senha"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Confirme sua nova senha"
                 />
               </div>
-              <Button
+
+              <Button 
                 onClick={handleUpdatePassword}
-                disabled={passwordLoading || !newPassword || !confirmPassword}
-                className="flex items-center gap-2"
+                disabled={passwordLoading}
+                className="w-full"
               >
-                <Save className="w-4 h-4" />
                 {passwordLoading ? "Atualizando..." : "Atualizar Senha"}
               </Button>
             </CardContent>
           </Card>
+
+          <Separator />
 
           {/* Danger Zone */}
           <Card className="border-destructive">
@@ -762,164 +426,119 @@ export default function Account() {
                 Zona de Perigo
               </CardTitle>
               <CardDescription>
-                Ações irreversíveis em sua conta e dados
+                Ações irreversíveis que afetam seus dados
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <Separator className="mb-6" />
-              <div className="space-y-6">
-                {/* Clear All Expenses - Light red */}
-                <div className="p-4 rounded-lg border border-orange-200 bg-orange-50 dark:bg-orange-950/20 dark:border-orange-900">
-                  <div className="flex items-start gap-3 mb-3">
-                    <div className="p-2 rounded-md bg-orange-100 dark:bg-orange-900/40">
-                      <Trash2 className="w-5 h-5 text-orange-600 dark:text-orange-400" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-orange-900 dark:text-orange-300 mb-1">
-                        🗑️ Limpar Todos os Meus Gastos
-                      </h3>
-                      <p className="text-sm text-orange-700 dark:text-orange-400">
-                        Remove todas as despesas, despesas recorrentes e configurações do cartão.
-                        <strong className="block mt-1">Sua conta permanecerá ativa.</strong>
-                      </p>
-                    </div>
-                  </div>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button 
-                        variant="outline" 
-                        className="flex items-center gap-2 border-orange-300 text-orange-700 hover:bg-orange-100 dark:border-orange-800 dark:text-orange-400 dark:hover:bg-orange-900/40"
+            <CardContent className="space-y-4">
+              {/* Clear All Data */}
+              <div className="p-4 border border-yellow-500/50 bg-yellow-500/10 rounded-lg">
+                <h4 className="font-semibold mb-2 flex items-center gap-2">
+                  <Trash2 className="w-4 h-4" />
+                  Limpar Todos os Dados
+                </h4>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Remove todas as suas despesas, despesas recorrentes e configurações. Sua conta permanecerá ativa.
+                </p>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="outline" className="w-full border-yellow-500 text-yellow-600 hover:bg-yellow-500/10">
+                      Limpar Dados
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Esta ação irá <strong>deletar permanentemente</strong>:
+                        <ul className="list-disc list-inside mt-2 space-y-1">
+                          <li>Todas as despesas</li>
+                          <li>Todas as despesas recorrentes</li>
+                          <li>Todas as configurações de cartão de crédito</li>
+                        </ul>
+                        <br />
+                        Sua conta permanecerá ativa e você poderá começar do zero.
+                        <br /><br />
+                        Para confirmar, digite <strong>LIMPAR</strong> abaixo:
+                      </AlertDialogDescription>
+                      <Input
+                        placeholder="Digite LIMPAR"
+                        value={clearDataConfirmation}
+                        onChange={(e) => setClearDataConfirmation(e.target.value)}
+                        className="mt-2"
+                      />
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel onClick={() => setClearDataConfirmation("")}>
+                        Cancelar
+                      </AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={handleClearAllExpenses}
+                        disabled={clearDataConfirmation !== "LIMPAR" || loading}
+                        className="bg-yellow-600 hover:bg-yellow-700"
                       >
-                        <Trash2 className="w-4 h-4" />
-                        Limpar Todos os Dados
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>⚠️ Limpar todos os gastos?</AlertDialogTitle>
-                        <AlertDialogDescription className="space-y-3">
-                          <p>Esta ação irá remover permanentemente:</p>
-                          <ul className="list-disc list-inside space-y-1 text-sm">
-                            <li>Todas as suas despesas registradas</li>
-                            <li>Todas as despesas recorrentes</li>
-                            <li>Configurações do cartão de crédito</li>
-                          </ul>
-                          <p className="font-semibold mt-3">
-                            Sua conta de acesso permanecerá ativa e você poderá continuar usando o sistema.
-                          </p>
-                          <p className="text-destructive font-bold">Esta ação não pode ser desfeita!</p>
-                          
-                          <div className="space-y-2 mt-4">
-                            <Label htmlFor="clearConfirmation">
-                              Para confirmar, digite <strong>CONFIRMAR</strong> abaixo:
-                            </Label>
-                            <Input
-                              id="clearConfirmation"
-                              value={clearDataConfirmation}
-                              onChange={(e) => setClearDataConfirmation(e.target.value)}
-                              placeholder="Digite CONFIRMAR"
-                              className="font-mono"
-                            />
-                          </div>
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel onClick={() => setClearDataConfirmation("")}>
-                          Cancelar
-                        </AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={handleClearAllExpenses}
-                          disabled={loading || clearDataConfirmation !== "CONFIRMAR"}
-                          className="bg-orange-600 text-white hover:bg-orange-700 dark:bg-orange-700 dark:hover:bg-orange-800 disabled:opacity-50"
-                        >
-                          {loading ? "Limpando..." : "Sim, limpar todos os dados"}
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </div>
+                        {loading ? "Limpando..." : "Confirmar Limpeza"}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
 
-                <Separator />
-
-                {/* Delete Account Completely - Dark red */}
-                <div className="p-4 rounded-lg border border-red-300 bg-red-50 dark:bg-red-950/30 dark:border-red-900">
-                  <div className="flex items-start gap-3 mb-3">
-                    <div className="p-2 rounded-md bg-red-100 dark:bg-red-900/40">
-                      <Trash2 className="w-5 h-5 text-red-700 dark:text-red-400" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-red-900 dark:text-red-300 mb-1">
-                        ⚠️ Excluir Conta Permanentemente
-                      </h3>
-                      <p className="text-sm text-red-700 dark:text-red-400">
-                        Remove todos os dados e encerra sua conta completamente.
-                        <strong className="block mt-1">Você não poderá mais acessar o sistema com esta conta.</strong>
-                      </p>
-                    </div>
-                  </div>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button 
-                        variant="destructive" 
-                        className="flex items-center gap-2 bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800"
+              {/* Delete Account */}
+              <div className="p-4 border border-destructive bg-destructive/10 rounded-lg">
+                <h4 className="font-semibold mb-2 flex items-center gap-2 text-destructive">
+                  <Trash2 className="w-4 h-4" />
+                  Deletar Conta Permanentemente
+                </h4>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Remove completamente sua conta e TODOS os dados associados. Esta ação é irreversível.
+                </p>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" className="w-full">
+                      Deletar Conta
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle className="text-destructive">ATENÇÃO: Deletar Conta</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Esta ação irá <strong className="text-destructive">deletar permanentemente</strong>:
+                        <ul className="list-disc list-inside mt-2 space-y-1">
+                          <li>Sua conta de usuário</li>
+                          <li>Todas as suas despesas</li>
+                          <li>Todas as despesas recorrentes</li>
+                          <li>Todas as configurações</li>
+                          <li>Todo o histórico de logs</li>
+                        </ul>
+                        <br />
+                        <strong className="text-destructive">Esta ação NÃO pode ser desfeita!</strong>
+                        <br /><br />
+                        Para confirmar, digite <strong>DELETAR CONTA</strong> abaixo:
+                      </AlertDialogDescription>
+                      <Input
+                        placeholder="Digite DELETAR CONTA"
+                        value={deleteAccountConfirmation}
+                        onChange={(e) => setDeleteAccountConfirmation(e.target.value)}
+                        className="mt-2"
+                      />
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel onClick={() => {
+                        setDeleteAccountConfirmation("");
+                        setDeleteAccountPassword("");
+                      }}>
+                        Cancelar
+                      </AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={handleDeleteAccountCompletely}
+                        disabled={deleteAccountConfirmation !== "DELETAR CONTA" || loading}
+                        className="bg-destructive hover:bg-destructive/90"
                       >
-                        <Trash2 className="w-4 h-4" />
-                        Excluir Conta Completamente
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent className="max-w-md">
-                      <AlertDialogHeader>
-                        <AlertDialogTitle className="text-destructive">🚨 EXCLUIR CONTA PERMANENTEMENTE?</AlertDialogTitle>
-                        <AlertDialogDescription className="space-y-3">
-                          <p className="font-bold text-destructive">ATENÇÃO: Esta é uma ação IRREVERSÍVEL!</p>
-                          <p>Esta ação irá:</p>
-                          <ul className="list-disc list-inside space-y-1 text-sm">
-                            <li>Remover TODAS as suas despesas</li>
-                            <li>Remover TODAS as despesas recorrentes</li>
-                            <li>Remover suas configurações</li>
-                            <li>Encerrar sua conta de acesso</li>
-                          </ul>
-                          <p className="font-semibold mt-3 text-destructive">
-                            Você será desconectado e não poderá mais acessar o sistema com esta conta.
-                          </p>
-                          
-                          <div className="space-y-3 mt-4 p-3 bg-destructive/10 rounded-md">
-                            <div className="space-y-2">
-                              <Label htmlFor="deleteAccountConfirmation">
-                                Digite <strong>DELETAR MINHA CONTA</strong> para confirmar:
-                              </Label>
-                              <Input
-                                id="deleteAccountConfirmation"
-                                value={deleteAccountConfirmation}
-                                onChange={(e) => setDeleteAccountConfirmation(e.target.value)}
-                                placeholder="Digite DELETAR MINHA CONTA"
-                                className="font-mono text-xs"
-                              />
-                            </div>
-                          </div>
-                          
-                          <p className="text-xs text-muted-foreground mt-3">
-                            Nota: Para exclusão completa dos dados de autenticação do Supabase, entre em contato com o suporte após esta ação.
-                          </p>
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel onClick={() => {
-                          setDeleteAccountConfirmation("");
-                        }}>
-                          Cancelar
-                        </AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={handleDeleteAccountCompletely}
-                          disabled={loading || deleteAccountConfirmation !== "DELETAR MINHA CONTA"}
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
-                        >
-                          {loading ? "Excluindo..." : "Sim, EXCLUIR MINHA CONTA"}
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </div>
+                        {loading ? "Deletando..." : "Confirmar Deleção"}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             </CardContent>
           </Card>
