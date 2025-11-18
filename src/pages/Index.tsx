@@ -20,7 +20,7 @@ import { BudgetProgress } from "@/components/budget-progress";
 import { RemindersPanel } from "@/components/reminders-panel";
 import { toast } from "@/hooks/use-toast";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { BarChart3 } from "lucide-react";
+import { BarChart3, CreditCard, Settings } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -829,10 +829,11 @@ export default function Index() {
             <img
               src="/lovable-uploads/06a1acc2-f553-41f0-8d87-32d25b4e425e.png"
               alt="Gastinho Simples - Controle de Gastos"
-              className="h-20 w-auto"
+              className="h-20 w-auto cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={() => navigate("/")}
             />
           </div>
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
             <Button
               variant="outline"
               size="sm"
@@ -845,11 +846,29 @@ export default function Index() {
             <Button
               variant="outline"
               size="sm"
+              onClick={() => navigate("/cards")}
+              className="flex items-center gap-2 text-xs sm:text-sm"
+            >
+              <CreditCard className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Cartões</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate("/settings")}
+              className="flex items-center gap-2 text-xs sm:text-sm"
+            >
+              <Settings className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Configurações</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => navigate("/account")}
               className="flex items-center gap-2 text-xs sm:text-sm"
             >
               <User className="w-3 h-3 sm:w-4 sm:h-4" />
-              <span className="hidden sm:inline">Minha Conta</span>
+              <span className="hidden sm:inline">Conta</span>
             </Button>
             <Button
               variant="outline"
