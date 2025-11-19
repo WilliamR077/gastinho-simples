@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "938517509878",
+    "project_id": "gastinho-simples",
+    "storage_bucket": "gastinho-simples.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:938517509878:android:cf6c9bef74cb2e5c791ed7",
+        "android_client_info": {
+          "package_name": "app.lovable.gastinhosimples"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA24cFGO4_SrGuIHGGAsbUzXT8DYp8fIEQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
