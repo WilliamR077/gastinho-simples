@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { NotificationService } from "@/services/notification-service";
+import { firebaseNotificationService } from "@/services/firebase-notification-service";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,17 +27,36 @@ export default function NotificationDebug() {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [platform, setPlatform] = useState("");
+  const [hasPermission, setHasPermission] = useState(false);
+  const [fcmToken, setFcmToken] = useState<string | null>(null);
 
   useEffect(() => {
     loadStats();
-    setPlatform(NotificationService.isIOS() ? "iOS" : "Android/Web");
+    checkFCMStatus();
   }, []);
+
+  const checkFCMStatus = async () => {
+    const permission = await firebaseNotificationService.checkPermissions();
+    const token = firebaseNotificationService.getCurrentToken();
+    setHasPermission(permission);
+    setFcmToken(token);
+    setPlatform("Firebase Cloud Messaging");
+    console.log("FCM Status:", { permission, token });
+  };
 
   const loadStats = async () => {
     setLoading(true);
     try {
-      const data = await NotificationService.getNotificationStats();
-      setStats(data);
+      // Buscar estatísticas de notificações do Firebase
+      const { data: tokens } = await supabase
+        .from("user_fcm_tokens")
+        .select("*")
+        .eq("user_id", user?.id);
+      
+      setStats({
+        total: tokens?.length || 0,
+        tokens: tokens || []
+      });
     } catch (error) {
       console.error("Error loading stats:", error);
     } finally {
@@ -48,30 +67,17 @@ export default function NotificationDebug() {
   const handleResync = async () => {
     setLoading(true);
     try {
-      const { data: expenses } = await supabase
-        .from("recurring_expenses")
-        .select("*")
-        .eq("user_id", user?.id)
-        .eq("is_active", true);
-
-      const { data: settings } = await supabase
-        .from("notification_settings")
-        .select("*")
-        .eq("user_id", user?.id)
-        .maybeSingle();
-
-      if (expenses) {
-        await NotificationService.syncNotifications(expenses, settings || undefined);
-        await loadStats();
-        
-        toast({
-          title: "✅ Sincronização completa",
-          description: "Notificações foram atualizadas com sucesso",
-        });
-      }
+      await firebaseNotificationService.initialize();
+      await checkFCMStatus();
+      await loadStats();
+      
+      toast({
+        title: "✅ Firebase reinicializado",
+        description: "Serviço de notificações foi reinicializado com sucesso",
+      });
     } catch (error: any) {
       toast({
-        title: "Erro ao sincronizar",
+        title: "Erro ao reinicializar",
         description: error.message,
         variant: "destructive",
       });
@@ -83,26 +89,18 @@ export default function NotificationDebug() {
   const handleClearAll = async () => {
     setLoading(true);
     try {
-      const pending = await NotificationService.getNotificationStats();
-      
-      if (pending.pending.length > 0) {
-        await NotificationService.rescheduleAllNotifications([], {
-          is_enabled: false,
-          notify_3_days_before: false,
-          notify_1_day_before: false,
-          notify_on_day: false,
-        });
-        
+      if (fcmToken) {
+        await firebaseNotificationService.removeFCMToken();
         await loadStats();
         
         toast({
-          title: "🗑️ Todas notificações removidas",
-          description: `${pending.total} notificações foram canceladas`,
+          title: "🗑️ Token removido",
+          description: "Token FCM foi removido do banco de dados",
         });
       }
     } catch (error: any) {
       toast({
-        title: "Erro ao limpar notificações",
+        title: "Erro ao remover token",
         description: error.message,
         variant: "destructive",
       });
@@ -112,7 +110,12 @@ export default function NotificationDebug() {
   };
 
   const handleListInConsole = async () => {
-    await NotificationService.listPendingNotifications();
+    console.log("=== FCM Debug Info ===");
+    console.log("Platform:", platform);
+    console.log("Has Permission:", hasPermission);
+    console.log("FCM Token:", fcmToken);
+    console.log("Stats:", stats);
+    
     toast({
       title: "📋 Logs disponíveis",
       description: "Verifique o console do navegador para detalhes",
@@ -143,16 +146,35 @@ export default function NotificationDebug() {
         {/* Platform Info */}
         <Alert className="mb-6">
           <Info className="h-4 w-4" />
-          <AlertTitle>Plataforma Detectada</AlertTitle>
+          <AlertTitle>Sistema de Notificações</AlertTitle>
           <AlertDescription>
-            Executando em: <strong>{platform}</strong>
-            {NotificationService.isIOS() && (
-              <span className="block mt-2 text-sm">
-                ⚠️ Limite iOS: máximo de 64 notificações simultâneas (≈21 despesas fixas)
-              </span>
-            )}
+            Sistema: <strong>{platform}</strong>
+            <span className="block mt-2 text-sm">
+              {hasPermission ? "✅ Permissões concedidas" : "❌ Permissões negadas"}
+            </span>
           </AlertDescription>
         </Alert>
+
+        {/* Firebase Status Card */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Bell className="w-5 h-5" />
+              Firebase Cloud Messaging (FCM)
+            </CardTitle>
+            <CardDescription>
+              Status da conexão e informações do token
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <p><strong>Status:</strong> {hasPermission ? "✅ Ativo" : "❌ Inativo"}</p>
+            <p><strong>FCM Token:</strong> {fcmToken ? `${fcmToken.substring(0, 30)}...` : "Não disponível"}</p>
+            <p><strong>Dispositivos registrados:</strong> {stats?.total || 0}</p>
+            <Button onClick={() => firebaseNotificationService.initialize()} className="mt-4">
+              Reinicializar Firebase
+            </Button>
+          </CardContent>
+        </Card>
 
         {/* Stats Card */}
         <Card className="mb-6">
@@ -213,17 +235,17 @@ export default function NotificationDebug() {
                   {stats.total === 0 ? (
                     <Alert>
                       <AlertCircle className="h-4 w-4" />
-                      <AlertTitle>Nenhuma notificação agendada</AlertTitle>
+                      <AlertTitle>Nenhum dispositivo registrado</AlertTitle>
                       <AlertDescription>
-                        Adicione despesas fixas para receber lembretes automáticos
+                        Ative as notificações nas configurações para começar a receber lembretes
                       </AlertDescription>
                     </Alert>
                   ) : (
                     <Alert className="border-green-500/50">
                       <CheckCircle className="h-4 w-4 text-green-500" />
-                      <AlertTitle>Sistema Ativo</AlertTitle>
+                      <AlertTitle>Firebase Ativo</AlertTitle>
                       <AlertDescription>
-                        {stats.total} notificação(ões) agendada(s) e funcionando corretamente
+                        {stats.total} dispositivo(s) registrado(s) e pronto para receber notificações
                       </AlertDescription>
                     </Alert>
                   )}
@@ -253,7 +275,7 @@ export default function NotificationDebug() {
               variant="default"
             >
               <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-              Forçar Ressincronização
+              Reinicializar Firebase
             </Button>
 
             <Button
@@ -273,13 +295,13 @@ export default function NotificationDebug() {
               variant="destructive"
             >
               <Trash2 className="w-4 h-4 mr-2" />
-              Cancelar Todas Notificações
+              Remover Token FCM
             </Button>
 
             <Alert className="mt-4">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription className="text-xs">
-                Use "Forçar Ressincronização" se perceber inconsistências entre as despesas cadastradas e as notificações recebidas.
+                Use "Reinicializar Firebase" para reconectar ao serviço de notificações se houver problemas.
               </AlertDescription>
             </Alert>
           </CardContent>
