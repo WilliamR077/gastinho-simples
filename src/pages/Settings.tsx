@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, Settings as SettingsIcon, FileDown, FileSpreadsheet, Bug } from "lucide-react";
-import { NotificationSettings } from "@/components/notification-settings";
+import { FirebaseNotificationSettings } from "@/components/firebase-notification-settings";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -318,7 +318,7 @@ export default function Settings() {
         <Separator />
 
         {/* Seção: Notificações */}
-        <NotificationSettings />
+        <FirebaseNotificationSettings />
 
         <Separator />
 
