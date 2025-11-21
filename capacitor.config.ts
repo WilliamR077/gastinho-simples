@@ -7,7 +7,7 @@ const config: CapacitorConfig = {
   bundledWebRuntime: false,
   plugins: {
     AdMob: {
-      appIdAndroid: "ca-app-pub-3940256099942544~3347511713" // ID de teste
+      appIdAndroid: "ca-app-pub-7994981472093749~6808485616" // ID de teste
     }
   }
 };
