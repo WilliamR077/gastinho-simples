@@ -6,7 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Bell, TestTube } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Bell, TestTube, AlertTriangle } from "lucide-react";
 import { NotificationService } from "@/services/notification-service";
 import { LocalNotifications } from "@capacitor/local-notifications";
 
@@ -154,6 +155,16 @@ export function NotificationSettings() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Migration Alert */}
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>⚠️ Sistema Antigo</AlertTitle>
+          <AlertDescription>
+            Este painel usa notificações locais (Capacitor). 
+            Migre para o novo sistema Firebase em Configurações.
+          </AlertDescription>
+        </Alert>
+
         {/* Master switch */}
         <div className="flex items-center justify-between p-4 rounded-lg border bg-card">
           <div className="space-y-0.5">
