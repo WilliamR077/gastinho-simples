@@ -2,12 +2,18 @@ import { useSubscription } from "@/hooks/use-subscription";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, Crown, Sparkles, Zap } from "lucide-react";
+import { Check, Crown, Sparkles, Zap, Smartphone } from "lucide-react";
 import { SUBSCRIPTION_FEATURES } from "@/types/subscription";
 import { Skeleton } from "@/components/ui/skeleton";
+import { billingService } from "@/services/billing-service";
+import { toast } from "@/hooks/use-toast";
+import { useState } from "react";
+import { Capacitor } from "@capacitor/core";
 
 export default function Subscription() {
-  const { tier, loading, features } = useSubscription();
+  const { tier, loading, features, refreshSubscription } = useSubscription();
+  const [purchasing, setPurchasing] = useState<string | null>(null);
+  const isNative = Capacitor.isNativePlatform();
 
   if (loading) {
     return (
@@ -21,6 +27,47 @@ export default function Subscription() {
       </div>
     );
   }
+
+  const handlePurchase = async (planTier: string) => {
+    setPurchasing(planTier);
+
+    try {
+      const success = await billingService.purchase('', planTier);
+      
+      if (success) {
+        toast({
+          title: "Assinatura ativada!",
+          description: "Sua assinatura foi ativada com sucesso. Aproveite todos os recursos premium!",
+        });
+        
+        // Atualizar estado da assinatura
+        await refreshSubscription();
+      } else {
+        if (!isNative) {
+          toast({
+            title: "Compra via web",
+            description: "Sistema de pagamento web em desenvolvimento. Use o app Android para realizar compras.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Erro na compra",
+            description: "Não foi possível processar sua compra. Tente novamente.",
+            variant: "destructive",
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao processar compra:', error);
+      toast({
+        title: "Erro",
+        description: "Ocorreu um erro ao processar sua compra.",
+        variant: "destructive",
+      });
+    } finally {
+      setPurchasing(null);
+    }
+  };
 
   const plans = [
     {
@@ -144,12 +191,25 @@ export default function Subscription() {
                   <Button className="w-full" disabled>
                     Plano Atual
                   </Button>
+                ) : plan.tier === "free" ? (
+                  <Button className="w-full" variant="outline" disabled>
+                    Plano Gratuito
+                  </Button>
                 ) : (
                   <Button 
-                    className="w-full"
+                    className="w-full gap-2"
                     variant={plan.popular ? "default" : "outline"}
+                    onClick={() => handlePurchase(plan.tier)}
+                    disabled={purchasing !== null}
                   >
-                    {plan.tier === "free" ? "Plano Gratuito" : "Fazer Upgrade"}
+                    {purchasing === plan.tier ? (
+                      "Processando..."
+                    ) : (
+                      <>
+                        {isNative ? <Smartphone className="h-4 w-4" /> : null}
+                        {isNative ? "Comprar via Google Play" : "Fazer Upgrade"}
+                      </>
+                    )}
                   </Button>
                 )}
               </CardFooter>
@@ -168,12 +228,43 @@ export default function Subscription() {
         <CardContent>
           <div className="text-sm text-muted-foreground space-y-2">
             <p>✅ <strong>Gratuito:</strong> Perfeito para começar a organizar suas finanças</p>
-            <p>⚡ <strong>Sem Anúncios:</strong> Experiência sem interrupções por apenas R$ 4,90/mês</p>
-            <p>👑 <strong>Premium:</strong> Recursos avançados para controle total (com anúncios)</p>
-            <p>🌟 <strong>Premium Plus:</strong> Todos os recursos + experiência sem anúncios</p>
+            <p>⚡ <strong>Sem Anúncios (R$ 4,90/mês):</strong> Experiência sem interrupções</p>
+            <p>👑 <strong>Premium (R$ 14,90/mês):</strong> Recursos avançados para controle total</p>
+            <p>🌟 <strong>Premium Plus (R$ 17,90/mês):</strong> Todos os recursos + sem anúncios</p>
           </div>
         </CardContent>
       </Card>
+
+      {isNative && (
+        <Card className="mt-4 border-primary/20 bg-primary/5">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <Smartphone className="h-5 w-5 text-primary mt-0.5" />
+              <div className="text-sm">
+                <p className="font-semibold text-foreground mb-1">Compra Segura via Google Play</p>
+                <p className="text-muted-foreground">
+                  Todas as compras são processadas pelo Google Play Store com segurança total. 
+                  Gerencie suas assinaturas diretamente nas configurações do Google Play.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {!isNative && (
+        <Card className="mt-4 border-amber-500/20 bg-amber-500/5">
+          <CardContent className="pt-6">
+            <div className="text-sm text-center">
+              <p className="font-semibold text-foreground mb-2">💡 Dica</p>
+              <p className="text-muted-foreground">
+                Para realizar compras, use o aplicativo Android. 
+                Sistema de pagamento web em desenvolvimento.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
