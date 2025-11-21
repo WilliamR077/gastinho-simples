@@ -15,6 +15,7 @@ import Account from "./pages/Account";
 import Cards from "./pages/Cards";
 import Settings from "./pages/Settings";
 import Reports from "./pages/Reports";
+import Subscription from "./pages/Subscription";
 import NotFound from "./pages/NotFound";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import NotificationDebug from "./pages/NotificationDebug";
@@ -56,6 +57,7 @@ const AppContent = () => {
           <Route path="/cards" element={<Cards />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/reports" element={<Reports />} />
+          <Route path="/subscription" element={<Subscription />} />
           <Route path="/privacy" element={<PrivacyPolicy />} />
           <Route path="/notification-debug" element={<NotificationDebug />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
