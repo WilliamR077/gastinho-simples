@@ -164,19 +164,6 @@ export default function Index() {
     }
   }, [user]);
 
-  // Initialize AdMob and show banner
-  useEffect(() => {
-    if (user) {
-      adMobService.initialize().then(() => {
-        adMobService.showBanner();
-      });
-    }
-
-    return () => {
-      adMobService.hideBanner();
-    };
-  }, [user]);
-
   const loadExpenses = async () => {
     try {
       const { data, error } = await supabase

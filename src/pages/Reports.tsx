@@ -88,7 +88,7 @@ const Reports = () => {
   }, [expenses, creditCardConfig]);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-16">
       <header className="border-b bg-card/50 backdrop-blur">
         <div className="container mx-auto px-4 py-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

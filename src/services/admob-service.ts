@@ -12,6 +12,8 @@ class AdMobService {
   // Configuração
   private readonly SHOW_INTERSTITIAL_AFTER = 3; // Mostrar a cada 3 despesas
   private readonly INTERSTITIAL_DELAY_ON_STARTUP = 2000; // 2 segundos após abrir o app
+  private readonly STARTUP_INTERSTITIAL_COOLDOWN = 6 * 60 * 60 * 1000; // 6 horas em ms
+  private readonly LAST_STARTUP_INTERSTITIAL_KEY = 'lastStartupInterstitial';
 
   // IDs das unidades de anúncio (IDs reais do AdMob)
   private readonly BANNER_AD_UNIT_ID = 'ca-app-pub-7994981472093749/7496902553';
@@ -164,11 +166,28 @@ class AdMobService {
   }
 
   /**
-   * Mostra intersticial de boas-vindas ao abrir o app
+   * Mostra intersticial de boas-vindas ao abrir o app (com cooldown de 6h)
    */
   async showStartupInterstitial(): Promise<void> {
+    // Verificar cooldown
+    const lastShown = localStorage.getItem(this.LAST_STARTUP_INTERSTITIAL_KEY);
+    const now = Date.now();
+
+    if (lastShown) {
+      const timeSinceLastShown = now - parseInt(lastShown);
+      if (timeSinceLastShown < this.STARTUP_INTERSTITIAL_COOLDOWN) {
+        const hoursRemaining = ((this.STARTUP_INTERSTITIAL_COOLDOWN - timeSinceLastShown) / (60 * 60 * 1000)).toFixed(1);
+        console.log(`⏰ Cooldown ativo. Próximo intersticial em ${hoursRemaining}h`);
+        return;
+      }
+    }
+
+    // Mostrar intersticial após delay
     setTimeout(async () => {
       await this.showInterstitial();
+      
+      // Salvar timestamp
+      localStorage.setItem(this.LAST_STARTUP_INTERSTITIAL_KEY, now.toString());
     }, this.INTERSTITIAL_DELAY_ON_STARTUP);
   }
 
@@ -181,7 +200,7 @@ class AdMobService {
     }
 
     this.expenseCount++;
-    console.log(`📊 Despesas adicionadas: ${this.expenseCount}/${this.SHOW_INTERSTITIAL_AFTER}`);
+    console.log(`📊 Despesas: ${this.expenseCount}/${this.SHOW_INTERSTITIAL_AFTER} - Próximo anúncio em ${this.SHOW_INTERSTITIAL_AFTER - this.expenseCount}`);
 
     if (this.expenseCount >= this.SHOW_INTERSTITIAL_AFTER) {
       this.showInterstitial();
