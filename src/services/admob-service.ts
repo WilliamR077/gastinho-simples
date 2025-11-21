@@ -216,13 +216,33 @@ class AdMobService {
   }
 
   /**
-   * Verifica se usuário tem assinatura premium ativa
-   * TODO: Implementar verificação real com Supabase
+   * Verifica se usuário tem assinatura premium ativa (no_ads ou premium_plus)
    */
   private async checkPremiumStatus(): Promise<boolean> {
-    // Por enquanto, retorna false (nenhum usuário é premium)
-    // Quando implementarmos assinaturas, verificar tabela no Supabase
-    return false;
+    try {
+      const { supabase } = await import('@/integrations/supabase/client');
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) return false;
+
+      const { data, error } = await supabase.rpc('get_user_subscription_tier', {
+        user_id_param: user.id
+      });
+
+      if (error) {
+        console.error('❌ Erro ao verificar premium:', error);
+        return false;
+      }
+
+      // Usuário é premium se tier é 'no_ads' ou 'premium_plus' (sem anúncios)
+      const isPremium = data === 'no_ads' || data === 'premium_plus';
+      console.log(`🎯 Premium Status: ${isPremium ? 'SIM' : 'NÃO'} (Tier: ${data})`);
+      
+      return isPremium;
+    } catch (error) {
+      console.error('❌ Erro ao verificar premium:', error);
+      return false;
+    }
   }
 
   /**

@@ -282,6 +282,39 @@ export type Database = {
           },
         ]
       }
+      subscriptions: {
+        Row: {
+          created_at: string
+          expires_at: string | null
+          id: string
+          is_active: boolean
+          started_at: string
+          tier: Database["public"]["Enums"]["subscription_tier"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          started_at?: string
+          tier?: Database["public"]["Enums"]["subscription_tier"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          started_at?: string
+          tier?: Database["public"]["Enums"]["subscription_tier"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_fcm_tokens: {
         Row: {
           created_at: string
@@ -314,6 +347,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_user_subscription_tier: {
+        Args: { user_id_param: string }
+        Returns: Database["public"]["Enums"]["subscription_tier"]
+      }
       migrate_credit_card_config: { Args: never; Returns: undefined }
     }
     Enums: {
@@ -329,6 +366,7 @@ export type Database = {
         | "servicos"
         | "outros"
       payment_method: "pix" | "credit" | "debit"
+      subscription_tier: "free" | "no_ads" | "premium" | "premium_plus"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -469,6 +507,7 @@ export const Constants = {
         "outros",
       ],
       payment_method: ["pix", "credit", "debit"],
+      subscription_tier: ["free", "no_ads", "premium", "premium_plus"],
     },
   },
 } as const
