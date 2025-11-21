@@ -27,6 +27,37 @@ let cachedAccessToken: string | null = null;
 let tokenExpiresAt: number = 0;
 
 /**
+ * Converte uma private key PEM (PKCS#8) em CryptoKey para uso com djwt
+ */
+async function importPrivateKey(pemKey: string): Promise<CryptoKey> {
+  // Remover header/footer e quebras de linha do PEM
+  const pemContents = pemKey
+    .replace(/-----BEGIN PRIVATE KEY-----/, '')
+    .replace(/-----END PRIVATE KEY-----/, '')
+    .replace(/\s/g, '');
+  
+  // Converter base64 para ArrayBuffer
+  const binaryDer = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
+  
+  console.log("🔑 Importando private key como CryptoKey...");
+  
+  // Importar como CryptoKey
+  const cryptoKey = await crypto.subtle.importKey(
+    "pkcs8",  // Formato da chave privada
+    binaryDer,
+    {
+      name: "RSASSA-PKCS1-v1_5",  // Algoritmo usado pelo RS256
+      hash: "SHA-256",
+    },
+    false,  // Não exportável (mais seguro)
+    ["sign"]  // Uso: assinar JWTs
+  );
+  
+  console.log("✅ Private key importada com sucesso");
+  return cryptoKey;
+}
+
+/**
  * Gera um Access Token OAuth 2.0 usando a Service Account do Firebase
  */
 async function getAccessToken(): Promise<string> {
@@ -47,17 +78,20 @@ async function getAccessToken(): Promise<string> {
   const { project_id, client_email } = serviceAccount;
   
   // ✅ CORREÇÃO: Converter \n literais para quebras de linha reais
-  const private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+  const private_key_pem = serviceAccount.private_key.replace(/\\n/g, '\n');
 
   console.log("📝 Project ID:", project_id);
   console.log("📝 Client Email:", client_email);
-  console.log("🔑 Private key format check:", private_key.substring(0, 30) + "...");
+  console.log("🔑 Private key format check:", private_key_pem.substring(0, 30) + "...");
 
   // Criar JWT assinado com a private key da service account
   const iat = getNumericDate(0);
   const exp = getNumericDate(60 * 60); // 1 hora
 
   try {
+    // ✅ Importar private key como CryptoKey para djwt
+    const private_key = await importPrivateKey(private_key_pem);
+    
     const jwt = await create(
       { alg: "RS256", typ: "JWT" },
       {
