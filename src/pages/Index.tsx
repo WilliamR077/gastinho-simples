@@ -29,6 +29,7 @@ import { LogOut, Wallet, User } from "lucide-react";
 import { generateBillingPeriods, filterExpensesByBillingPeriod } from "@/utils/billing-period";
 import { NotificationService } from "@/services/notification-service";
 import { App as CapacitorApp } from '@capacitor/app';
+import { adMobService } from "@/services/admob-service";
 
 export default function Index() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -161,6 +162,19 @@ export default function Index() {
       loadCreditCardConfig();
       loadBudgetGoals();
     }
+  }, [user]);
+
+  // Initialize AdMob and show banner
+  useEffect(() => {
+    if (user) {
+      adMobService.initialize().then(() => {
+        adMobService.showBanner();
+      });
+    }
+
+    return () => {
+      adMobService.hideBanner();
+    };
   }, [user]);
 
   const loadExpenses = async () => {
@@ -325,6 +339,9 @@ export default function Index() {
           ? `${description} - R$ ${amount.toFixed(2)}`
           : `${description} - ${installments}x de R$ ${(amount / installments).toFixed(2)}`,
       });
+
+      // Incrementar contador de despesas para controlar exibição de anúncios
+      adMobService.incrementExpenseCount();
     } catch (error) {
       console.error("Error adding expense:", error);
       toast({
@@ -821,7 +838,7 @@ export default function Index() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-16">
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">

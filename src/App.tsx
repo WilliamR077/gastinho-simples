@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/hooks/use-theme";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { firebaseNotificationService } from "@/services/firebase-notification-service";
+import { adMobService } from "@/services/admob-service";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
@@ -27,6 +28,11 @@ const AppContent = () => {
     if (user) {
       // Inicializar Firebase quando o usuário fizer login
       firebaseNotificationService.initialize();
+      
+      // Inicializar AdMob e mostrar intersticial de boas-vindas
+      adMobService.initialize().then(() => {
+        adMobService.showStartupInterstitial();
+      });
     }
   }, [user]);
 
