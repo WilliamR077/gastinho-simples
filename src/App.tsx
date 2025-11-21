@@ -29,11 +29,18 @@ const AppContent = () => {
       // Inicializar Firebase quando o usuário fizer login
       firebaseNotificationService.initialize();
       
-      // Inicializar AdMob e mostrar intersticial de boas-vindas
+      // Inicializar AdMob, mostrar banner global e intersticial de boas-vindas
       adMobService.initialize().then(() => {
+        adMobService.showBanner(); // Banner global em todas as telas
         adMobService.showStartupInterstitial();
       });
     }
+
+    return () => {
+      if (user) {
+        adMobService.hideBanner();
+      }
+    };
   }, [user]);
 
   return (

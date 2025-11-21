@@ -71,7 +71,7 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense }: Expens
             return (
               <div
                 key={expense.id}
-                className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-lg border bg-card/50 hover:bg-card/80 transition-all duration-300 hover:shadow-card"
+                className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-lg border bg-card/50 hover:bg-card/80 transition-all duration-300 hover:shadow-card overflow-hidden max-w-full"
               >
                 {/* Linha superior - Mobile e Desktop */}
                 <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -82,10 +82,10 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense }: Expens
                     <Icon className="h-4 w-4 text-white" />
                   </div>
                   
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 overflow-hidden">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-lg shrink-0">{categoryIcons[expense.category]}</span>
-                      <p className="font-medium text-foreground truncate">{expense.description}</p>
+                      <p className="font-medium text-foreground truncate break-words">{expense.description}</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-1 sm:gap-2 text-xs sm:text-sm text-muted-foreground">
                       <span>{categoryLabels[expense.category]}</span>
