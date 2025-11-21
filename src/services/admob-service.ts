@@ -1,0 +1,230 @@
+import { AdMob, BannerAdOptions, BannerAdSize, BannerAdPosition } from '@capacitor-community/admob';
+import { Capacitor } from '@capacitor/core';
+
+class AdMobService {
+  // Estado interno
+  private initialized = false;
+  private bannerVisible = false;
+  private interstitialReady = false;
+  private expenseCount = 0;
+  private userIsPremium = false;
+
+  // Configuração
+  private readonly SHOW_INTERSTITIAL_AFTER = 3; // Mostrar a cada 3 despesas
+  private readonly INTERSTITIAL_DELAY_ON_STARTUP = 2000; // 2 segundos após abrir o app
+
+  // IDs das unidades de anúncio (IDs reais do AdMob)
+  private readonly BANNER_AD_UNIT_ID = 'ca-app-pub-7994981472093749/7496902553';
+  private readonly INTERSTITIAL_AD_UNIT_ID = 'ca-app-pub-7994981472093749/5214338233';
+
+  /**
+   * Inicializa o AdMob e prepara o primeiro intersticial
+   */
+  async initialize(): Promise<void> {
+    // Verificar se está rodando em plataforma mobile
+    if (!Capacitor.isNativePlatform()) {
+      console.log('⚠️ AdMob não disponível em plataforma web');
+      return;
+    }
+
+    // Verificar se usuário é premium (futuro)
+    this.userIsPremium = await this.checkPremiumStatus();
+    if (this.userIsPremium) {
+      console.log('✅ Usuário premium - anúncios desabilitados');
+      return;
+    }
+
+    try {
+      // Inicializar AdMob
+      await AdMob.initialize({
+        initializeForTesting: false, // Mudar para true durante testes
+      });
+
+      console.log('✅ AdMob inicializado com sucesso');
+      this.initialized = true;
+
+      // Preparar primeiro intersticial em background
+      await this.prepareInterstitial();
+
+    } catch (error) {
+      console.error('❌ Erro ao inicializar AdMob:', error);
+    }
+  }
+
+  /**
+   * Exibe banner fixo na parte inferior da tela
+   */
+  async showBanner(): Promise<void> {
+    if (!this.initialized || this.userIsPremium || this.bannerVisible) {
+      return;
+    }
+
+    try {
+      const options: BannerAdOptions = {
+        adId: this.BANNER_AD_UNIT_ID,
+        adSize: BannerAdSize.BANNER, // 320x50
+        position: BannerAdPosition.BOTTOM_CENTER,
+        margin: 0,
+        isTesting: false, // Mudar para true durante testes
+      };
+
+      await AdMob.showBanner(options);
+      this.bannerVisible = true;
+      console.log('✅ Banner exibido');
+
+    } catch (error) {
+      console.error('❌ Erro ao exibir banner:', error);
+    }
+  }
+
+  /**
+   * Esconde o banner (útil ao navegar para outras páginas)
+   */
+  async hideBanner(): Promise<void> {
+    if (!this.bannerVisible) {
+      return;
+    }
+
+    try {
+      await AdMob.hideBanner();
+      this.bannerVisible = false;
+      console.log('✅ Banner escondido');
+    } catch (error) {
+      console.error('❌ Erro ao esconder banner:', error);
+    }
+  }
+
+  /**
+   * Remove completamente o banner
+   */
+  async removeBanner(): Promise<void> {
+    if (!this.bannerVisible) {
+      return;
+    }
+
+    try {
+      await AdMob.removeBanner();
+      this.bannerVisible = false;
+      console.log('✅ Banner removido');
+    } catch (error) {
+      console.error('❌ Erro ao remover banner:', error);
+    }
+  }
+
+  /**
+   * Prepara um anúncio intersticial em background
+   */
+  async prepareInterstitial(): Promise<void> {
+    if (!this.initialized || this.userIsPremium) {
+      return;
+    }
+
+    try {
+      await AdMob.prepareInterstitial({
+        adId: this.INTERSTITIAL_AD_UNIT_ID,
+        isTesting: false, // Mudar para true durante testes
+      });
+
+      this.interstitialReady = true;
+      console.log('✅ Intersticial preparado');
+
+    } catch (error) {
+      console.error('❌ Erro ao preparar intersticial:', error);
+      this.interstitialReady = false;
+    }
+  }
+
+  /**
+   * Mostra o intersticial se estiver pronto
+   */
+  async showInterstitial(): Promise<void> {
+    if (!this.initialized || this.userIsPremium || !this.interstitialReady) {
+      console.log('⚠️ Intersticial não pode ser exibido:', {
+        initialized: this.initialized,
+        premium: this.userIsPremium,
+        ready: this.interstitialReady,
+      });
+      return;
+    }
+
+    try {
+      await AdMob.showInterstitial();
+      console.log('✅ Intersticial exibido');
+      this.interstitialReady = false;
+
+      // Preparar próximo intersticial em background
+      setTimeout(() => {
+        this.prepareInterstitial();
+      }, 1000);
+
+    } catch (error) {
+      console.error('❌ Erro ao exibir intersticial:', error);
+      this.interstitialReady = false;
+    }
+  }
+
+  /**
+   * Mostra intersticial de boas-vindas ao abrir o app
+   */
+  async showStartupInterstitial(): Promise<void> {
+    setTimeout(async () => {
+      await this.showInterstitial();
+    }, this.INTERSTITIAL_DELAY_ON_STARTUP);
+  }
+
+  /**
+   * Incrementa contador de despesas e verifica se deve mostrar anúncio
+   */
+  incrementExpenseCount(): void {
+    if (this.userIsPremium) {
+      return;
+    }
+
+    this.expenseCount++;
+    console.log(`📊 Despesas adicionadas: ${this.expenseCount}/${this.SHOW_INTERSTITIAL_AFTER}`);
+
+    if (this.expenseCount >= this.SHOW_INTERSTITIAL_AFTER) {
+      this.showInterstitial();
+      this.expenseCount = 0; // Resetar contador
+    }
+  }
+
+  /**
+   * Reseta o contador de despesas
+   */
+  resetExpenseCount(): void {
+    this.expenseCount = 0;
+  }
+
+  /**
+   * Verifica se usuário tem assinatura premium ativa
+   * TODO: Implementar verificação real com Supabase
+   */
+  private async checkPremiumStatus(): Promise<boolean> {
+    // Por enquanto, retorna false (nenhum usuário é premium)
+    // Quando implementarmos assinaturas, verificar tabela no Supabase
+    return false;
+  }
+
+  /**
+   * Desabilita anúncios para usuário premium
+   */
+  async disableAdsForPremium(): Promise<void> {
+    this.userIsPremium = true;
+    await this.removeBanner();
+    console.log('✅ Anúncios desabilitados para usuário premium');
+  }
+
+  /**
+   * Reabilita anúncios (quando assinatura expirar)
+   */
+  async enableAds(): Promise<void> {
+    this.userIsPremium = false;
+    await this.showBanner();
+    await this.prepareInterstitial();
+    console.log('✅ Anúncios reabilitados');
+  }
+}
+
+// Exportar instância única (singleton)
+export const adMobService = new AdMobService();
