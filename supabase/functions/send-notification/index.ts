@@ -44,45 +44,60 @@ async function getAccessToken(): Promise<string> {
   }
 
   const serviceAccount: ServiceAccount = JSON.parse(FIREBASE_SERVICE_ACCOUNT_JSON);
-  const { project_id, private_key, client_email } = serviceAccount;
+  const { project_id, client_email } = serviceAccount;
+  
+  // ✅ CORREÇÃO: Converter \n literais para quebras de linha reais
+  const private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+
+  console.log("📝 Project ID:", project_id);
+  console.log("📝 Client Email:", client_email);
+  console.log("🔑 Private key format check:", private_key.substring(0, 30) + "...");
 
   // Criar JWT assinado com a private key da service account
   const iat = getNumericDate(0);
   const exp = getNumericDate(60 * 60); // 1 hora
 
-  const jwt = await create(
-    { alg: "RS256", typ: "JWT" },
-    {
-      iss: client_email,
-      scope: "https://www.googleapis.com/auth/firebase.messaging",
-      aud: "https://oauth2.googleapis.com/token",
-      iat,
-      exp,
-    },
-    private_key
-  );
+  try {
+    const jwt = await create(
+      { alg: "RS256", typ: "JWT" },
+      {
+        iss: client_email,
+        scope: "https://www.googleapis.com/auth/firebase.messaging",
+        aud: "https://oauth2.googleapis.com/token",
+        iat,
+        exp,
+      },
+      private_key
+    );
 
-  // Trocar JWT por Access Token OAuth 2.0
-  const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
-  });
+    console.log("✅ JWT criado com sucesso");
 
-  if (!tokenResponse.ok) {
-    const error = await tokenResponse.text();
-    console.error("❌ Erro ao obter access token:", error);
-    throw new Error("Falha na autenticação OAuth 2.0");
+    // Trocar JWT por Access Token OAuth 2.0
+    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
+    });
+
+    if (!tokenResponse.ok) {
+      const error = await tokenResponse.text();
+      console.error("❌ Erro ao obter access token:", error);
+      throw new Error("Falha na autenticação OAuth 2.0");
+    }
+
+    const tokenData = await tokenResponse.json();
+    cachedAccessToken = tokenData.access_token;
+    tokenExpiresAt = now + tokenData.expires_in;
+
+    console.log("✅ Access token gerado com sucesso (expira em " + tokenData.expires_in + "s)");
+    return cachedAccessToken;
+    
+  } catch (error) {
+    console.error("❌ Erro ao criar JWT:", error);
+    throw error;
   }
-
-  const tokenData = await tokenResponse.json();
-  cachedAccessToken = tokenData.access_token;
-  tokenExpiresAt = now + tokenData.expires_in;
-
-  console.log("✅ Access token gerado com sucesso (expira em " + tokenData.expires_in + "s)");
-  return cachedAccessToken;
 }
 
 serve(async (req) => {
