@@ -977,7 +977,7 @@ export default function Index() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {/* Budget Goals Form */}
               <div className="space-y-6">
-                <BudgetGoalsForm onSubmit={addBudgetGoal} />
+                <BudgetGoalsForm onSubmit={addBudgetGoal} currentGoalsCount={budgetGoals.length} />
               </div>
 
               {/* Budget Progress */}

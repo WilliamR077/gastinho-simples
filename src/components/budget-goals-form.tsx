@@ -9,7 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ExpenseCategory, categoryLabels } from "@/types/expense";
 import { BudgetGoalType } from "@/types/budget-goal";
-import { Target } from "lucide-react";
+import { Target, Crown } from "lucide-react";
+import { useSubscription } from "@/hooks/use-subscription";
+import { useNavigate } from "react-router-dom";
 
 const budgetGoalSchema = z.object({
   type: z.enum(["monthly_total", "category"] as const),
@@ -21,10 +23,13 @@ type BudgetGoalFormData = z.infer<typeof budgetGoalSchema>;
 
 interface BudgetGoalsFormProps {
   onSubmit: (data: { type: BudgetGoalType; category?: ExpenseCategory; limitAmount: number }) => void;
+  currentGoalsCount: number;
 }
 
-export function BudgetGoalsForm({ onSubmit }: BudgetGoalsFormProps) {
+export function BudgetGoalsForm({ onSubmit, currentGoalsCount }: BudgetGoalsFormProps) {
   const [goalType, setGoalType] = useState<"monthly_total" | "category">("monthly_total");
+  const { canAddGoal, features, tier } = useSubscription();
+  const navigate = useNavigate();
 
   const {
     register,
@@ -38,6 +43,8 @@ export function BudgetGoalsForm({ onSubmit }: BudgetGoalsFormProps) {
       type: "monthly_total",
     },
   });
+
+  const canAddMore = canAddGoal(currentGoalsCount);
 
   const handleFormSubmit = (data: BudgetGoalFormData) => {
     onSubmit({
@@ -118,8 +125,25 @@ export function BudgetGoalsForm({ onSubmit }: BudgetGoalsFormProps) {
             )}
           </div>
 
-          <Button type="submit" className="w-full bg-gradient-primary hover:scale-105 transition-all duration-300 shadow-elegant">
-            Adicionar Meta
+          {!canAddMore && (
+            <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 text-sm">
+              <Crown className="inline h-4 w-4 mr-1" />
+              Você atingiu o limite de <strong>{features.goals} meta{features.goals > 1 ? 's' : ''}</strong> do plano {tier === 'free' ? 'gratuito' : tier}.
+              {' '}<span 
+                className="underline cursor-pointer font-semibold"
+                onClick={() => navigate("/subscription")}
+              >
+                Faça upgrade
+              </span> para adicionar metas ilimitadas.
+            </div>
+          )}
+
+          <Button 
+            type="submit" 
+            className="w-full bg-gradient-primary hover:scale-105 transition-all duration-300 shadow-elegant"
+            disabled={!canAddMore}
+          >
+            {canAddMore ? 'Adicionar Meta' : `Limite Atingido - Faça Upgrade`}
           </Button>
         </form>
       </CardContent>

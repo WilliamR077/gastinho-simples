@@ -2,13 +2,15 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardFormData, CardType, cardTypeLabels } from "@/types/card";
 import { useToast } from "@/hooks/use-toast";
+import { useSubscription } from "@/hooks/use-subscription";
 import { Button } from "@/components/ui/button";
 import { Card as CardUI, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, CreditCard, Pencil, Trash2 } from "lucide-react";
+import { Plus, CreditCard, Pencil, Trash2, Crown } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { useNavigate } from "react-router-dom";
 
 export function CardManager() {
   const [cards, setCards] = useState<Card[]>([]);
@@ -17,6 +19,8 @@ export function CardManager() {
   const [editingCard, setEditingCard] = useState<Card | null>(null);
   const [deleteCardId, setDeleteCardId] = useState<string | null>(null);
   const { toast } = useToast();
+  const { canAddCard, features, tier } = useSubscription();
+  const navigate = useNavigate();
 
   const [formData, setFormData] = useState<CardFormData>({
     name: "",
@@ -202,19 +206,62 @@ export function CardManager() {
     setShowForm(false);
   };
 
+  const handleAddCard = () => {
+    // Verificar se usuário pode adicionar mais cartões
+    if (!canAddCard(cards.length)) {
+      toast({
+        title: "Limite atingido",
+        description: `Você atingiu o limite de ${features.cards} cartão${features.cards > 1 ? 'ões' : ''} do plano ${tier === 'free' ? 'Gratuito' : tier}. Faça upgrade para adicionar mais cartões.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    setShowForm(!showForm);
+  };
+
   if (loading) {
     return <div className="text-center py-4">Carregando...</div>;
   }
+
+  const canAddMoreCards = canAddCard(cards.length);
 
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-semibold">Meus Cartões</h2>
-        <Button onClick={() => setShowForm(!showForm)} size="sm">
-          <Plus className="h-4 w-4 mr-2" />
-          Adicionar Cartão
-        </Button>
+        <div className="flex items-center gap-2">
+          {!canAddMoreCards && (
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => navigate("/subscription")}
+              className="gap-2"
+            >
+              <Crown className="h-4 w-4" />
+              Upgrade
+            </Button>
+          )}
+          <Button onClick={handleAddCard} size="sm" disabled={!canAddMoreCards && !editingCard}>
+            <Plus className="h-4 w-4 mr-2" />
+            Adicionar Cartão
+          </Button>
+        </div>
       </div>
+
+      {!canAddMoreCards && !showForm && (
+        <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 text-sm">
+          <p className="text-foreground">
+            <Crown className="inline h-4 w-4 mr-1" />
+            Você atingiu o limite de <strong>{features.cards} cartão{features.cards > 1 ? 'ões' : ''}</strong> do plano gratuito.
+            {' '}<span 
+              className="underline cursor-pointer font-semibold"
+              onClick={() => navigate("/subscription")}
+            >
+              Faça upgrade
+            </span> para adicionar cartões ilimitados.
+          </p>
+        </div>
+      )}
 
       {showForm && (
         <CardUI>

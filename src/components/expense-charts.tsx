@@ -2,11 +2,14 @@ import { useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Expense, PaymentMethod, ExpenseCategory, categoryLabels } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, BarChart, Bar } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
 import { format, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { filterExpensesByBillingPeriod } from "@/utils/billing-period";
-import { BarChart3, TrendingUp, PieChartIcon } from "lucide-react";
+import { BarChart3, TrendingUp, PieChartIcon, Crown, Lock } from "lucide-react";
+import { useSubscription } from "@/hooks/use-subscription";
+import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
 
 interface ExpenseChartsProps {
   expenses: Expense[];
@@ -51,6 +54,8 @@ export function ExpenseCharts({
   paymentMethod,
   category
 }: ExpenseChartsProps) {
+  const { hasAdvancedReports } = useSubscription();
+  const navigate = useNavigate();
   
   // Filtrar despesas para o período selecionado
   const filteredExpenses = useMemo(() => {
@@ -338,88 +343,131 @@ export function ExpenseCharts({
         </CardContent>
       </Card>
 
-      {/* Gráfico de Linha - Evolução Mensal */}
+      {/* Gráfico de Linha - Evolução Mensal (Premium) */}
       <Card className="lg:col-span-2">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="w-5 h-5" />
-            Evolução dos Gastos (Últimos 6 Meses)
-          </CardTitle>
-          <CardDescription>
-            Acompanhe a evolução dos seus gastos ao longo do tempo
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="w-5 h-5" />
+                Evolução dos Gastos (Últimos 6 Meses)
+                {!hasAdvancedReports && (
+                  <Crown className="h-4 w-4 text-primary ml-2" />
+                )}
+              </CardTitle>
+              <CardDescription>
+                {hasAdvancedReports 
+                  ? "Acompanhe a evolução dos seus gastos ao longo do tempo"
+                  : "Recurso disponível apenas para planos Premium"
+                }
+              </CardDescription>
+            </div>
+            {!hasAdvancedReports && (
+              <Button 
+                variant="default" 
+                size="sm"
+                onClick={() => navigate("/subscription")}
+                className="gap-2"
+              >
+                <Crown className="h-4 w-4" />
+                Fazer Upgrade
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
-          {monthlyData.length > 0 ? (
-            <>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={monthlyData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis 
-                    dataKey="month" 
-                    stroke="hsl(var(--foreground))"
-                    style={{ fontSize: '12px' }}
-                  />
-                  <YAxis 
-                    stroke="hsl(var(--foreground))"
-                    style={{ fontSize: '12px' }}
-                    tickFormatter={(value) => `R$ ${value.toFixed(0)}`}
-                  />
-                  <Tooltip 
-                    formatter={(value: number) => [`R$ ${value.toFixed(2)}`, 'Total']}
-                    labelFormatter={(label) => `Mês: ${label}`}
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(var(--card))', 
-                      border: '1px solid hsl(var(--border))',
-                      color: 'hsl(var(--foreground))'
-                    }}
-                    labelStyle={{ color: 'hsl(var(--foreground))' }}
-                    itemStyle={{ color: 'hsl(var(--foreground))' }}
-                  />
-                  <Legend />
-                  <Line 
-                    type="monotone" 
-                    dataKey="total" 
-                    stroke="#3b82f6" 
-                    strokeWidth={3}
-                    dot={{ fill: '#3b82f6', r: 5 }}
-                    activeDot={{ r: 8 }}
-                    name="Total Gasto"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+          {hasAdvancedReports ? (
+            monthlyData.length > 0 ? (
+              <>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={monthlyData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis 
+                      dataKey="month" 
+                      stroke="hsl(var(--foreground))"
+                      style={{ fontSize: '12px' }}
+                    />
+                    <YAxis 
+                      stroke="hsl(var(--foreground))"
+                      style={{ fontSize: '12px' }}
+                      tickFormatter={(value) => `R$ ${value.toFixed(0)}`}
+                    />
+                    <Tooltip 
+                      formatter={(value: number) => [`R$ ${value.toFixed(2)}`, 'Total']}
+                      labelFormatter={(label) => `Mês: ${label}`}
+                      contentStyle={{ 
+                        backgroundColor: 'hsl(var(--card))', 
+                        border: '1px solid hsl(var(--border))',
+                        color: 'hsl(var(--foreground))'
+                      }}
+                      labelStyle={{ color: 'hsl(var(--foreground))' }}
+                      itemStyle={{ color: 'hsl(var(--foreground))' }}
+                    />
+                    <Legend />
+                    <Line 
+                      type="monotone" 
+                      dataKey="total" 
+                      stroke="#3b82f6" 
+                      strokeWidth={3}
+                      dot={{ fill: '#3b82f6', r: 5 }}
+                      activeDot={{ r: 8 }}
+                      name="Total Gasto"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
 
-              {/* Comparação Mês a Mês */}
-              {monthComparison && (
-                <div className="mt-6 p-4 rounded-lg bg-muted">
-                  <h4 className="font-semibold mb-3">Comparação Mês a Mês</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="p-3 rounded-md bg-background">
-                      <div className="text-sm text-muted-foreground mb-1">Mês Anterior</div>
-                      <div className="text-xl font-bold">R$ {monthComparison.previous.total.toFixed(2)}</div>
-                      <div className="text-xs text-muted-foreground">{monthComparison.previous.count} gastos</div>
-                    </div>
-                    <div className="p-3 rounded-md bg-background">
-                      <div className="text-sm text-muted-foreground mb-1">Mês Atual</div>
-                      <div className="text-xl font-bold">R$ {monthComparison.current.total.toFixed(2)}</div>
-                      <div className="text-xs text-muted-foreground">{monthComparison.current.count} gastos</div>
-                    </div>
-                    <div className={`p-3 rounded-md ${monthComparison.isIncrease ? 'bg-red-50 dark:bg-red-950/20' : 'bg-green-50 dark:bg-green-950/20'}`}>
-                      <div className="text-sm text-muted-foreground mb-1">Variação</div>
-                      <div className={`text-xl font-bold ${monthComparison.isIncrease ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-                        {monthComparison.isIncrease ? '+' : ''} R$ {monthComparison.difference.toFixed(2)}
+                {/* Comparação Mês a Mês */}
+                {monthComparison && (
+                  <div className="mt-6 p-4 rounded-lg bg-muted">
+                    <h4 className="font-semibold mb-3">Comparação Mês a Mês</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="p-3 rounded-md bg-background">
+                        <div className="text-sm text-muted-foreground mb-1">Mês Anterior</div>
+                        <div className="text-xl font-bold">R$ {monthComparison.previous.total.toFixed(2)}</div>
+                        <div className="text-xs text-muted-foreground">{monthComparison.previous.count} gastos</div>
                       </div>
-                      <div className={`text-xs font-semibold ${monthComparison.isIncrease ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-                        {monthComparison.isIncrease ? '↑' : '↓'} {Math.abs(Number(monthComparison.percentageChange))}%
+                      <div className="p-3 rounded-md bg-background">
+                        <div className="text-sm text-muted-foreground mb-1">Mês Atual</div>
+                        <div className="text-xl font-bold">R$ {monthComparison.current.total.toFixed(2)}</div>
+                        <div className="text-xs text-muted-foreground">{monthComparison.current.count} gastos</div>
+                      </div>
+                      <div className={`p-3 rounded-md ${monthComparison.isIncrease ? 'bg-red-50 dark:bg-red-950/20' : 'bg-green-50 dark:bg-green-950/20'}`}>
+                        <div className="text-sm text-muted-foreground mb-1">Variação</div>
+                        <div className={`text-xl font-bold ${monthComparison.isIncrease ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                          {monthComparison.isIncrease ? '+' : ''} R$ {monthComparison.difference.toFixed(2)}
+                        </div>
+                        <div className={`text-xs font-semibold ${monthComparison.isIncrease ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                          {monthComparison.isIncrease ? '↑' : '↓'} {Math.abs(Number(monthComparison.percentageChange))}%
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              )}
-            </>
+                )}
+              </>
+            ) : (
+              <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                Nenhum gasto registrado
+              </div>
+            )
           ) : (
-            <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-              Nenhum gasto registrado
+            <div className="h-[300px] flex flex-col items-center justify-center gap-4 text-center">
+              <Lock className="h-16 w-16 text-muted-foreground/40" />
+              <div>
+                <p className="text-lg font-semibold text-foreground mb-2">
+                  Relatórios Avançados Bloqueados
+                </p>
+                <p className="text-sm text-muted-foreground max-w-md">
+                  Acompanhe a evolução dos seus gastos nos últimos 6 meses e veja comparações detalhadas mês a mês.
+                  Faça upgrade para um plano Premium para desbloquear este recurso.
+                </p>
+                <Button 
+                  className="mt-4 gap-2"
+                  onClick={() => navigate("/subscription")}
+                >
+                  <Crown className="h-4 w-4" />
+                  Ver Planos Premium
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>
