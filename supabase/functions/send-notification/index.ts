@@ -89,7 +89,9 @@ serve(async (req) => {
         const result = await response.json();
 
         if (!response.ok) {
-          console.error(`Erro ao enviar para token ${fcm_token}:`, result);
+          console.error(`❌ FCM Error - Status: ${response.status}`);
+          console.error(`Token: ${fcm_token.slice(-8)}`);
+          console.error(`Response:`, JSON.stringify(result, null, 2));
           
           // Se o token é inválido, remover do banco
           if (result.error === "InvalidRegistration" || result.error === "NotRegistered") {
@@ -97,12 +99,18 @@ serve(async (req) => {
               .from("user_fcm_tokens")
               .delete()
               .eq("fcm_token", fcm_token);
-            console.log(`Token inválido removido: ${fcm_token}`);
+            console.log(`🗑️ Token inválido removido: ${fcm_token.slice(-8)}`);
+          }
+          
+          // Verificar se é erro de autenticação
+          if (response.status === 401 || result.error === "Unauthorized") {
+            console.error("⚠️ FIREBASE_SERVER_KEY pode estar incorreta ou expirada!");
           }
           
           throw new Error(result.error || "Erro ao enviar notificação");
         }
 
+        console.log(`✅ Notificação enviada com sucesso para token: ${fcm_token.slice(-8)}`);
         return result;
       })
     );

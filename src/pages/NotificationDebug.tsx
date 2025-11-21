@@ -55,7 +55,8 @@ export default function NotificationDebug() {
       
       setStats({
         total: tokens?.length || 0,
-        tokens: tokens || []
+        tokens: tokens || [],
+        byType: {} // Fix: adicionar byType para evitar crash
       });
     } catch (error) {
       console.error("Error loading stats:", error);
@@ -168,7 +169,7 @@ export default function NotificationDebug() {
           </CardHeader>
           <CardContent className="space-y-2">
             <p><strong>Status:</strong> {hasPermission ? "✅ Ativo" : "❌ Inativo"}</p>
-            <p><strong>FCM Token:</strong> {fcmToken ? `${fcmToken.substring(0, 30)}...` : "Não disponível"}</p>
+            <p><strong>FCM Token:</strong> {fcmToken ? `•••${fcmToken.slice(-8)}` : "Não disponível"}</p>
             <p><strong>Dispositivos registrados:</strong> {stats?.total || 0}</p>
             <Button onClick={() => firebaseNotificationService.initialize()} className="mt-4">
               Reinicializar Firebase
