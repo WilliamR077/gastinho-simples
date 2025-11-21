@@ -1,4 +1,5 @@
 import { FirebaseMessaging } from '@capacitor-firebase/messaging';
+import { LocalNotifications } from '@capacitor/local-notifications';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { Capacitor } from '@capacitor/core';
@@ -44,6 +45,12 @@ export class FirebaseNotificationService {
 
       // Obter FCM Token
       await this.getFCMToken();
+
+      // Verificar e solicitar permissões de notificações locais
+      const localNotifPermission = await LocalNotifications.checkPermissions();
+      if (localNotifPermission.display !== 'granted') {
+        await LocalNotifications.requestPermissions();
+      }
 
       // Configurar listeners
       this.setupListeners();
@@ -141,12 +148,36 @@ export class FirebaseNotificationService {
    */
   private setupListeners(): void {
     // Notificação recebida quando o app está em foreground
-    FirebaseMessaging.addListener('notificationReceived', (notification) => {
+    FirebaseMessaging.addListener('notificationReceived', async (notification) => {
       console.log('Notificação recebida (foreground):', notification);
-      toast({
-        title: notification.notification?.title || 'Nova Notificação',
-        description: notification.notification?.body || '',
-      });
+      
+      try {
+        // Criar notificação local para aparecer na bandeja do sistema
+        await LocalNotifications.schedule({
+          notifications: [
+            {
+              title: notification.notification?.title || 'Nova Notificação',
+              body: notification.notification?.body || '',
+              id: Date.now(), // ID único baseado no timestamp
+              schedule: { at: new Date(Date.now() + 100) }, // Mostrar quase imediatamente
+              sound: 'default',
+              attachments: undefined,
+              actionTypeId: '',
+              extra: (notification as any).data || {},
+            },
+          ],
+        });
+        
+        console.log('✅ Notificação local criada com sucesso');
+      } catch (error) {
+        console.error('❌ Erro ao criar notificação local:', error);
+        
+        // Fallback: mostrar toast se a notificação local falhar
+        toast({
+          title: notification.notification?.title || 'Nova Notificação',
+          description: notification.notification?.body || '',
+        });
+      }
     });
 
     // Notificação clicada (app em background ou fechado)
