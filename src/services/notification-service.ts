@@ -1,3 +1,9 @@
+/**
+ * @deprecated Este serviço usa Capacitor Local Notifications e será removido.
+ * Use FirebaseNotificationService em vez disso.
+ * 
+ * Mantido temporariamente para compatibilidade com dados existentes.
+ */
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { RecurringExpense } from '@/types/recurring-expense';
 import { Toast } from '@capacitor/toast';
