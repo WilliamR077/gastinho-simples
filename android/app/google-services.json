@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:938517509878:android:cf6c9bef74cb2e5c791ed7",
+        "mobilesdk_app_id": "1:938517509878:android:3d9450b368512374791ed7",
         "android_client_info": {
-          "package_name": "app.lovable.gastinhosimples"
+          "package_name": "com.gastinhosimples.app"
         }
       },
       "oauth_client": [],
