@@ -450,14 +450,14 @@ export function ExpenseCharts({
               </div>
             )
           ) : (
-            <div className="h-[300px] flex flex-col items-center justify-center gap-4 text-center">
+            <div className="h-[300px] flex flex-col items-center justify-center gap-4 text-center px-4">
               <Lock className="h-16 w-16 text-muted-foreground/40" />
               <div>
                 <p className="text-lg font-semibold text-foreground mb-2">
-                  Relatórios Avançados Bloqueados
+                  📊 Relatórios Avançados - Premium
                 </p>
                 <p className="text-sm text-muted-foreground max-w-md">
-                  Acompanhe a evolução dos seus gastos nos últimos 6 meses e veja comparações detalhadas mês a mês.
+                  Veja a evolução dos seus gastos mês a mês nos últimos 6 meses e identifique tendências para economizar mais.
                   Faça upgrade para um plano Premium para desbloquear este recurso.
                 </p>
                 <Button 

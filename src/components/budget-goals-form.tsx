@@ -127,14 +127,17 @@ export function BudgetGoalsForm({ onSubmit, currentGoalsCount }: BudgetGoalsForm
 
           {!canAddMore && (
             <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 text-sm">
-              <Crown className="inline h-4 w-4 mr-1" />
-              Você atingiu o limite de <strong>{features.goals} meta{features.goals > 1 ? 's' : ''}</strong> do plano {tier === 'free' ? 'gratuito' : tier}.
-              {' '}<span 
-                className="underline cursor-pointer font-semibold"
-                onClick={() => navigate("/subscription")}
-              >
-                Faça upgrade
-              </span> para adicionar metas ilimitadas.
+              <p className="text-foreground">
+                🎯 <strong>Apenas {features.goals} meta no plano Gratuito</strong>
+                <br />
+                Upgrade para Premium e crie <strong>quantas metas precisar!</strong>
+                {' '}<span 
+                  className="underline cursor-pointer font-semibold text-primary"
+                  onClick={() => navigate("/subscription")}
+                >
+                  Ver planos
+                </span>
+              </p>
             </div>
           )}
 
