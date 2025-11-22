@@ -2,7 +2,7 @@ import { useSubscription } from "@/hooks/use-subscription";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, Crown, Sparkles, Zap, Smartphone } from "lucide-react";
+import { Check, Crown, Sparkles, Zap, Smartphone, Wallet, BarChart3, FileDown } from "lucide-react";
 import { SUBSCRIPTION_FEATURES } from "@/types/subscription";
 import { Skeleton } from "@/components/ui/skeleton";
 import { billingService } from "@/services/billing-service";
@@ -99,7 +99,7 @@ export default function Subscription() {
 
   return (
     <div className="container mx-auto p-6 space-y-6 pb-20">
-      <div className="text-center space-y-2">
+      <div className="text-center space-y-2 mb-6">
         <h1 className="text-3xl font-bold">Planos e Assinaturas</h1>
         <p className="text-muted-foreground">
           Escolha o plano ideal para suas necessidades
@@ -110,6 +110,38 @@ export default function Subscription() {
           </Badge>
         )}
       </div>
+
+      {/* Seção: Por que fazer upgrade? */}
+      <Card className="mb-6 bg-gradient-to-r from-primary/10 to-purple-500/10 border-primary/20">
+        <CardHeader>
+          <CardTitle className="text-2xl text-center">Por que fazer upgrade?</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid md:grid-cols-3 gap-6">
+            <div className="text-center">
+              <Wallet className="h-12 w-12 mx-auto mb-3 text-primary" />
+              <h4 className="font-semibold mb-2">Controle Total</h4>
+              <p className="text-sm text-muted-foreground">
+                Cartões e metas ilimitadas para organizar suas finanças do seu jeito
+              </p>
+            </div>
+            <div className="text-center">
+              <BarChart3 className="h-12 w-12 mx-auto mb-3 text-primary" />
+              <h4 className="font-semibold mb-2">Insights Poderosos</h4>
+              <p className="text-sm text-muted-foreground">
+                Relatórios avançados para identificar padrões e economizar mais
+              </p>
+            </div>
+            <div className="text-center">
+              <FileDown className="h-12 w-12 mx-auto mb-3 text-primary" />
+              <h4 className="font-semibold mb-2">Seus Dados, Seu Controle</h4>
+              <p className="text-sm text-muted-foreground">
+                Exporte para Excel ou PDF e use em qualquer ferramenta
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
         {plans.map((plan) => {
@@ -206,8 +238,9 @@ export default function Subscription() {
                       "Processando..."
                     ) : (
                       <>
-                        {isNative ? <Smartphone className="h-4 w-4" /> : null}
-                        {isNative ? "Comprar via Google Play" : "Fazer Upgrade"}
+                        {plan.tier === "no_ads" && "Remover Anúncios 🎯"}
+                        {plan.tier === "premium" && "Desbloquear Premium 🚀"}
+                        {plan.tier === "premium_plus" && "Ter Acesso Completo ⭐"}
                       </>
                     )}
                   </Button>

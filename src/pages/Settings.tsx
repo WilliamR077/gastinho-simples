@@ -5,7 +5,8 @@ import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Settings as SettingsIcon, FileDown, FileSpreadsheet, Bug } from "lucide-react";
+import { ArrowLeft, Settings as SettingsIcon, FileDown, FileSpreadsheet, Bug, Crown, Lock } from "lucide-react";
+import { useSubscription } from "@/hooks/use-subscription";
 import { FirebaseNotificationSettings } from "@/components/firebase-notification-settings";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
@@ -17,6 +18,7 @@ import { sanitizeErrorMessage } from "@/utils/security";
 export default function Settings() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { canExportPdf, canExportExcel } = useSubscription();
 
   // Audit log helper function
   const logAuditAction = async (action: string, details?: any) => {
@@ -35,6 +37,16 @@ export default function Settings() {
   };
 
   const handleExportToExcel = async () => {
+    if (!canExportExcel) {
+      toast({
+        title: "Recurso Premium 👑",
+        description: "A exportação para Excel está disponível apenas para assinantes Premium. Faça upgrade para desbloquear!",
+        variant: "destructive",
+      });
+      navigate("/subscription");
+      return;
+    }
+
     try {
       if (!user?.id) {
         throw new Error("Usuário não identificado");
@@ -123,6 +135,16 @@ export default function Settings() {
   };
 
   const handleExportToPDF = async () => {
+    if (!canExportPdf) {
+      toast({
+        title: "Recurso Premium 👑",
+        description: "A exportação para PDF está disponível apenas para assinantes Premium. Faça upgrade para desbloquear!",
+        variant: "destructive",
+      });
+      navigate("/subscription");
+      return;
+    }
+
     try {
       if (!user?.id) {
         throw new Error("Usuário não identificado");
@@ -296,20 +318,50 @@ export default function Settings() {
             <CardTitle className="flex items-center gap-2">
               <FileDown className="h-5 w-5" />
               Exportar Dados
+              {(!canExportPdf || !canExportExcel) && (
+                <Crown className="h-4 w-4 text-primary ml-auto" />
+              )}
             </CardTitle>
             <CardDescription>
               Baixe todos os seus dados em formato Excel ou PDF
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {(!canExportPdf || !canExportExcel) && (
+              <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <Crown className="h-5 w-5 text-primary mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="font-semibold mb-1">📁 Exportações Premium</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Salve seus dados para análise externa ou backup seguro em Excel e PDF.
+                      Disponível nos planos Premium e Premium Plus.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="flex flex-col sm:flex-row gap-3">
-              <Button onClick={handleExportToExcel} className="flex-1 gap-2">
+              <Button 
+                onClick={handleExportToExcel} 
+                className="flex-1 gap-2"
+                disabled={!canExportExcel}
+              >
+                {!canExportExcel && <Lock className="h-4 w-4" />}
                 <FileSpreadsheet className="h-4 w-4" />
                 Exportar para Excel
+                {!canExportExcel && <Crown className="h-4 w-4 ml-auto" />}
               </Button>
-              <Button onClick={handleExportToPDF} variant="outline" className="flex-1 gap-2">
+              <Button 
+                onClick={handleExportToPDF} 
+                variant="outline" 
+                className="flex-1 gap-2"
+                disabled={!canExportPdf}
+              >
+                {!canExportPdf && <Lock className="h-4 w-4" />}
                 <FileDown className="h-4 w-4" />
                 Exportar para PDF
+                {!canExportPdf && <Crown className="h-4 w-4 ml-auto" />}
               </Button>
             </div>
           </CardContent>

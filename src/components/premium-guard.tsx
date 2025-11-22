@@ -97,11 +97,12 @@ export function PremiumGuard({
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Lock className="h-5 w-5 text-primary" />
-              Recurso Premium
+              <Crown className="h-5 w-5 text-primary" />
+              Que ótimo que você quer {getFeatureName()}! 🎉
             </DialogTitle>
             <DialogDescription>
-              Para {getFeatureName()}, você precisa fazer upgrade para um plano premium.
+              Esse recurso está disponível nos planos Premium e Premium Plus.
+              Faça upgrade para desbloquear todo o potencial do Gastinho Simples!
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
