@@ -5,7 +5,7 @@ import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Settings as SettingsIcon, FileDown, FileSpreadsheet, Bug, Crown, Lock } from "lucide-react";
+import { ArrowLeft, Settings as SettingsIcon, FileDown, FileSpreadsheet, Bug, Crown, Lock, Sparkles } from "lucide-react";
 import { useSubscription } from "@/hooks/use-subscription";
 import { FirebaseNotificationSettings } from "@/components/firebase-notification-settings";
 import * as XLSX from "xlsx";
@@ -18,7 +18,7 @@ import { sanitizeErrorMessage } from "@/utils/security";
 export default function Settings() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { canExportPdf, canExportExcel } = useSubscription();
+  const { canExportPdf, canExportExcel, tier, features } = useSubscription();
 
   // Audit log helper function
   const logAuditAction = async (action: string, details?: any) => {
@@ -364,6 +364,36 @@ export default function Settings() {
                 {!canExportPdf && <Crown className="h-4 w-4 ml-auto" />}
               </Button>
             </div>
+          </CardContent>
+        </Card>
+
+        <Separator />
+
+        {/* Seção: Assinatura */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              Assinatura e Planos
+            </CardTitle>
+            <CardDescription>
+              Gerencie sua assinatura e veja outros planos disponíveis
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
+              <p className="text-sm font-semibold mb-1">Plano Atual</p>
+              <p className="text-lg font-bold text-primary">{features.name}</p>
+              <p className="text-sm text-muted-foreground mt-1">{features.price}</p>
+            </div>
+            <Button 
+              onClick={() => navigate("/subscription")} 
+              className="w-full gap-2"
+              variant="outline"
+            >
+              <Crown className="h-4 w-4" />
+              Ver Todos os Planos
+            </Button>
           </CardContent>
         </Card>
 
