@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, User, Mail, Lock, Trash2 } from "lucide-react";
+import { ArrowLeft, User, Mail, Lock, Trash2, Crown } from "lucide-react";
+import { useSubscription } from "@/hooks/use-subscription";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { validatePasswordStrength, sanitizeErrorMessage, isEmailValid } from "@/utils/security";
 import { Progress } from "@/components/ui/progress";
@@ -16,6 +17,7 @@ import { Progress } from "@/components/ui/progress";
 export default function Account() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const { tier, features } = useSubscription();
   const [loading, setLoading] = useState(false);
   const [emailLoading, setEmailLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
@@ -260,15 +262,14 @@ export default function Account() {
     <div className="min-h-screen bg-background pb-16">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         {/* Header */}
-        <div className="flex items-center gap-4 mb-8">
+        <div className="flex items-start gap-4 mb-8">
           <Button
             variant="ghost"
-            size="sm"
+            size="icon"
             onClick={() => navigate("/")}
-            className="flex items-center gap-2"
+            className="shrink-0 mt-1"
           >
             <ArrowLeft className="w-4 h-4" />
-            Voltar
           </Button>
           <div className="flex items-center gap-3">
             <div className="p-3 rounded-full bg-gradient-primary shadow-elegant">
@@ -276,40 +277,39 @@ export default function Account() {
             </div>
             <div>
               <h1 className="text-3xl font-bold text-foreground">Minha Conta</h1>
-              <p className="text-muted-foreground">Gerencie suas informações pessoais e segurança</p>
+              <p className="text-muted-foreground">
+                Gerencie suas informações pessoais • Conta criada em {user?.created_at ? new Date(user.created_at).toLocaleDateString('pt-BR') : 'N/A'}
+              </p>
             </div>
           </div>
         </div>
 
         <div className="grid gap-6">
-          {/* Account Info */}
-          <Card>
+          {/* Subscription Section */}
+          <Card className="border-primary/30">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <User className="w-5 h-5" />
-                Informações da Conta
+                <Crown className="w-5 h-5 text-primary" />
+                Assinatura e Planos
               </CardTitle>
               <CardDescription>
-                Dados básicos da sua conta
+                Gerencie sua assinatura e veja outros planos disponíveis
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
-                <Label className="text-sm text-muted-foreground">ID do Usuário</Label>
-                <p className="text-sm font-mono bg-muted p-2 rounded mt-1 break-all">{user?.id}</p>
+              <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
+                <p className="text-sm font-semibold mb-1">Plano Atual</p>
+                <p className="text-lg font-bold text-primary">{features.name}</p>
+                <p className="text-sm text-muted-foreground mt-1">{features.price}</p>
               </div>
-              <div>
-                <Label className="text-sm text-muted-foreground">Conta criada em</Label>
-                <p className="text-sm font-mono bg-muted p-2 rounded mt-1">
-                  {user?.created_at ? new Date(user.created_at).toLocaleDateString('pt-BR', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  }) : 'N/A'}
-                </p>
-              </div>
+              <Button 
+                onClick={() => navigate("/subscription")} 
+                className="w-full gap-2"
+                variant="outline"
+              >
+                <Crown className="h-4 w-4" />
+                Ver Todos os Planos
+              </Button>
             </CardContent>
           </Card>
 

@@ -115,42 +115,42 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense }: Expens
                 </div>
                 
                 {/* Linha inferior - Mobile | Mesma linha no Desktop */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3 w-full sm:w-auto pl-11 sm:pl-0">
-                  <Badge 
-                    variant="outline" 
-                    className="text-xs whitespace-nowrap border-0 text-white max-w-[180px] truncate"
-                    style={cardColor ? { backgroundColor: cardColor } : {}}
-                  >
-                    {config.label}
-                    {expense.card && ` - ${expense.card.name}`}
-                  </Badge>
-                  
-                  <div className="flex items-center gap-2 sm:gap-3 shrink-0 ml-auto">
+                <div className="flex items-center justify-between gap-3 w-full pl-11 sm:pl-0">
+                  <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
                     <p className="font-bold text-base sm:text-lg text-primary whitespace-nowrap">
                       R$ {expense.amount.toFixed(2).replace('.', ',')}
                     </p>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="bg-background">
-                        <DropdownMenuItem onClick={() => onEditExpense(expense)}>
-                          <Pencil className="mr-2 h-4 w-4" />
-                          Editar
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={() => onDeleteExpense(expense.id)}
-                          className="text-destructive focus:text-destructive"
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Apagar
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <Badge 
+                      variant="outline" 
+                      className="text-xs whitespace-nowrap border-0 text-white max-w-[180px] truncate"
+                      style={cardColor ? { backgroundColor: cardColor } : {}}
+                    >
+                      {config.label}
+                      {expense.card && ` - ${expense.card.name}`}
+                    </Badge>
                   </div>
+                  
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="bg-background">
+                      <DropdownMenuItem onClick={() => onEditExpense(expense)}>
+                        <Pencil className="mr-2 h-4 w-4" />
+                        Editar
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => onDeleteExpense(expense.id)}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Apagar
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
             )
