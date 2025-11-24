@@ -2,18 +2,20 @@ import { useSubscription } from "@/hooks/use-subscription";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, Crown, Sparkles, Zap, Smartphone, Wallet, BarChart3, FileDown } from "lucide-react";
+import { Check, Crown, Sparkles, Zap, Smartphone, Wallet, BarChart3, FileDown, ArrowLeft } from "lucide-react";
 import { SUBSCRIPTION_FEATURES } from "@/types/subscription";
 import { Skeleton } from "@/components/ui/skeleton";
 import { billingService } from "@/services/billing-service";
 import { toast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { Capacitor } from "@capacitor/core";
+import { useNavigate } from "react-router-dom";
 
 export default function Subscription() {
   const { tier, loading, features, refreshSubscription } = useSubscription();
   const [purchasing, setPurchasing] = useState<string | null>(null);
   const isNative = Capacitor.isNativePlatform();
+  const navigate = useNavigate();
 
   if (loading) {
     return (
@@ -99,6 +101,15 @@ export default function Subscription() {
 
   return (
     <div className="container mx-auto p-6 space-y-6 pb-20">
+      {/* Header com botão voltar */}
+      <div className="flex items-center justify-between">
+        <Button variant="ghost" onClick={() => navigate(-1)} className="gap-2">
+          <ArrowLeft className="h-4 w-4" />
+          Voltar
+        </Button>
+      </div>
+
+      {/* Título e descrição */}
       <div className="text-center space-y-2 mb-6">
         <h1 className="text-3xl font-bold">Planos e Assinaturas</h1>
         <p className="text-muted-foreground">

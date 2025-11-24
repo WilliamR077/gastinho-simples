@@ -85,7 +85,7 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense }: Expens
                   <div className="flex-1 min-w-0 overflow-hidden">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-lg shrink-0">{categoryIcons[expense.category]}</span>
-                      <p className="font-medium text-foreground truncate break-words">{expense.description}</p>
+                      <p className="font-medium text-foreground truncate break-words max-w-[200px] sm:max-w-[300px]">{expense.description}</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-1 sm:gap-2 text-xs sm:text-sm text-muted-foreground">
                       <span>{categoryLabels[expense.category]}</span>
@@ -115,39 +115,42 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense }: Expens
                 </div>
                 
                 {/* Linha inferior - Mobile | Mesma linha no Desktop */}
-                <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3 shrink-0 pl-11 sm:pl-0">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3 w-full sm:w-auto pl-11 sm:pl-0">
                   <Badge 
                     variant="outline" 
-                    className="text-xs whitespace-nowrap border-0 text-white"
+                    className="text-xs whitespace-nowrap border-0 text-white max-w-[180px] truncate"
                     style={cardColor ? { backgroundColor: cardColor } : {}}
                   >
                     {config.label}
                     {expense.card && ` - ${expense.card.name}`}
                   </Badge>
-                  <p className="font-bold text-base sm:text-lg text-primary whitespace-nowrap">
-                    R$ {expense.amount.toFixed(2).replace('.', ',')}
-                  </p>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="bg-background">
-                      <DropdownMenuItem onClick={() => onEditExpense(expense)}>
-                        <Pencil className="mr-2 h-4 w-4" />
-                        Editar
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={() => onDeleteExpense(expense.id)}
-                        className="text-destructive focus:text-destructive"
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Apagar
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  
+                  <div className="flex items-center gap-2 sm:gap-3 shrink-0 ml-auto">
+                    <p className="font-bold text-base sm:text-lg text-primary whitespace-nowrap">
+                      R$ {expense.amount.toFixed(2).replace('.', ',')}
+                    </p>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="bg-background">
+                        <DropdownMenuItem onClick={() => onEditExpense(expense)}>
+                          <Pencil className="mr-2 h-4 w-4" />
+                          Editar
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => onDeleteExpense(expense.id)}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Apagar
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
               </div>
             )
