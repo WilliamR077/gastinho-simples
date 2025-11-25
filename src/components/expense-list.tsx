@@ -71,58 +71,63 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense }: Expens
             return (
               <div
                 key={expense.id}
-                className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-lg border bg-card/50 hover:bg-card/80 transition-all duration-300 hover:shadow-card overflow-hidden max-w-full"
+                className="flex flex-col p-4 rounded-lg border bg-card/50 hover:bg-card/80 transition-all duration-300 hover:shadow-card"
               >
-                {/* Linha superior - Ícone + Descrição e detalhes */}
-                <div className="flex items-start gap-3 flex-1 min-w-0">
+                {/* Linha 1 - Cabeçalho com ícone, categoria e nome */}
+                <div className="flex items-center gap-3">
                   <div 
                     className="p-2 rounded-full shrink-0" 
-                    style={cardColor ? { backgroundColor: cardColor } : {}}
+                    style={{ backgroundColor: cardColor || '#6B7280' }}
                   >
                     <Icon className="h-4 w-4 text-white" />
                   </div>
-                  
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start gap-2 mb-1">
-                      <span className="text-lg shrink-0">{categoryIcons[expense.category]}</span>
-                      <p className="font-medium text-foreground">{expense.description}</p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-1 sm:gap-2 text-xs sm:text-sm text-muted-foreground">
-                      <span>{categoryLabels[expense.category]}</span>
-                      <span>•</span>
-                      <span className="whitespace-nowrap">
-                        {new Date(expense.expense_date).toLocaleDateString('pt-BR')}
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="text-lg shrink-0">{categoryIcons[expense.category]}</span>
+                    <p className="font-medium text-foreground truncate">{expense.description}</p>
+                    {expense.total_installments > 1 && (
+                      <span className="text-sm font-medium text-primary whitespace-nowrap">
+                        {expense.installment_number}/{expense.total_installments}x
                       </span>
-                      {expense.total_installments > 1 && (
-                        <>
-                          <span>•</span>
-                          <span className="font-medium text-primary whitespace-nowrap">
-                            {expense.installment_number}/{expense.total_installments}x
-                          </span>
-                        </>
-                      )}
-                    </div>
+                    )}
                   </div>
                 </div>
                 
-                {/* Linha inferior - Preço + Badge + Menu */}
-                <div className="flex items-center justify-between gap-3 sm:gap-4 mt-3 sm:mt-0 sm:w-auto">
-                  <div className="flex items-center gap-2 flex-1 sm:flex-initial">
-                    <p className="font-bold text-lg text-primary whitespace-nowrap">
-                      R$ {expense.amount.toFixed(2).replace('.', ',')}
-                    </p>
-                    <Badge 
-                      className="text-xs whitespace-nowrap text-white"
-                      style={cardColor ? { backgroundColor: cardColor } : {}}
-                    >
-                      {config.label}
-                      {expense.card && ` - ${expense.card.name}`}
-                    </Badge>
-                  </div>
-                  
+                {/* Linha 2 - Categoria e Data da Despesa */}
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2 ml-11">
+                  <span>{categoryLabels[expense.category]}</span>
+                  <span>•</span>
+                  <span>{new Date(expense.expense_date).toLocaleDateString('pt-BR')}</span>
+                </div>
+                
+                {/* Linha 3 - Criado em */}
+                <div className="text-xs text-muted-foreground mt-1 ml-11">
+                  Criado em: {new Date(expense.created_at).toLocaleDateString('pt-BR', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  }).replace(',', ' às')}
+                </div>
+                
+                {/* Linha 4 - Badge da forma de pagamento */}
+                <div className="mt-2 ml-11">
+                  <Badge 
+                    className="text-xs text-white"
+                    style={{ backgroundColor: cardColor || '#6B7280' }}
+                  >
+                    {config.label}
+                    {expense.card && ` - ${expense.card.name}`}
+                  </Badge>
+                </div>
+                
+                {/* Linha 5 - Preço (esquerda) e Menu (direita) */}
+                <div className="flex items-center justify-between mt-3">
+                  <p className="font-bold text-lg text-primary">
+                    R$ {expense.amount.toFixed(2).replace('.', ',')}
+                  </p>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                      <Button variant="ghost" size="icon" className="h-8 w-8">
                         <MoreVertical className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
