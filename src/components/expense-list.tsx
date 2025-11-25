@@ -27,6 +27,12 @@ const paymentMethodConfig = {
   credit: { label: "Crédito", icon: CreditCard, color: "bg-warning text-warning-foreground" }
 }
 
+// Helper para parsear data sem problemas de timezone
+const parseLocalDate = (dateString: string) => {
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
 export function ExpenseList({ expenses, onDeleteExpense, onEditExpense }: ExpenseListProps) {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
@@ -96,7 +102,7 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense }: Expens
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2 ml-11">
                   <span>{categoryLabels[expense.category]}</span>
                   <span>•</span>
-                  <span>{new Date(expense.expense_date).toLocaleDateString('pt-BR')}</span>
+                  <span>{parseLocalDate(expense.expense_date).toLocaleDateString('pt-BR')}</span>
                 </div>
                 
                 {/* Linha 3 - Criado em */}
