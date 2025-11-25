@@ -6,9 +6,62 @@ import { BudgetGoal } from "@/types/budget-goal";
 import { Expense } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
 import { categoryLabels, categoryIcons } from "@/types/expense";
-import { AlertTriangle, TrendingDown, TrendingUp, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { AlertTriangle, TrendingDown, TrendingUp, MoreVertical, Pencil, Trash2, AlertCircle, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+
+type AlertLevel = 'safe' | 'warning' | 'caution' | 'danger' | 'critical';
+
+const getAlertLevel = (percentage: number): AlertLevel => {
+  if (percentage >= 100) return 'critical';
+  if (percentage >= 95) return 'danger';
+  if (percentage >= 85) return 'caution';
+  if (percentage >= 70) return 'warning';
+  return 'safe';
+};
+
+const alertConfig = {
+  safe: {
+    color: 'text-success',
+    bgColor: 'bg-success/10',
+    borderColor: 'border-success/30',
+    progressColor: 'bg-success',
+    icon: Check,
+    message: 'Você está no controle! Continue assim.',
+  },
+  warning: {
+    color: 'text-yellow-600 dark:text-yellow-500',
+    bgColor: 'bg-yellow-500/10',
+    borderColor: 'border-yellow-500/30',
+    progressColor: 'bg-yellow-500',
+    icon: AlertCircle,
+    message: 'Atenção! Você já usou bastante do orçamento.',
+  },
+  caution: {
+    color: 'text-orange-600 dark:text-orange-500',
+    bgColor: 'bg-orange-500/10',
+    borderColor: 'border-orange-500/50',
+    progressColor: 'bg-orange-500',
+    icon: AlertTriangle,
+    message: 'Cuidado! Você está perto do limite.',
+  },
+  danger: {
+    color: 'text-destructive',
+    bgColor: 'bg-destructive/10',
+    borderColor: 'border-destructive/50',
+    progressColor: 'bg-destructive',
+    icon: AlertTriangle,
+    message: 'Alerta! Você está quase estourando a meta.',
+  },
+  critical: {
+    color: 'text-destructive',
+    bgColor: 'bg-destructive/20',
+    borderColor: 'border-destructive',
+    progressColor: 'bg-destructive',
+    icon: AlertTriangle,
+    message: 'Meta estourada! Hora de economizar.',
+  },
+};
 
 interface BudgetProgressProps {
   goals: BudgetGoal[];
@@ -83,9 +136,15 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, onDelete, o
       {goals.map((goal) => {
         const { totalSpent, limit, percentage, remaining, isOver } = calculateProgress(goal);
         const progressValue = Math.min(percentage, 100);
+        const alertLevel = getAlertLevel(percentage);
+        const config = alertConfig[alertLevel];
+        const AlertIcon = config.icon;
 
         return (
-          <Card key={goal.id} className={isOver ? "border-destructive" : ""}>
+          <Card 
+            key={goal.id} 
+            className={`transition-all ${config.borderColor} ${alertLevel !== 'safe' ? config.bgColor : ''}`}
+          >
             <CardHeader>
               <div className="flex items-start justify-between">
                 <div className="flex-1">
@@ -136,7 +195,7 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, onDelete, o
                 </div>
                 <Progress 
                   value={progressValue} 
-                  className={isOver ? "[&>div]:bg-destructive" : ""}
+                  className={`[&>div]:${config.progressColor}`}
                 />
                 <div className="flex items-center justify-between text-sm">
                   {isOver ? (
@@ -153,11 +212,31 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, onDelete, o
                 </div>
               </div>
 
-              {isOver && (
-                <Alert variant="destructive">
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertDescription>
-                    Você ultrapassou o limite desta meta!
+              {alertLevel !== 'safe' && (
+                <Alert className={`${config.borderColor} ${config.bgColor}`}>
+                  <AlertIcon className={`h-4 w-4 ${config.color}`} />
+                  <AlertDescription className={config.color}>
+                    <strong>{config.message}</strong>
+                    {alertLevel === 'critical' && (
+                      <span className="block mt-1 text-sm">
+                        Você excedeu o orçamento em {formatCurrency(Math.abs(remaining))}.
+                      </span>
+                    )}
+                    {alertLevel === 'danger' && (
+                      <span className="block mt-1 text-sm">
+                        Restam apenas {formatCurrency(remaining)} para não estourar.
+                      </span>
+                    )}
+                    {alertLevel === 'caution' && (
+                      <span className="block mt-1 text-sm">
+                        Você ainda tem {formatCurrency(remaining)} disponíveis.
+                      </span>
+                    )}
+                    {alertLevel === 'warning' && (
+                      <span className="block mt-1 text-sm">
+                        Tente economizar! Restam {formatCurrency(remaining)}.
+                      </span>
+                    )}
                   </AlertDescription>
                 </Alert>
               )}

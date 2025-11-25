@@ -8,6 +8,7 @@ import { CategorySummary } from "@/components/category-summary";
 import { ExpenseEditDialog } from "@/components/expense-edit-dialog";
 import { RecurringExpenseEditDialog } from "@/components/recurring-expense-edit-dialog";
 import { BudgetGoalEditDialog } from "@/components/budget-goal-edit-dialog";
+import { BudgetAlertBanner } from "@/components/budget-alert-banner";
 
 import { Expense, PaymentMethod, ExpenseFormData, ExpenseCategory, categoryLabels } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
@@ -812,6 +813,47 @@ export default function Index() {
     });
   };
 
+  // Calcular metas em risco
+  const goalsAtRisk = useMemo(() => {
+    const currentMonth = new Date().getMonth();
+    const currentYear = new Date().getFullYear();
+
+    const monthlyExpenses = expenses.filter((expense) => {
+      const expenseDate = new Date(expense.expense_date);
+      return (
+        expenseDate.getMonth() === currentMonth &&
+        expenseDate.getFullYear() === currentYear
+      );
+    });
+
+    const activeRecurring = recurringExpenses.filter((re) => re.is_active);
+
+    return budgetGoals
+      .map((goal) => {
+        let totalSpent = 0;
+
+        if (goal.type === "monthly_total") {
+          totalSpent = monthlyExpenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
+          totalSpent += activeRecurring.reduce((sum, re) => sum + Number(re.amount), 0);
+        } else if (goal.type === "category" && goal.category) {
+          totalSpent = monthlyExpenses
+            .filter((exp) => exp.category === goal.category)
+            .reduce((sum, exp) => sum + Number(exp.amount), 0);
+          totalSpent += activeRecurring
+            .filter((re) => re.category === goal.category)
+            .reduce((sum, re) => sum + Number(re.amount), 0);
+        }
+
+        const limit = Number(goal.limit_amount);
+        const percentage = (totalSpent / limit) * 100;
+        const remaining = limit - totalSpent;
+
+        return { goal, totalSpent, limit, percentage, remaining };
+      })
+      .filter((item) => item.percentage >= 80);
+  }, [budgetGoals, expenses, recurringExpenses]);
+
+
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -924,23 +966,41 @@ export default function Index() {
             creditCardConfig={creditCardConfig || undefined}
             onPaymentMethodClick={handlePaymentMethodFilter}
             activePaymentMethod={filters.paymentMethod}
+            budgetGoals={budgetGoals}
           />
         </div>
 
+        {/* Budget Alert Banner */}
+        <BudgetAlertBanner
+          goalsAtRisk={goalsAtRisk}
+          onNavigateToGoals={() => setActiveTab("goals")}
+        />
 
         {/* Main Content */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3 mb-8">
             <TabsTrigger value="expenses">Despesas</TabsTrigger>
             <TabsTrigger value="recurring">Despesas Fixas</TabsTrigger>
-            <TabsTrigger value="goals">Metas</TabsTrigger>
+            <TabsTrigger value="goals" className="relative">
+              Metas
+              {goalsAtRisk.length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                  {goalsAtRisk.length}
+                </span>
+              )}
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="expenses">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {/* Expense Form */}
               <div className="space-y-6">
-                <ExpenseForm onAddExpense={addExpense} />
+                <ExpenseForm 
+                  onAddExpense={addExpense}
+                  budgetGoals={budgetGoals}
+                  expenses={expenses}
+                  recurringExpenses={recurringExpenses}
+                />
               </div>
 
               {/* Expense List */}

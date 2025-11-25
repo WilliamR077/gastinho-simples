@@ -1,9 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { CreditCard, Smartphone, TrendingUp } from "lucide-react"
-import { Expense, PaymentMethod } from "@/types/expense"
+import { CreditCard, Smartphone, TrendingUp, Target, Check, AlertTriangle, AlertCircle } from "lucide-react"
+import { Expense, PaymentMethod, categoryLabels } from "@/types/expense"
 import { RecurringExpense } from "@/types/recurring-expense"
 import { calculateBillingPeriod } from "@/utils/billing-period"
 import { Card as CardType } from "@/types/card"
+import { BudgetGoal } from "@/types/budget-goal"
+import { Progress } from "@/components/ui/progress"
+import { useMemo } from "react"
 
 interface ExpenseSummaryProps {
   expenses: Expense[]
@@ -14,6 +17,7 @@ interface ExpenseSummaryProps {
   creditCardConfig?: { opening_day: number; closing_day: number }
   onPaymentMethodClick?: (method: PaymentMethod) => void
   activePaymentMethod?: PaymentMethod
+  budgetGoals?: BudgetGoal[]
 }
 
 export function ExpenseSummary({ 
@@ -24,7 +28,8 @@ export function ExpenseSummary({
   endDate,
   creditCardConfig,
   onPaymentMethodClick,
-  activePaymentMethod
+  activePaymentMethod,
+  budgetGoals = []
 }: ExpenseSummaryProps) {
   const totals = expenses.reduce(
     (acc, expense) => {
@@ -139,8 +144,56 @@ export function ExpenseSummary({
       debitCardTotals[cardName].total += expense.amount;
     });
 
+  const currentMonth = new Date().getMonth();
+  const currentYear = new Date().getFullYear();
+
   const formatCurrency = (value: number) => 
     `R$ ${value.toFixed(2).replace('.', ',')}`
+
+  const monthlyExpenses = useMemo(() => {
+    return expenses.filter((expense) => {
+      const expenseDate = new Date(expense.expense_date);
+      return (
+        expenseDate.getMonth() === currentMonth &&
+        expenseDate.getFullYear() === currentYear
+      );
+    });
+  }, [expenses, currentMonth, currentYear]);
+
+  const recurringActive = useMemo(() => {
+    return recurringExpenses.filter((re) => re.is_active);
+  }, [recurringExpenses]);
+
+  const budgetProgress = useMemo(() => {
+    return budgetGoals.map((goal) => {
+      let totalSpent = 0;
+
+      if (goal.type === "monthly_total") {
+        totalSpent = monthlyExpenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
+        totalSpent += recurringActive.reduce((sum, re) => sum + Number(re.amount), 0);
+      } else if (goal.type === "category" && goal.category) {
+        totalSpent = monthlyExpenses
+          .filter((exp) => exp.category === goal.category)
+          .reduce((sum, exp) => sum + Number(exp.amount), 0);
+        totalSpent += recurringActive
+          .filter((re) => re.category === goal.category)
+          .reduce((sum, re) => sum + Number(re.amount), 0);
+      }
+
+      const limit = Number(goal.limit_amount);
+      const percentage = (totalSpent / limit) * 100;
+      const remaining = limit - totalSpent;
+
+      return { goal, totalSpent, limit, percentage, remaining };
+    });
+  }, [budgetGoals, monthlyExpenses, recurringActive]);
+
+  const getStatusIcon = (percentage: number) => {
+    if (percentage >= 100) return <AlertTriangle className="h-3 w-3 text-destructive" />;
+    if (percentage >= 85) return <AlertCircle className="h-3 w-3 text-orange-500" />;
+    if (percentage >= 70) return <AlertCircle className="h-3 w-3 text-yellow-500" />;
+    return <Check className="h-3 w-3 text-success" />;
+  };
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -253,6 +306,44 @@ export function ExpenseSummary({
             <p className="text-xs text-muted-foreground">
               {activeRecurringExpenses.length} despesa{activeRecurringExpenses.length !== 1 ? 's' : ''} fixa{activeRecurringExpenses.length !== 1 ? 's' : ''}
             </p>
+          )}
+
+          {budgetProgress.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-border space-y-2">
+              <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                <Target className="h-3 w-3" />
+                <span>Metas do Mês</span>
+              </div>
+              {budgetProgress.slice(0, 3).map(({ goal, percentage, remaining }) => {
+                const progressValue = Math.min(percentage, 100);
+                return (
+                  <div key={goal.id} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-1">
+                        {getStatusIcon(percentage)}
+                        <span className="text-muted-foreground">
+                          {goal.type === "category" && goal.category
+                            ? categoryLabels[goal.category]
+                            : "Total"}
+                        </span>
+                      </div>
+                      <span className={`font-medium ${percentage >= 100 ? 'text-destructive' : percentage >= 85 ? 'text-orange-500' : 'text-muted-foreground'}`}>
+                        {percentage.toFixed(0)}%
+                      </span>
+                    </div>
+                    <Progress 
+                      value={progressValue} 
+                      className={`h-1 ${
+                        percentage >= 100 ? '[&>div]:bg-destructive' : 
+                        percentage >= 85 ? '[&>div]:bg-orange-500' : 
+                        percentage >= 70 ? '[&>div]:bg-yellow-500' : 
+                        '[&>div]:bg-success'
+                      }`}
+                    />
+                  </div>
+                );
+              })}
+            </div>
           )}
         </CardContent>
       </Card>
