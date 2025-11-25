@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { format } from "date-fns"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -7,17 +7,28 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { PlusCircle, CalendarIcon } from "lucide-react"
-import { PaymentMethod, ExpenseFormData, ExpenseCategory, categoryLabels, categoryIcons } from "@/types/expense"
+import { PlusCircle, CalendarIcon, AlertTriangle } from "lucide-react"
+import { PaymentMethod, ExpenseFormData, ExpenseCategory, categoryLabels, categoryIcons, Expense } from "@/types/expense"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/integrations/supabase/client"
 import { Card as CardType } from "@/types/card"
+import { BudgetGoal } from "@/types/budget-goal"
+import { RecurringExpense } from "@/types/recurring-expense"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface ExpenseFormProps {
-  onAddExpense: (data: ExpenseFormData) => void
+  onAddExpense: (data: ExpenseFormData) => void;
+  budgetGoals?: BudgetGoal[];
+  expenses?: Expense[];
+  recurringExpenses?: RecurringExpense[];
 }
 
-export function ExpenseForm({ onAddExpense }: ExpenseFormProps) {
+export function ExpenseForm({ 
+  onAddExpense, 
+  budgetGoals = [], 
+  expenses = [], 
+  recurringExpenses = [] 
+}: ExpenseFormProps) {
   const [description, setDescription] = useState("")
   const [amount, setAmount] = useState("")
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("")
@@ -59,6 +70,69 @@ export function ExpenseForm({ onAddExpense }: ExpenseFormProps) {
       if (paymentMethod === 'debit') return card.card_type === 'debit';
       return false;
     });
+  };
+
+  const budgetWarning = useMemo(() => {
+    if (!category) return null;
+
+    const currentMonth = new Date().getMonth();
+    const currentYear = new Date().getFullYear();
+
+    // Buscar meta para a categoria ou meta mensal total
+    const categoryGoal = budgetGoals.find(
+      g => g.type === "category" && g.category === category
+    );
+    const monthlyGoal = budgetGoals.find(g => g.type === "monthly_total");
+
+    const relevantGoal = categoryGoal || monthlyGoal;
+    if (!relevantGoal) return null;
+
+    // Calcular gastos atuais
+    const monthlyExpenses = expenses.filter((expense) => {
+      const expenseDate = new Date(expense.expense_date);
+      return (
+        expenseDate.getMonth() === currentMonth &&
+        expenseDate.getFullYear() === currentYear
+      );
+    });
+
+    const activeRecurringExpenses = recurringExpenses.filter((re) => re.is_active);
+
+    let totalSpent = 0;
+    if (relevantGoal.type === "monthly_total") {
+      totalSpent = monthlyExpenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
+      totalSpent += activeRecurringExpenses.reduce((sum, re) => sum + Number(re.amount), 0);
+    } else if (relevantGoal.type === "category" && relevantGoal.category) {
+      totalSpent = monthlyExpenses
+        .filter((exp) => exp.category === relevantGoal.category)
+        .reduce((sum, exp) => sum + Number(exp.amount), 0);
+      totalSpent += activeRecurringExpenses
+        .filter((re) => re.category === relevantGoal.category)
+        .reduce((sum, re) => sum + Number(re.amount), 0);
+    }
+
+    const limit = Number(relevantGoal.limit_amount);
+    const percentage = (totalSpent / limit) * 100;
+    const remaining = limit - totalSpent;
+
+    if (percentage >= 70) {
+      return {
+        percentage,
+        remaining,
+        limit,
+        goalType: relevantGoal.type === "monthly_total" ? "mensal" : "de categoria",
+        isOver: remaining < 0,
+      };
+    }
+
+    return null;
+  }, [category, budgetGoals, expenses, recurringExpenses]);
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    }).format(value);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -172,6 +246,24 @@ export function ExpenseForm({ onAddExpense }: ExpenseFormProps) {
                 ))}
               </SelectContent>
             </Select>
+
+            {budgetWarning && (
+              <Alert className={`mt-2 ${budgetWarning.isOver ? 'border-destructive bg-destructive/10' : 'border-orange-500 bg-orange-500/10'}`}>
+                <AlertTriangle className={`h-4 w-4 ${budgetWarning.isOver ? 'text-destructive' : 'text-orange-600'}`} />
+                <AlertDescription className={budgetWarning.isOver ? 'text-destructive' : 'text-orange-600'}>
+                  <strong>
+                    {budgetWarning.isOver 
+                      ? '🚨 Meta estourada!' 
+                      : `⚠️ Atenção! ${budgetWarning.percentage.toFixed(0)}% da meta ${budgetWarning.goalType} usada`}
+                  </strong>
+                  <div className="text-sm mt-1">
+                    {budgetWarning.isOver 
+                      ? `Você já excedeu o limite em ${formatCurrency(Math.abs(budgetWarning.remaining))}.`
+                      : `Restam apenas ${formatCurrency(budgetWarning.remaining)} do orçamento de ${formatCurrency(budgetWarning.limit)}.`}
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
 
           <div className="space-y-2">

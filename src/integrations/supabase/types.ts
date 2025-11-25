@@ -44,6 +44,41 @@ export type Database = {
         }
         Relationships: []
       }
+      budget_goal_alerts: {
+        Row: {
+          alert_date: string
+          alert_level: number
+          created_at: string
+          goal_id: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          alert_date?: string
+          alert_level: number
+          created_at?: string
+          goal_id: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          alert_date?: string
+          alert_level?: number
+          created_at?: string
+          goal_id?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "budget_goal_alerts_goal_id_fkey"
+            columns: ["goal_id"]
+            isOneToOne: false
+            referencedRelation: "budget_goals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       budget_goals: {
         Row: {
           category: Database["public"]["Enums"]["expense_category"] | null

@@ -1,1 +1,16 @@
 project_id = "jaoldaqvbdllowepzwbr"
+
+[functions.check-recurring-reminders]
+verify_jwt = false
+
+[functions.delete-user-account]
+verify_jwt = true
+
+[functions.send-notification]
+verify_jwt = false
+
+[functions.validate-purchase]
+verify_jwt = false
+
+[functions.check-budget-goals]
+verify_jwt = false
