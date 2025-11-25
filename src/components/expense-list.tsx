@@ -29,7 +29,9 @@ const paymentMethodConfig = {
 
 // Helper para parsear data sem problemas de timezone
 const parseLocalDate = (dateString: string) => {
-  const [year, month, day] = dateString.split('-').map(Number);
+  // Extrai apenas a parte da data (YYYY-MM-DD) ignorando hora e timezone
+  const datePart = dateString.split('T')[0].split(' ')[0];
+  const [year, month, day] = datePart.split('-').map(Number);
   return new Date(year, month - 1, day);
 };
 
