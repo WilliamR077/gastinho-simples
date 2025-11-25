@@ -73,8 +73,8 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense }: Expens
                 key={expense.id}
                 className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-lg border bg-card/50 hover:bg-card/80 transition-all duration-300 hover:shadow-card overflow-hidden max-w-full"
               >
-                {/* Linha superior - Mobile e Desktop */}
-                <div className="flex items-center gap-3 flex-1 min-w-0">
+                {/* Linha superior - Ícone + Descrição e detalhes */}
+                <div className="flex items-start gap-3 flex-1 min-w-0">
                   <div 
                     className="p-2 rounded-full shrink-0" 
                     style={cardColor ? { backgroundColor: cardColor } : {}}
@@ -82,31 +82,22 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense }: Expens
                     <Icon className="h-4 w-4 text-white" />
                   </div>
                   
-                  <div className="flex-1 min-w-0 overflow-hidden">
-                    <div className="flex items-center gap-2 mb-1">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start gap-2 mb-1">
                       <span className="text-lg shrink-0">{categoryIcons[expense.category]}</span>
-                      <p className="font-medium text-foreground truncate break-words max-w-[200px] sm:max-w-[300px]">{expense.description}</p>
+                      <p className="font-medium text-foreground">{expense.description}</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-1 sm:gap-2 text-xs sm:text-sm text-muted-foreground">
                       <span>{categoryLabels[expense.category]}</span>
-                      <span className="hidden sm:inline">•</span>
+                      <span>•</span>
                       <span className="whitespace-nowrap">
-                        Data: {expense.expense_date.substring(0, 10).split('-').reverse().join('/')}
-                      </span>
-                      <span className="hidden sm:inline">•</span>
-                      <span className="whitespace-nowrap">
-                        Criado: {new Date(expense.created_at).toLocaleDateString('pt-BR', {
-                          day: '2-digit',
-                          month: '2-digit',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
+                        {new Date(expense.expense_date).toLocaleDateString('pt-BR')}
                       </span>
                       {expense.total_installments > 1 && (
                         <>
-                          <span className="hidden sm:inline">•</span>
+                          <span>•</span>
                           <span className="font-medium text-primary whitespace-nowrap">
-                            {expense.installment_number}/{expense.total_installments}
+                            {expense.installment_number}/{expense.total_installments}x
                           </span>
                         </>
                       )}
@@ -114,15 +105,14 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense }: Expens
                   </div>
                 </div>
                 
-                {/* Linha inferior - Mobile | Mesma linha no Desktop */}
-                <div className="flex items-center justify-between gap-3 w-full pl-11 sm:pl-0">
-                  <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
-                    <p className="font-bold text-base sm:text-lg text-primary whitespace-nowrap">
+                {/* Linha inferior - Preço + Badge + Menu */}
+                <div className="flex items-center justify-between gap-3 sm:gap-4 mt-3 sm:mt-0 sm:w-auto">
+                  <div className="flex items-center gap-2 flex-1 sm:flex-initial">
+                    <p className="font-bold text-lg text-primary whitespace-nowrap">
                       R$ {expense.amount.toFixed(2).replace('.', ',')}
                     </p>
                     <Badge 
-                      variant="outline" 
-                      className="text-xs whitespace-nowrap border-0 text-white max-w-[180px] truncate"
+                      className="text-xs whitespace-nowrap text-white"
                       style={cardColor ? { backgroundColor: cardColor } : {}}
                     >
                       {config.label}
