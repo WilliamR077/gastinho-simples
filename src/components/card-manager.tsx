@@ -227,9 +227,9 @@ export function CardManager() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-wrap gap-3 justify-between items-center">
         <h2 className="text-2xl font-semibold">Meus Cartões</h2>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {!canAddMoreCards && (
             <Button 
               variant="outline" 
@@ -238,12 +238,12 @@ export function CardManager() {
               className="gap-2"
             >
               <Crown className="h-4 w-4" />
-              Upgrade
+              <span className="hidden sm:inline">Upgrade</span>
             </Button>
           )}
           <Button onClick={handleAddCard} size="sm" disabled={!canAddMoreCards && !editingCard}>
-            <Plus className="h-4 w-4 mr-2" />
-            Adicionar Cartão
+            <Plus className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Adicionar Cartão</span>
           </Button>
         </div>
       </div>

@@ -204,28 +204,22 @@ export function FirebaseNotificationSettings() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Status do Firebase */}
-        <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
-          <div className="flex items-center gap-3">
-            <Smartphone className="h-5 w-5" />
-            <div>
-              <p className="font-medium">Status do Firebase</p>
-              <p className="text-sm text-muted-foreground">
-                {hasPermission ? "✅ Conectado" : "❌ Desconectado"}
-              </p>
-              {fcmToken && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Token: {fcmToken.substring(0, 20)}...
+        {!hasPermission && (
+          <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
+            <div className="flex items-center gap-3">
+              <Smartphone className="h-5 w-5" />
+              <div>
+                <p className="font-medium">Notificações Desativadas</p>
+                <p className="text-sm text-muted-foreground">
+                  Ative para receber lembretes
                 </p>
-              )}
+              </div>
             </div>
-          </div>
-          {!hasPermission && (
             <Button onClick={handleEnableNotifications} size="sm">
               Ativar
             </Button>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Configurações */}
         <div className="space-y-4">
@@ -278,13 +272,6 @@ export function FirebaseNotificationSettings() {
             </>
           )}
         </div>
-
-        {/* Botão de Teste */}
-        {hasPermission && (
-          <Button onClick={handleTestNotification} variant="outline" className="w-full">
-            Enviar Notificação de Teste
-          </Button>
-        )}
       </CardContent>
     </Card>
   );

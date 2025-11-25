@@ -46,7 +46,7 @@ export function validatePasswordStrength(password: string): PasswordStrength {
   }
 
   return {
-    score,
+    score: score * 20, // Converte 0-5 para 0-100
     feedback,
     isValid: score >= 4 && password.length >= 8
   };

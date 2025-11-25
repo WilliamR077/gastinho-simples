@@ -103,7 +103,7 @@ export function RecurringExpenseList({ expenses, onDeleteExpense, onToggleActive
                         <MoreVertical className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="bg-background">
+                    <DropdownMenuContent align="end" side="top" className="bg-background">
                       <DropdownMenuItem onClick={() => onEditRecurringExpense(expense)}>
                         <Pencil className="mr-2 h-4 w-4" />
                         Editar
