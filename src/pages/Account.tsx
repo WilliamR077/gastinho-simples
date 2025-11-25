@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, User, Mail, Lock, Trash2, Crown } from "lucide-react";
+import { ArrowLeft, User, Mail, Lock, Trash2, Crown, Eye, EyeOff } from "lucide-react";
 import { useSubscription } from "@/hooks/use-subscription";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { validatePasswordStrength, sanitizeErrorMessage, isEmailValid } from "@/utils/security";
@@ -28,6 +28,8 @@ export default function Account() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordStrength, setPasswordStrength] = useState(validatePasswordStrength(""));
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
   // Confirmation states for danger zone
   const [clearDataConfirmation, setClearDataConfirmation] = useState("");
@@ -315,43 +317,6 @@ export default function Account() {
 
           <Separator />
 
-          {/* Email Management */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Mail className="w-5 h-5" />
-                Gerenciamento de Email
-              </CardTitle>
-              <CardDescription>
-                Atualize o email associado à sua conta
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email atual: {user?.email}</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="Digite o novo email"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                />
-              </div>
-              <Button 
-                onClick={handleUpdateEmail}
-                disabled={emailLoading}
-                className="w-full"
-              >
-                {emailLoading ? "Atualizando..." : "Atualizar Email"}
-              </Button>
-              <p className="text-xs text-muted-foreground">
-                Você receberá um email de confirmação no novo endereço
-              </p>
-            </CardContent>
-          </Card>
-
-          <Separator />
-
           {/* Password Management */}
           <Card>
             <CardHeader>
@@ -366,13 +331,25 @@ export default function Account() {
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="newPassword">Nova Senha</Label>
-                <Input
-                  id="newPassword"
-                  type="password"
-                  placeholder="Digite a nova senha"
-                  value={newPassword}
-                  onChange={(e) => handlePasswordChange(e.target.value)}
-                />
+                <div className="relative">
+                  <Input
+                    id="newPassword"
+                    type={showNewPassword ? "text" : "password"}
+                    placeholder="Digite a nova senha"
+                    value={newPassword}
+                    onChange={(e) => handlePasswordChange(e.target.value)}
+                    className="pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                  >
+                    {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
                 {newPassword && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-xs">
@@ -397,13 +374,25 @@ export default function Account() {
 
               <div className="space-y-2">
                 <Label htmlFor="confirmPassword">Confirmar Nova Senha</Label>
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  placeholder="Confirme a nova senha"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                />
+                <div className="relative">
+                  <Input
+                    id="confirmPassword"
+                    type={showConfirmPassword ? "text" : "password"}
+                    placeholder="Confirme a nova senha"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  >
+                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
               </div>
 
               <Button 

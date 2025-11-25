@@ -371,31 +371,6 @@ export default function Settings() {
 
         {/* Seção: Notificações */}
         <FirebaseNotificationSettings />
-
-        <Separator />
-
-        {/* Seção: Debug */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Bug className="h-5 w-5" />
-              Debug de Notificações
-            </CardTitle>
-            <CardDescription>
-              Ferramentas para desenvolvedores e testes
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button
-              variant="outline"
-              onClick={() => navigate("/notification-debug")}
-              className="gap-2"
-            >
-              <Bug className="h-4 w-4" />
-              Abrir Painel de Debug
-            </Button>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );
