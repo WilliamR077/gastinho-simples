@@ -46,6 +46,47 @@ export function CardManager() {
     loadCards();
   }, []);
 
+  // Corrige automaticamente cartões com dias de abertura incorretos
+  useEffect(() => {
+    const fixIncorrectOpeningDays = async () => {
+      const cardsToFix = cards.filter((card) => {
+        if (card.card_type !== "credit" && card.card_type !== "both") return false;
+        if (!card.closing_day || !card.opening_day) return false;
+
+        // Calcula o opening_day correto
+        const correctOpeningDay = card.closing_day === 31 ? 1 : card.closing_day + 1;
+        
+        // Se o opening_day atual for diferente do correto, precisa corrigir
+        return card.opening_day !== correctOpeningDay;
+      });
+
+      if (cardsToFix.length === 0) return;
+
+      try {
+        for (const card of cardsToFix) {
+          const correctOpeningDay = card.closing_day === 31 ? 1 : card.closing_day! + 1;
+          
+          await supabase
+            .from("cards")
+            .update({ opening_day: correctOpeningDay })
+            .eq("id", card.id);
+        }
+
+        toast({
+          title: "Cartões atualizados",
+          description: `${cardsToFix.length} cartão${cardsToFix.length > 1 ? 'ões foram atualizados' : ' foi atualizado'} com os dias de abertura corretos.`,
+        });
+
+        // Recarrega os cartões para mostrar os valores corrigidos
+        loadCards();
+      } catch (error) {
+        console.error("Erro ao corrigir dias de abertura:", error);
+      }
+    };
+
+    fixIncorrectOpeningDays();
+  }, [cards.length]); // Roda apenas quando o número de cartões muda (primeira carga)
+
   const loadCards = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
