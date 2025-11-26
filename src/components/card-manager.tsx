@@ -106,7 +106,7 @@ export function CardManager() {
 
       if (formData.card_type === "credit" || formData.card_type === "both") {
         const closingDay = formData.closing_day!;
-        const openingDay = closingDay === 1 ? 31 : closingDay - 1;
+        const openingDay = closingDay === 31 ? 1 : closingDay + 1;
         cardData.closing_day = closingDay;
         cardData.opening_day = openingDay;
       }
@@ -316,7 +316,7 @@ export function CardManager() {
                     onChange={(e) => setFormData({ ...formData, closing_day: parseInt(e.target.value) || undefined })}
                   />
                   <p className="text-sm text-muted-foreground">
-                    O período de abertura será calculado automaticamente (dia anterior ao fechamento)
+                    O dia de abertura será o dia seguinte ao fechamento. A fatura vai do dia de abertura até o dia de fechamento.
                   </p>
                 </div>
               )}
@@ -397,7 +397,7 @@ export function CardManager() {
               </div>
             </CardHeader>
             <CardContent className="space-y-2">
-              {card.card_type === "credit" && (
+              {(card.card_type === "credit" || card.card_type === "both") && (
                 <div className="text-sm">
                   <span className="font-medium">Fechamento:</span> Dia {card.closing_day}
                   <br />
