@@ -46,6 +46,9 @@
     
     <!-- Local Notifications Permissions -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <parameter name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    
+    <!-- Google Play Billing Permission -->
+    <uses-permission android:name="com.android.vending.BILLING" />
 </manifest>
