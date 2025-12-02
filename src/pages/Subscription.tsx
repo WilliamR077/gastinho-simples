@@ -2,21 +2,55 @@ import { useSubscription } from "@/hooks/use-subscription";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, Crown, Sparkles, Zap, Smartphone, Wallet, BarChart3, FileDown, ArrowLeft, RefreshCw } from "lucide-react";
+import { Check, Crown, Sparkles, Zap, Smartphone, Wallet, BarChart3, FileDown, ArrowLeft, RefreshCw, Settings, AlertTriangle } from "lucide-react";
 import { SUBSCRIPTION_FEATURES } from "@/types/subscription";
 import { Skeleton } from "@/components/ui/skeleton";
 import { billingService, TIER_TO_PRODUCT_ID } from "@/services/billing-service";
 import { toast } from "@/hooks/use-toast";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Capacitor } from "@capacitor/core";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export default function Subscription() {
   const { tier, loading, features, refreshSubscription } = useSubscription();
   const [purchasing, setPurchasing] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const isNative = Capacitor.isNativePlatform();
   const navigate = useNavigate();
+
+  // Buscar data de expiração da assinatura
+  useEffect(() => {
+    const fetchSubscriptionDetails = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase
+        .from('subscriptions')
+        .select('expires_at')
+        .eq('user_id', user.id)
+        .single();
+
+      if (data?.expires_at) {
+        setExpiresAt(data.expires_at);
+      }
+    };
+
+    fetchSubscriptionDetails();
+  }, [tier]);
 
   if (loading) {
     return (
@@ -35,7 +69,6 @@ export default function Subscription() {
     setPurchasing(planTier);
 
     try {
-      // Obter o product ID correto para o tier
       const productId = TIER_TO_PRODUCT_ID[planTier];
       
       if (!productId) {
@@ -54,8 +87,6 @@ export default function Subscription() {
           title: "Assinatura ativada!",
           description: "Sua assinatura foi ativada com sucesso. Aproveite todos os recursos!",
         });
-        
-        // Atualizar estado da assinatura
         await refreshSubscription();
       } else {
         if (!isNative) {
@@ -123,6 +154,54 @@ export default function Subscription() {
     }
   };
 
+  const handleManageSubscription = () => {
+    billingService.openSubscriptionManagement();
+    toast({
+      title: "Gerenciar Assinatura",
+      description: "Você será redirecionado para o Google Play para gerenciar sua assinatura.",
+    });
+  };
+
+  const handleResetToFree = async () => {
+    setResetting(true);
+
+    try {
+      const success = await billingService.resetToFree();
+      
+      if (success) {
+        toast({
+          title: "Assinatura resetada",
+          description: "Sua assinatura foi alterada para o plano gratuito.",
+        });
+        await refreshSubscription();
+        setExpiresAt(null);
+      } else {
+        toast({
+          title: "Erro",
+          description: "Não foi possível resetar a assinatura.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao resetar assinatura:', error);
+      toast({
+        title: "Erro",
+        description: "Ocorreu um erro ao resetar sua assinatura.",
+        variant: "destructive",
+      });
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+    });
+  };
+
   const plans = [
     {
       tier: "free" as const,
@@ -181,11 +260,75 @@ export default function Subscription() {
           Escolha o plano ideal para suas necessidades
         </p>
         {tier !== "free" && (
-          <Badge variant="secondary" className="text-sm">
-            Plano Atual: {SUBSCRIPTION_FEATURES[tier].name}
-          </Badge>
+          <div className="space-y-1">
+            <Badge variant="secondary" className="text-sm">
+              Plano Atual: {SUBSCRIPTION_FEATURES[tier].name}
+            </Badge>
+            {expiresAt && (
+              <p className="text-sm text-muted-foreground">
+                Válido até: {formatDate(expiresAt)}
+              </p>
+            )}
+          </div>
         )}
       </div>
+
+      {/* Card de Gerenciamento de Assinatura */}
+      {tier !== "free" && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              Gerenciar Assinatura
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Você pode cancelar ou modificar sua assinatura diretamente pelo Google Play.
+              A assinatura continuará ativa até o final do período pago.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button 
+                variant="outline" 
+                onClick={handleManageSubscription}
+                className="gap-2"
+              >
+                <Settings className="h-4 w-4" />
+                Gerenciar no Google Play
+              </Button>
+              
+              {/* Botão de Reset para testes (remover em produção) */}
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    className="gap-2 border-destructive/50 text-destructive hover:bg-destructive/10"
+                    disabled={resetting}
+                  >
+                    <AlertTriangle className="h-4 w-4" />
+                    {resetting ? 'Resetando...' : 'Resetar para Gratuito (Dev)'}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Resetar Assinatura?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Esta ação vai alterar sua assinatura para o plano gratuito imediatamente.
+                      Use apenas para testes de desenvolvimento.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleResetToFree}>
+                      Confirmar Reset
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Seção: Por que fazer upgrade? */}
       <Card className="mb-6 bg-gradient-to-r from-primary/10 to-purple-500/10 border-primary/20">
