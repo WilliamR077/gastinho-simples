@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { ExpenseSummary } from "@/components/expense-summary";
-import { ExpenseForm } from "@/components/expense-form";
 import { ExpenseList } from "@/components/expense-list";
 import { ExpenseFilters, ExpenseFilters as ExpenseFiltersType } from "@/components/expense-filters";
 import { CategorySummary } from "@/components/category-summary";
@@ -9,14 +8,17 @@ import { ExpenseEditDialog } from "@/components/expense-edit-dialog";
 import { RecurringExpenseEditDialog } from "@/components/recurring-expense-edit-dialog";
 import { BudgetGoalEditDialog } from "@/components/budget-goal-edit-dialog";
 import { BudgetAlertBanner } from "@/components/budget-alert-banner";
+import { MonthNavigator } from "@/components/month-navigator";
+import { FloatingActionButton } from "@/components/floating-action-button";
+import { ExpenseFormSheet } from "@/components/expense-form-sheet";
+import { RecurringExpenseFormSheet } from "@/components/recurring-expense-form-sheet";
+import { BudgetGoalFormSheet } from "@/components/budget-goal-form-sheet";
 
 import { Expense, PaymentMethod, ExpenseFormData, ExpenseCategory, categoryLabels } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
-import { RecurringExpenseForm } from "@/components/recurring-expense-form";
 import { RecurringExpenseList } from "@/components/recurring-expense-list";
 import { RecurringExpenseFormData } from "@/types/recurring-expense";
 import { BudgetGoal } from "@/types/budget-goal";
-import { BudgetGoalsForm } from "@/components/budget-goals-form";
 import { BudgetProgress } from "@/components/budget-progress";
 import { RemindersPanel } from "@/components/reminders-panel";
 import { toast } from "@/hooks/use-toast";
@@ -26,21 +28,36 @@ import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LogOut, Wallet, User } from "lucide-react";
+import { LogOut, User } from "lucide-react";
 import { generateBillingPeriods, filterExpensesByBillingPeriod } from "@/utils/billing-period";
 import { NotificationService } from "@/services/notification-service";
 import { App as CapacitorApp } from '@capacitor/app';
 import { adMobService } from "@/services/admob-service";
+import { startOfMonth, endOfMonth } from "date-fns";
 
 export default function Index() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>([]);
   const [budgetGoals, setBudgetGoals] = useState<BudgetGoal[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState<ExpenseFiltersType>({});
+  const [filters, setFilters] = useState<ExpenseFiltersType>(() => {
+    const now = new Date();
+    return {
+      startDate: startOfMonth(now),
+      endDate: endOfMonth(now),
+    };
+  });
   const [creditCardConfig, setCreditCardConfig] = useState<{ opening_day: number; closing_day: number } | null>(null);
   const [notificationSettings, setNotificationSettings] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("expenses");
+
+  // Estado para o mês atual da navegação
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+
+  // Estados para os sheets de formulário
+  const [expenseSheetOpen, setExpenseSheetOpen] = useState(false);
+  const [recurringExpenseSheetOpen, setRecurringExpenseSheetOpen] = useState(false);
+  const [budgetGoalSheetOpen, setBudgetGoalSheetOpen] = useState(false);
 
   // Estados para os modais de edição
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
@@ -246,6 +263,16 @@ export default function Index() {
         variant: "destructive",
       });
     }
+  };
+
+  // Handler para navegação por mês
+  const handleMonthChange = (startDate: Date, endDate: Date) => {
+    setCurrentMonth(startDate);
+    setFilters(prev => ({
+      ...prev,
+      startDate,
+      endDate,
+    }));
   };
 
   const addExpense = async (data: ExpenseFormData) => {
@@ -867,10 +894,10 @@ export default function Index() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-16">
+    <div className="min-h-screen bg-background pb-24">
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
           <div className="flex items-center gap-3">
             <img
               src="/lovable-uploads/06a1acc2-f553-41f0-8d87-32d25b4e425e.png"
@@ -928,6 +955,12 @@ export default function Index() {
             <ThemeToggle />
           </div>
         </div>
+
+        {/* Navegador de Mês */}
+        <MonthNavigator
+          currentDate={currentMonth}
+          onMonthChange={handleMonthChange}
+        />
 
         {/* Lembretes */}
         <RemindersPanel recurringExpenses={recurringExpenses} />
@@ -992,67 +1025,62 @@ export default function Index() {
           </TabsList>
 
           <TabsContent value="expenses">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Expense Form */}
-              <div className="space-y-6">
-                <ExpenseForm 
-                  onAddExpense={addExpense}
-                  budgetGoals={budgetGoals}
-                  expenses={expenses}
-                  recurringExpenses={recurringExpenses}
-                />
-              </div>
-
-              {/* Expense List */}
-              <div className="space-y-6">
-                <ExpenseList
-                  expenses={filteredExpenses}
-                  onDeleteExpense={deleteExpense}
-                  onEditExpense={handleEditExpense}
-                />
-              </div>
-            </div>
+            <ExpenseList
+              expenses={filteredExpenses}
+              onDeleteExpense={deleteExpense}
+              onEditExpense={handleEditExpense}
+            />
           </TabsContent>
 
           <TabsContent value="recurring">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Recurring Expense Form */}
-              <div className="space-y-6">
-                <RecurringExpenseForm onAddRecurringExpense={addRecurringExpense} />
-              </div>
-
-              {/* Recurring Expense List */}
-              <div className="space-y-6">
-                <RecurringExpenseList
-                  expenses={recurringExpenses}
-                  onDeleteExpense={deleteRecurringExpense}
-                  onToggleActive={toggleRecurringExpenseActive}
-                  onEditRecurringExpense={handleEditRecurringExpense}
-                />
-              </div>
-            </div>
+            <RecurringExpenseList
+              expenses={recurringExpenses}
+              onDeleteExpense={deleteRecurringExpense}
+              onToggleActive={toggleRecurringExpenseActive}
+              onEditRecurringExpense={handleEditRecurringExpense}
+            />
           </TabsContent>
 
           <TabsContent value="goals">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Budget Goals Form */}
-              <div className="space-y-6">
-                <BudgetGoalsForm onSubmit={addBudgetGoal} currentGoalsCount={budgetGoals.length} />
-              </div>
-
-              {/* Budget Progress */}
-              <div className="space-y-6">
-                <BudgetProgress
-                  goals={budgetGoals}
-                  expenses={expenses}
-                  recurringExpenses={recurringExpenses}
-                  onDelete={deleteBudgetGoal}
-                  onEdit={handleEditBudgetGoal}
-                />
-              </div>
-            </div>
+            <BudgetProgress
+              goals={budgetGoals}
+              expenses={expenses}
+              recurringExpenses={recurringExpenses}
+              onDelete={deleteBudgetGoal}
+              onEdit={handleEditBudgetGoal}
+            />
           </TabsContent>
         </Tabs>
+
+        {/* Floating Action Button */}
+        <FloatingActionButton
+          onExpenseClick={() => setExpenseSheetOpen(true)}
+          onRecurringClick={() => setRecurringExpenseSheetOpen(true)}
+          onGoalClick={() => setBudgetGoalSheetOpen(true)}
+        />
+
+        {/* Sheets de Formulário */}
+        <ExpenseFormSheet
+          open={expenseSheetOpen}
+          onOpenChange={setExpenseSheetOpen}
+          onAddExpense={addExpense}
+          budgetGoals={budgetGoals}
+          expenses={expenses}
+          recurringExpenses={recurringExpenses}
+        />
+
+        <RecurringExpenseFormSheet
+          open={recurringExpenseSheetOpen}
+          onOpenChange={setRecurringExpenseSheetOpen}
+          onAddRecurringExpense={addRecurringExpense}
+        />
+
+        <BudgetGoalFormSheet
+          open={budgetGoalSheetOpen}
+          onOpenChange={setBudgetGoalSheetOpen}
+          onSubmit={addBudgetGoal}
+          currentGoalsCount={budgetGoals.length}
+        />
 
         {/* Modais de Edição */}
         <ExpenseEditDialog
@@ -1078,4 +1106,4 @@ export default function Index() {
       </div>
     </div>
   );
-};
+}
