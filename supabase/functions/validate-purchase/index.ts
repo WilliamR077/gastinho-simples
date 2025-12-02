@@ -170,7 +170,7 @@ async function validateGooglePlayPurchase(
         
         if (accessToken) {
           // Verificar assinatura no Google Play
-          const packageName = 'app.lovable.gastinhosimples';
+          const packageName = 'com.gastinhosimples.app';
           const apiUrl = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/purchases/subscriptions/${productId}/tokens/${purchaseToken}`;
           
           const response = await fetch(apiUrl, {
