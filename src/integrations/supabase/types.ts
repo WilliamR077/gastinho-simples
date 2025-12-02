@@ -323,6 +323,9 @@ export type Database = {
           expires_at: string | null
           id: string
           is_active: boolean
+          platform: string | null
+          product_id: string | null
+          purchase_token: string | null
           started_at: string
           tier: Database["public"]["Enums"]["subscription_tier"]
           updated_at: string
@@ -333,6 +336,9 @@ export type Database = {
           expires_at?: string | null
           id?: string
           is_active?: boolean
+          platform?: string | null
+          product_id?: string | null
+          purchase_token?: string | null
           started_at?: string
           tier?: Database["public"]["Enums"]["subscription_tier"]
           updated_at?: string
@@ -343,6 +349,9 @@ export type Database = {
           expires_at?: string | null
           id?: string
           is_active?: boolean
+          platform?: string | null
+          product_id?: string | null
+          purchase_token?: string | null
           started_at?: string
           tier?: Database["public"]["Enums"]["subscription_tier"]
           updated_at?: string
