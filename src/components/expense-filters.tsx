@@ -4,12 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { CalendarIcon, FilterX, ChevronDown } from "lucide-react";
-import { format, startOfMonth, endOfMonth } from "date-fns";
-import { cn } from "@/lib/utils";
+import { FilterX, ChevronDown } from "lucide-react";
 import { PaymentMethod, ExpenseCategory, categoryLabels, categoryIcons } from "@/types/expense";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -34,20 +30,21 @@ interface ExpenseFiltersProps {
 }
 
 export function ExpenseFilters({ filters, onFiltersChange, billingPeriods = [] }: ExpenseFiltersProps) {
-  const [localFilters, setLocalFilters] = useState<ExpenseFilters>(() => {
-    const currentDate = new Date();
-    const monthStart = startOfMonth(currentDate);
-    const monthEnd = endOfMonth(currentDate);
-
-    return {
-      ...filters,
-      startDate: filters.startDate || monthStart,
-      endDate: filters.endDate || monthEnd,
-    };
+  const [localFilters, setLocalFilters] = useState<ExpenseFilters>({
+    ...filters,
   });
   const [isOpen, setIsOpen] = useState(false);
   const [cards, setCards] = useState<CardType[]>([]);
   const { user } = useAuth();
+
+  // Sync localFilters when parent filters change (e.g., from MonthNavigator)
+  useEffect(() => {
+    setLocalFilters(prev => ({
+      ...prev,
+      startDate: filters.startDate,
+      endDate: filters.endDate,
+    }));
+  }, [filters.startDate, filters.endDate]);
 
   useEffect(() => {
     if (user) {
@@ -71,23 +68,6 @@ export function ExpenseFilters({ filters, onFiltersChange, billingPeriods = [] }
     }
   };
 
-  // Atualiza os filtros quando o componente é montado com as datas padrão
-  useEffect(() => {
-    if (!filters.startDate && !filters.endDate) {
-      const currentDate = new Date();
-      const monthStart = startOfMonth(currentDate);
-      const monthEnd = endOfMonth(currentDate);
-
-      const defaultFilters = {
-        ...filters,
-        startDate: monthStart,
-        endDate: monthEnd,
-      };
-
-      onFiltersChange(defaultFilters);
-    }
-  }, []);
-
   const handleFilterChange = (key: keyof ExpenseFilters, value: any) => {
     const newFilters = { ...localFilters, [key]: value };
     setLocalFilters(newFilters);
@@ -98,13 +78,10 @@ export function ExpenseFilters({ filters, onFiltersChange, billingPeriods = [] }
   };
 
   const clearFilters = () => {
-    const currentDate = new Date();
-    const monthStart = startOfMonth(currentDate);
-    const monthEnd = endOfMonth(currentDate);
-
+    // Keep the current date range from MonthNavigator, only clear other filters
     const defaultFilters: ExpenseFilters = {
-      startDate: monthStart,
-      endDate: monthEnd,
+      startDate: filters.startDate,
+      endDate: filters.endDate,
     };
     setLocalFilters(defaultFilters);
     onFiltersChange(defaultFilters);
@@ -128,62 +105,6 @@ export function ExpenseFilters({ filters, onFiltersChange, billingPeriods = [] }
         <CollapsibleContent>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-              {/* Filtro de Data Início */}
-              <div className="space-y-2">
-                <Label>Data Início</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !localFilters.startDate && "text-muted-foreground"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {localFilters.startDate ? format(localFilters.startDate, "dd/MM/yyyy") : "Selecionar data"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={localFilters.startDate}
-                      onSelect={(date) => handleFilterChange('startDate', date)}
-                      initialFocus
-                      className="pointer-events-auto"
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-
-              {/* Filtro de Data Fim */}
-              <div className="space-y-2">
-                <Label>Data Fim</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !localFilters.endDate && "text-muted-foreground"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {localFilters.endDate ? format(localFilters.endDate, "dd/MM/yyyy") : "Selecionar data"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={localFilters.endDate}
-                      onSelect={(date) => handleFilterChange('endDate', date)}
-                      initialFocus
-                      className="pointer-events-auto"
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-
               {/* Filtro de Descrição */}
               <div className="space-y-2">
                 <Label>Descrição</Label>
