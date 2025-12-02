@@ -100,7 +100,7 @@ export function RecurringExpenseFormSheet({
           <SheetTitle className="text-primary">Nova Despesa Fixa</SheetTitle>
         </SheetHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 pb-24">
           <div className="space-y-2">
             <Label htmlFor="recurring-sheet-description">Descrição</Label>
             <Input

@@ -73,7 +73,7 @@ export function BudgetGoalFormSheet({
           </SheetDescription>
         </SheetHeader>
 
-        <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
+        <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4 pb-24">
           <div className="space-y-2">
             <Label htmlFor="goal-sheet-type">Tipo de Meta</Label>
             <Select

@@ -185,7 +185,7 @@ export function ExpenseFormSheet({
           <SheetTitle className="text-primary">Nova Despesa</SheetTitle>
         </SheetHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 pb-24">
           <div className="space-y-2">
             <Label htmlFor="sheet-description">Descrição</Label>
             <Input
