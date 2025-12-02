@@ -2,10 +2,10 @@ import { useSubscription } from "@/hooks/use-subscription";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, Crown, Sparkles, Zap, Smartphone, Wallet, BarChart3, FileDown, ArrowLeft } from "lucide-react";
+import { Check, Crown, Sparkles, Zap, Smartphone, Wallet, BarChart3, FileDown, ArrowLeft, RefreshCw } from "lucide-react";
 import { SUBSCRIPTION_FEATURES } from "@/types/subscription";
 import { Skeleton } from "@/components/ui/skeleton";
-import { billingService } from "@/services/billing-service";
+import { billingService, TIER_TO_PRODUCT_ID } from "@/services/billing-service";
 import { toast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { Capacitor } from "@capacitor/core";
@@ -14,6 +14,7 @@ import { useNavigate } from "react-router-dom";
 export default function Subscription() {
   const { tier, loading, features, refreshSubscription } = useSubscription();
   const [purchasing, setPurchasing] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState(false);
   const isNative = Capacitor.isNativePlatform();
   const navigate = useNavigate();
 
@@ -34,12 +35,24 @@ export default function Subscription() {
     setPurchasing(planTier);
 
     try {
-      const success = await billingService.purchase('', planTier);
+      // Obter o product ID correto para o tier
+      const productId = TIER_TO_PRODUCT_ID[planTier];
+      
+      if (!productId) {
+        toast({
+          title: "Erro",
+          description: "Plano não encontrado.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const success = await billingService.purchase(productId, planTier);
       
       if (success) {
         toast({
           title: "Assinatura ativada!",
-          description: "Sua assinatura foi ativada com sucesso. Aproveite todos os recursos premium!",
+          description: "Sua assinatura foi ativada com sucesso. Aproveite todos os recursos!",
         });
         
         // Atualizar estado da assinatura
@@ -53,8 +66,8 @@ export default function Subscription() {
           });
         } else {
           toast({
-            title: "Erro na compra",
-            description: "Não foi possível processar sua compra. Tente novamente.",
+            title: "Compra cancelada",
+            description: "A compra foi cancelada ou não foi possível processar.",
             variant: "destructive",
           });
         }
@@ -63,11 +76,50 @@ export default function Subscription() {
       console.error('Erro ao processar compra:', error);
       toast({
         title: "Erro",
-        description: "Ocorreu um erro ao processar sua compra.",
+        description: "Ocorreu um erro ao processar sua compra. Tente novamente.",
         variant: "destructive",
       });
     } finally {
       setPurchasing(null);
+    }
+  };
+
+  const handleRestorePurchases = async () => {
+    if (!isNative) {
+      toast({
+        title: "Não disponível",
+        description: "Restaurar compras disponível apenas no app Android.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setRestoring(true);
+
+    try {
+      const result = await billingService.restorePurchases();
+      
+      if (result.success && result.tier) {
+        toast({
+          title: "Compras restauradas!",
+          description: `Sua assinatura ${SUBSCRIPTION_FEATURES[result.tier as keyof typeof SUBSCRIPTION_FEATURES]?.name || result.tier} foi restaurada.`,
+        });
+        await refreshSubscription();
+      } else {
+        toast({
+          title: "Nenhuma compra encontrada",
+          description: "Não encontramos assinaturas anteriores para restaurar.",
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao restaurar compras:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível restaurar suas compras. Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setRestoring(false);
     }
   };
 
@@ -107,6 +159,19 @@ export default function Subscription() {
           <ArrowLeft className="h-4 w-4" />
           Voltar
         </Button>
+        
+        {/* Botão Restaurar Compras */}
+        {isNative && (
+          <Button 
+            variant="outline" 
+            onClick={handleRestorePurchases}
+            disabled={restoring}
+            className="gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${restoring ? 'animate-spin' : ''}`} />
+            {restoring ? 'Restaurando...' : 'Restaurar Compras'}
+          </Button>
+        )}
       </div>
 
       {/* Título e descrição */}
@@ -243,10 +308,12 @@ export default function Subscription() {
                     className="w-full gap-2"
                     variant={plan.popular ? "default" : "outline"}
                     onClick={() => handlePurchase(plan.tier)}
-                    disabled={purchasing !== null}
+                    disabled={purchasing !== null || !isNative}
                   >
                     {purchasing === plan.tier ? (
                       "Processando..."
+                    ) : !isNative ? (
+                      "Disponível no App"
                     ) : (
                       <>
                         {plan.tier === "no_ads" && "Remover Anúncios 🎯"}
