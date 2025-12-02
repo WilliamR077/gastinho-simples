@@ -1,9 +1,75 @@
 import { Capacitor } from '@capacitor/core';
 import { supabase } from '@/integrations/supabase/client';
 
+// Declare the CdvPurchase global type
+declare global {
+  interface Window {
+    CdvPurchase?: {
+      store: CdvPurchaseStore;
+      Platform: {
+        GOOGLE_PLAY: string;
+        APPLE_APPSTORE: string;
+      };
+      ProductType: {
+        PAID_SUBSCRIPTION: string;
+        CONSUMABLE: string;
+        NON_CONSUMABLE: string;
+      };
+      LogLevel: {
+        DEBUG: number;
+        INFO: number;
+        WARNING: number;
+        ERROR: number;
+        QUIET: number;
+      };
+    };
+  }
+}
+
+interface CdvPurchaseStore {
+  verbosity: number;
+  register: (products: CdvPurchaseProduct[]) => void;
+  initialize: (platforms?: string[]) => Promise<void>;
+  ready: (callback: () => void) => void;
+  when: () => CdvPurchaseWhen;
+  get: (productId: string) => CdvPurchaseProduct | undefined;
+  order: (product: CdvPurchaseProduct) => Promise<any>;
+  refresh: () => Promise<void>;
+  restorePurchases: () => Promise<void>;
+}
+
+interface CdvPurchaseProduct {
+  id: string;
+  type?: string;
+  platform?: string;
+  title?: string;
+  description?: string;
+  pricing?: {
+    price: string;
+    priceMicros: number;
+    currency: string;
+  };
+  canPurchase?: boolean;
+  owned?: boolean;
+}
+
+interface CdvPurchaseWhen {
+  approved: (callback: (transaction: CdvPurchaseTransaction) => void) => CdvPurchaseWhen;
+  verified: (callback: (receipt: any) => void) => CdvPurchaseWhen;
+  finished: (callback: (transaction: CdvPurchaseTransaction) => void) => CdvPurchaseWhen;
+  updated: (callback: (product: CdvPurchaseProduct) => void) => CdvPurchaseWhen;
+}
+
+interface CdvPurchaseTransaction {
+  id: string;
+  products: { id: string }[];
+  finish: () => void;
+  verify: () => Promise<void>;
+  purchaseToken?: string;
+}
+
 /**
  * Product IDs configurados no Google Play Console
- * IMPORTANTE: Estes são os IDs reais das assinaturas criadas
  */
 export const PRODUCT_IDS = {
   NO_ADS: 'app.gastinho.subscription_no_ads_monthly',
@@ -40,8 +106,10 @@ export const PRODUCT_ID_TO_TIER: Record<string, string> = {
 
 class BillingService {
   private isNative: boolean;
-  private purchasesPlugin: any = null;
+  private store: CdvPurchaseStore | null = null;
   private initialized = false;
+  private pendingPurchaseResolve: ((value: boolean) => void) | null = null;
+  private pendingPurchaseTier: string | null = null;
 
   constructor() {
     this.isNative = Capacitor.isNativePlatform();
@@ -62,55 +130,131 @@ class BillingService {
     if (!this.isNative) return false;
 
     try {
-      // Importação dinâmica para evitar erros na web
-      const purchasesModule = await import('@capgo/capacitor-purchases');
-      this.purchasesPlugin = purchasesModule.CapacitorPurchases;
+      // Aguardar o CdvPurchase estar disponível
+      if (!window.CdvPurchase) {
+        console.log('⏳ Aguardando CdvPurchase...');
+        await new Promise<void>((resolve) => {
+          const checkInterval = setInterval(() => {
+            if (window.CdvPurchase) {
+              clearInterval(checkInterval);
+              resolve();
+            }
+          }, 100);
+          // Timeout após 5 segundos
+          setTimeout(() => {
+            clearInterval(checkInterval);
+            resolve();
+          }, 5000);
+        });
+      }
+
+      if (!window.CdvPurchase) {
+        console.warn('⚠️ CdvPurchase não disponível');
+        return false;
+      }
+
+      this.store = window.CdvPurchase.store;
       
-      // Inicializar com a chave do Google Play (será configurada)
-      // Por enquanto, apenas prepara o plugin
-      console.log('🛒 Plugin de compras carregado');
+      // Configurar nível de log
+      this.store.verbosity = window.CdvPurchase.LogLevel.DEBUG;
+
+      // Registrar produtos
+      const products: CdvPurchaseProduct[] = Object.values(PRODUCT_IDS).map(id => ({
+        id,
+        type: window.CdvPurchase!.ProductType.PAID_SUBSCRIPTION,
+        platform: window.CdvPurchase!.Platform.GOOGLE_PLAY,
+      }));
+
+      this.store.register(products);
+      console.log('📦 Produtos registrados:', products.map(p => p.id));
+
+      // Configurar handlers
+      this.setupEventHandlers();
+
+      // Inicializar a loja
+      await this.store.initialize([window.CdvPurchase.Platform.GOOGLE_PLAY]);
+      
+      console.log('✅ Loja de compras inicializada');
       this.initialized = true;
       return true;
     } catch (error) {
-      console.error('❌ Erro ao carregar plugin de compras:', error);
+      console.error('❌ Erro ao inicializar loja de compras:', error);
       return false;
     }
   }
 
   /**
+   * Configura handlers de eventos de compra
+   */
+  private setupEventHandlers(): void {
+    if (!this.store || !window.CdvPurchase) return;
+
+    this.store.when()
+      .approved(async (transaction) => {
+        console.log('✅ Transação aprovada:', transaction.id);
+        
+        // Obter o produto comprado
+        const productId = transaction.products[0]?.id;
+        if (productId) {
+          const tier = PRODUCT_ID_TO_TIER[productId] || this.pendingPurchaseTier;
+          const purchaseToken = transaction.purchaseToken || transaction.id;
+          
+          // Validar no backend
+          const success = await this.validatePurchase(productId, purchaseToken, tier || 'premium');
+          
+          if (success) {
+            console.log('✅ Compra validada no backend');
+            transaction.finish();
+            
+            if (this.pendingPurchaseResolve) {
+              this.pendingPurchaseResolve(true);
+              this.pendingPurchaseResolve = null;
+            }
+          }
+        }
+      })
+      .finished((transaction) => {
+        console.log('🏁 Transação finalizada:', transaction.id);
+      })
+      .updated((product) => {
+        console.log('🔄 Produto atualizado:', product.id, product);
+      });
+  }
+
+  /**
    * Busca os produtos disponíveis
    */
-  async getProducts(): Promise<any[]> {
-    if (!this.isNative || !this.purchasesPlugin) {
+  async getProducts(): Promise<CdvPurchaseProduct[]> {
+    if (!this.isNative) {
       console.log('ℹ️ Busca de produtos disponível apenas no app nativo');
       return [];
     }
 
-    try {
-      const productIds = Object.values(PRODUCT_IDS);
-      const { products } = await this.purchasesPlugin.getProducts({
-        productIdentifiers: productIds,
-        type: 'SUBS',
-      });
-      
-      console.log('📦 Produtos encontrados:', products);
-      return products;
-    } catch (error) {
-      console.error('❌ Erro ao buscar produtos:', error);
+    await this.initialize();
+
+    if (!this.store) {
       return [];
     }
+
+    const products: CdvPurchaseProduct[] = [];
+    for (const productId of Object.values(PRODUCT_IDS)) {
+      const product = this.store.get(productId);
+      if (product) {
+        products.push(product);
+      }
+    }
+
+    console.log('📦 Produtos disponíveis:', products);
+    return products;
   }
 
   /**
    * Inicia processo de compra
-   * @param productId - ID do produto no Google Play
-   * @param tier - Tier da assinatura (no_ads, premium, premium_plus)
    */
   async purchase(productId: string, tier: string): Promise<boolean> {
     try {
-      console.log(`🛒 Iniciando compra: ${productId || 'auto'} (${tier})`);
+      console.log(`🛒 Iniciando compra: ${productId} (${tier})`);
       
-      // Determinar o product ID correto
       const finalProductId = productId || TIER_TO_PRODUCT_ID[tier];
       
       if (!finalProductId) {
@@ -121,11 +265,11 @@ class BillingService {
       if (this.isNative) {
         await this.initialize();
         
-        if (this.purchasesPlugin) {
-          return await this.purchaseWithPlugin(finalProductId, tier);
+        if (this.store && window.CdvPurchase) {
+          return await this.purchaseWithStore(finalProductId, tier);
         } else {
           // Fallback para simulação (apenas desenvolvimento)
-          console.warn('⚠️ Plugin não disponível - Usando simulação');
+          console.warn('⚠️ Store não disponível - Usando simulação');
           return await this.simulatePurchase(tier, finalProductId);
         }
       } else {
@@ -139,36 +283,76 @@ class BillingService {
   }
 
   /**
-   * Realiza compra usando o plugin nativo
+   * Realiza compra usando cordova-plugin-purchase
    */
-  private async purchaseWithPlugin(productId: string, tier: string): Promise<boolean> {
-    try {
-      console.log(`🛒 Iniciando compra via plugin: ${productId}`);
-      
-      // Fazer a compra via Google Play
-      const { customerInfo, productIdentifier } = await this.purchasesPlugin.purchaseProduct({
-        productIdentifier: productId,
-      });
-      
-      console.log('✅ Compra realizada:', { customerInfo, productIdentifier });
-      
-      // Obter o token da compra para validação
-      const purchaseToken = customerInfo?.originalPurchaseDate || Date.now().toString();
-      
-      // Validar compra no backend
-      return await this.validatePurchase(productId, purchaseToken, tier);
-    } catch (error: any) {
-      // Verifica se o usuário cancelou
-      if (error?.code === 'PRODUCT_ALREADY_OWNED' || 
-          error?.message?.includes('cancelled') ||
-          error?.message?.includes('canceled')) {
-        console.log('ℹ️ Compra cancelada pelo usuário');
-        return false;
-      }
-      
-      console.error('❌ Erro na compra via plugin:', error);
-      throw error;
+  private async purchaseWithStore(productId: string, tier: string): Promise<boolean> {
+    if (!this.store) {
+      throw new Error('Store não inicializada');
     }
+
+    return new Promise(async (resolve) => {
+      try {
+        console.log(`🛒 Iniciando compra via store: ${productId}`);
+        
+        const product = this.store!.get(productId);
+        
+        if (!product) {
+          console.error('❌ Produto não encontrado:', productId);
+          resolve(false);
+          return;
+        }
+
+        if (!product.canPurchase) {
+          console.error('❌ Produto não pode ser comprado:', productId);
+          // Pode já estar comprado
+          if (product.owned) {
+            console.log('ℹ️ Produto já foi comprado');
+            // Tentar validar a compra existente
+            const success = await this.validatePurchase(productId, 'restored', tier);
+            resolve(success);
+            return;
+          }
+          resolve(false);
+          return;
+        }
+
+        // Salvar resolver para usar no callback approved
+        this.pendingPurchaseResolve = resolve;
+        this.pendingPurchaseTier = tier;
+
+        // Iniciar compra
+        const result = await this.store!.order(product);
+        
+        if (result?.error) {
+          console.error('❌ Erro ao iniciar compra:', result.error);
+          this.pendingPurchaseResolve = null;
+          resolve(false);
+        }
+        
+        // O resultado final virá pelo callback 'approved'
+        // Timeout para não ficar esperando indefinidamente
+        setTimeout(() => {
+          if (this.pendingPurchaseResolve) {
+            console.log('⏰ Timeout da compra - usuário pode ter cancelado');
+            this.pendingPurchaseResolve = null;
+            resolve(false);
+          }
+        }, 120000); // 2 minutos
+
+      } catch (error: any) {
+        console.error('❌ Erro na compra via store:', error);
+        this.pendingPurchaseResolve = null;
+        
+        // Verifica se o usuário cancelou
+        if (error?.code === 6777001 || 
+            error?.message?.includes('cancelled') ||
+            error?.message?.includes('canceled')) {
+          console.log('ℹ️ Compra cancelada pelo usuário');
+        }
+        
+        resolve(false);
+      }
+    });
   }
 
   /**
@@ -214,11 +398,9 @@ class BillingService {
         throw new Error('Usuário não autenticado');
       }
 
-      // Calcular data de expiração (30 dias)
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 30);
 
-      // Atualizar assinatura
       const { error } = await supabase
         .from('subscriptions')
         .upsert({
@@ -237,7 +419,6 @@ class BillingService {
         throw error;
       }
 
-      // Registrar no audit log
       await supabase.from('audit_log').insert({
         user_id: user.id,
         action: 'subscription_activated_test',
@@ -269,44 +450,40 @@ class BillingService {
     try {
       await this.initialize();
       
-      if (!this.purchasesPlugin) {
-        console.warn('⚠️ Plugin não disponível para restaurar compras');
+      if (!this.store) {
+        console.warn('⚠️ Store não disponível para restaurar compras');
         return { success: false };
       }
 
       console.log('🔄 Restaurando compras...');
       
-      const { customerInfo } = await this.purchasesPlugin.restorePurchases();
+      await this.store.refresh();
       
-      console.log('📦 Informações do cliente:', customerInfo);
+      // Verificar produtos owned
+      let highestTier = 'free';
+      let highestProductId = '';
       
-      // Verificar se há assinaturas ativas
-      const activeSubscriptions = customerInfo?.activeSubscriptions || [];
-      
-      if (activeSubscriptions.length > 0) {
-        // Encontrar o tier mais alto
-        let highestTier = 'free';
-        let highestProductId = '';
-        
-        for (const sub of activeSubscriptions) {
-          const tier = PRODUCT_ID_TO_TIER[sub];
+      for (const productId of Object.values(PRODUCT_IDS)) {
+        const product = this.store.get(productId);
+        if (product?.owned) {
+          const tier = PRODUCT_ID_TO_TIER[productId];
           if (tier === 'premium_plus') {
             highestTier = 'premium_plus';
-            highestProductId = sub;
+            highestProductId = productId;
             break;
           } else if (tier === 'premium' && highestTier !== 'premium_plus') {
             highestTier = 'premium';
-            highestProductId = sub;
+            highestProductId = productId;
           } else if (tier === 'no_ads' && highestTier === 'free') {
             highestTier = 'no_ads';
-            highestProductId = sub;
+            highestProductId = productId;
           }
         }
-        
-        // Validar e atualizar no backend
-        if (highestTier !== 'free') {
-          const purchaseToken = customerInfo?.originalPurchaseDate || Date.now().toString();
-          await this.validatePurchase(highestProductId, purchaseToken, highestTier);
+      }
+      
+      if (highestTier !== 'free') {
+        const success = await this.validatePurchase(highestProductId, 'restored', highestTier);
+        if (success) {
           return { success: true, tier: highestTier };
         }
       }
@@ -319,15 +496,58 @@ class BillingService {
   }
 
   /**
-   * Cancela assinatura (redireciona para Google Play)
+   * Abre página de gerenciamento de assinaturas do Google Play
    */
-  cancelSubscription(): void {
+  openSubscriptionManagement(): void {
+    const url = 'https://play.google.com/store/account/subscriptions';
     if (this.isNative) {
-      console.log('ℹ️ Redirecionar para: Google Play Store > Assinaturas');
-      // Aqui poderia abrir deep link para as assinaturas do Google Play
-      // Exemplo: window.open('https://play.google.com/store/account/subscriptions', '_system');
+      // Abrir no navegador do sistema
+      window.open(url, '_system');
     } else {
-      console.log('ℹ️ Gerenciar assinaturas na web');
+      window.open(url, '_blank');
+    }
+  }
+
+  /**
+   * Reseta assinatura para gratuito (apenas desenvolvimento)
+   */
+  async resetToFree(): Promise<boolean> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      const { error } = await supabase
+        .from('subscriptions')
+        .update({
+          tier: 'free',
+          is_active: true,
+          expires_at: null,
+          product_id: null,
+          purchase_token: null,
+        })
+        .eq('user_id', user.id);
+
+      if (error) {
+        throw error;
+      }
+
+      await supabase.from('audit_log').insert({
+        user_id: user.id,
+        action: 'subscription_reset_to_free',
+        details: {
+          method: 'manual_reset',
+          timestamp: new Date().toISOString(),
+        },
+      });
+
+      console.log('✅ Assinatura resetada para gratuito');
+      return true;
+    } catch (error) {
+      console.error('❌ Erro ao resetar assinatura:', error);
+      return false;
     }
   }
 }
