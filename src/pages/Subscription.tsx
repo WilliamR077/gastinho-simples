@@ -297,34 +297,6 @@ export default function Subscription() {
                 Gerenciar no Google Play
               </Button>
               
-              {/* Botão de Reset para testes (remover em produção) */}
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button 
-                    variant="outline" 
-                    className="gap-2 border-destructive/50 text-destructive hover:bg-destructive/10"
-                    disabled={resetting}
-                  >
-                    <AlertTriangle className="h-4 w-4" />
-                    {resetting ? 'Resetando...' : 'Resetar para Gratuito (Dev)'}
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Resetar Assinatura?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Esta ação vai alterar sua assinatura para o plano gratuito imediatamente.
-                      Use apenas para testes de desenvolvimento.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleResetToFree}>
-                      Confirmar Reset
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
             </div>
           </CardContent>
         </Card>
