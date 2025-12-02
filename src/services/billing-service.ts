@@ -38,6 +38,17 @@ interface CdvPurchaseStore {
   restorePurchases: () => Promise<void>;
 }
 
+interface CdvPurchaseOffer {
+  id: string;
+  order: () => Promise<any>;
+  pricingPhases?: Array<{
+    price: string;
+    priceMicros: number;
+    currency: string;
+    billingPeriod?: string;
+  }>;
+}
+
 interface CdvPurchaseProduct {
   id: string;
   type?: string;
@@ -51,6 +62,8 @@ interface CdvPurchaseProduct {
   };
   canPurchase?: boolean;
   owned?: boolean;
+  getOffer?: () => CdvPurchaseOffer | undefined;
+  offers?: CdvPurchaseOffer[];
 }
 
 interface CdvPurchaseWhen {
@@ -158,14 +171,15 @@ class BillingService {
       // Configurar nível de log
       this.store.verbosity = window.CdvPurchase.LogLevel.DEBUG;
 
-      // Registrar produtos
-      const products: CdvPurchaseProduct[] = Object.values(PRODUCT_IDS).map(id => ({
+      // Registrar produtos com grupo para upgrades/downgrades
+      const products = Object.values(PRODUCT_IDS).map(id => ({
         id,
         type: window.CdvPurchase!.ProductType.PAID_SUBSCRIPTION,
         platform: window.CdvPurchase!.Platform.GOOGLE_PLAY,
+        group: 'subscription',
       }));
 
-      this.store.register(products);
+      this.store.register(products as any);
       console.log('📦 Produtos registrados:', products.map(p => p.id));
 
       // Configurar handlers
@@ -294,7 +308,7 @@ class BillingService {
       try {
         console.log(`🛒 Iniciando compra via store: ${productId}`);
         
-        const product = this.store!.get(productId);
+        const product = this.store!.get(productId) as CdvPurchaseProduct | undefined;
         
         if (!product) {
           console.error('❌ Produto não encontrado:', productId);
@@ -302,17 +316,38 @@ class BillingService {
           return;
         }
 
-        if (!product.canPurchase) {
-          console.error('❌ Produto não pode ser comprado:', productId);
-          // Pode já estar comprado
-          if (product.owned) {
-            console.log('ℹ️ Produto já foi comprado');
-            // Tentar validar a compra existente
-            const success = await this.validatePurchase(productId, 'restored', tier);
-            resolve(success);
+        console.log('📦 Produto encontrado:', JSON.stringify(product));
+
+        // Obter a oferta do produto (necessário para assinaturas)
+        let offer: CdvPurchaseOffer | undefined;
+        
+        if (typeof product.getOffer === 'function') {
+          offer = product.getOffer();
+          console.log('📦 Oferta via getOffer():', offer?.id);
+        } else if (product.offers && product.offers.length > 0) {
+          offer = product.offers[0];
+          console.log('📦 Oferta via offers[]:', offer?.id);
+        }
+
+        if (!offer) {
+          console.error('❌ Oferta não encontrada para o produto:', productId);
+          console.log('📦 Estrutura do produto:', Object.keys(product));
+          
+          // Tentar acessar offers de forma alternativa
+          const productAny = product as any;
+          if (productAny.offers && Array.isArray(productAny.offers) && productAny.offers.length > 0) {
+            offer = productAny.offers[0];
+            console.log('📦 Oferta encontrada via fallback:', offer?.id);
+          } else {
+            resolve(false);
             return;
           }
-          resolve(false);
+        }
+
+        if (product.owned) {
+          console.log('ℹ️ Produto já foi comprado');
+          const success = await this.validatePurchase(productId, 'restored', tier);
+          resolve(success);
           return;
         }
 
@@ -320,8 +355,9 @@ class BillingService {
         this.pendingPurchaseResolve = resolve;
         this.pendingPurchaseTier = tier;
 
-        // Iniciar compra
-        const result = await this.store!.order(product);
+        // Iniciar compra usando a OFERTA (não o produto)
+        console.log('🛒 Chamando offer.order() para:', offer.id);
+        const result = await offer.order();
         
         if (result?.error) {
           console.error('❌ Erro ao iniciar compra:', result.error);
