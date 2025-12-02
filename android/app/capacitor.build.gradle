@@ -15,7 +15,7 @@ dependencies {
     implementation project(':capacitor-local-notifications')
     implementation project(':capacitor-toast')
     implementation project(':capgo-capacitor-purchases')
-
+    implementation "com.android.billingclient:billing:7.1.1"
 }
 
 
