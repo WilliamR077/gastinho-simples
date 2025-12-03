@@ -36,9 +36,10 @@ class AppLockService {
   }
 
   // Autenticar com biometria
-  async authenticateWithBiometric(): Promise<boolean> {
+  // Retorna: { success: boolean, cancelled: boolean }
+  async authenticateWithBiometric(): Promise<{ success: boolean; cancelled: boolean }> {
     if (!this.isNative()) {
-      return false;
+      return { success: false, cancelled: false };
     }
 
     try {
@@ -47,11 +48,24 @@ class AppLockService {
         title: "Autenticação",
         subtitle: "Use sua biometria para desbloquear",
         description: "Coloque seu dedo no sensor ou use o reconhecimento facial",
+        negativeButtonText: "Usar PIN",
       });
-      return true;
-    } catch (error) {
-      console.error("Falha na autenticação biométrica:", error);
-      return false;
+      // Se chegou aqui, autenticação foi bem-sucedida
+      console.log("Biometria: autenticação bem-sucedida");
+      return { success: true, cancelled: false };
+    } catch (error: any) {
+      console.log("Biometria erro:", error);
+      // Verificar se foi cancelamento do usuário
+      const errorMessage = error?.message || error?.toString() || "";
+      const isCancelled = 
+        errorMessage.includes("cancel") || 
+        errorMessage.includes("Cancel") ||
+        errorMessage.includes("negative") ||
+        errorMessage.includes("dismissed") ||
+        error?.code === "10" || // Android: ERROR_CANCELED
+        error?.code === "13"; // Android: ERROR_NEGATIVE_BUTTON
+      
+      return { success: false, cancelled: isCancelled };
     }
   }
 

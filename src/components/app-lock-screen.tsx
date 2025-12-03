@@ -39,19 +39,28 @@ export function AppLockScreen({ onUnlock }: AppLockScreenProps) {
     if (isAuthenticating) return;
     
     setIsAuthenticating(true);
-    const success = await appLockService.authenticateWithBiometric();
+    const result = await appLockService.authenticateWithBiometric();
     setIsAuthenticating(false);
     
-    if (success) {
-      appLockService.setLastActive();
-      onUnlock();
-    } else {
+    if (result.success) {
       toast({
-        title: "Falha na autenticação",
+        title: "Desbloqueado!",
+        description: "Autenticação bem-sucedida",
+      });
+      appLockService.setLastActive();
+      // Pequeno delay para mostrar feedback
+      setTimeout(() => {
+        onUnlock();
+      }, 300);
+    } else if (!result.cancelled) {
+      // Só mostra erro se NÃO foi cancelamento do usuário
+      toast({
+        title: "Falha na leitura",
         description: "Tente novamente ou use o PIN",
         variant: "destructive",
       });
     }
+    // Se foi cancelamento, não mostra nada - usuário quer usar PIN
   };
 
   const handlePinSubmit = () => {
@@ -65,8 +74,14 @@ export function AppLockScreen({ onUnlock }: AppLockScreenProps) {
     }
 
     if (appLockService.verifyPin(pin)) {
+      toast({
+        title: "Desbloqueado!",
+        description: "PIN correto",
+      });
       appLockService.setLastActive();
-      onUnlock();
+      setTimeout(() => {
+        onUnlock();
+      }, 300);
     } else {
       setAttempts((prev) => prev + 1);
       setPin("");
