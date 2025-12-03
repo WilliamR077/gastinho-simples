@@ -5,20 +5,51 @@ import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Settings as SettingsIcon, FileDown, FileSpreadsheet, Bug, Crown, Lock } from "lucide-react";
+import { ArrowLeft, Settings as SettingsIcon, FileDown, FileSpreadsheet, Crown, Lock } from "lucide-react";
 import { useSubscription } from "@/hooks/use-subscription";
 import { FirebaseNotificationSettings } from "@/components/firebase-notification-settings";
+import { SecuritySettings } from "@/components/security-settings";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
 import { categoryLabels } from "@/types/expense";
 import { sanitizeErrorMessage } from "@/utils/security";
+import { Capacitor } from "@capacitor/core";
+import { Filesystem, Directory } from "@capacitor/filesystem";
+import { Share } from "@capacitor/share";
+
+// Helper para detectar se está no app nativo
+const isNativeApp = () => Capacitor.isNativePlatform();
+
+// Helper para salvar e compartilhar arquivo no app
+const saveAndShareFile = async (base64Data: string, fileName: string, mimeType: string) => {
+  try {
+    // Salvar arquivo no dispositivo
+    const result = await Filesystem.writeFile({
+      path: fileName,
+      data: base64Data,
+      directory: Directory.Cache,
+    });
+
+    // Compartilhar o arquivo
+    await Share.share({
+      title: fileName,
+      url: result.uri,
+      dialogTitle: "Exportar arquivo",
+    });
+
+    return true;
+  } catch (error) {
+    console.error("Erro ao salvar/compartilhar arquivo:", error);
+    throw error;
+  }
+};
 
 export default function Settings() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { canExportPdf, canExportExcel, tier, features } = useSubscription();
+  const { canExportPdf, canExportExcel } = useSubscription();
 
   // Audit log helper function
   const logAuditAction = async (action: string, details?: any) => {
@@ -115,8 +146,16 @@ export default function Settings() {
       XLSX.utils.book_append_sheet(wb, wsRecurring, "Despesas Recorrentes");
       XLSX.utils.book_append_sheet(wb, wsBudget, "Metas de Gastos");
 
-      // Download
-      XLSX.writeFile(wb, `gastinho-simples-${format(new Date(), "dd-MM-yyyy")}.xlsx`);
+      const fileName = `gastinho-simples-${format(new Date(), "dd-MM-yyyy")}.xlsx`;
+
+      if (isNativeApp()) {
+        // No app: converter para base64 e compartilhar
+        const wbout = XLSX.write(wb, { bookType: "xlsx", type: "base64" });
+        await saveAndShareFile(wbout, fileName, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      } else {
+        // No navegador: download direto
+        XLSX.writeFile(wb, fileName);
+      }
 
       toast({
         title: "Excel exportado!",
@@ -271,8 +310,16 @@ export default function Settings() {
         });
       }
 
-      // Download
-      doc.save(`gastinho-simples-${format(new Date(), "dd-MM-yyyy")}.pdf`);
+      const fileName = `gastinho-simples-${format(new Date(), "dd-MM-yyyy")}.pdf`;
+
+      if (isNativeApp()) {
+        // No app: converter para base64 e compartilhar
+        const pdfBase64 = doc.output("datauristring").split(",")[1];
+        await saveAndShareFile(pdfBase64, fileName, "application/pdf");
+      } else {
+        // No navegador: download direto
+        doc.save(fileName);
+      }
 
       toast({
         title: "PDF exportado!",
@@ -311,6 +358,11 @@ export default function Settings() {
             Personalize e configure seu aplicativo
           </p>
         </div>
+
+        {/* Seção: Segurança */}
+        <SecuritySettings />
+
+        <Separator />
 
         {/* Seção: Exportar Dados */}
         <Card>
