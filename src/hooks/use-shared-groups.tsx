@@ -392,8 +392,24 @@ export function SharedGroupsProvider({ children }: { children: ReactNode }) {
           .update({ shared_group_id: null })
           .eq('shared_group_id', groupId)
           .eq('user_id', user.id);
+      } else {
+        // action === 'delete_all': deletar manualmente ANTES de deletar o grupo
+        // (O ON DELETE SET NULL do banco não deleta, apenas seta NULL)
+        await supabase
+          .from('expenses')
+          .delete()
+          .eq('shared_group_id', groupId);
+
+        await supabase
+          .from('recurring_expenses')
+          .delete()
+          .eq('shared_group_id', groupId);
+
+        await supabase
+          .from('budget_goals')
+          .delete()
+          .eq('shared_group_id', groupId);
       }
-      // Se action === 'delete_all', o ON DELETE CASCADE cuida de deletar automaticamente
 
       const { error } = await supabase
         .from('shared_groups')
