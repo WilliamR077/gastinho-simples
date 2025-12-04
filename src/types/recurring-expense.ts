@@ -1,4 +1,5 @@
 import { Database } from "@/integrations/supabase/types";
+import { SharedGroup } from "./shared-group";
 
 export type RecurringExpense = Database["public"]["Tables"]["recurring_expenses"]["Row"] & {
   card?: {
@@ -7,6 +8,7 @@ export type RecurringExpense = Database["public"]["Tables"]["recurring_expenses"
     color: string;
     card_type: string;
   };
+  shared_group?: Pick<SharedGroup, 'id' | 'name' | 'color'>;
 };
 export type RecurringExpenseInsert = Database["public"]["Tables"]["recurring_expenses"]["Insert"];
 export type PaymentMethod = Database["public"]["Enums"]["payment_method"];
@@ -19,4 +21,5 @@ export interface RecurringExpenseFormData {
   dayOfMonth: number;
   category: ExpenseCategory;
   cardId?: string;
+  sharedGroupId?: string | null;
 }
