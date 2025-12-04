@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const internalApiSecret = Deno.env.get("INTERNAL_API_SECRET")!;
 
 serve(async (req) => {
   try {
@@ -76,10 +77,13 @@ serve(async (req) => {
       if (shouldNotify) {
         console.log(`Enviando notificação para ${expense.user_id}: ${notificationTitle}`);
 
-        // Chamar a edge function send-notification
+        // Chamar a edge function send-notification com secret de autenticação
         const { error: notificationError } = await supabase.functions.invoke(
           "send-notification",
           {
+            headers: {
+              "x-internal-secret": internalApiSecret,
+            },
             body: {
               user_id: expense.user_id,
               title: notificationTitle,
