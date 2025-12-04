@@ -85,6 +85,7 @@ export type Database = {
           created_at: string
           id: string
           limit_amount: number
+          shared_group_id: string | null
           type: Database["public"]["Enums"]["budget_goal_type"]
           updated_at: string
           user_id: string
@@ -94,6 +95,7 @@ export type Database = {
           created_at?: string
           id?: string
           limit_amount: number
+          shared_group_id?: string | null
           type: Database["public"]["Enums"]["budget_goal_type"]
           updated_at?: string
           user_id: string
@@ -103,11 +105,20 @@ export type Database = {
           created_at?: string
           id?: string
           limit_amount?: number
+          shared_group_id?: string | null
           type?: Database["public"]["Enums"]["budget_goal_type"]
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "budget_goals_shared_group_id_fkey"
+            columns: ["shared_group_id"]
+            isOneToOne: false
+            referencedRelation: "shared_groups"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       cards: {
         Row: {

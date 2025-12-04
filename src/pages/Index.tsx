@@ -22,7 +22,7 @@ import { RecurringExpenseList } from "@/components/recurring-expense-list";
 import { RecurringExpenseFormData } from "@/types/recurring-expense";
 import { BudgetGoal } from "@/types/budget-goal";
 import { BudgetProgress } from "@/components/budget-progress";
-import { RemindersPanel } from "@/components/reminders-panel";
+import { RemindersButton } from "@/components/reminders-button";
 import { toast } from "@/hooks/use-toast";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { BarChart3, CreditCard, Settings } from "lucide-react";
@@ -271,10 +271,19 @@ export default function Index() {
 
   const loadBudgetGoals = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("budget_goals")
         .select("*")
         .order("created_at", { ascending: false });
+
+      // Filtrar por contexto
+      if (currentContext.type === 'personal') {
+        query = query.is('shared_group_id', null);
+      } else if (currentContext.type === 'group' && currentContext.groupId) {
+        query = query.eq('shared_group_id', currentContext.groupId);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       setBudgetGoals(data || []);
@@ -551,8 +560,11 @@ export default function Index() {
     }
   };
 
-  const addBudgetGoal = async (data: { type: string; category?: string; limitAmount: number }) => {
+  const addBudgetGoal = async (data: { type: string; category?: string; limitAmount: number; sharedGroupId?: string }) => {
     if (!user) return;
+
+    // Usar sharedGroupId do formulário ou do contexto atual
+    const groupId = data.sharedGroupId || (currentContext.type === 'group' ? currentContext.groupId : null);
 
     try {
       const { data: insertedData, error } = await supabase
@@ -562,6 +574,7 @@ export default function Index() {
           type: data.type as any,
           category: data.category as any || null,
           limit_amount: data.limitAmount,
+          ...(groupId && { shared_group_id: groupId }),
         }])
         .select()
         .single();
@@ -570,9 +583,12 @@ export default function Index() {
 
       setBudgetGoals(prev => [insertedData, ...prev]);
 
+      const contextLabel = currentContext.type === 'group' && currentContext.groupName 
+        ? ` (${currentContext.groupName})` 
+        : '';
       toast({
         title: "Meta adicionada!",
-        description: "Sua meta de gastos foi criada com sucesso.",
+        description: `Sua meta de gastos foi criada com sucesso${contextLabel}.`,
       });
     } catch (error) {
       console.error("Error adding budget goal:", error);
@@ -993,6 +1009,7 @@ export default function Index() {
               <LogOut className="w-3 h-3 sm:w-4 sm:h-4" />
               <span className="hidden sm:inline">Sair</span>
             </Button>
+            <RemindersButton recurringExpenses={recurringExpenses} />
             <ThemeToggle />
           </div>
         </div>
@@ -1005,9 +1022,6 @@ export default function Index() {
           currentDate={currentMonth}
           onMonthChange={handleMonthChange}
         />
-
-        {/* Lembretes */}
-        <RemindersPanel recurringExpenses={recurringExpenses} />
 
         {/* Filtros */}
         <div className="mb-8">
