@@ -31,7 +31,7 @@ interface SharedGroupsContextType {
   createGroup: (input: CreateGroupInput) => Promise<SharedGroup | null>;
   joinGroup: (inviteCode: string) => Promise<boolean>;
   leaveGroup: (groupId: string) => Promise<boolean>;
-  deleteGroup: (groupId: string) => Promise<boolean>;
+  deleteGroup: (groupId: string, action?: 'move_to_personal' | 'delete_all') => Promise<boolean>;
   updateGroup: (groupId: string, data: Partial<CreateGroupInput>) => Promise<boolean>;
   
   // Ações de membros
@@ -284,15 +284,17 @@ export function SharedGroupsProvider({ children }: { children: ReactNode }) {
         return false;
       }
 
-      // Verificar limite de membros
-      const { count } = await supabase
-        .from('shared_group_members')
-        .select('*', { count: 'exact', head: true })
-        .eq('group_id', groupData.id);
+      // Verificar limite de membros (apenas se max_members não for null/ilimitado)
+      if (groupData.max_members !== null) {
+        const { count } = await supabase
+          .from('shared_group_members')
+          .select('*', { count: 'exact', head: true })
+          .eq('group_id', groupData.id);
 
-      if (count && count >= groupData.max_members) {
-        toast.error('Este grupo está cheio');
-        return false;
+        if (count && count >= groupData.max_members) {
+          toast.error('Este grupo está cheio');
+          return false;
+        }
       }
 
       // Adicionar como membro
@@ -358,8 +360,8 @@ export function SharedGroupsProvider({ children }: { children: ReactNode }) {
     }
   }, [user, groups, currentContext.groupId, setPersonalContext, fetchGroups]);
 
-  // Deletar grupo (apenas owner)
-  const deleteGroup = useCallback(async (groupId: string): Promise<boolean> => {
+  // Deletar grupo (apenas owner) - com opção de mover despesas
+  const deleteGroup = useCallback(async (groupId: string, action: 'move_to_personal' | 'delete_all' = 'move_to_personal'): Promise<boolean> => {
     if (!user) return false;
 
     const group = groups.find(g => g.id === groupId);
@@ -369,6 +371,30 @@ export function SharedGroupsProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      if (action === 'move_to_personal') {
+        // Mover despesas para o usuário pessoal (remover shared_group_id)
+        await supabase
+          .from('expenses')
+          .update({ shared_group_id: null })
+          .eq('shared_group_id', groupId)
+          .eq('user_id', user.id);
+
+        // Mover despesas recorrentes
+        await supabase
+          .from('recurring_expenses')
+          .update({ shared_group_id: null })
+          .eq('shared_group_id', groupId)
+          .eq('user_id', user.id);
+
+        // Mover metas
+        await supabase
+          .from('budget_goals')
+          .update({ shared_group_id: null })
+          .eq('shared_group_id', groupId)
+          .eq('user_id', user.id);
+      }
+      // Se action === 'delete_all', o ON DELETE CASCADE cuida de deletar automaticamente
+
       const { error } = await supabase
         .from('shared_groups')
         .delete()
@@ -376,7 +402,10 @@ export function SharedGroupsProvider({ children }: { children: ReactNode }) {
 
       if (error) throw error;
 
-      toast.success('Grupo excluído com sucesso');
+      const message = action === 'move_to_personal' 
+        ? 'Grupo excluído! Suas despesas foram movidas para sua conta pessoal.'
+        : 'Grupo e todas as despesas foram excluídos.';
+      toast.success(message);
       
       if (currentContext.groupId === groupId) {
         setPersonalContext();

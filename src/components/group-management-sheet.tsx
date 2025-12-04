@@ -22,6 +22,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { DeleteGroupDialog, DeleteGroupAction } from './delete-group-dialog';
 import { 
   Copy, 
   Check, 
@@ -122,10 +123,10 @@ export function GroupManagementSheet({ open, onOpenChange, groupId }: GroupManag
     setShowLeaveDialog(false);
   };
 
-  const handleDelete = async () => {
+  const handleDelete = async (action: DeleteGroupAction) => {
     if (!groupId) return;
     
-    const success = await deleteGroup(groupId);
+    const success = await deleteGroup(groupId, action);
     if (success) {
       onOpenChange(false);
     }
@@ -245,7 +246,7 @@ export function GroupManagementSheet({ open, onOpenChange, groupId }: GroupManag
             <div className="space-y-3">
               <Label className="flex items-center gap-2">
                 <Users className="h-4 w-4" />
-                Membros ({members.length}/{group.max_members})
+                Membros ({members.length}{group.max_members ? `/${group.max_members}` : ''})
               </Label>
               
               {isLoading ? (
@@ -340,26 +341,12 @@ export function GroupManagementSheet({ open, onOpenChange, groupId }: GroupManag
       </AlertDialog>
 
       {/* Dialog de confirmação para excluir */}
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir grupo?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta ação não pode ser desfeita. Todas as despesas compartilhadas 
-              serão desvinculadas do grupo e os membros perderão acesso.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={handleDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Excluir
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeleteGroupDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        groupName={group.name}
+        onConfirm={handleDelete}
+      />
     </>
   );
 }
