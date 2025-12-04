@@ -483,6 +483,17 @@ export type Database = {
     }
     Functions: {
       can_create_group: { Args: { user_id_param: string }; Returns: boolean }
+      find_group_by_invite_code: {
+        Args: { invite_code_param: string }
+        Returns: {
+          color: string
+          description: string
+          id: string
+          is_active: boolean
+          max_members: number
+          name: string
+        }[]
+      }
       generate_invite_code: { Args: never; Returns: string }
       get_group_role: {
         Args: { group_id_param: string; user_id_param: string }

@@ -257,15 +257,14 @@ export function SharedGroupsProvider({ children }: { children: ReactNode }) {
     const normalizedCode = inviteCode.toUpperCase().trim();
 
     try {
-      // Buscar grupo pelo código
-      const { data: groupData, error: groupError } = await supabase
-        .from('shared_groups')
-        .select('*')
-        .eq('invite_code', normalizedCode)
-        .eq('is_active', true)
-        .maybeSingle();
+      // Buscar grupo pelo código usando função RPC (bypassa RLS de forma segura)
+      const { data: groupResult, error: rpcError } = await supabase
+        .rpc('find_group_by_invite_code', { invite_code_param: normalizedCode });
 
-      if (groupError) throw groupError;
+      if (rpcError) throw rpcError;
+
+      // A função retorna um array, pegar o primeiro resultado
+      const groupData = Array.isArray(groupResult) ? groupResult[0] : groupResult;
 
       if (!groupData) {
         toast.error('Código de convite inválido');
