@@ -434,18 +434,22 @@ export function SharedGroupsProvider({ children }: { children: ReactNode }) {
     }
   }, [user, groups, currentContext.groupId, fetchGroups]);
 
-  // Buscar membros do grupo
+  // Buscar membros do grupo com email (usando RPC SECURITY DEFINER)
   const getGroupMembers = useCallback(async (groupId: string): Promise<SharedGroupMember[]> => {
     try {
       const { data, error } = await supabase
-        .from('shared_group_members')
-        .select('*')
-        .eq('group_id', groupId)
-        .order('joined_at', { ascending: true });
+        .rpc('get_group_members_with_email', { group_id_param: groupId });
 
       if (error) throw error;
 
-      return (data || []) as SharedGroupMember[];
+      return (data || []).map((member: any) => ({
+        id: member.id,
+        group_id: member.group_id,
+        user_id: member.user_id,
+        role: member.role as GroupMemberRole,
+        joined_at: member.joined_at,
+        user_email: member.user_email,
+      }));
     } catch (error) {
       console.error('Erro ao buscar membros:', error);
       return [];
