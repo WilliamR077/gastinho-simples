@@ -205,17 +205,9 @@ async function validateGooglePlayPurchase(
       }
     }
     
-    // Fallback: Validação mock para desenvolvimento
-    // IMPORTANTE: Remover em produção ou quando Service Account estiver configurado
-    console.warn('⚠️ VALIDAÇÃO MOCK - Service Account não configurado ou erro na validação');
-    
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30);
-    
-    return {
-      valid: true,
-      expiresAt: expiresAt.toISOString(),
-    };
+    // No mock fallback - Service Account must be properly configured
+    console.error('❌ GOOGLE_PLAY_SERVICE_ACCOUNT not configured or validation failed');
+    return { valid: false };
   } catch (error) {
     console.error('❌ Erro ao validar compra Google Play:', error);
     return { valid: false };
@@ -319,13 +311,7 @@ function pemToBinary(pem: string): ArrayBuffer {
 async function validateAppStorePurchase(
   receiptData: string
 ): Promise<{ valid: boolean; expiresAt?: string }> {
-  console.warn('⚠️ Validação App Store não implementada');
-  
-  const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 30);
-  
-  return {
-    valid: true,
-    expiresAt: expiresAt.toISOString(),
-  };
+  // No mock validation - App Store validation must be properly implemented
+  console.error('❌ App Store validation not implemented - rejecting purchase');
+  return { valid: false };
 }

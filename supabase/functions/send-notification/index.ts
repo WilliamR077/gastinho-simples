@@ -2,11 +2,12 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { create, getNumericDate } from "https://deno.land/x/djwt@v3.0.1/mod.ts";
 
 const FIREBASE_SERVICE_ACCOUNT_JSON = Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON");
+const INTERNAL_API_SECRET = Deno.env.get("INTERNAL_API_SECRET");
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-internal-secret",
 };
 
 interface NotificationPayload {
@@ -141,6 +142,19 @@ serve(async (req) => {
   }
 
   try {
+    // Security: Validate internal API secret to prevent unauthorized notifications
+    const providedSecret = req.headers.get("x-internal-secret");
+    if (!INTERNAL_API_SECRET || providedSecret !== INTERNAL_API_SECRET) {
+      console.error("❌ Unauthorized: Invalid or missing internal API secret");
+      return new Response(
+        JSON.stringify({ success: false, error: "Unauthorized" }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 401,
+        }
+      );
+    }
+
     const payload: NotificationPayload = await req.json();
     const { user_id, title, body, data } = payload;
 
