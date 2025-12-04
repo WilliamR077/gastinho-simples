@@ -190,6 +190,7 @@ export type Database = {
           installment_group_id: string | null
           installment_number: number | null
           payment_method: Database["public"]["Enums"]["payment_method"]
+          shared_group_id: string | null
           total_installments: number | null
           updated_at: string
           user_id: string
@@ -205,6 +206,7 @@ export type Database = {
           installment_group_id?: string | null
           installment_number?: number | null
           payment_method: Database["public"]["Enums"]["payment_method"]
+          shared_group_id?: string | null
           total_installments?: number | null
           updated_at?: string
           user_id: string
@@ -220,6 +222,7 @@ export type Database = {
           installment_group_id?: string | null
           installment_number?: number | null
           payment_method?: Database["public"]["Enums"]["payment_method"]
+          shared_group_id?: string | null
           total_installments?: number | null
           updated_at?: string
           user_id?: string
@@ -230,6 +233,13 @@ export type Database = {
             columns: ["card_id"]
             isOneToOne: false
             referencedRelation: "cards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_shared_group_id_fkey"
+            columns: ["shared_group_id"]
+            isOneToOne: false
+            referencedRelation: "shared_groups"
             referencedColumns: ["id"]
           },
         ]
@@ -278,6 +288,7 @@ export type Database = {
           id: string
           is_active: boolean
           payment_method: Database["public"]["Enums"]["payment_method"]
+          shared_group_id: string | null
           updated_at: string
           user_id: string
         }
@@ -291,6 +302,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           payment_method: Database["public"]["Enums"]["payment_method"]
+          shared_group_id?: string | null
           updated_at?: string
           user_id: string
         }
@@ -304,6 +316,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           payment_method?: Database["public"]["Enums"]["payment_method"]
+          shared_group_id?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -315,7 +328,85 @@ export type Database = {
             referencedRelation: "cards"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "recurring_expenses_shared_group_id_fkey"
+            columns: ["shared_group_id"]
+            isOneToOne: false
+            referencedRelation: "shared_groups"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      shared_group_members: {
+        Row: {
+          group_id: string
+          id: string
+          joined_at: string | null
+          role: Database["public"]["Enums"]["group_member_role"]
+          user_id: string
+        }
+        Insert: {
+          group_id: string
+          id?: string
+          joined_at?: string | null
+          role?: Database["public"]["Enums"]["group_member_role"]
+          user_id: string
+        }
+        Update: {
+          group_id?: string
+          id?: string
+          joined_at?: string | null
+          role?: Database["public"]["Enums"]["group_member_role"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shared_group_members_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "shared_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shared_groups: {
+        Row: {
+          color: string | null
+          created_at: string | null
+          created_by: string
+          description: string | null
+          id: string
+          invite_code: string
+          is_active: boolean | null
+          max_members: number | null
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string | null
+          created_by: string
+          description?: string | null
+          id?: string
+          invite_code: string
+          is_active?: boolean | null
+          max_members?: number | null
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          color?: string | null
+          created_at?: string | null
+          created_by?: string
+          description?: string | null
+          id?: string
+          invite_code?: string
+          is_active?: boolean | null
+          max_members?: number | null
+          name?: string
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       subscriptions: {
         Row: {
@@ -391,9 +482,19 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_create_group: { Args: { user_id_param: string }; Returns: boolean }
+      generate_invite_code: { Args: never; Returns: string }
+      get_group_role: {
+        Args: { group_id_param: string; user_id_param: string }
+        Returns: Database["public"]["Enums"]["group_member_role"]
+      }
       get_user_subscription_tier: {
         Args: { user_id_param: string }
         Returns: Database["public"]["Enums"]["subscription_tier"]
+      }
+      is_group_member: {
+        Args: { group_id_param: string; user_id_param: string }
+        Returns: boolean
       }
       migrate_credit_card_config: { Args: never; Returns: undefined }
     }
@@ -409,6 +510,7 @@ export type Database = {
         | "vestuario"
         | "servicos"
         | "outros"
+      group_member_role: "owner" | "admin" | "member"
       payment_method: "pix" | "credit" | "debit"
       subscription_tier: "free" | "no_ads" | "premium" | "premium_plus"
     }
@@ -550,6 +652,7 @@ export const Constants = {
         "servicos",
         "outros",
       ],
+      group_member_role: ["owner", "admin", "member"],
       payment_method: ["pix", "credit", "debit"],
       subscription_tier: ["free", "no_ads", "premium", "premium_plus"],
     },

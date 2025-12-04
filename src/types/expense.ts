@@ -1,8 +1,10 @@
 import { Database } from "@/integrations/supabase/types";
 import { Card } from "./card";
+import { SharedGroup } from "./shared-group";
 
 export type Expense = Database["public"]["Tables"]["expenses"]["Row"] & {
   card?: Pick<Card, 'id' | 'name' | 'color' | 'card_type'>;
+  shared_group?: Pick<SharedGroup, 'id' | 'name' | 'color'>;
 };
 export type ExpenseInsert = Database["public"]["Tables"]["expenses"]["Insert"];
 export type PaymentMethod = Database["public"]["Enums"]["payment_method"];
@@ -16,6 +18,7 @@ export interface ExpenseFormData {
   installments?: number;
   category: ExpenseCategory;
   cardId?: string;
+  sharedGroupId?: string | null;
 }
 
 export const categoryLabels: Record<ExpenseCategory, string> = {
