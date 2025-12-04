@@ -495,6 +495,17 @@ export type Database = {
         }[]
       }
       generate_invite_code: { Args: never; Returns: string }
+      get_group_members_with_email: {
+        Args: { group_id_param: string }
+        Returns: {
+          group_id: string
+          id: string
+          joined_at: string
+          role: string
+          user_email: string
+          user_id: string
+        }[]
+      }
       get_group_role: {
         Args: { group_id_param: string; user_id_param: string }
         Returns: Database["public"]["Enums"]["group_member_role"]

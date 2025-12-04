@@ -32,7 +32,8 @@ import {
   Trash2,
   LogOut,
   Loader2,
-  Settings
+  Pencil,
+  X
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { SharedGroup, SharedGroupMember, GroupMemberRole } from '@/types/shared-group';
@@ -47,6 +48,12 @@ const roleLabels: Record<GroupMemberRole, { label: string; icon: React.ReactNode
   owner: { label: 'Dono', icon: <Crown className="h-3 w-3 text-yellow-500" /> },
   admin: { label: 'Admin', icon: <Shield className="h-3 w-3 text-blue-500" /> },
   member: { label: 'Membro', icon: <User className="h-3 w-3 text-muted-foreground" /> },
+};
+
+// Extrai o nome de exibição do email (parte antes do @)
+const getDisplayName = (email: string | undefined): string => {
+  if (!email) return 'Membro';
+  return email.split('@')[0];
 };
 
 export function GroupManagementSheet({ open, onOpenChange, groupId }: GroupManagementSheetProps) {
@@ -157,20 +164,32 @@ export function GroupManagementSheet({ open, onOpenChange, groupId }: GroupManag
               >
                 <Users className="h-3.5 w-3.5 text-white" />
               </div>
-              {editMode ? (
-                <div className="flex items-center gap-2 flex-1">
+            {editMode ? (
+                <div className="flex-1 space-y-2">
                   <Input
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
-                    className="h-8"
+                    className="h-9"
                     maxLength={50}
+                    autoFocus
                   />
-                  <Button size="sm" onClick={handleSaveName}>
-                    Salvar
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setEditMode(false)}>
-                    Cancelar
-                  </Button>
+                  <div className="flex justify-end gap-2">
+                    <Button 
+                      size="icon" 
+                      variant="ghost" 
+                      className="h-8 w-8"
+                      onClick={() => setEditMode(false)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                    <Button 
+                      size="icon" 
+                      className="h-8 w-8"
+                      onClick={handleSaveName}
+                    >
+                      <Check className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 <span className="flex items-center gap-2">
@@ -182,7 +201,7 @@ export function GroupManagementSheet({ open, onOpenChange, groupId }: GroupManag
                       className="h-6 w-6"
                       onClick={() => setEditMode(true)}
                     >
-                      <Settings className="h-3 w-3" />
+                      <Pencil className="h-3 w-3" />
                     </Button>
                   )}
                 </span>
@@ -249,7 +268,7 @@ export function GroupManagementSheet({ open, onOpenChange, groupId }: GroupManag
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">
-                            {isCurrentUser ? 'Você' : `Membro ${member.id.slice(0, 4)}`}
+                            {isCurrentUser ? 'Você' : getDisplayName(member.user_email)}
                           </p>
                           <p className="text-xs text-muted-foreground flex items-center gap-1">
                             {roleInfo.icon}
