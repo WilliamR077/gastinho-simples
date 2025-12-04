@@ -10,6 +10,7 @@ export const SUBSCRIPTION_FEATURES = {
     price: "R$ 0",
     cards: 2,
     goals: 1,
+    groups: 0, // Não pode criar grupos
     reports: false, // Apenas mês atual
     exportPdf: false,
     exportExcel: false,
@@ -20,6 +21,7 @@ export const SUBSCRIPTION_FEATURES = {
     price: "R$ 4,90/mês",
     cards: 2,
     goals: 1,
+    groups: 0, // Não pode criar grupos
     reports: false,
     exportPdf: false,
     exportExcel: false,
@@ -30,6 +32,7 @@ export const SUBSCRIPTION_FEATURES = {
     price: "R$ 14,90/mês",
     cards: Infinity,
     goals: Infinity,
+    groups: 3, // Até 3 grupos
     reports: true, // Gráficos avançados
     exportPdf: true,
     exportExcel: true,
@@ -40,6 +43,7 @@ export const SUBSCRIPTION_FEATURES = {
     price: "R$ 17,90/mês",
     cards: Infinity,
     goals: Infinity,
+    groups: 3, // Até 3 grupos
     reports: true,
     exportPdf: true,
     exportExcel: true,

@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/hooks/use-theme";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
+import { SharedGroupsProvider } from "@/hooks/use-shared-groups";
 import { firebaseNotificationService } from "@/services/firebase-notification-service";
 import { adMobService } from "@/services/admob-service";
 import { appLockService } from "@/services/app-lock-service";
@@ -150,9 +151,11 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider defaultTheme="dark">
       <AuthProvider>
-        <TooltipProvider>
-          <AppContent />
-        </TooltipProvider>
+        <SharedGroupsProvider>
+          <TooltipProvider>
+            <AppContent />
+          </TooltipProvider>
+        </SharedGroupsProvider>
       </AuthProvider>
     </ThemeProvider>
   </QueryClientProvider>
