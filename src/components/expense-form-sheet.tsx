@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { CalendarIcon, AlertTriangle } from "lucide-react";
+import { CalendarIcon, AlertTriangle, Users, User } from "lucide-react";
 import { PaymentMethod, ExpenseFormData, ExpenseCategory, categoryLabels, categoryIcons, Expense } from "@/types/expense";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,6 +16,8 @@ import { Card as CardType } from "@/types/card";
 import { BudgetGoal } from "@/types/budget-goal";
 import { RecurringExpense } from "@/types/recurring-expense";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useSharedGroups } from "@/hooks/use-shared-groups";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 interface ExpenseFormSheetProps {
   open: boolean;
@@ -42,6 +44,20 @@ export function ExpenseFormSheet({
   const [category, setCategory] = useState<ExpenseCategory>("outros");
   const [cardId, setCardId] = useState<string>("");
   const [cards, setCards] = useState<CardType[]>([]);
+  const [selectedDestination, setSelectedDestination] = useState<string>("personal");
+
+  const { groups, currentContext } = useSharedGroups();
+
+  // Atualiza o destino selecionado quando o contexto atual muda ou o sheet abre
+  useEffect(() => {
+    if (open) {
+      if (currentContext.type === "group" && currentContext.groupId) {
+        setSelectedDestination(currentContext.groupId);
+      } else {
+        setSelectedDestination("personal");
+      }
+    }
+  }, [open, currentContext]);
 
   useEffect(() => {
     if (open) {
@@ -148,6 +164,12 @@ export function ExpenseFormSheet({
     setInstallments("1");
     setCategory("outros");
     setCardId("");
+    // Mantém o destino baseado no contexto atual
+    if (currentContext.type === "group" && currentContext.groupId) {
+      setSelectedDestination(currentContext.groupId);
+    } else {
+      setSelectedDestination("personal");
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -172,6 +194,7 @@ export function ExpenseFormSheet({
       installments: installmentCount,
       category,
       cardId: cardId || undefined,
+      sharedGroupId: selectedDestination !== "personal" ? selectedDestination : undefined,
     });
 
     resetForm();
@@ -186,6 +209,40 @@ export function ExpenseFormSheet({
         </SheetHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 pb-24">
+          {/* Seletor de Destino - só mostra se tem grupos */}
+          {groups.length > 0 && (
+            <div className="space-y-3 p-3 rounded-lg bg-muted/50 border border-border">
+              <Label className="text-sm font-medium">Adicionar em:</Label>
+              <RadioGroup
+                value={selectedDestination}
+                onValueChange={setSelectedDestination}
+                className="space-y-2"
+              >
+                <div className="flex items-center space-x-3">
+                  <RadioGroupItem value="personal" id="personal" />
+                  <Label htmlFor="personal" className="flex items-center gap-2 cursor-pointer font-normal">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    Meus Gastos Pessoais
+                  </Label>
+                </div>
+                {groups.map((group) => (
+                  <div key={group.id} className="flex items-center space-x-3">
+                    <RadioGroupItem value={group.id} id={group.id} />
+                    <Label htmlFor={group.id} className="flex items-center gap-2 cursor-pointer font-normal">
+                      <div 
+                        className="w-4 h-4 rounded-full flex items-center justify-center"
+                        style={{ backgroundColor: group.color }}
+                      >
+                        <Users className="h-2.5 w-2.5 text-white" />
+                      </div>
+                      {group.name}
+                    </Label>
+                  </div>
+                ))}
+              </RadioGroup>
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="sheet-description">Descrição</Label>
             <Input

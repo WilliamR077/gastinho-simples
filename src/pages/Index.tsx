@@ -71,7 +71,7 @@ export default function Index() {
 
   const { user, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
-  const { currentContext } = useSharedGroups();
+  const { currentContext, groups } = useSharedGroups();
 
   // Redirect to auth if not logged in
   useEffect(() => {
@@ -302,7 +302,7 @@ export default function Index() {
     if (!user) return;
 
     try {
-      const { description, amount, paymentMethod, expenseDate, installments = 1, category, cardId } = data;
+      const { description, amount, paymentMethod, expenseDate, installments = 1, category, cardId, sharedGroupId } = data;
 
       // Format date to YYYY-MM-DD in local timezone (avoid UTC conversion issues)
       const formatDateLocal = (date: Date) => {
@@ -312,8 +312,8 @@ export default function Index() {
         return `${year}-${month}-${day}`;
       };
 
-      // Determinar shared_group_id baseado no contexto atual
-      const sharedGroupId = currentContext.type === 'group' ? currentContext.groupId : null;
+      // Usar sharedGroupId do formulário (permite escolher destino diferente do contexto atual)
+      const groupId = sharedGroupId || null;
 
       if (installments === 1) {
         // Single expense
@@ -329,7 +329,7 @@ export default function Index() {
           installment_number: 1,
           category,
           ...(cardId && { card_id: cardId }),
-          ...(sharedGroupId && { shared_group_id: sharedGroupId }),
+          ...(groupId && { shared_group_id: groupId }),
         })
         .select(`
           *,
@@ -361,7 +361,7 @@ export default function Index() {
             installment_group_id: installmentGroupId,
             category,
             ...(cardId && { card_id: cardId }),
-            ...(sharedGroupId && { shared_group_id: sharedGroupId }),
+            ...(groupId && { shared_group_id: groupId }),
           });
         }
 
@@ -378,7 +378,9 @@ export default function Index() {
         setExpenses(prev => [...(insertedData || []), ...prev]);
       }
 
-      const contextLabel = currentContext.type === 'group' ? ` (${currentContext.groupName})` : '';
+      // Determinar label do contexto baseado no grupo selecionado no formulário
+      const selectedGroup = groupId ? groups.find(g => g.id === groupId) : null;
+      const contextLabel = selectedGroup ? ` (${selectedGroup.name})` : '';
       toast({
         title: installments === 1 ? "Gasto adicionado!" : "Gasto parcelado adicionado!",
         description: installments === 1
@@ -427,8 +429,8 @@ export default function Index() {
   const addRecurringExpense = async (data: RecurringExpenseFormData) => {
     if (!user) return;
 
-    // Determinar shared_group_id baseado no contexto atual
-    const sharedGroupId = currentContext.type === 'group' ? currentContext.groupId : null;
+    // Usar sharedGroupId do formulário (permite escolher destino diferente do contexto atual)
+    const groupId = data.sharedGroupId || null;
 
     try {
     const { data: insertedData, error } = await supabase
@@ -441,7 +443,7 @@ export default function Index() {
         user_id: user.id,
         category: data.category,
         ...(data.cardId && { card_id: data.cardId }),
-        ...(sharedGroupId && { shared_group_id: sharedGroupId }),
+        ...(groupId && { shared_group_id: groupId }),
       })
       .select(`
         *,
@@ -456,7 +458,9 @@ export default function Index() {
       // Agendar notificações para a nova despesa
       await NotificationService.scheduleNotificationsForExpense(insertedData, notificationSettings);
 
-      const contextLabel = currentContext.type === 'group' ? ` (${currentContext.groupName})` : '';
+      // Determinar label do contexto baseado no grupo selecionado no formulário
+      const selectedGroup = groupId ? groups.find(g => g.id === groupId) : null;
+      const contextLabel = selectedGroup ? ` (${selectedGroup.name})` : '';
       toast({
         title: "Despesa fixa adicionada!",
         description: `${data.description} - R$ ${data.amount.toFixed(2)} (Dia ${data.dayOfMonth})${contextLabel}`,

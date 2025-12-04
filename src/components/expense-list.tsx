@@ -2,7 +2,7 @@ import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { CreditCard, Smartphone, Trash2, Receipt, MoreVertical, Pencil } from "lucide-react"
+import { CreditCard, Smartphone, Trash2, Receipt, MoreVertical, Pencil, Users } from "lucide-react"
 import { Expense, categoryLabels, categoryIcons } from "@/types/expense"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
@@ -117,8 +117,8 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense }: Expens
                   }).replace(',', ' às')}
                 </div>
                 
-                {/* Linha 4 - Badge da forma de pagamento */}
-                <div className="mt-2 ml-11">
+                {/* Linha 4 - Badge da forma de pagamento e grupo */}
+                <div className="mt-2 ml-11 flex flex-wrap gap-2">
                   <Badge 
                     className="text-xs text-white"
                     style={{ backgroundColor: cardColor || '#6B7280' }}
@@ -126,6 +126,15 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense }: Expens
                     {config.label}
                     {expense.card && ` - ${expense.card.name}`}
                   </Badge>
+                  {expense.shared_group && (
+                    <Badge 
+                      className="text-xs text-white flex items-center gap-1"
+                      style={{ backgroundColor: expense.shared_group.color || '#6366f1' }}
+                    >
+                      <Users className="h-3 w-3" />
+                      {expense.shared_group.name}
+                    </Badge>
+                  )}
                 </div>
                 
                 {/* Linha 5 - Preço (esquerda) e Menu (direita) */}
