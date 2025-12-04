@@ -13,6 +13,8 @@ import { FloatingActionButton } from "@/components/floating-action-button";
 import { ExpenseFormSheet } from "@/components/expense-form-sheet";
 import { RecurringExpenseFormSheet } from "@/components/recurring-expense-form-sheet";
 import { BudgetGoalFormSheet } from "@/components/budget-goal-form-sheet";
+import { ContextSelector } from "@/components/context-selector";
+import { useSharedGroups } from "@/hooks/use-shared-groups";
 
 import { Expense, PaymentMethod, ExpenseFormData, ExpenseCategory, categoryLabels } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
@@ -69,6 +71,7 @@ export default function Index() {
 
   const { user, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
+  const { currentContext } = useSharedGroups();
 
   // Redirect to auth if not logged in
   useEffect(() => {
@@ -180,17 +183,27 @@ export default function Index() {
       loadCreditCardConfig();
       loadBudgetGoals();
     }
-  }, [user]);
+  }, [user, currentContext]);
 
   const loadExpenses = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("expenses")
         .select(`
           *,
-          card:cards(id, name, color, card_type)
+          card:cards(id, name, color, card_type),
+          shared_group:shared_groups(id, name, color)
         `)
         .order("created_at", { ascending: false });
+
+      // Filtrar por contexto
+      if (currentContext.type === 'personal') {
+        query = query.is('shared_group_id', null);
+      } else if (currentContext.type === 'group' && currentContext.groupId) {
+        query = query.eq('shared_group_id', currentContext.groupId);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       setExpenses(data || []);
@@ -208,13 +221,23 @@ export default function Index() {
 
   const loadRecurringExpenses = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("recurring_expenses")
         .select(`
           *,
-          card:cards(id, name, color, card_type)
+          card:cards(id, name, color, card_type),
+          shared_group:shared_groups(id, name, color)
         `)
         .order("day_of_month", { ascending: true });
+
+      // Filtrar por contexto
+      if (currentContext.type === 'personal') {
+        query = query.is('shared_group_id', null);
+      } else if (currentContext.type === 'group' && currentContext.groupId) {
+        query = query.eq('shared_group_id', currentContext.groupId);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       setRecurringExpenses(data || []);
@@ -289,6 +312,9 @@ export default function Index() {
         return `${year}-${month}-${day}`;
       };
 
+      // Determinar shared_group_id baseado no contexto atual
+      const sharedGroupId = currentContext.type === 'group' ? currentContext.groupId : null;
+
       if (installments === 1) {
         // Single expense
       const { data: insertedData, error } = await supabase
@@ -303,10 +329,12 @@ export default function Index() {
           installment_number: 1,
           category,
           ...(cardId && { card_id: cardId }),
+          ...(sharedGroupId && { shared_group_id: sharedGroupId }),
         })
         .select(`
           *,
-          card:cards(id, name, color, card_type)
+          card:cards(id, name, color, card_type),
+          shared_group:shared_groups(id, name, color)
         `)
         .single();
 
@@ -333,6 +361,7 @@ export default function Index() {
             installment_group_id: installmentGroupId,
             category,
             ...(cardId && { card_id: cardId }),
+            ...(sharedGroupId && { shared_group_id: sharedGroupId }),
           });
         }
 
@@ -341,18 +370,20 @@ export default function Index() {
         .insert(expensesToInsert)
         .select(`
           *,
-          card:cards(id, name, color, card_type)
+          card:cards(id, name, color, card_type),
+          shared_group:shared_groups(id, name, color)
         `);
 
         if (error) throw error;
         setExpenses(prev => [...(insertedData || []), ...prev]);
       }
 
+      const contextLabel = currentContext.type === 'group' ? ` (${currentContext.groupName})` : '';
       toast({
         title: installments === 1 ? "Gasto adicionado!" : "Gasto parcelado adicionado!",
         description: installments === 1
-          ? `${description} - R$ ${amount.toFixed(2)}`
-          : `${description} - ${installments}x de R$ ${(amount / installments).toFixed(2)}`,
+          ? `${description} - R$ ${amount.toFixed(2)}${contextLabel}`
+          : `${description} - ${installments}x de R$ ${(amount / installments).toFixed(2)}${contextLabel}`,
       });
 
       // Incrementar contador de despesas para controlar exibição de anúncios
@@ -396,6 +427,9 @@ export default function Index() {
   const addRecurringExpense = async (data: RecurringExpenseFormData) => {
     if (!user) return;
 
+    // Determinar shared_group_id baseado no contexto atual
+    const sharedGroupId = currentContext.type === 'group' ? currentContext.groupId : null;
+
     try {
     const { data: insertedData, error } = await supabase
       .from("recurring_expenses")
@@ -407,10 +441,12 @@ export default function Index() {
         user_id: user.id,
         category: data.category,
         ...(data.cardId && { card_id: data.cardId }),
+        ...(sharedGroupId && { shared_group_id: sharedGroupId }),
       })
       .select(`
         *,
-        card:cards(id, name, color, card_type)
+        card:cards(id, name, color, card_type),
+        shared_group:shared_groups(id, name, color)
       `)
       .single();
 
@@ -420,9 +456,10 @@ export default function Index() {
       // Agendar notificações para a nova despesa
       await NotificationService.scheduleNotificationsForExpense(insertedData, notificationSettings);
 
+      const contextLabel = currentContext.type === 'group' ? ` (${currentContext.groupName})` : '';
       toast({
         title: "Despesa fixa adicionada!",
-        description: `${data.description} - R$ ${data.amount.toFixed(2)} (Dia ${data.dayOfMonth})`,
+        description: `${data.description} - R$ ${data.amount.toFixed(2)} (Dia ${data.dayOfMonth})${contextLabel}`,
       });
     } catch (error) {
       console.error("Error adding recurring expense:", error);
@@ -955,6 +992,9 @@ export default function Index() {
             <ThemeToggle />
           </div>
         </div>
+
+        {/* Context Selector */}
+        <ContextSelector />
 
         {/* Navegador de Mês */}
         <MonthNavigator

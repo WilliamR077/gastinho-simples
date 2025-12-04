@@ -85,6 +85,7 @@ export function ContextSelector() {
                 {groups.map((group) => (
                   <DropdownMenuItem 
                     key={group.id}
+                    onClick={() => setGroupContext(group.id)}
                     className={`flex items-center gap-2 cursor-pointer ${
                       currentContext.groupId === group.id ? 'bg-accent' : ''
                     }`}
@@ -95,10 +96,7 @@ export function ContextSelector() {
                     >
                       <Users className="h-2.5 w-2.5 text-white" />
                     </div>
-                    <span 
-                      className="flex-1 truncate"
-                      onClick={() => setGroupContext(group.id)}
-                    >
+                    <span className="flex-1 truncate">
                       {group.name}
                     </span>
                     <Button
