@@ -13,7 +13,7 @@ import { CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Expense, PaymentMethod, ExpenseCategory, categoryLabels, ExpenseFormData } from "@/types/expense";
-import { cn } from "@/lib/utils";
+import { cn, parseLocalDate, normalizeToLocalDate } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { Card as CardType } from "@/types/card";
 
@@ -92,7 +92,7 @@ export function ExpenseEditDialog({ expense, open, onOpenChange, onSave }: Expen
         description: expense.description,
         amount: Number(expense.amount),
         paymentMethod: expense.payment_method as PaymentMethod,
-        expenseDate: new Date(expense.expense_date),
+        expenseDate: parseLocalDate(expense.expense_date),
         category: expense.category as ExpenseCategory,
         cardId: expense.card_id || "",
       });
@@ -265,9 +265,10 @@ export function ExpenseEditDialog({ expense, open, onOpenChange, onSave }: Expen
                       <Calendar
                         mode="single"
                         selected={field.value}
-                        onSelect={field.onChange}
+                        onSelect={(date) => date && field.onChange(normalizeToLocalDate(date))}
                         locale={ptBR}
                         initialFocus
+                        className="pointer-events-auto"
                       />
                     </PopoverContent>
                   </Popover>

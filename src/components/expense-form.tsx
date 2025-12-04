@@ -10,7 +10,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { PlusCircle, CalendarIcon, AlertTriangle } from "lucide-react"
 import { PaymentMethod, ExpenseFormData, ExpenseCategory, categoryLabels, categoryIcons, Expense } from "@/types/expense"
-import { cn } from "@/lib/utils"
+import { cn, normalizeToLocalDate } from "@/lib/utils"
 import { supabase } from "@/integrations/supabase/client"
 import { Card as CardType } from "@/types/card"
 import { BudgetGoal } from "@/types/budget-goal"
@@ -33,7 +33,7 @@ export function ExpenseForm({
   const [description, setDescription] = useState("")
   const [amount, setAmount] = useState("")
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("")
-  const [expenseDate, setExpenseDate] = useState<Date>(new Date())
+  const [expenseDate, setExpenseDate] = useState<Date>(normalizeToLocalDate(new Date()))
   const [installments, setInstallments] = useState("1")
   const [category, setCategory] = useState<ExpenseCategory>("outros")
   const [cardId, setCardId] = useState<string>("")
@@ -164,7 +164,7 @@ export function ExpenseForm({
     setDescription("")
     setAmount("")
     setPaymentMethod("")
-    setExpenseDate(new Date())
+    setExpenseDate(normalizeToLocalDate(new Date()))
     setInstallments("1")
     setCategory("outros")
     setCardId("")
@@ -224,9 +224,10 @@ export function ExpenseForm({
                 <Calendar
                   mode="single"
                   selected={expenseDate}
-                  onSelect={(date) => date && setExpenseDate(date)}
+                  onSelect={(date) => date && setExpenseDate(normalizeToLocalDate(date))}
                   disabled={(date) => date > new Date()}
                   initialFocus
+                  className="pointer-events-auto"
                 />
               </PopoverContent>
             </Popover>
