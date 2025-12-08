@@ -5,8 +5,28 @@ const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const internalApiSecret = Deno.env.get("INTERNAL_API_SECRET")!;
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-internal-secret',
+};
+
 serve(async (req) => {
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
   try {
+    // Validate internal API secret
+    const providedSecret = req.headers.get("x-internal-secret");
+    if (providedSecret !== internalApiSecret) {
+      console.error("Invalid or missing internal API secret");
+      return new Response(
+        JSON.stringify({ success: false, error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     console.log("Iniciando verificação de lembretes de despesas recorrentes...");
 
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -113,7 +133,7 @@ serve(async (req) => {
         sent: notificationsSent,
       }),
       {
-        headers: { "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
       }
     );
@@ -125,7 +145,7 @@ serve(async (req) => {
         error: error.message,
       }),
       {
-        headers: { "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 500,
       }
     );
