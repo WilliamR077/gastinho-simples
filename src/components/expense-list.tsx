@@ -2,8 +2,9 @@ import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { CreditCard, Smartphone, Trash2, Receipt, MoreVertical, Pencil, Users } from "lucide-react"
+import { CreditCard, Smartphone, Trash2, Receipt, MoreVertical, Pencil, Users, User } from "lucide-react"
 import { Expense, categoryLabels, categoryIcons } from "@/types/expense"
+import { SharedGroupMember } from "@/types/shared-group"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
   Pagination,
@@ -19,7 +20,16 @@ interface ExpenseListProps {
   expenses: Expense[]
   onDeleteExpense: (id: string) => void
   onEditExpense: (expense: Expense) => void
+  groupMembers?: SharedGroupMember[]
+  isGroupContext?: boolean
 }
+
+// Helper para obter nome de exibição do usuário (parte antes do @)
+const getUserDisplayName = (userId: string, members: SharedGroupMember[]): string | null => {
+  const member = members.find(m => m.user_id === userId);
+  if (!member?.user_email) return null;
+  return member.user_email.split('@')[0];
+};
 
 const paymentMethodConfig = {
   pix: { label: "PIX", icon: Smartphone, color: "bg-success text-success-foreground" },
@@ -35,7 +45,7 @@ const parseLocalDate = (dateString: string) => {
   return new Date(year, month - 1, day);
 };
 
-export function ExpenseList({ expenses, onDeleteExpense, onEditExpense }: ExpenseListProps) {
+export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, groupMembers = [], isGroupContext = false }: ExpenseListProps) {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
 
@@ -136,6 +146,16 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense }: Expens
                     </Badge>
                   )}
                 </div>
+                
+                {/* Linha 5 - Criador da despesa (apenas em contexto de grupo) */}
+                {isGroupContext && expense.user_id && groupMembers.length > 0 && (
+                  <div className="text-xs text-muted-foreground mt-1 ml-11 flex items-center gap-1">
+                    <User className="h-3 w-3" />
+                    <span>
+                      Adicionado por: {getUserDisplayName(expense.user_id, groupMembers) || 'Desconhecido'}
+                    </span>
+                  </div>
+                )}
                 
                 {/* Linha 5 - Preço (esquerda) e Menu (direita) */}
                 <div className="flex items-center justify-between mt-3">

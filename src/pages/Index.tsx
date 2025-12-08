@@ -18,6 +18,7 @@ import { useSharedGroups } from "@/hooks/use-shared-groups";
 
 import { Expense, PaymentMethod, ExpenseFormData, ExpenseCategory, categoryLabels } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
+import { SharedGroupMember } from "@/types/shared-group";
 import { RecurringExpenseList } from "@/components/recurring-expense-list";
 import { RecurringExpenseFormData } from "@/types/recurring-expense";
 import { BudgetGoal } from "@/types/budget-goal";
@@ -72,7 +73,8 @@ export default function Index() {
 
   const { user, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
-  const { currentContext, groups } = useSharedGroups();
+  const { currentContext, groups, getGroupMembers } = useSharedGroups();
+  const [groupMembers, setGroupMembers] = useState<SharedGroupMember[]>([]);
 
   // Redirect to auth if not logged in
   useEffect(() => {
@@ -80,6 +82,20 @@ export default function Index() {
       navigate("/auth");
     }
   }, [user, authLoading, navigate]);
+
+  // Load group members when context changes to a group
+  useEffect(() => {
+    if (currentContext.type === 'group' && currentContext.groupId) {
+      getGroupMembers(currentContext.groupId).then(members => {
+        setGroupMembers(members);
+      }).catch(err => {
+        console.error("Error loading group members:", err);
+        setGroupMembers([]);
+      });
+    } else {
+      setGroupMembers([]);
+    }
+  }, [currentContext, getGroupMembers]);
 
   // Initialize notifications when recurring expenses are loaded
   useEffect(() => {
@@ -1088,6 +1104,8 @@ export default function Index() {
               expenses={filteredExpenses}
               onDeleteExpense={deleteExpense}
               onEditExpense={handleEditExpense}
+              groupMembers={groupMembers}
+              isGroupContext={currentContext.type === 'group'}
             />
           </TabsContent>
 
