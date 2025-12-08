@@ -10,7 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { CalendarIcon, AlertTriangle, Users, User } from "lucide-react";
 import { PaymentMethod, ExpenseFormData, ExpenseCategory, categoryLabels, categoryIcons, Expense } from "@/types/expense";
-import { cn } from "@/lib/utils";
+import { cn, normalizeToLocalDate, parseLocalDate } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { Card as CardType } from "@/types/card";
 import { BudgetGoal } from "@/types/budget-goal";
@@ -39,7 +39,7 @@ export function ExpenseFormSheet({
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
-  const [expenseDate, setExpenseDate] = useState<Date>(new Date());
+  const [expenseDate, setExpenseDate] = useState<Date>(normalizeToLocalDate(new Date()));
   const [installments, setInstallments] = useState("1");
   const [category, setCategory] = useState<ExpenseCategory>("outros");
   const [cardId, setCardId] = useState<string>("");
@@ -110,10 +110,10 @@ export function ExpenseFormSheet({
     if (!relevantGoal) return null;
 
     const monthlyExpenses = expenses.filter((expense) => {
-      const expenseDate = new Date(expense.expense_date);
+      const expDate = parseLocalDate(expense.expense_date);
       return (
-        expenseDate.getMonth() === currentMonth &&
-        expenseDate.getFullYear() === currentYear
+        expDate.getMonth() === currentMonth &&
+        expDate.getFullYear() === currentYear
       );
     });
 
@@ -160,7 +160,7 @@ export function ExpenseFormSheet({
     setDescription("");
     setAmount("");
     setPaymentMethod("");
-    setExpenseDate(new Date());
+    setExpenseDate(normalizeToLocalDate(new Date()));
     setInstallments("1");
     setCategory("outros");
     setCardId("");
@@ -287,7 +287,7 @@ export function ExpenseFormSheet({
                 <Calendar
                   mode="single"
                   selected={expenseDate}
-                  onSelect={(date) => date && setExpenseDate(date)}
+                  onSelect={(date) => date && setExpenseDate(normalizeToLocalDate(date))}
                   disabled={(date) => date > new Date()}
                   initialFocus
                   className={cn("p-3 pointer-events-auto")}

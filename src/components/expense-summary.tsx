@@ -7,6 +7,7 @@ import { Card as CardType } from "@/types/card"
 import { BudgetGoal } from "@/types/budget-goal"
 import { Progress } from "@/components/ui/progress"
 import { useMemo } from "react"
+import { parseLocalDate } from "@/lib/utils"
 
 interface ExpenseSummaryProps {
   expenses: Expense[]
@@ -152,7 +153,7 @@ export function ExpenseSummary({
 
   const monthlyExpenses = useMemo(() => {
     return expenses.filter((expense) => {
-      const expenseDate = new Date(expense.expense_date);
+      const expenseDate = parseLocalDate(expense.expense_date);
       return (
         expenseDate.getMonth() === currentMonth &&
         expenseDate.getFullYear() === currentYear
