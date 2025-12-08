@@ -36,6 +36,7 @@ import { NotificationService } from "@/services/notification-service";
 import { App as CapacitorApp } from '@capacitor/app';
 import { adMobService } from "@/services/admob-service";
 import { startOfMonth, endOfMonth } from "date-fns";
+import { parseLocalDate } from "@/lib/utils";
 
 export default function Index() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -796,13 +797,13 @@ export default function Index() {
     return expenses.filter(expense => {
       // Filtro de data início
       if (filters.startDate) {
-        const expenseDate = new Date(expense.expense_date);
+        const expenseDate = parseLocalDate(expense.expense_date);
         if (expenseDate < filters.startDate) return false;
       }
 
       // Filtro de data fim
       if (filters.endDate) {
-        const expenseDate = new Date(expense.expense_date);
+        const expenseDate = parseLocalDate(expense.expense_date);
         if (expenseDate > filters.endDate) return false;
       }
 
@@ -903,7 +904,7 @@ export default function Index() {
     const currentYear = new Date().getFullYear();
 
     const monthlyExpenses = expenses.filter((expense) => {
-      const expenseDate = new Date(expense.expense_date);
+      const expenseDate = parseLocalDate(expense.expense_date);
       return (
         expenseDate.getMonth() === currentMonth &&
         expenseDate.getFullYear() === currentYear

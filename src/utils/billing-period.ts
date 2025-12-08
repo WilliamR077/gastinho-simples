@@ -1,4 +1,5 @@
 import { startOfMonth, endOfMonth, addMonths, format } from "date-fns";
+import { parseLocalDate } from "@/lib/utils";
 
 interface CreditCardConfig {
   opening_day: number;
@@ -67,7 +68,7 @@ export function generateBillingPeriods(
   expenses
     .filter(expense => expense.payment_method === "credit")
     .forEach(expense => {
-      const expenseDate = new Date(expense.expense_date);
+      const expenseDate = parseLocalDate(expense.expense_date);
       const period = calculateBillingPeriod(expenseDate, config);
       periods.add(period);
     });
@@ -104,7 +105,7 @@ export function filterExpensesByBillingPeriod(
   return expenses.filter(expense => {
     if (expense.payment_method !== "credit") return false;
     
-    const expenseDate = new Date(expense.expense_date);
+    const expenseDate = parseLocalDate(expense.expense_date);
     const expensePeriod = calculateBillingPeriod(expenseDate, config);
     
     return expensePeriod === billingPeriod;

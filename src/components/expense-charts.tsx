@@ -10,6 +10,7 @@ import { BarChart3, TrendingUp, PieChartIcon, Crown, Lock } from "lucide-react";
 import { useSubscription } from "@/hooks/use-subscription";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { parseLocalDate } from "@/lib/utils";
 
 interface ExpenseChartsProps {
   expenses: Expense[];
@@ -65,10 +66,10 @@ export function ExpenseCharts({
       filtered = filterExpensesByBillingPeriod(filtered, billingPeriod, creditCardConfig) as Expense[];
     } else {
       if (startDate) {
-        filtered = filtered.filter(e => new Date(e.expense_date) >= startDate);
+        filtered = filtered.filter(e => parseLocalDate(e.expense_date) >= startDate);
       }
       if (endDate) {
-        filtered = filtered.filter(e => new Date(e.expense_date) <= endDate);
+        filtered = filtered.filter(e => parseLocalDate(e.expense_date) <= endDate);
       }
     }
 
@@ -176,7 +177,7 @@ export function ExpenseCharts({
       const monthEnd = endOfMonth(month);
 
       const monthExpenses = filteredExpenses.filter(expense => {
-        const expenseDate = new Date(expense.expense_date);
+        const expenseDate = parseLocalDate(expense.expense_date);
         return expenseDate >= monthStart && expenseDate <= monthEnd;
       });
 

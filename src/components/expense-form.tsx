@@ -10,7 +10,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { PlusCircle, CalendarIcon, AlertTriangle } from "lucide-react"
 import { PaymentMethod, ExpenseFormData, ExpenseCategory, categoryLabels, categoryIcons, Expense } from "@/types/expense"
-import { cn, normalizeToLocalDate } from "@/lib/utils"
+import { cn, normalizeToLocalDate, parseLocalDate } from "@/lib/utils"
 import { supabase } from "@/integrations/supabase/client"
 import { Card as CardType } from "@/types/card"
 import { BudgetGoal } from "@/types/budget-goal"
@@ -90,10 +90,10 @@ export function ExpenseForm({
 
     // Calcular gastos atuais
     const monthlyExpenses = expenses.filter((expense) => {
-      const expenseDate = new Date(expense.expense_date);
+      const expDate = parseLocalDate(expense.expense_date);
       return (
-        expenseDate.getMonth() === currentMonth &&
-        expenseDate.getFullYear() === currentYear
+        expDate.getMonth() === currentMonth &&
+        expDate.getFullYear() === currentYear
       );
     });
 

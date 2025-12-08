@@ -9,6 +9,7 @@ import { categoryLabels, categoryIcons } from "@/types/expense";
 import { AlertTriangle, TrendingDown, TrendingUp, MoreVertical, Pencil, Trash2, AlertCircle, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { parseLocalDate } from "@/lib/utils";
 
 type AlertLevel = 'safe' | 'warning' | 'caution' | 'danger' | 'critical';
 
@@ -84,7 +85,7 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, onDelete, o
 
   const monthlyExpenses = useMemo(() => {
     return expenses.filter((expense) => {
-      const expenseDate = new Date(expense.expense_date);
+      const expenseDate = parseLocalDate(expense.expense_date);
       return (
         expenseDate.getMonth() === currentMonth &&
         expenseDate.getFullYear() === currentYear

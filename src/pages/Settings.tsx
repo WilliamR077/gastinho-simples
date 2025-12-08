@@ -14,6 +14,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
 import { categoryLabels } from "@/types/expense";
+import { parseLocalDate } from "@/lib/utils";
 import { sanitizeErrorMessage } from "@/utils/security";
 import { Capacitor } from "@capacitor/core";
 import { Filesystem, Directory } from "@capacitor/filesystem";
@@ -109,7 +110,7 @@ export default function Settings() {
 
       // Prepare data for Excel
       const expensesData = expenses?.map((exp) => ({
-        Data: format(new Date(exp.expense_date), "dd/MM/yyyy"),
+        Data: format(parseLocalDate(exp.expense_date), "dd/MM/yyyy"),
         Descrição: exp.description,
         Valor: `R$ ${Number(exp.amount).toFixed(2)}`,
         Categoria: categoryLabels[exp.category as keyof typeof categoryLabels] || exp.category,
@@ -232,7 +233,7 @@ export default function Settings() {
         yPosition += 5;
 
         const expensesData = expenses.map((exp) => [
-          format(new Date(exp.expense_date), "dd/MM/yyyy"),
+          format(parseLocalDate(exp.expense_date), "dd/MM/yyyy"),
           exp.description,
           `R$ ${Number(exp.amount).toFixed(2)}`,
           categoryLabels[exp.category as keyof typeof categoryLabels] || exp.category,
