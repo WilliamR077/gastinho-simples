@@ -61,61 +61,48 @@ export function CategorySelector({
 
   return (
     <>
-      <div className={`flex items-center gap-2 ${className}`}>
-        <Select 
-          value={value} 
-          onValueChange={onValueChange}
-          open={isOpen}
-          onOpenChange={setIsOpen}
-        >
-          <SelectTrigger className={`flex-1 ${triggerClassName}`}>
-            <SelectValue placeholder="Selecione a categoria">
-              {getDisplayValue()}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent className="bg-background">
-            {useStaticCategories ? (
-              // Fallback para categorias estáticas
-              Object.entries(categoryLabels).map(([key, label]) => (
-                <SelectItem key={key} value={key}>
-                  {categoryIcons[key as ExpenseCategory]} {label}
-                </SelectItem>
-              ))
-            ) : (
-              // Categorias personalizadas do usuário
-              activeCategories.map((category) => (
-                <SelectItem key={category.id} value={category.id}>
-                  {category.icon} {category.name}
-                </SelectItem>
-              ))
-            )}
-            
-            <Separator className="my-1" />
-            
-            <div className="p-1">
-              <Button 
-                variant="ghost" 
-                className="w-full justify-start text-sm h-9"
-                onClick={handleOpenManager}
-              >
-                <Settings className="h-4 w-4 mr-2" />
-                Gerenciar categorias...
-              </Button>
-            </div>
-          </SelectContent>
-        </Select>
-
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          onClick={() => setShowManager(true)}
-          className="shrink-0"
-          title="Gerenciar categorias"
-        >
-          <Settings className="h-4 w-4" />
-        </Button>
-      </div>
+      <Select 
+        value={value} 
+        onValueChange={onValueChange}
+        open={isOpen}
+        onOpenChange={setIsOpen}
+      >
+        <SelectTrigger className={`${className} ${triggerClassName}`}>
+          <SelectValue placeholder="Selecione a categoria">
+            {getDisplayValue()}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent className="bg-background">
+          {useStaticCategories ? (
+            // Fallback para categorias estáticas
+            Object.entries(categoryLabels).map(([key, label]) => (
+              <SelectItem key={key} value={key}>
+                {categoryIcons[key as ExpenseCategory]} {label}
+              </SelectItem>
+            ))
+          ) : (
+            // Categorias personalizadas do usuário
+            activeCategories.map((category) => (
+              <SelectItem key={category.id} value={category.id}>
+                {category.icon} {category.name}
+              </SelectItem>
+            ))
+          )}
+          
+          <Separator className="my-1" />
+          
+          <div className="p-1">
+            <Button 
+              variant="ghost" 
+              className="w-full justify-start text-sm h-9"
+              onClick={handleOpenManager}
+            >
+              <Settings className="h-4 w-4 mr-2" />
+              Gerenciar categorias...
+            </Button>
+          </div>
+        </SelectContent>
+      </Select>
 
       <CategoryManager open={showManager} onOpenChange={setShowManager} />
     </>

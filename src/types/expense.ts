@@ -16,7 +16,7 @@ export interface ExpenseFormData {
   paymentMethod: PaymentMethod;
   expenseDate: Date;
   installments?: number;
-  category: ExpenseCategory;
+  category?: ExpenseCategory;
   cardId?: string;
   sharedGroupId?: string | null;
   categoryId?: string;

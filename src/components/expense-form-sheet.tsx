@@ -9,7 +9,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { CalendarIcon, AlertTriangle, Users, User } from "lucide-react";
-import { PaymentMethod, ExpenseFormData, ExpenseCategory, categoryLabels, categoryIcons, Expense } from "@/types/expense";
+import { PaymentMethod, ExpenseFormData, Expense } from "@/types/expense";
 import { cn, normalizeToLocalDate, parseLocalDate } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { Card as CardType } from "@/types/card";
@@ -18,6 +18,8 @@ import { RecurringExpense } from "@/types/recurring-expense";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useSharedGroups } from "@/hooks/use-shared-groups";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { CategorySelector } from "@/components/category-selector";
+import { useCategories } from "@/hooks/use-categories";
 
 interface ExpenseFormSheetProps {
   open: boolean;
@@ -41,10 +43,12 @@ export function ExpenseFormSheet({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
   const [expenseDate, setExpenseDate] = useState<Date>(normalizeToLocalDate(new Date()));
   const [installments, setInstallments] = useState("1");
-  const [category, setCategory] = useState<ExpenseCategory>("outros");
+  const [category, setCategory] = useState<string>("");
   const [cardId, setCardId] = useState<string>("");
   const [cards, setCards] = useState<CardType[]>([]);
   const [selectedDestination, setSelectedDestination] = useState<string>("personal");
+  
+  const { activeCategories } = useCategories();
 
   const { groups, currentContext } = useSharedGroups();
 
@@ -162,7 +166,7 @@ export function ExpenseFormSheet({
     setPaymentMethod("");
     setExpenseDate(normalizeToLocalDate(new Date()));
     setInstallments("1");
-    setCategory("outros");
+    setCategory(activeCategories.find(c => c.name.toLowerCase() === "outros")?.id || activeCategories[0]?.id || "");
     setCardId("");
     // Mantém o destino baseado no contexto atual
     if (currentContext.type === "group" && currentContext.groupId) {
@@ -192,7 +196,7 @@ export function ExpenseFormSheet({
       paymentMethod,
       expenseDate,
       installments: installmentCount,
-      category,
+      categoryId: category,
       cardId: cardId || undefined,
       sharedGroupId: selectedDestination !== "personal" ? selectedDestination : undefined,
     });
@@ -298,18 +302,10 @@ export function ExpenseFormSheet({
 
           <div className="space-y-2">
             <Label htmlFor="sheet-category">Categoria</Label>
-            <Select value={category} onValueChange={(value: ExpenseCategory) => setCategory(value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione a categoria" />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(categoryLabels).map(([key, label]) => (
-                  <SelectItem key={key} value={key}>
-                    {categoryIcons[key as ExpenseCategory]} {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <CategorySelector
+              value={category}
+              onValueChange={setCategory}
+            />
 
             {budgetWarning && (
               <Alert
