@@ -5,7 +5,7 @@ import { ptBR } from "date-fns/locale";
 
 interface MonthNavigatorProps {
   currentDate: Date;
-  onMonthChange: (startDate: Date, endDate: Date) => void;
+  onMonthChange: (startDate: Date, endDate?: Date) => void;
 }
 
 export function MonthNavigator({ currentDate, onMonthChange }: MonthNavigatorProps) {

@@ -4,20 +4,38 @@ import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Expense } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
-import { ExpenseCharts } from "@/components/expense-charts";
-import { ExpenseFilters, ExpenseFilters as ExpenseFiltersType } from "@/components/expense-filters";
+import { Card } from "@/types/card";
+import { ReportsAccordion } from "@/components/reports-accordion";
+import { MonthNavigator } from "@/components/month-navigator";
+import { ContextSelector } from "@/components/context-selector";
+import { useSharedGroups } from "@/hooks/use-shared-groups";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, LogOut, User } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { generateBillingPeriods } from "@/utils/billing-period";
+import { startOfMonth, endOfMonth } from "date-fns";
+
+interface GroupMember {
+  user_id: string;
+  user_email: string;
+  role: string;
+}
 
 const Reports = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const { currentContext, getGroupMembers } = useSharedGroups();
+  
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>([]);
-  const [filters, setFilters] = useState<ExpenseFiltersType>({});
-  const [creditCardConfig, setCreditCardConfig] = useState<{ opening_day: number; closing_day: number } | null>(null);
+  const [cards, setCards] = useState<Card[]>([]);
+  const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
+  
+  // Estado para navegação de mês
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const startDate = startOfMonth(currentDate);
+  const endDate = endOfMonth(currentDate);
+
+  const isGroupContext = currentContext.type === 'group';
 
   useEffect(() => {
     if (!user) {
@@ -27,17 +45,38 @@ const Reports = () => {
     
     fetchExpenses();
     fetchRecurringExpenses();
-    fetchCreditCardConfig();
-  }, [user, navigate]);
+    fetchCards();
+  }, [user, navigate, currentContext]);
+
+  // Buscar membros do grupo quando em contexto de grupo
+  useEffect(() => {
+    const fetchGroupMembers = async () => {
+      if (isGroupContext && currentContext.groupId) {
+        const members = await getGroupMembers(currentContext.groupId);
+        setGroupMembers(members as GroupMember[]);
+      } else {
+        setGroupMembers([]);
+      }
+    };
+    
+    fetchGroupMembers();
+  }, [isGroupContext, currentContext.groupId, getGroupMembers]);
 
   const fetchExpenses = async () => {
     if (!user) return;
 
-    const { data, error } = await supabase
+    let query = supabase
       .from("expenses")
       .select("*")
-      .eq("user_id", user.id)
       .order("expense_date", { ascending: false });
+
+    if (isGroupContext && currentContext.groupId) {
+      query = query.eq("shared_group_id", currentContext.groupId);
+    } else {
+      query = query.eq("user_id", user.id).is("shared_group_id", null);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error("Error fetching expenses:", error);
@@ -50,12 +89,19 @@ const Reports = () => {
   const fetchRecurringExpenses = async () => {
     if (!user) return;
 
-    const { data, error } = await supabase
+    let query = supabase
       .from("recurring_expenses")
       .select("*")
-      .eq("user_id", user.id)
       .eq("is_active", true)
       .order("created_at", { ascending: false });
+
+    if (isGroupContext && currentContext.groupId) {
+      query = query.eq("shared_group_id", currentContext.groupId);
+    } else {
+      query = query.eq("user_id", user.id).is("shared_group_id", null);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error("Error fetching recurring expenses:", error);
@@ -65,31 +111,31 @@ const Reports = () => {
     setRecurringExpenses(data || []);
   };
 
-  const fetchCreditCardConfig = async () => {
+  const fetchCards = async () => {
     if (!user) return;
 
     const { data, error } = await supabase
-      .from("credit_card_configs")
+      .from("cards")
       .select("*")
       .eq("user_id", user.id)
-      .maybeSingle();
+      .eq("is_active", true)
+      .order("name", { ascending: true });
 
     if (error) {
-      console.error("Error fetching credit card config:", error);
+      console.error("Error fetching cards:", error);
       return;
     }
 
-    setCreditCardConfig(data);
+    setCards(data || []);
   };
 
-  const billingPeriods = useMemo(() => {
-    if (!creditCardConfig) return [];
-    return generateBillingPeriods(expenses, creditCardConfig);
-  }, [expenses, creditCardConfig]);
+  const handleMonthChange = (newStartDate: Date) => {
+    setCurrentDate(newStartDate);
+  };
 
   return (
     <div className="min-h-screen bg-background pb-16">
-      <header className="border-b bg-card/50 backdrop-blur">
+      <header className="border-b bg-card/50 backdrop-blur sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-4">
@@ -102,7 +148,7 @@ const Reports = () => {
                 Voltar
               </Button>
               <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-                Relatórios e Gráficos
+                Relatórios
               </h1>
             </div>
             <div className="flex items-center gap-2">
@@ -130,26 +176,26 @@ const Reports = () => {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8">
-        {/* Filtros */}
-        <div className="mb-8">
-          <ExpenseFilters 
-            filters={filters}
-            onFiltersChange={setFilters}
-            billingPeriods={billingPeriods}
-          />
-        </div>
+      {/* Seletor de contexto (Pessoal / Grupo) */}
+      <ContextSelector />
 
-        {/* Gráficos */}
-        <ExpenseCharts 
-          expenses={expenses} 
+      {/* Navegador de mês */}
+      <div className="container mx-auto px-4">
+        <MonthNavigator 
+          currentDate={currentDate}
+          onMonthChange={handleMonthChange}
+        />
+      </div>
+
+      <main className="container mx-auto px-4 py-4">
+        <ReportsAccordion 
+          expenses={expenses}
           recurringExpenses={recurringExpenses}
-          billingPeriod={filters.billingPeriod}
-          startDate={filters.startDate}
-          endDate={filters.endDate}
-          creditCardConfig={creditCardConfig || undefined}
-          paymentMethod={filters.paymentMethod}
-          category={filters.category}
+          cards={cards}
+          startDate={startDate}
+          endDate={endDate}
+          isGroupContext={isGroupContext}
+          groupMembers={groupMembers}
         />
       </main>
     </div>
