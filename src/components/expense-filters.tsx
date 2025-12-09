@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { FilterX, ChevronDown } from "lucide-react";
-import { PaymentMethod, ExpenseCategory, categoryLabels, categoryIcons } from "@/types/expense";
+import { PaymentMethod } from "@/types/expense";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { Card as CardType } from "@/types/card";
@@ -19,7 +19,6 @@ export interface ExpenseFilters {
   maxAmount?: number;
   paymentMethod?: PaymentMethod;
   billingPeriod?: string;
-  category?: ExpenseCategory;
   cardId?: string;
 }
 
@@ -137,27 +136,6 @@ export function ExpenseFilters({ filters, onFiltersChange, billingPeriods = [] }
                   value={localFilters.maxAmount || ''}
                   onChange={(e) => handleFilterChange('maxAmount', parseFloat(e.target.value) || undefined)}
                 />
-              </div>
-
-              {/* Filtro de Categoria */}
-              <div className="space-y-2">
-                <Label>Categoria</Label>
-                <Select
-                  value={localFilters.category || 'all'}
-                  onValueChange={(value) => handleFilterChange('category', value === 'all' ? undefined : value as ExpenseCategory)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todas as categorias" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas as categorias</SelectItem>
-                    {Object.entries(categoryLabels).map(([key, label]) => (
-                      <SelectItem key={key} value={key}>
-                        {categoryIcons[key as ExpenseCategory]} {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
 
               {/* Filtro de Forma de Pagamento */}

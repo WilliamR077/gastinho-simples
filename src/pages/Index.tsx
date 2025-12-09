@@ -328,7 +328,7 @@ export default function Index() {
     if (!user) return;
 
     try {
-      const { description, amount, paymentMethod, expenseDate, installments = 1, category, cardId, sharedGroupId } = data;
+      const { description, amount, paymentMethod, expenseDate, installments = 1, categoryId, cardId, sharedGroupId } = data;
 
       // Format date to YYYY-MM-DD in local timezone (avoid UTC conversion issues)
       const formatDateLocal = (date: Date) => {
@@ -353,7 +353,7 @@ export default function Index() {
           expense_date: formatDateLocal(expenseDate),
           total_installments: 1,
           installment_number: 1,
-          category,
+          ...(categoryId && { category_id: categoryId }),
           ...(cardId && { card_id: cardId }),
           ...(groupId && { shared_group_id: groupId }),
         })
@@ -385,7 +385,7 @@ export default function Index() {
             total_installments: installments,
             installment_number: i,
             installment_group_id: installmentGroupId,
-            category,
+            ...(categoryId && { category_id: categoryId }),
             ...(cardId && { card_id: cardId }),
             ...(groupId && { shared_group_id: groupId }),
           });
@@ -467,7 +467,7 @@ export default function Index() {
         payment_method: data.paymentMethod,
         day_of_month: data.dayOfMonth,
         user_id: user.id,
-        category: data.category,
+        ...(data.categoryId && { category_id: data.categoryId }),
         ...(data.cardId && { card_id: data.cardId }),
         ...(groupId && { shared_group_id: groupId }),
       })
@@ -852,11 +852,6 @@ export default function Index() {
         if (expense.payment_method !== filters.paymentMethod) return false;
       }
 
-      // Filtro de categoria
-      if (filters.category) {
-        if (expense.category !== filters.category) return false;
-      }
-
       // Filtro de cartão
       if (filters.cardId && expense.card_id !== filters.cardId) {
         return false;
@@ -897,26 +892,6 @@ export default function Index() {
           description: `Exibindo apenas ${method === 'pix' ? 'PIX' : method === 'debit' ? 'Débito' : 'Crédito'}`,
         });
         return { ...prev, paymentMethod: method };
-      }
-    });
-  };
-
-  const handleCategoryFilter = (category: ExpenseCategory) => {
-    setFilters(prev => {
-      const isActive = prev.category === category;
-      if (isActive) {
-        const { category: _, ...rest } = prev;
-        toast({
-          title: "Filtro removido",
-          description: "Exibindo todas as categorias",
-        });
-        return rest;
-      } else {
-        toast({
-          title: "Filtro aplicado",
-          description: `Exibindo apenas ${categoryLabels[category]}`,
-        });
-        return { ...prev, category };
       }
     });
   };
@@ -1065,8 +1040,6 @@ export default function Index() {
             startDate={filters.startDate}
             endDate={filters.endDate}
             creditCardConfig={creditCardConfig || undefined}
-            onCategoryClick={handleCategoryFilter}
-            activeCategory={filters.category}
           />
         </div>
 

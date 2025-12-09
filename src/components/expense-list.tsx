@@ -1,9 +1,9 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { CreditCard, Smartphone, Trash2, Receipt, MoreVertical, Pencil, Users, User } from "lucide-react"
-import { Expense, categoryLabels, categoryIcons } from "@/types/expense"
+import { Expense, categoryLabels, categoryIcons, ExpenseCategory } from "@/types/expense"
 import { SharedGroupMember } from "@/types/shared-group"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
@@ -15,6 +15,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination"
+import { useCategories } from "@/hooks/use-categories"
 
 interface ExpenseListProps {
   expenses: Expense[]
@@ -48,6 +49,7 @@ const parseLocalDate = (dateString: string) => {
 export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, groupMembers = [], isGroupContext = false }: ExpenseListProps) {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
+  const { categories } = useCategories()
 
   const totalPages = Math.ceil(expenses.length / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
@@ -58,6 +60,24 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, groupMem
   if (currentPage > totalPages && totalPages > 0) {
     setCurrentPage(1)
   }
+
+  // Helper para obter ícone e nome da categoria
+  const getCategoryDisplay = (expense: Expense) => {
+    // Primeiro tenta buscar pela category_id (nova forma)
+    if (expense.category_id) {
+      const userCategory = categories.find(c => c.id === expense.category_id);
+      if (userCategory) {
+        return { icon: userCategory.icon, label: userCategory.name };
+      }
+    }
+    
+    // Fallback para categoria antiga (enum)
+    const categoryKey = expense.category as ExpenseCategory;
+    return {
+      icon: categoryIcons[categoryKey] || "📦",
+      label: categoryLabels[categoryKey] || "Outros"
+    };
+  };
 
   if (expenses.length === 0) {
     return (
@@ -85,6 +105,7 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, groupMem
             const config = paymentMethodConfig[expense.payment_method]
             const Icon = config.icon
             const cardColor = expense.card?.color || (expense.payment_method === 'credit' ? '#FFA500' : expense.payment_method === 'debit' ? '#3B82F6' : undefined)
+            const categoryDisplay = getCategoryDisplay(expense)
             
             return (
               <div
@@ -100,7 +121,7 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, groupMem
                     <Icon className="h-4 w-4 text-white" />
                   </div>
                   <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <span className="text-lg shrink-0">{categoryIcons[expense.category]}</span>
+                    <span className="text-lg shrink-0">{categoryDisplay.icon}</span>
                     <p className="font-medium text-foreground truncate">{expense.description}</p>
                     {expense.total_installments > 1 && (
                       <span className="text-sm font-medium text-primary whitespace-nowrap">
@@ -112,7 +133,7 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, groupMem
                 
                 {/* Linha 2 - Categoria e Data da Despesa */}
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2 ml-11">
-                  <span>{categoryLabels[expense.category]}</span>
+                  <span>{categoryDisplay.label}</span>
                   <span>•</span>
                   <span>{parseLocalDate(expense.expense_date).toLocaleDateString('pt-BR')}</span>
                 </div>
