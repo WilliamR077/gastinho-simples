@@ -672,7 +672,7 @@ export default function Index() {
           amount: data.amount,
           payment_method: data.paymentMethod,
           expense_date: formatDateLocal(data.expenseDate),
-          category: data.category,
+          ...(data.categoryId && { category_id: data.categoryId }),
           ...(data.cardId && { card_id: data.cardId }),
         })
         .eq("id", id)
@@ -721,7 +721,7 @@ export default function Index() {
           amount: data.amount,
           payment_method: data.paymentMethod,
           day_of_month: data.dayOfMonth,
-          category: data.category,
+          ...(data.categoryId && { category_id: data.categoryId }),
           ...(data.cardId && { card_id: data.cardId }),
         })
         .eq("id", id)
