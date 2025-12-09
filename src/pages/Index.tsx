@@ -532,9 +532,14 @@ export default function Index() {
 
   const toggleRecurringExpenseActive = async (id: string, isActive: boolean) => {
     try {
+      // Se desativando, definir end_date; se ativando, limpar end_date
+      const updateData = isActive 
+        ? { is_active: isActive, end_date: null }
+        : { is_active: isActive, end_date: new Date().toISOString().split('T')[0] };
+      
       const { error } = await supabase
         .from("recurring_expenses")
-        .update({ is_active: isActive })
+        .update(updateData)
         .eq("id", id);
 
       if (error) throw error;
@@ -543,7 +548,9 @@ export default function Index() {
 
       setRecurringExpenses(prev =>
         prev.map(expense =>
-          expense.id === id ? { ...expense, is_active: isActive } : expense
+          expense.id === id 
+            ? { ...expense, is_active: isActive, end_date: isActive ? null : new Date().toISOString().split('T')[0] } 
+            : expense
         )
       );
 

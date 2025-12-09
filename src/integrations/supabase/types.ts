@@ -296,10 +296,12 @@ export type Database = {
           created_at: string
           day_of_month: number
           description: string
+          end_date: string | null
           id: string
           is_active: boolean
           payment_method: Database["public"]["Enums"]["payment_method"]
           shared_group_id: string | null
+          start_date: string | null
           updated_at: string
           user_id: string
         }
@@ -310,10 +312,12 @@ export type Database = {
           created_at?: string
           day_of_month: number
           description: string
+          end_date?: string | null
           id?: string
           is_active?: boolean
           payment_method: Database["public"]["Enums"]["payment_method"]
           shared_group_id?: string | null
+          start_date?: string | null
           updated_at?: string
           user_id: string
         }
@@ -324,10 +328,12 @@ export type Database = {
           created_at?: string
           day_of_month?: number
           description?: string
+          end_date?: string | null
           id?: string
           is_active?: boolean
           payment_method?: Database["public"]["Enums"]["payment_method"]
           shared_group_id?: string | null
+          start_date?: string | null
           updated_at?: string
           user_id?: string
         }

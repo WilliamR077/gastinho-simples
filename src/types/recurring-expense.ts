@@ -9,6 +9,9 @@ export type RecurringExpense = Database["public"]["Tables"]["recurring_expenses"
     card_type: string;
   };
   shared_group?: Pick<SharedGroup, 'id' | 'name' | 'color'>;
+  // Campos adicionais da migração (estarão disponíveis após types serem atualizados)
+  start_date?: string | null;
+  end_date?: string | null;
 };
 export type RecurringExpenseInsert = Database["public"]["Tables"]["recurring_expenses"]["Insert"];
 export type PaymentMethod = Database["public"]["Enums"]["payment_method"];
