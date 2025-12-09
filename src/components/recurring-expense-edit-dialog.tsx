@@ -8,16 +8,17 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RecurringExpense, RecurringExpenseFormData } from "@/types/recurring-expense";
-import { categoryLabels } from "@/types/expense";
 import { supabase } from "@/integrations/supabase/client";
 import { Card as CardType } from "@/types/card";
+import { CategorySelector } from "@/components/category-selector";
+import { useCategories } from "@/hooks/use-categories";
 
 const recurringExpenseEditSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
   amount: z.number().positive("Valor deve ser positivo"),
   paymentMethod: z.enum(["pix", "debit", "credit"] as const),
   dayOfMonth: z.number().min(1, "Dia deve ser entre 1 e 31").max(31, "Dia deve ser entre 1 e 31"),
-  category: z.enum(["alimentacao", "transporte", "lazer", "saude", "educacao", "moradia", "vestuario", "servicos", "outros"] as const),
+  categoryId: z.string().min(1, "Categoria é obrigatória"),
   cardId: z.string().optional(),
 });
 
@@ -32,6 +33,7 @@ interface RecurringExpenseEditDialogProps {
 
 export function RecurringExpenseEditDialog({ expense, open, onOpenChange, onSave }: RecurringExpenseEditDialogProps) {
   const [cards, setCards] = useState<CardType[]>([]);
+  const { activeCategories } = useCategories();
 
   const form = useForm<RecurringExpenseEditFormData>({
     resolver: zodResolver(recurringExpenseEditSchema),
@@ -40,7 +42,7 @@ export function RecurringExpenseEditDialog({ expense, open, onOpenChange, onSave
       amount: 0,
       paymentMethod: "pix",
       dayOfMonth: 1,
-      category: "outros",
+      categoryId: "",
       cardId: "",
     },
   });
@@ -82,27 +84,40 @@ export function RecurringExpenseEditDialog({ expense, open, onOpenChange, onSave
 
   // Preencher formulário quando a despesa mudar
   useEffect(() => {
-    if (expense) {
+    if (expense && activeCategories.length > 0) {
+      // Encontrar a categoria pelo category_id ou pelo nome
+      let categoryId = expense.category_id || "";
+      if (!categoryId && expense.category) {
+        const found = activeCategories.find(c => 
+          c.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_") === expense.category
+        );
+        if (found) categoryId = found.id;
+      }
+
       form.reset({
         description: expense.description,
         amount: Number(expense.amount),
         paymentMethod: expense.payment_method,
         dayOfMonth: expense.day_of_month,
-        category: expense.category,
+        categoryId: categoryId,
         cardId: expense.card_id || "",
       });
     }
-  }, [expense, form]);
+  }, [expense, form, activeCategories]);
 
   const handleSubmit = (data: RecurringExpenseEditFormData) => {
     if (!expense) return;
+    
+    const selectedCategory = activeCategories.find(c => c.id === data.categoryId);
+    
     const formData: RecurringExpenseFormData = {
       description: data.description,
       amount: data.amount,
       paymentMethod: data.paymentMethod,
       dayOfMonth: data.dayOfMonth,
-      category: data.category,
+      category: selectedCategory?.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_") as any || "outros",
       cardId: data.cardId || undefined,
+      categoryId: data.categoryId || undefined,
     };
     onSave(expense.id, formData);
     onOpenChange(false);
@@ -152,24 +167,16 @@ export function RecurringExpenseEditDialog({ expense, open, onOpenChange, onSave
 
             <FormField
               control={form.control}
-              name="category"
+              name="categoryId"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Categoria</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione uma categoria" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent className="bg-background">
-                      {Object.entries(categoryLabels).map(([key, label]) => (
-                        <SelectItem key={key} value={key}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormControl>
+                    <CategorySelector
+                      value={field.value}
+                      onValueChange={field.onChange}
+                    />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}

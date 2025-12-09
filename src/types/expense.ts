@@ -19,6 +19,7 @@ export interface ExpenseFormData {
   category: ExpenseCategory;
   cardId?: string;
   sharedGroupId?: string | null;
+  categoryId?: string;
 }
 
 export const categoryLabels: Record<ExpenseCategory, string> = {

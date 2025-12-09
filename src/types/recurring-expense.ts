@@ -25,4 +25,5 @@ export interface RecurringExpenseFormData {
   category: ExpenseCategory;
   cardId?: string;
   sharedGroupId?: string | null;
+  categoryId?: string;
 }
