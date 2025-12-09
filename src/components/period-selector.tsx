@@ -36,7 +36,7 @@ import { ptBR } from "date-fns/locale";
 export type PeriodType = "month" | "year" | "quarter" | "custom" | "all";
 
 interface PeriodSelectorProps {
-  onPeriodChange: (startDate: Date, endDate: Date, periodLabel: string) => void;
+  onPeriodChange: (startDate: Date, endDate: Date, periodLabel: string, periodType: PeriodType) => void;
 }
 
 export function PeriodSelector({ onPeriodChange }: PeriodSelectorProps) {
@@ -52,22 +52,22 @@ export function PeriodSelector({ onPeriodChange }: PeriodSelectorProps) {
       const start = startOfMonth(currentDate);
       const end = endOfMonth(currentDate);
       const label = formatMonthLabel(currentDate);
-      onPeriodChange(start, end, label);
+      onPeriodChange(start, end, label, type);
     } else if (type === "year") {
       const start = startOfYear(currentDate);
       const end = endOfYear(currentDate);
       const label = format(currentDate, "yyyy");
-      onPeriodChange(start, end, label);
+      onPeriodChange(start, end, label, type);
     } else if (type === "quarter") {
       const start = startOfQuarter(currentDate);
       const end = endOfQuarter(currentDate);
       const quarter = getQuarter(currentDate);
       const label = `${quarter}º Trimestre de ${format(currentDate, "yyyy")}`;
-      onPeriodChange(start, end, label);
+      onPeriodChange(start, end, label, type);
     } else if (type === "all") {
       const start = new Date(2000, 0, 1);
       const end = new Date(2099, 11, 31);
-      onPeriodChange(start, end, "Todo o histórico");
+      onPeriodChange(start, end, "Todo o histórico", type);
     }
   };
 
@@ -80,26 +80,26 @@ export function PeriodSelector({ onPeriodChange }: PeriodSelectorProps) {
   const handlePreviousMonth = () => {
     const newDate = subMonths(currentDate, 1);
     setCurrentDate(newDate);
-    onPeriodChange(startOfMonth(newDate), endOfMonth(newDate), formatMonthLabel(newDate));
+    onPeriodChange(startOfMonth(newDate), endOfMonth(newDate), formatMonthLabel(newDate), "month");
   };
 
   const handleNextMonth = () => {
     const newDate = addMonths(currentDate, 1);
     setCurrentDate(newDate);
-    onPeriodChange(startOfMonth(newDate), endOfMonth(newDate), formatMonthLabel(newDate));
+    onPeriodChange(startOfMonth(newDate), endOfMonth(newDate), formatMonthLabel(newDate), "month");
   };
 
   // Year navigation
   const handlePreviousYear = () => {
     const newDate = subYears(currentDate, 1);
     setCurrentDate(newDate);
-    onPeriodChange(startOfYear(newDate), endOfYear(newDate), format(newDate, "yyyy"));
+    onPeriodChange(startOfYear(newDate), endOfYear(newDate), format(newDate, "yyyy"), "year");
   };
 
   const handleNextYear = () => {
     const newDate = addYears(currentDate, 1);
     setCurrentDate(newDate);
-    onPeriodChange(startOfYear(newDate), endOfYear(newDate), format(newDate, "yyyy"));
+    onPeriodChange(startOfYear(newDate), endOfYear(newDate), format(newDate, "yyyy"), "year");
   };
 
   // Quarter navigation
@@ -108,7 +108,7 @@ export function PeriodSelector({ onPeriodChange }: PeriodSelectorProps) {
     setCurrentDate(newDate);
     const quarter = getQuarter(newDate);
     const label = `${quarter}º Trimestre de ${format(newDate, "yyyy")}`;
-    onPeriodChange(startOfQuarter(newDate), endOfQuarter(newDate), label);
+    onPeriodChange(startOfQuarter(newDate), endOfQuarter(newDate), label, "quarter");
   };
 
   const handleNextQuarter = () => {
@@ -116,7 +116,7 @@ export function PeriodSelector({ onPeriodChange }: PeriodSelectorProps) {
     setCurrentDate(newDate);
     const quarter = getQuarter(newDate);
     const label = `${quarter}º Trimestre de ${format(newDate, "yyyy")}`;
-    onPeriodChange(startOfQuarter(newDate), endOfQuarter(newDate), label);
+    onPeriodChange(startOfQuarter(newDate), endOfQuarter(newDate), label, "quarter");
   };
 
   // Custom date selection
@@ -124,7 +124,7 @@ export function PeriodSelector({ onPeriodChange }: PeriodSelectorProps) {
     setCustomStart(date);
     if (date && customEnd) {
       const label = `${format(date, "dd/MM/yyyy")} - ${format(customEnd, "dd/MM/yyyy")}`;
-      onPeriodChange(date, customEnd, label);
+      onPeriodChange(date, customEnd, label, "custom");
     }
   };
 
@@ -132,7 +132,7 @@ export function PeriodSelector({ onPeriodChange }: PeriodSelectorProps) {
     setCustomEnd(date);
     if (customStart && date) {
       const label = `${format(customStart, "dd/MM/yyyy")} - ${format(date, "dd/MM/yyyy")}`;
-      onPeriodChange(customStart, date, label);
+      onPeriodChange(customStart, date, label, "custom");
     }
   };
 

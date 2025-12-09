@@ -6,7 +6,7 @@ import { Expense } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
 import { Card } from "@/types/card";
 import { ReportsAccordion } from "@/components/reports-accordion";
-import { PeriodSelector } from "@/components/period-selector";
+import { PeriodSelector, PeriodType } from "@/components/period-selector";
 import { ContextSelector } from "@/components/context-selector";
 import { useSharedGroups } from "@/hooks/use-shared-groups";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,7 @@ const Reports = () => {
   const [startDate, setStartDate] = useState(startOfMonth(new Date()));
   const [endDate, setEndDate] = useState(endOfMonth(new Date()));
   const [periodLabel, setPeriodLabel] = useState("");
+  const [periodType, setPeriodType] = useState<PeriodType>("month");
 
   const isGroupContext = currentContext.type === 'group';
 
@@ -132,10 +133,11 @@ const Reports = () => {
     setCards(data || []);
   };
 
-  const handlePeriodChange = (newStartDate: Date, newEndDate: Date, label: string) => {
+  const handlePeriodChange = (newStartDate: Date, newEndDate: Date, label: string, type: PeriodType) => {
     setStartDate(newStartDate);
     setEndDate(newEndDate);
     setPeriodLabel(label);
+    setPeriodType(type);
   };
 
   const handleExportPDF = async () => {
@@ -214,6 +216,8 @@ const Reports = () => {
           cards={cards}
           startDate={startDate}
           endDate={endDate}
+          periodType={periodType}
+          periodLabel={periodLabel}
           isGroupContext={isGroupContext}
           groupMembers={groupMembers}
         />
