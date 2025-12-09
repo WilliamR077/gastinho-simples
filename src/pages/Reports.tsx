@@ -10,11 +10,20 @@ import { PeriodSelector, PeriodType } from "@/components/period-selector";
 import { ContextSelector } from "@/components/context-selector";
 import { useSharedGroups } from "@/hooks/use-shared-groups";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Download, Loader2 } from "lucide-react";
+import { ArrowLeft, Download, Loader2, Lock, Crown } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { startOfMonth, endOfMonth } from "date-fns";
 import { exportReportsToPDF } from "@/services/pdf-export-service";
 import { toast } from "sonner";
+import { useSubscription } from "@/hooks/use-subscription";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface GroupMember {
   user_id: string;
@@ -26,12 +35,14 @@ const Reports = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { currentContext, getGroupMembers } = useSharedGroups();
+  const { canExportPdf } = useSubscription();
   
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
   const [isExporting, setIsExporting] = useState(false);
+  const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
   
   // Estado para período selecionado
   const [startDate, setStartDate] = useState(startOfMonth(new Date()));
@@ -141,6 +152,11 @@ const Reports = () => {
   };
 
   const handleExportPDF = async () => {
+    if (!canExportPdf) {
+      setShowUpgradeDialog(true);
+      return;
+    }
+    
     try {
       setIsExporting(true);
       await exportReportsToPDF(
@@ -190,8 +206,10 @@ const Reports = () => {
               >
                 {isExporting ? (
                   <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
-                ) : (
+                ) : canExportPdf ? (
                   <Download className="w-3 h-3 sm:w-4 sm:h-4" />
+                ) : (
+                  <Lock className="w-3 h-3 sm:w-4 sm:h-4" />
                 )}
                 <span className="hidden sm:inline">Exportar PDF</span>
               </Button>
@@ -222,6 +240,48 @@ const Reports = () => {
           groupMembers={groupMembers}
         />
       </main>
+
+      {/* Dialog de Upgrade */}
+      <Dialog open={showUpgradeDialog} onOpenChange={setShowUpgradeDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Crown className="h-5 w-5 text-yellow-500" />
+              Exportar para PDF
+            </DialogTitle>
+            <DialogDescription className="text-left space-y-3 pt-2">
+              <p>
+                A exportação de relatórios em PDF é um recurso Premium.
+              </p>
+              <p className="font-medium">Com o Premium você pode:</p>
+              <ul className="list-disc list-inside space-y-1 text-sm">
+                <li>Exportar relatórios para PDF</li>
+                <li>Ver relatórios de períodos maiores</li>
+                <li>Analisar por ano, trimestre ou período personalizado</li>
+                <li>Ver todo o histórico de gastos</li>
+              </ul>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowUpgradeDialog(false)}
+              className="w-full sm:w-auto"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                setShowUpgradeDialog(false);
+                navigate("/subscription");
+              }}
+              className="w-full sm:w-auto"
+            >
+              Ver Planos
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

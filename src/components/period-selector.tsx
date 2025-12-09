@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Calendar } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar, Lock, Crown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -32,6 +32,16 @@ import {
   getQuarter,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useSubscription } from "@/hooks/use-subscription";
+import { useNavigate } from "react-router-dom";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export type PeriodType = "month" | "year" | "quarter" | "custom" | "all";
 
@@ -39,13 +49,27 @@ interface PeriodSelectorProps {
   onPeriodChange: (startDate: Date, endDate: Date, periodLabel: string, periodType: PeriodType) => void;
 }
 
+const PREMIUM_PERIODS: PeriodType[] = ["year", "quarter", "custom", "all"];
+
 export function PeriodSelector({ onPeriodChange }: PeriodSelectorProps) {
   const [periodType, setPeriodType] = useState<PeriodType>("month");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [customStart, setCustomStart] = useState<Date | undefined>();
   const [customEnd, setCustomEnd] = useState<Date | undefined>();
+  const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
+  
+  const { hasAdvancedReports } = useSubscription();
+  const navigate = useNavigate();
+
+  const isPremiumPeriod = (type: PeriodType) => PREMIUM_PERIODS.includes(type);
 
   const handlePeriodTypeChange = (type: PeriodType) => {
+    // Verificar se é período premium e usuário não tem acesso
+    if (isPremiumPeriod(type) && !hasAdvancedReports) {
+      setShowUpgradeDialog(true);
+      return;
+    }
+    
     setPeriodType(type);
     
     if (type === "month") {
@@ -142,23 +166,44 @@ export function PeriodSelector({ onPeriodChange }: PeriodSelectorProps) {
   };
 
   return (
-    <div className="flex flex-col gap-3 py-4">
-      {/* Period type selector */}
-      <div className="flex items-center justify-center gap-2">
-        <span className="text-sm text-muted-foreground">Período:</span>
-        <Select value={periodType} onValueChange={(v) => handlePeriodTypeChange(v as PeriodType)}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="month">Mês</SelectItem>
-            <SelectItem value="year">Ano</SelectItem>
-            <SelectItem value="quarter">Trimestre</SelectItem>
-            <SelectItem value="custom">Personalizado</SelectItem>
-            <SelectItem value="all">Todo histórico</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+    <>
+      <div className="flex flex-col gap-3 py-4">
+        {/* Period type selector */}
+        <div className="flex items-center justify-center gap-2">
+          <span className="text-sm text-muted-foreground">Período:</span>
+          <Select value={periodType} onValueChange={(v) => handlePeriodTypeChange(v as PeriodType)}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="month">Mês</SelectItem>
+              <SelectItem value="year" className="flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  Ano
+                  {!hasAdvancedReports && <Lock className="h-3 w-3 text-muted-foreground" />}
+                </span>
+              </SelectItem>
+              <SelectItem value="quarter">
+                <span className="flex items-center gap-2">
+                  Trimestre
+                  {!hasAdvancedReports && <Lock className="h-3 w-3 text-muted-foreground" />}
+                </span>
+              </SelectItem>
+              <SelectItem value="custom">
+                <span className="flex items-center gap-2">
+                  Personalizado
+                  {!hasAdvancedReports && <Lock className="h-3 w-3 text-muted-foreground" />}
+                </span>
+              </SelectItem>
+              <SelectItem value="all">
+                <span className="flex items-center gap-2">
+                  Todo histórico
+                  {!hasAdvancedReports && <Lock className="h-3 w-3 text-muted-foreground" />}
+                </span>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
       {/* Month navigator */}
       {periodType === "month" && (
@@ -299,5 +344,49 @@ export function PeriodSelector({ onPeriodChange }: PeriodSelectorProps) {
         </div>
       )}
     </div>
+
+    {/* Dialog de Upgrade */}
+    <Dialog open={showUpgradeDialog} onOpenChange={setShowUpgradeDialog}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Crown className="h-5 w-5 text-yellow-500" />
+            Relatórios Avançados
+          </DialogTitle>
+          <DialogDescription className="text-left space-y-3 pt-2">
+            <p>
+              Que ótimo que você quer ver relatórios de períodos maiores!
+            </p>
+            <p className="font-medium">Com o Premium você pode:</p>
+            <ul className="list-disc list-inside space-y-1 text-sm">
+              <li>Ver relatórios do ano inteiro</li>
+              <li>Analisar por trimestre</li>
+              <li>Definir período personalizado</li>
+              <li>Ver todo o histórico</li>
+              <li>Exportar para PDF</li>
+            </ul>
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="flex-col sm:flex-row gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setShowUpgradeDialog(false)}
+            className="w-full sm:w-auto"
+          >
+            Cancelar
+          </Button>
+          <Button
+            onClick={() => {
+              setShowUpgradeDialog(false);
+              navigate("/subscription");
+            }}
+            className="w-full sm:w-auto"
+          >
+            Ver Planos
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  </>
   );
 }
