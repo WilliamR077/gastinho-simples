@@ -6,11 +6,11 @@ import { Expense } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
 import { Card } from "@/types/card";
 import { ReportsAccordion } from "@/components/reports-accordion";
-import { MonthNavigator } from "@/components/month-navigator";
+import { PeriodSelector } from "@/components/period-selector";
 import { ContextSelector } from "@/components/context-selector";
 import { useSharedGroups } from "@/hooks/use-shared-groups";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, LogOut, User, Download, Loader2 } from "lucide-react";
+import { ArrowLeft, Download, Loader2 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { startOfMonth, endOfMonth } from "date-fns";
 import { exportReportsToPDF } from "@/services/pdf-export-service";
@@ -23,7 +23,7 @@ interface GroupMember {
 }
 
 const Reports = () => {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const { currentContext, getGroupMembers } = useSharedGroups();
   
@@ -33,10 +33,10 @@ const Reports = () => {
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
   const [isExporting, setIsExporting] = useState(false);
   
-  // Estado para navegação de mês
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const startDate = startOfMonth(currentDate);
-  const endDate = endOfMonth(currentDate);
+  // Estado para período selecionado
+  const [startDate, setStartDate] = useState(startOfMonth(new Date()));
+  const [endDate, setEndDate] = useState(endOfMonth(new Date()));
+  const [periodLabel, setPeriodLabel] = useState("");
 
   const isGroupContext = currentContext.type === 'group';
 
@@ -132,8 +132,10 @@ const Reports = () => {
     setCards(data || []);
   };
 
-  const handleMonthChange = (newStartDate: Date) => {
-    setCurrentDate(newStartDate);
+  const handlePeriodChange = (newStartDate: Date, newEndDate: Date, label: string) => {
+    setStartDate(newStartDate);
+    setEndDate(newEndDate);
+    setPeriodLabel(label);
   };
 
   const handleExportPDF = async () => {
@@ -162,7 +164,7 @@ const Reports = () => {
     <div className="min-h-screen bg-background pb-16">
       <header className="border-b bg-card/50 backdrop-blur sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Button
                 variant="ghost"
@@ -192,24 +194,6 @@ const Reports = () => {
                 <span className="hidden sm:inline">Exportar PDF</span>
               </Button>
               <ThemeToggle />
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate("/account")}
-                className="flex items-center gap-2 text-xs sm:text-sm"
-              >
-                <User className="w-3 h-3 sm:w-4 sm:h-4" />
-                <span className="hidden sm:inline">Conta</span>
-              </Button>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={signOut}
-                className="flex items-center gap-2 text-xs sm:text-sm"
-              >
-                <LogOut className="w-3 h-3 sm:w-4 sm:h-4" />
-                <span className="hidden sm:inline">Sair</span>
-              </Button>
             </div>
           </div>
         </div>
@@ -218,12 +202,9 @@ const Reports = () => {
       {/* Seletor de contexto (Pessoal / Grupo) */}
       <ContextSelector />
 
-      {/* Navegador de mês */}
+      {/* Seletor de período */}
       <div className="container mx-auto px-4">
-        <MonthNavigator 
-          currentDate={currentDate}
-          onMonthChange={handleMonthChange}
-        />
+        <PeriodSelector onPeriodChange={handlePeriodChange} />
       </div>
 
       <main className="container mx-auto px-4 py-4">
