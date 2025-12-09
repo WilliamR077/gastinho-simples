@@ -4,11 +4,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { RecurringExpenseFormData, PaymentMethod, ExpenseCategory } from "@/types/recurring-expense"
-import { categoryLabels, categoryIcons } from "@/types/expense"
+import { RecurringExpenseFormData, PaymentMethod } from "@/types/recurring-expense"
 import { Calendar } from "lucide-react"
 import { supabase } from "@/integrations/supabase/client"
 import { Card as CardType } from "@/types/card"
+import { CategorySelector } from "@/components/category-selector"
+import { useCategories } from "@/hooks/use-categories"
 
 interface RecurringExpenseFormProps {
   onAddRecurringExpense: (data: RecurringExpenseFormData) => void
@@ -19,9 +20,10 @@ export function RecurringExpenseForm({ onAddRecurringExpense }: RecurringExpense
   const [amount, setAmount] = useState("")
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("credit")
   const [dayOfMonth, setDayOfMonth] = useState("1")
-  const [category, setCategory] = useState<ExpenseCategory>("outros")
+  const [categoryId, setCategoryId] = useState<string>("")
   const [cardId, setCardId] = useState<string>("")
   const [cards, setCards] = useState<CardType[]>([])
+  const { activeCategories } = useCategories()
 
   useEffect(() => {
     loadCards()
@@ -64,20 +66,23 @@ export function RecurringExpenseForm({ onAddRecurringExpense }: RecurringExpense
       return
     }
 
+    const selectedCategory = activeCategories.find(c => c.id === categoryId);
+
     onAddRecurringExpense({
       description,
       amount: parseFloat(amount),
       paymentMethod,
       dayOfMonth: parseInt(dayOfMonth),
-      category,
-      cardId: cardId || undefined
+      category: selectedCategory?.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_") as any || "outros",
+      cardId: cardId || undefined,
+      categoryId: categoryId || undefined,
     })
 
     setDescription("")
     setAmount("")
     setPaymentMethod("credit")
     setDayOfMonth("1")
-    setCategory("outros")
+    setCategoryId("")
     setCardId("")
   }
 
@@ -134,18 +139,11 @@ export function RecurringExpenseForm({ onAddRecurringExpense }: RecurringExpense
 
           <div className="space-y-2">
             <Label htmlFor="recurring-category">Categoria</Label>
-            <Select value={category} onValueChange={(value) => setCategory(value as ExpenseCategory)}>
-              <SelectTrigger id="recurring-category" className="bg-background/50">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(categoryLabels).map(([key, label]) => (
-                  <SelectItem key={key} value={key}>
-                    {categoryIcons[key as ExpenseCategory]} {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <CategorySelector
+              value={categoryId}
+              onValueChange={setCategoryId}
+              triggerClassName="bg-background/50"
+            />
           </div>
 
           <div className="space-y-2">

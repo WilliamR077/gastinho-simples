@@ -194,6 +194,7 @@ export type Database = {
           amount: number
           card_id: string | null
           category: Database["public"]["Enums"]["expense_category"]
+          category_id: string | null
           created_at: string
           description: string
           expense_date: string
@@ -210,6 +211,7 @@ export type Database = {
           amount: number
           card_id?: string | null
           category?: Database["public"]["Enums"]["expense_category"]
+          category_id?: string | null
           created_at?: string
           description: string
           expense_date?: string
@@ -226,6 +228,7 @@ export type Database = {
           amount?: number
           card_id?: string | null
           category?: Database["public"]["Enums"]["expense_category"]
+          category_id?: string | null
           created_at?: string
           description?: string
           expense_date?: string
@@ -244,6 +247,13 @@ export type Database = {
             columns: ["card_id"]
             isOneToOne: false
             referencedRelation: "cards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "user_categories"
             referencedColumns: ["id"]
           },
           {
@@ -293,6 +303,7 @@ export type Database = {
           amount: number
           card_id: string | null
           category: Database["public"]["Enums"]["expense_category"]
+          category_id: string | null
           created_at: string
           day_of_month: number
           description: string
@@ -309,6 +320,7 @@ export type Database = {
           amount: number
           card_id?: string | null
           category?: Database["public"]["Enums"]["expense_category"]
+          category_id?: string | null
           created_at?: string
           day_of_month: number
           description: string
@@ -325,6 +337,7 @@ export type Database = {
           amount?: number
           card_id?: string | null
           category?: Database["public"]["Enums"]["expense_category"]
+          category_id?: string | null
           created_at?: string
           day_of_month?: number
           description?: string
@@ -343,6 +356,13 @@ export type Database = {
             columns: ["card_id"]
             isOneToOne: false
             referencedRelation: "cards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_expenses_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "user_categories"
             referencedColumns: ["id"]
           },
           {
@@ -467,6 +487,45 @@ export type Database = {
         }
         Relationships: []
       }
+      user_categories: {
+        Row: {
+          color: string | null
+          created_at: string | null
+          display_order: number | null
+          icon: string
+          id: string
+          is_active: boolean | null
+          is_default: boolean | null
+          name: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string | null
+          display_order?: number | null
+          icon?: string
+          id?: string
+          is_active?: boolean | null
+          is_default?: boolean | null
+          name: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string | null
+          display_order?: number | null
+          icon?: string
+          id?: string
+          is_active?: boolean | null
+          is_default?: boolean | null
+          name?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_fcm_tokens: {
         Row: {
           created_at: string
@@ -531,11 +590,19 @@ export type Database = {
         Args: { user_id_param: string }
         Returns: Database["public"]["Enums"]["subscription_tier"]
       }
+      initialize_user_categories: {
+        Args: { user_id_param: string }
+        Returns: undefined
+      }
       is_group_member: {
         Args: { group_id_param: string; user_id_param: string }
         Returns: boolean
       }
       migrate_credit_card_config: { Args: never; Returns: undefined }
+      migrate_expense_categories: {
+        Args: { user_id_param: string }
+        Returns: undefined
+      }
     }
     Enums: {
       budget_goal_type: "monthly_total" | "category"

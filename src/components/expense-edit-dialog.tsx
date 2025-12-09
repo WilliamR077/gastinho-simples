@@ -12,17 +12,19 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Expense, PaymentMethod, ExpenseCategory, categoryLabels, ExpenseFormData } from "@/types/expense";
+import { Expense, PaymentMethod, ExpenseFormData } from "@/types/expense";
 import { cn, parseLocalDate, normalizeToLocalDate } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { Card as CardType } from "@/types/card";
+import { CategorySelector } from "@/components/category-selector";
+import { useCategories } from "@/hooks/use-categories";
 
 const expenseEditSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
   amount: z.number().positive("Valor deve ser positivo"),
   paymentMethod: z.enum(["pix", "debit", "credit"] as const),
   expenseDate: z.date(),
-  category: z.enum(["alimentacao", "transporte", "lazer", "saude", "educacao", "moradia", "vestuario", "servicos", "outros"] as const),
+  categoryId: z.string().min(1, "Categoria é obrigatória"),
   cardId: z.string().optional(),
 });
 
@@ -37,6 +39,7 @@ interface ExpenseEditDialogProps {
 
 export function ExpenseEditDialog({ expense, open, onOpenChange, onSave }: ExpenseEditDialogProps) {
   const [cards, setCards] = useState<CardType[]>([]);
+  const { activeCategories } = useCategories();
 
   const form = useForm<ExpenseEditFormData>({
     resolver: zodResolver(expenseEditSchema),
@@ -45,7 +48,7 @@ export function ExpenseEditDialog({ expense, open, onOpenChange, onSave }: Expen
       amount: 0,
       paymentMethod: "pix",
       expenseDate: new Date(),
-      category: "outros",
+      categoryId: "",
       cardId: "",
     },
   });
@@ -87,27 +90,41 @@ export function ExpenseEditDialog({ expense, open, onOpenChange, onSave }: Expen
 
   // Preencher formulário quando a despesa mudar
   useEffect(() => {
-    if (expense) {
+    if (expense && activeCategories.length > 0) {
+      // Encontrar a categoria pelo category_id ou pelo nome
+      let categoryId = expense.category_id || "";
+      if (!categoryId && expense.category) {
+        // Fallback: tentar encontrar pelo nome da categoria
+        const found = activeCategories.find(c => 
+          c.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_") === expense.category
+        );
+        if (found) categoryId = found.id;
+      }
+
       form.reset({
         description: expense.description,
         amount: Number(expense.amount),
         paymentMethod: expense.payment_method as PaymentMethod,
         expenseDate: parseLocalDate(expense.expense_date),
-        category: expense.category as ExpenseCategory,
+        categoryId: categoryId,
         cardId: expense.card_id || "",
       });
     }
-  }, [expense, form]);
+  }, [expense, form, activeCategories]);
 
   const handleSubmit = (data: ExpenseEditFormData) => {
     if (!expense) return;
+    
+    const selectedCategory = activeCategories.find(c => c.id === data.categoryId);
+    
     const formData: ExpenseFormData = {
       description: data.description,
       amount: data.amount,
       paymentMethod: data.paymentMethod,
       expenseDate: data.expenseDate,
-      category: data.category,
+      category: selectedCategory?.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_") as any || "outros",
       cardId: data.cardId || undefined,
+      categoryId: data.categoryId || undefined,
     };
     onSave(expense.id, formData);
     onOpenChange(false);
@@ -157,24 +174,16 @@ export function ExpenseEditDialog({ expense, open, onOpenChange, onSave }: Expen
 
             <FormField
               control={form.control}
-              name="category"
+              name="categoryId"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Categoria</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione uma categoria" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent className="bg-background">
-                      {Object.entries(categoryLabels).map(([key, label]) => (
-                        <SelectItem key={key} value={key}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormControl>
+                    <CategorySelector
+                      value={field.value}
+                      onValueChange={field.onChange}
+                    />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}

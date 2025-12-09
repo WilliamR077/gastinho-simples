@@ -9,13 +9,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { PlusCircle, CalendarIcon, AlertTriangle } from "lucide-react"
-import { PaymentMethod, ExpenseFormData, ExpenseCategory, categoryLabels, categoryIcons, Expense } from "@/types/expense"
+import { PaymentMethod, ExpenseFormData, Expense } from "@/types/expense"
 import { cn, normalizeToLocalDate, parseLocalDate } from "@/lib/utils"
 import { supabase } from "@/integrations/supabase/client"
 import { Card as CardType } from "@/types/card"
 import { BudgetGoal } from "@/types/budget-goal"
 import { RecurringExpense } from "@/types/recurring-expense"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { CategorySelector } from "@/components/category-selector"
+import { useCategories } from "@/hooks/use-categories"
 
 interface ExpenseFormProps {
   onAddExpense: (data: ExpenseFormData) => void;
@@ -35,8 +37,9 @@ export function ExpenseForm({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("")
   const [expenseDate, setExpenseDate] = useState<Date>(normalizeToLocalDate(new Date()))
   const [installments, setInstallments] = useState("1")
-  const [category, setCategory] = useState<ExpenseCategory>("outros")
+  const [categoryId, setCategoryId] = useState<string>("")
   const [cardId, setCardId] = useState<string>("")
+  const { activeCategories } = useCategories()
   const [cards, setCards] = useState<CardType[]>([])
 
   useEffect(() => {
@@ -73,19 +76,19 @@ export function ExpenseForm({
     });
   };
 
+  // Encontrar a categoria selecionada para verificação de orçamento
+  const selectedCategory = activeCategories.find(c => c.id === categoryId);
+
   const budgetWarning = useMemo(() => {
-    if (!category) return null;
+    if (!categoryId || !selectedCategory) return null;
 
     const currentMonth = new Date().getMonth();
     const currentYear = new Date().getFullYear();
 
-    // Buscar meta para a categoria ou meta mensal total
-    const categoryGoal = budgetGoals.find(
-      g => g.type === "category" && g.category === category
-    );
+    // Buscar meta mensal total (por enquanto, categorias personalizadas não têm metas específicas)
     const monthlyGoal = budgetGoals.find(g => g.type === "monthly_total");
 
-    const relevantGoal = categoryGoal || monthlyGoal;
+    const relevantGoal = monthlyGoal;
     if (!relevantGoal) return null;
 
     // Calcular gastos atuais
@@ -103,13 +106,6 @@ export function ExpenseForm({
     if (relevantGoal.type === "monthly_total") {
       totalSpent = monthlyExpenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
       totalSpent += activeRecurringExpenses.reduce((sum, re) => sum + Number(re.amount), 0);
-    } else if (relevantGoal.type === "category" && relevantGoal.category) {
-      totalSpent = monthlyExpenses
-        .filter((exp) => exp.category === relevantGoal.category)
-        .reduce((sum, exp) => sum + Number(exp.amount), 0);
-      totalSpent += activeRecurringExpenses
-        .filter((re) => re.category === relevantGoal.category)
-        .reduce((sum, re) => sum + Number(re.amount), 0);
     }
 
     const limit = Number(relevantGoal.limit_amount);
@@ -121,13 +117,13 @@ export function ExpenseForm({
         percentage,
         remaining,
         limit,
-        goalType: relevantGoal.type === "monthly_total" ? "mensal" : "de categoria",
+        goalType: "mensal",
         isOver: remaining < 0,
       };
     }
 
     return null;
-  }, [category, budgetGoals, expenses, recurringExpenses]);
+  }, [categoryId, selectedCategory, budgetGoals, expenses, recurringExpenses]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("pt-BR", {
@@ -156,8 +152,9 @@ export function ExpenseForm({
       paymentMethod,
       expenseDate,
       installments: installmentCount,
-      category,
-      cardId: cardId || undefined
+      category: selectedCategory?.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_") as any || "outros",
+      cardId: cardId || undefined,
+      categoryId: categoryId || undefined,
     })
     
     // Reset form
@@ -166,7 +163,7 @@ export function ExpenseForm({
     setPaymentMethod("")
     setExpenseDate(normalizeToLocalDate(new Date()))
     setInstallments("1")
-    setCategory("outros")
+    setCategoryId("")
     setCardId("")
   }
 
@@ -235,18 +232,11 @@ export function ExpenseForm({
           
           <div className="space-y-2">
             <Label htmlFor="category">Categoria</Label>
-            <Select value={category} onValueChange={(value: ExpenseCategory) => setCategory(value)}>
-              <SelectTrigger className="transition-all duration-300 focus:shadow-elegant">
-                <SelectValue placeholder="Selecione a categoria" />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(categoryLabels).map(([key, label]) => (
-                  <SelectItem key={key} value={key}>
-                    {categoryIcons[key as ExpenseCategory]} {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <CategorySelector
+              value={categoryId}
+              onValueChange={setCategoryId}
+              triggerClassName="transition-all duration-300 focus:shadow-elegant"
+            />
 
             {budgetWarning && (
               <Alert className={`mt-2 ${budgetWarning.isOver ? 'border-destructive bg-destructive/10' : 'border-orange-500 bg-orange-500/10'}`}>
