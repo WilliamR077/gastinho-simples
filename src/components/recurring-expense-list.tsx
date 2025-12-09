@@ -4,8 +4,9 @@ import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { CreditCard, Smartphone, Trash2, Calendar, MoreVertical, Pencil } from "lucide-react"
 import { RecurringExpense } from "@/types/recurring-expense"
-import { categoryLabels, categoryIcons } from "@/types/expense"
+import { categoryLabels, categoryIcons, ExpenseCategory } from "@/types/expense"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { useCategories } from "@/hooks/use-categories"
 
 interface RecurringExpenseListProps {
   expenses: RecurringExpense[]
@@ -21,6 +22,26 @@ const paymentMethodConfig = {
 }
 
 export function RecurringExpenseList({ expenses, onDeleteExpense, onToggleActive, onEditRecurringExpense }: RecurringExpenseListProps) {
+  const { categories } = useCategories()
+
+  // Helper para obter ícone e nome da categoria
+  const getCategoryDisplay = (expense: RecurringExpense) => {
+    // Primeiro tenta buscar pela category_id (nova forma)
+    if (expense.category_id) {
+      const userCategory = categories.find(c => c.id === expense.category_id);
+      if (userCategory) {
+        return { icon: userCategory.icon, label: userCategory.name };
+      }
+    }
+    
+    // Fallback para categoria antiga (enum)
+    const categoryKey = expense.category as ExpenseCategory;
+    return {
+      icon: categoryIcons[categoryKey] || "📦",
+      label: categoryLabels[categoryKey] || "Outros"
+    };
+  };
+
   if (expenses.length === 0) {
     return (
       <Card className="bg-gradient-card border-border/50 shadow-card backdrop-blur-sm">
@@ -46,6 +67,7 @@ export function RecurringExpenseList({ expenses, onDeleteExpense, onToggleActive
           {expenses.map((expense) => {
             const config = paymentMethodConfig[expense.payment_method]
             const Icon = config.icon
+            const categoryDisplay = getCategoryDisplay(expense)
             
             // Buscar cor do cartão ou usar cor padrão
             const cardColor = expense.card?.color || (
@@ -69,11 +91,11 @@ export function RecurringExpenseList({ expenses, onDeleteExpense, onToggleActive
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-lg">{categoryIcons[expense.category]}</span>
+                      <span className="text-lg">{categoryDisplay.icon}</span>
                       <p className="font-medium text-foreground truncate">{expense.description}</p>
                     </div>
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-xs sm:text-sm text-muted-foreground">
-                      <span>{categoryLabels[expense.category]}</span>
+                      <span>{categoryDisplay.label}</span>
                       <span className="hidden sm:inline">•</span>
                       <span>Cobrança: Dia {expense.day_of_month}</span>
                       <span className="hidden sm:inline">•</span>

@@ -20,7 +20,7 @@ export function CategorySelector({
   className,
   triggerClassName 
 }: CategorySelectorProps) {
-  const { activeCategories, loading } = useCategories();
+  const { activeCategories, loading, refresh } = useCategories();
   const [showManager, setShowManager] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
 
@@ -28,6 +28,14 @@ export function CategorySelector({
     setIsOpen(false);
     // Pequeno delay para fechar o select antes de abrir o manager
     setTimeout(() => setShowManager(true), 100);
+  };
+
+  // Recarrega categorias quando o manager fecha
+  const handleManagerClose = (open: boolean) => {
+    setShowManager(open);
+    if (!open) {
+      refresh();
+    }
   };
 
   // Se ainda está carregando ou não tem categorias personalizadas, usar as estáticas
@@ -104,7 +112,7 @@ export function CategorySelector({
         </SelectContent>
       </Select>
 
-      <CategoryManager open={showManager} onOpenChange={setShowManager} />
+      <CategoryManager open={showManager} onOpenChange={handleManagerClose} />
     </>
   );
 }

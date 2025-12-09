@@ -4,8 +4,9 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { TrendingUp, ChevronDown } from "lucide-react"
 import { Expense } from "@/types/expense"
 import { RecurringExpense } from "@/types/recurring-expense"
-import { categoryLabels, categoryIcons, ExpenseCategory } from "@/types/expense"
-import { isWithinInterval, parseISO } from "date-fns"
+import { isWithinInterval } from "date-fns"
+import { useCategories } from "@/hooks/use-categories"
+import { UserCategory } from "@/types/user-category"
 
 interface CategorySummaryProps {
   expenses: Expense[]
@@ -17,8 +18,8 @@ interface CategorySummaryProps {
     opening_day: number
     closing_day: number
   }
-  onCategoryClick?: (category: ExpenseCategory) => void
-  activeCategory?: ExpenseCategory
+  onCategoryClick?: (categoryId: string) => void
+  activeCategory?: string
 }
 
 export function CategorySummary({
@@ -33,23 +34,35 @@ export function CategorySummary({
 }: CategorySummaryProps) {
 
   const [isOpen, setIsOpen] = useState(false)
+  const { categories } = useCategories()
+
+  // Helper para obter categoria por ID ou fallback
+  const getCategoryInfo = (categoryId: string | null, categoryEnum: string): { id: string; name: string; icon: string } => {
+    if (categoryId) {
+      const userCategory = categories.find(c => c.id === categoryId);
+      if (userCategory) {
+        return { id: userCategory.id, name: userCategory.name, icon: userCategory.icon };
+      }
+    }
+    // Fallback para categoria antiga
+    const fallbackCategory = categories.find(c => c.name.toLowerCase() === categoryEnum.replace('ao', 'ão').toLowerCase() || 
+      c.name.toLowerCase() === categoryEnum.toLowerCase());
+    if (fallbackCategory) {
+      return { id: fallbackCategory.id, name: fallbackCategory.name, icon: fallbackCategory.icon };
+    }
+    return { id: categoryEnum, name: categoryEnum, icon: "📦" };
+  };
 
   // Calculate totals by category from regular expenses
-  const categoryTotals: Record<ExpenseCategory, number> = {
-    alimentacao: 0,
-    transporte: 0,
-    lazer: 0,
-    saude: 0,
-    educacao: 0,
-    moradia: 0,
-    vestuario: 0,
-    servicos: 0,
-    outros: 0
-  }
+  const categoryTotals: Record<string, { total: number; name: string; icon: string }> = {};
 
   expenses.forEach(expense => {
-    categoryTotals[expense.category] += Number(expense.amount)
-  })
+    const catInfo = getCategoryInfo(expense.category_id, expense.category);
+    if (!categoryTotals[catInfo.id]) {
+      categoryTotals[catInfo.id] = { total: 0, name: catInfo.name, icon: catInfo.icon };
+    }
+    categoryTotals[catInfo.id].total += Number(expense.amount);
+  });
 
   // Add recurring expenses if they're within the filter period
   if (recurringExpenses.length > 0) {
@@ -99,17 +112,21 @@ export function CategorySummary({
       }
 
       if (shouldInclude) {
-        categoryTotals[expense.category] += Number(expense.amount)
+        const catInfo = getCategoryInfo(expense.category_id, expense.category);
+        if (!categoryTotals[catInfo.id]) {
+          categoryTotals[catInfo.id] = { total: 0, name: catInfo.name, icon: catInfo.icon };
+        }
+        categoryTotals[catInfo.id].total += Number(expense.amount);
       }
     })
   }
 
   // Sort categories by total (descending) and filter out categories with 0
   const sortedCategories = Object.entries(categoryTotals)
-    .filter(([_, total]) => total > 0)
-    .sort(([, a], [, b]) => b - a)
+    .filter(([_, data]) => data.total > 0)
+    .sort(([, a], [, b]) => b.total - a.total)
 
-  const totalAmount = sortedCategories.reduce((sum, [_, total]) => sum + total, 0)
+  const totalAmount = sortedCategories.reduce((sum, [_, data]) => sum + data.total, 0)
 
   const formatCurrency = (value: number) => {
     return value.toLocaleString('pt-BR', {
@@ -155,26 +172,25 @@ export function CategorySummary({
         <CollapsibleContent>
           <CardContent>
             <div className="space-y-4">
-              {sortedCategories.map(([category, total]) => {
-                const percentage = totalAmount > 0 ? (total / totalAmount) * 100 : 0
-                const categoryKey = category as ExpenseCategory
+              {sortedCategories.map(([categoryId, data]) => {
+                const percentage = totalAmount > 0 ? (data.total / totalAmount) * 100 : 0
 
                 return (
                   <div
-                    key={category}
-                    className={`space-y-2 cursor-pointer hover:bg-muted/50 transition-colors rounded-lg p-2 ${activeCategory === categoryKey ? 'bg-muted ring-2 ring-primary ring-offset-2 ring-offset-background' : ''
+                    key={categoryId}
+                    className={`space-y-2 cursor-pointer hover:bg-muted/50 transition-colors rounded-lg p-2 ${activeCategory === categoryId ? 'bg-muted ring-2 ring-primary ring-offset-2 ring-offset-background' : ''
                       }`}
-                    onClick={() => onCategoryClick?.(categoryKey)}
+                    onClick={() => onCategoryClick?.(categoryId)}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="text-2xl">{categoryIcons[categoryKey]}</span>
+                        <span className="text-2xl">{data.icon}</span>
                         <span className="font-medium text-foreground">
-                          {categoryLabels[categoryKey]}
+                          {data.name}
                         </span>
                       </div>
                       <div className="text-right">
-                        <p className="font-bold text-primary">{formatCurrency(total)}</p>
+                        <p className="font-bold text-primary">{formatCurrency(data.total)}</p>
                         <p className="text-xs text-muted-foreground">{percentage.toFixed(1)}%</p>
                       </div>
                     </div>
