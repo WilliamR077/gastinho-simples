@@ -1,6 +1,6 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Expense } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
@@ -10,9 +10,11 @@ import { MonthNavigator } from "@/components/month-navigator";
 import { ContextSelector } from "@/components/context-selector";
 import { useSharedGroups } from "@/hooks/use-shared-groups";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, LogOut, User } from "lucide-react";
+import { ArrowLeft, LogOut, User, Download, Loader2 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { startOfMonth, endOfMonth } from "date-fns";
+import { exportReportsToPDF } from "@/services/pdf-export-service";
+import { toast } from "sonner";
 
 interface GroupMember {
   user_id: string;
@@ -29,6 +31,7 @@ const Reports = () => {
   const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
+  const [isExporting, setIsExporting] = useState(false);
   
   // Estado para navegação de mês
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -133,6 +136,28 @@ const Reports = () => {
     setCurrentDate(newStartDate);
   };
 
+  const handleExportPDF = async () => {
+    try {
+      setIsExporting(true);
+      await exportReportsToPDF(
+        expenses,
+        recurringExpenses,
+        cards,
+        startDate,
+        endDate,
+        isGroupContext,
+        groupMembers,
+        currentContext.groupName
+      );
+      toast.success("Relatório exportado com sucesso!");
+    } catch (error) {
+      console.error("Error exporting PDF:", error);
+      toast.error("Erro ao exportar relatório");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background pb-16">
       <header className="border-b bg-card/50 backdrop-blur sticky top-0 z-10">
@@ -152,6 +177,20 @@ const Reports = () => {
               </h1>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleExportPDF}
+                disabled={isExporting}
+                className="flex items-center gap-2 text-xs sm:text-sm"
+              >
+                {isExporting ? (
+                  <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
+                ) : (
+                  <Download className="w-3 h-3 sm:w-4 sm:h-4" />
+                )}
+                <span className="hidden sm:inline">Exportar PDF</span>
+              </Button>
               <ThemeToggle />
               <Button
                 variant="ghost"
