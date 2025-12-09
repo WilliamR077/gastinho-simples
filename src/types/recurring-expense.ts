@@ -22,7 +22,7 @@ export interface RecurringExpenseFormData {
   amount: number;
   paymentMethod: PaymentMethod;
   dayOfMonth: number;
-  category: ExpenseCategory;
+  category?: ExpenseCategory;
   cardId?: string;
   sharedGroupId?: string | null;
   categoryId?: string;

@@ -4,13 +4,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { RecurringExpenseFormData, PaymentMethod, ExpenseCategory } from "@/types/recurring-expense";
-import { categoryLabels, categoryIcons } from "@/types/expense";
+import { RecurringExpenseFormData, PaymentMethod } from "@/types/recurring-expense";
 import { supabase } from "@/integrations/supabase/client";
 import { Card as CardType } from "@/types/card";
 import { useSharedGroups } from "@/hooks/use-shared-groups";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Users, User } from "lucide-react";
+import { CategorySelector } from "@/components/category-selector";
+import { useCategories } from "@/hooks/use-categories";
 
 interface RecurringExpenseFormSheetProps {
   open: boolean;
@@ -27,12 +28,13 @@ export function RecurringExpenseFormSheet({
   const [amount, setAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("credit");
   const [dayOfMonth, setDayOfMonth] = useState("1");
-  const [category, setCategory] = useState<ExpenseCategory>("outros");
+  const [category, setCategory] = useState<string>("");
   const [cardId, setCardId] = useState<string>("");
   const [cards, setCards] = useState<CardType[]>([]);
   const [selectedDestination, setSelectedDestination] = useState<string>("personal");
 
   const { groups, currentContext } = useSharedGroups();
+  const { activeCategories } = useCategories();
 
   // Atualiza o destino selecionado quando o contexto atual muda ou o sheet abre
   useEffect(() => {
@@ -86,7 +88,7 @@ export function RecurringExpenseFormSheet({
     setAmount("");
     setPaymentMethod("credit");
     setDayOfMonth("1");
-    setCategory("outros");
+    setCategory(activeCategories.find(c => c.name.toLowerCase() === "outros")?.id || activeCategories[0]?.id || "");
     setCardId("");
     // Mantém o destino baseado no contexto atual
     if (currentContext.type === "group" && currentContext.groupId) {
@@ -108,7 +110,7 @@ export function RecurringExpenseFormSheet({
       amount: parseFloat(amount),
       paymentMethod,
       dayOfMonth: parseInt(dayOfMonth),
-      category,
+      categoryId: category,
       cardId: cardId || undefined,
       sharedGroupId: selectedDestination !== "personal" ? selectedDestination : undefined,
     });
@@ -200,18 +202,10 @@ export function RecurringExpenseFormSheet({
 
           <div className="space-y-2">
             <Label htmlFor="recurring-sheet-category">Categoria</Label>
-            <Select value={category} onValueChange={(value) => setCategory(value as ExpenseCategory)}>
-              <SelectTrigger id="recurring-sheet-category">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(categoryLabels).map(([key, label]) => (
-                  <SelectItem key={key} value={key}>
-                    {categoryIcons[key as ExpenseCategory]} {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <CategorySelector
+              value={category}
+              onValueChange={setCategory}
+            />
           </div>
 
           <div className="space-y-2">
