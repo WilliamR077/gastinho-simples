@@ -54,6 +54,7 @@ export default function Index() {
   const [creditCardConfig, setCreditCardConfig] = useState<{ opening_day: number; closing_day: number } | null>(null);
   const [notificationSettings, setNotificationSettings] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("expenses");
+  const [activeCategoryFilter, setActiveCategoryFilter] = useState<string | null>(null);
 
   // Estado para o mês atual da navegação
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
@@ -896,6 +897,32 @@ export default function Index() {
     });
   };
 
+  const handleCategoryFilter = (categoryId: string) => {
+    setActiveCategoryFilter(prev => {
+      if (prev === categoryId) {
+        toast({
+          title: "Filtro removido",
+          description: "Exibindo todas as categorias",
+        });
+        return null;
+      } else {
+        toast({
+          title: "Filtro aplicado",
+          description: "Filtrando por categoria selecionada",
+        });
+        return categoryId;
+      }
+    });
+  };
+
+  // Despesas filtradas por categoria
+  const displayedExpenses = useMemo(() => {
+    if (!activeCategoryFilter) return filteredExpenses;
+    return filteredExpenses.filter(e => 
+      e.category_id === activeCategoryFilter || e.category === activeCategoryFilter
+    );
+  }, [filteredExpenses, activeCategoryFilter]);
+
   // Calcular metas em risco
   const goalsAtRisk = useMemo(() => {
     const currentMonth = new Date().getMonth();
@@ -1040,6 +1067,8 @@ export default function Index() {
             startDate={filters.startDate}
             endDate={filters.endDate}
             creditCardConfig={creditCardConfig || undefined}
+            onCategoryClick={handleCategoryFilter}
+            activeCategory={activeCategoryFilter || undefined}
           />
         </div>
 
@@ -1081,7 +1110,7 @@ export default function Index() {
 
           <TabsContent value="expenses">
             <ExpenseList
-              expenses={filteredExpenses}
+              expenses={displayedExpenses}
               onDeleteExpense={deleteExpense}
               onEditExpense={handleEditExpense}
               groupMembers={groupMembers}

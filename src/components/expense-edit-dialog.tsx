@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -40,6 +40,7 @@ interface ExpenseEditDialogProps {
 export function ExpenseEditDialog({ expense, open, onOpenChange, onSave }: ExpenseEditDialogProps) {
   const [cards, setCards] = useState<CardType[]>([]);
   const { activeCategories } = useCategories();
+  const lastExpenseIdRef = useRef<string | null>(null);
 
   const form = useForm<ExpenseEditFormData>({
     resolver: zodResolver(expenseEditSchema),
@@ -90,7 +91,10 @@ export function ExpenseEditDialog({ expense, open, onOpenChange, onSave }: Expen
 
   // Preencher formulário quando a despesa mudar
   useEffect(() => {
-    if (expense && activeCategories.length > 0) {
+    // Só fazer reset se o expense mudou de verdade (diferente ID)
+    if (expense && activeCategories.length > 0 && expense.id !== lastExpenseIdRef.current) {
+      lastExpenseIdRef.current = expense.id;
+      
       // Encontrar a categoria pelo category_id ou pelo nome
       let categoryId = expense.category_id || "";
       if (!categoryId && expense.category) {
@@ -109,6 +113,11 @@ export function ExpenseEditDialog({ expense, open, onOpenChange, onSave }: Expen
         categoryId: categoryId,
         cardId: expense.card_id || "",
       });
+    }
+    
+    // Limpar ref quando fechar o diálogo
+    if (!expense) {
+      lastExpenseIdRef.current = null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expense, activeCategories]);
