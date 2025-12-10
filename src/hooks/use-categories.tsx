@@ -151,6 +151,69 @@ export function useCategories() {
     return updateCategory(id, { is_active: !category.is_active });
   };
 
+  const deleteCategory = async (id: string): Promise<boolean> => {
+    try {
+      const category = categories.find(c => c.id === id);
+      if (!category) return false;
+
+      // Impedir exclusão de "Outros"
+      if (category.name.toLowerCase() === "outros") {
+        toast({
+          title: "Ação não permitida",
+          description: "A categoria 'Outros' não pode ser excluída",
+          variant: "destructive",
+        });
+        return false;
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return false;
+
+      // Buscar categoria "Outros" do usuário
+      const outrosCategory = categories.find(c => c.name.toLowerCase() === "outros");
+
+      if (outrosCategory) {
+        // Migrar despesas para "Outros"
+        await supabase
+          .from("expenses")
+          .update({ category_id: outrosCategory.id })
+          .eq("user_id", user.id)
+          .eq("category_id", id);
+
+        await supabase
+          .from("recurring_expenses")
+          .update({ category_id: outrosCategory.id })
+          .eq("user_id", user.id)
+          .eq("category_id", id);
+      }
+
+      // Excluir categoria
+      const { error } = await supabase
+        .from("user_categories")
+        .delete()
+        .eq("id", id);
+
+      if (error) throw error;
+
+      setCategories(prev => prev.filter(c => c.id !== id));
+      toast({
+        title: "Categoria excluída",
+        description: outrosCategory 
+          ? "Despesas relacionadas foram movidas para 'Outros'" 
+          : "Categoria removida com sucesso",
+      });
+      return true;
+    } catch (error) {
+      console.error("Erro ao excluir categoria:", error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível excluir a categoria",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
   const activeCategories = useMemo(() => categories.filter(c => c.is_active), [categories]);
   const hiddenCategories = useMemo(() => categories.filter(c => !c.is_active), [categories]);
 
@@ -161,6 +224,7 @@ export function useCategories() {
     loading,
     addCategory,
     updateCategory,
+    deleteCategory,
     toggleCategoryVisibility,
     refresh: loadCategories,
   };
