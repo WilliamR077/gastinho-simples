@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { UserCategory, UserCategoryInsert, UserCategoryUpdate } from "@/types/user-category";
 import { useToast } from "@/hooks/use-toast";
@@ -151,8 +151,8 @@ export function useCategories() {
     return updateCategory(id, { is_active: !category.is_active });
   };
 
-  const activeCategories = categories.filter(c => c.is_active);
-  const hiddenCategories = categories.filter(c => !c.is_active);
+  const activeCategories = useMemo(() => categories.filter(c => c.is_active), [categories]);
+  const hiddenCategories = useMemo(() => categories.filter(c => !c.is_active), [categories]);
 
   return {
     categories,
