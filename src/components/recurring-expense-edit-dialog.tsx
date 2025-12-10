@@ -103,7 +103,8 @@ export function RecurringExpenseEditDialog({ expense, open, onOpenChange, onSave
         cardId: expense.card_id || "",
       });
     }
-  }, [expense, form, activeCategories]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expense, activeCategories]);
 
   const handleSubmit = (data: RecurringExpenseEditFormData) => {
     if (!expense) return;
