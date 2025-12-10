@@ -110,7 +110,8 @@ export function ExpenseEditDialog({ expense, open, onOpenChange, onSave }: Expen
         cardId: expense.card_id || "",
       });
     }
-  }, [expense, form, activeCategories]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expense, activeCategories]);
 
   const handleSubmit = (data: ExpenseEditFormData) => {
     if (!expense) return;

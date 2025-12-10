@@ -18,6 +18,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
+import { useCategories } from "@/hooks/use-categories";
 
 interface GroupMember {
   user_id: string;
@@ -74,6 +75,26 @@ export function ReportsAccordion({
 }: ReportsAccordionProps) {
   const { hasAdvancedReports } = useSubscription();
   const navigate = useNavigate();
+  const { categories } = useCategories();
+
+  // Helper para obter info da categoria
+  const getCategoryInfo = (categoryId: string | null | undefined, categoryEnum: ExpenseCategory | null | undefined) => {
+    // Primeiro tentar pelo category_id
+    if (categoryId && categories.length > 0) {
+      const found = categories.find(c => c.id === categoryId);
+      if (found) {
+        return { id: found.id, name: found.name, icon: found.icon };
+      }
+    }
+    
+    // Fallback para o enum antigo
+    if (categoryEnum) {
+      const label = categoryLabels[categoryEnum] || categoryEnum;
+      return { id: categoryEnum, name: label, icon: '📦' };
+    }
+    
+    return { id: 'outros', name: 'Outros', icon: '📦' };
+  };
   
   // Filtrar despesas para o período selecionado
   const filteredExpenses = useMemo(() => {
@@ -154,32 +175,38 @@ export function ReportsAccordion({
       }));
   }, [filteredExpenses, filteredRecurringExpenses, monthsInPeriod, periodType]);
 
-  // Dados para gráfico de pizza - Por categoria
+  // Dados para gráfico de pizza - Por categoria (usando category_id)
   const categoryData = useMemo(() => {
-    const totals: Partial<Record<ExpenseCategory, number>> = {};
+    const totals: Record<string, { name: string; icon: string; value: number }> = {};
 
     filteredExpenses.forEach(expense => {
-      const category = expense.category || 'outros';
-      totals[category] = (totals[category] || 0) + Number(expense.amount);
+      const catInfo = getCategoryInfo(expense.category_id, expense.category);
+      if (!totals[catInfo.id]) {
+        totals[catInfo.id] = { name: catInfo.name, icon: catInfo.icon, value: 0 };
+      }
+      totals[catInfo.id].value += Number(expense.amount);
     });
 
     const recurringMultiplier = periodType === "month" ? 1 : monthsInPeriod;
     filteredRecurringExpenses.forEach(recurring => {
-      const category = recurring.category || 'outros';
-      totals[category] = (totals[category] || 0) + Number(recurring.amount) * recurringMultiplier;
+      const catInfo = getCategoryInfo(recurring.category_id, recurring.category);
+      if (!totals[catInfo.id]) {
+        totals[catInfo.id] = { name: catInfo.name, icon: catInfo.icon, value: 0 };
+      }
+      totals[catInfo.id].value += Number(recurring.amount) * recurringMultiplier;
     });
 
-    const total = Object.values(totals).reduce((sum, value) => sum + value, 0);
+    const total = Object.values(totals).reduce((sum, item) => sum + item.value, 0);
 
-    return Object.entries(totals)
-      .filter(([_, value]) => value > 0)
-      .map(([category, value]) => ({
-        name: categoryLabels[category as ExpenseCategory],
-        value: Number(value.toFixed(2)),
-        percentage: total > 0 ? ((value / total) * 100).toFixed(1) : "0"
+    return Object.values(totals)
+      .filter(item => item.value > 0)
+      .map(item => ({
+        name: `${item.icon} ${item.name}`,
+        value: Number(item.value.toFixed(2)),
+        percentage: total > 0 ? ((item.value / total) * 100).toFixed(1) : "0"
       }))
       .sort((a, b) => b.value - a.value);
-  }, [filteredExpenses, filteredRecurringExpenses, monthsInPeriod, periodType]);
+  }, [filteredExpenses, filteredRecurringExpenses, monthsInPeriod, periodType, categories]);
 
   // Dados para gráfico de pizza - Por cartão
   const cardData = useMemo(() => {
