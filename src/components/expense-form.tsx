@@ -18,6 +18,7 @@ import { RecurringExpense } from "@/types/recurring-expense"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { CategorySelector } from "@/components/category-selector"
 import { useCategories } from "@/hooks/use-categories"
+import { DescriptionAutocomplete } from "@/components/description-autocomplete"
 
 interface ExpenseFormProps {
   onAddExpense: (data: ExpenseFormData) => void;
@@ -179,11 +180,10 @@ export function ExpenseForm({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="description">Descrição</Label>
-            <Input
-              id="description"
-              placeholder="Ex: Almoço, Transporte, Supermercado..."
+            <DescriptionAutocomplete
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={setDescription}
+              placeholder="Ex: Almoço, Transporte, Supermercado..."
               className="transition-all duration-300 focus:shadow-elegant"
             />
           </div>
