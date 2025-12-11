@@ -20,6 +20,7 @@ import { useSharedGroups } from "@/hooks/use-shared-groups";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { CategorySelector } from "@/components/category-selector";
 import { useCategories } from "@/hooks/use-categories";
+import { DescriptionAutocomplete } from "@/components/description-autocomplete";
 
 interface ExpenseFormSheetProps {
   open: boolean;
@@ -249,11 +250,10 @@ export function ExpenseFormSheet({
 
           <div className="space-y-2">
             <Label htmlFor="sheet-description">Descrição</Label>
-            <Input
-              id="sheet-description"
-              placeholder="Ex: Almoço, Transporte, Supermercado..."
+            <DescriptionAutocomplete
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={setDescription}
+              placeholder="Ex: Almoço, Transporte, Supermercado..."
             />
           </div>
 
