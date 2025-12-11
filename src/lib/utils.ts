@@ -45,3 +45,22 @@ export function formatDateToYYYYMMDD(date: Date): string {
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
+
+/**
+ * Formata um valor monetário com opção de ocultar para privacidade.
+ */
+export function formatCurrencyWithVisibility(value: number, isHidden: boolean): string {
+  if (isHidden) return "R$ ***,**";
+  return `R$ ${value.toFixed(2).replace('.', ',')}`;
+}
+
+/**
+ * Formata um valor monetário com localização pt-BR e opção de ocultar.
+ */
+export function formatCurrencyLocaleWithVisibility(value: number, isHidden: boolean): string {
+  if (isHidden) return "R$ ***,**";
+  return value.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  });
+}
