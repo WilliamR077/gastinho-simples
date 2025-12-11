@@ -919,9 +919,6 @@ export default function Index() {
   // Filtrar despesas recorrentes baseado nos filtros aplicados
   const filteredRecurringExpenses = useMemo(() => {
     return recurringExpenses.filter(expense => {
-      // Só incluir ativas
-      if (!expense.is_active) return false;
-
       // Filtro de descrição
       if (filters.description) {
         if (!expense.description.toLowerCase().includes(filters.description.toLowerCase())) {
