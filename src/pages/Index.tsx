@@ -916,6 +916,43 @@ export default function Index() {
     });
   };
 
+  // Filtrar despesas recorrentes baseado nos filtros aplicados
+  const filteredRecurringExpenses = useMemo(() => {
+    return recurringExpenses.filter(expense => {
+      // Só incluir ativas
+      if (!expense.is_active) return false;
+
+      // Filtro de descrição
+      if (filters.description) {
+        if (!expense.description.toLowerCase().includes(filters.description.toLowerCase())) {
+          return false;
+        }
+      }
+
+      // Filtro de valor mínimo
+      if (filters.minAmount !== undefined) {
+        if (expense.amount < filters.minAmount) return false;
+      }
+
+      // Filtro de valor máximo
+      if (filters.maxAmount !== undefined) {
+        if (expense.amount > filters.maxAmount) return false;
+      }
+
+      // Filtro de forma de pagamento
+      if (filters.paymentMethod) {
+        if (expense.payment_method !== filters.paymentMethod) return false;
+      }
+
+      // Filtro de cartão
+      if (filters.cardId && expense.card_id !== filters.cardId) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [recurringExpenses, filters]);
+
   // Despesas filtradas por categoria
   const displayedExpenses = useMemo(() => {
     if (!activeCategoryFilter) return filteredExpenses;
@@ -923,6 +960,14 @@ export default function Index() {
       e.category_id === activeCategoryFilter || e.category === activeCategoryFilter
     );
   }, [filteredExpenses, activeCategoryFilter]);
+
+  // Despesas recorrentes filtradas por categoria
+  const displayedRecurringExpenses = useMemo(() => {
+    if (!activeCategoryFilter) return filteredRecurringExpenses;
+    return filteredRecurringExpenses.filter(e => 
+      e.category_id === activeCategoryFilter || e.category === activeCategoryFilter
+    );
+  }, [filteredRecurringExpenses, activeCategoryFilter]);
 
   // Calcular metas em risco
   const goalsAtRisk = useMemo(() => {
@@ -1064,7 +1109,7 @@ export default function Index() {
         <div className="mb-8">
           <CategorySummary
             expenses={filteredExpenses}
-            recurringExpenses={recurringExpenses}
+            recurringExpenses={filteredRecurringExpenses}
             billingPeriod={filters.billingPeriod}
             startDate={filters.startDate}
             endDate={filters.endDate}
@@ -1077,8 +1122,8 @@ export default function Index() {
         {/* Summary Cards */}
         <div className="mb-8">
           <ExpenseSummary
-            expenses={filteredExpenses}
-            recurringExpenses={recurringExpenses}
+            expenses={displayedExpenses}
+            recurringExpenses={displayedRecurringExpenses}
             billingPeriod={filters.billingPeriod}
             startDate={filters.startDate}
             endDate={filters.endDate}
