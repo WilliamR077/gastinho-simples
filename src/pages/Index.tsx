@@ -27,7 +27,7 @@ import { RemindersButton } from "@/components/reminders-button";
 import { toast } from "@/hooks/use-toast";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ValuesVisibilityToggle } from "@/components/values-visibility-toggle";
-import { BarChart3, CreditCard, Settings } from "lucide-react";
+import { BarChart3, CreditCard, Settings, FilterX } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -969,6 +969,31 @@ export default function Index() {
     );
   }, [filteredRecurringExpenses, activeCategoryFilter]);
 
+  // Verificar se há filtros ativos
+  const hasActiveFilters = useMemo(() => {
+    return !!(
+      filters.description ||
+      filters.minAmount !== undefined ||
+      filters.maxAmount !== undefined ||
+      filters.paymentMethod ||
+      filters.cardId ||
+      activeCategoryFilter
+    );
+  }, [filters, activeCategoryFilter]);
+
+  // Função para limpar todos os filtros
+  const clearAllFilters = () => {
+    setFilters(prev => ({
+      ...prev,
+      description: undefined,
+      minAmount: undefined,
+      maxAmount: undefined,
+      paymentMethod: undefined,
+      cardId: undefined,
+    }));
+    setActiveCategoryFilter(null);
+  };
+
   // Calcular metas em risco
   const goalsAtRisk = useMemo(() => {
     const currentMonth = new Date().getMonth();
@@ -1156,22 +1181,52 @@ export default function Index() {
           </TabsList>
 
           <TabsContent value="expenses">
-            <ExpenseList
-              expenses={displayedExpenses}
-              onDeleteExpense={deleteExpense}
-              onEditExpense={handleEditExpense}
-              groupMembers={groupMembers}
-              isGroupContext={currentContext.type === 'group'}
-            />
+            <div className="space-y-4">
+              {hasActiveFilters && (
+                <div className="flex justify-end">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearAllFilters}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <FilterX className="h-3 w-3 mr-1" />
+                    Limpar filtros
+                  </Button>
+                </div>
+              )}
+              <ExpenseList
+                expenses={displayedExpenses}
+                onDeleteExpense={deleteExpense}
+                onEditExpense={handleEditExpense}
+                groupMembers={groupMembers}
+                isGroupContext={currentContext.type === 'group'}
+              />
+            </div>
           </TabsContent>
 
           <TabsContent value="recurring">
-            <RecurringExpenseList
-              expenses={recurringExpenses}
-              onDeleteExpense={deleteRecurringExpense}
-              onToggleActive={toggleRecurringExpenseActive}
-              onEditRecurringExpense={handleEditRecurringExpense}
-            />
+            <div className="space-y-4">
+              {hasActiveFilters && (
+                <div className="flex justify-end">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearAllFilters}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <FilterX className="h-3 w-3 mr-1" />
+                    Limpar filtros
+                  </Button>
+                </div>
+              )}
+              <RecurringExpenseList
+                expenses={displayedRecurringExpenses}
+                onDeleteExpense={deleteRecurringExpense}
+                onToggleActive={toggleRecurringExpenseActive}
+                onEditRecurringExpense={handleEditRecurringExpense}
+              />
+            </div>
           </TabsContent>
 
           <TabsContent value="goals">
