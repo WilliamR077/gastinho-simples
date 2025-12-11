@@ -16,6 +16,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination"
 import { useCategories } from "@/hooks/use-categories"
+import { useValuesVisibility } from "@/hooks/use-values-visibility"
 
 interface ExpenseListProps {
   expenses: Expense[]
@@ -50,6 +51,10 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, groupMem
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
   const { categories } = useCategories()
+  const { isHidden } = useValuesVisibility()
+
+  const formatCurrency = (value: number) => 
+    isHidden ? "R$ ***,**" : `R$ ${value.toFixed(2).replace('.', ',')}`
 
   const totalPages = Math.ceil(expenses.length / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
@@ -181,7 +186,7 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, groupMem
                 {/* Linha 5 - Preço (esquerda) e Menu (direita) */}
                 <div className="flex items-center justify-between mt-3">
                   <p className="font-bold text-lg text-primary">
-                    R$ {expense.amount.toFixed(2).replace('.', ',')}
+                    {formatCurrency(expense.amount)}
                   </p>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>

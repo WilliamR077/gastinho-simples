@@ -10,6 +10,7 @@ import { AlertTriangle, TrendingDown, TrendingUp, MoreVertical, Pencil, Trash2, 
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { parseLocalDate } from "@/lib/utils";
+import { useValuesVisibility } from "@/hooks/use-values-visibility";
 
 type AlertLevel = 'safe' | 'warning' | 'caution' | 'danger' | 'critical';
 
@@ -73,7 +74,10 @@ interface BudgetProgressProps {
 }
 
 export function BudgetProgress({ goals, expenses, recurringExpenses, onDelete, onEdit }: BudgetProgressProps) {
+  const { isHidden } = useValuesVisibility();
+  
   const formatCurrency = (value: number) => {
+    if (isHidden) return "R$ ***,**";
     return new Intl.NumberFormat("pt-BR", {
       style: "currency",
       currency: "BRL",

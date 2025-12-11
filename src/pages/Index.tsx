@@ -26,6 +26,7 @@ import { BudgetProgress } from "@/components/budget-progress";
 import { RemindersButton } from "@/components/reminders-button";
 import { toast } from "@/hooks/use-toast";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { ValuesVisibilityToggle } from "@/components/values-visibility-toggle";
 import { BarChart3, CreditCard, Settings } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
@@ -1036,6 +1037,7 @@ export default function Index() {
               <span className="hidden sm:inline">Sair</span>
             </Button>
             <RemindersButton recurringExpenses={recurringExpenses} />
+            <ValuesVisibilityToggle />
             <ThemeToggle />
           </div>
         </div>

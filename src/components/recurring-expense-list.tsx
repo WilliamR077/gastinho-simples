@@ -7,6 +7,7 @@ import { RecurringExpense } from "@/types/recurring-expense"
 import { categoryLabels, categoryIcons, ExpenseCategory } from "@/types/expense"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useCategories } from "@/hooks/use-categories"
+import { useValuesVisibility } from "@/hooks/use-values-visibility"
 
 interface RecurringExpenseListProps {
   expenses: RecurringExpense[]
@@ -23,6 +24,10 @@ const paymentMethodConfig = {
 
 export function RecurringExpenseList({ expenses, onDeleteExpense, onToggleActive, onEditRecurringExpense }: RecurringExpenseListProps) {
   const { categories } = useCategories()
+  const { isHidden } = useValuesVisibility()
+
+  const formatCurrency = (value: number) => 
+    isHidden ? "R$ ***,**" : `R$ ${value.toFixed(2).replace('.', ',')}`
 
   // Helper para obter ícone e nome da categoria
   const getCategoryDisplay = (expense: RecurringExpense) => {
@@ -117,7 +122,7 @@ export function RecurringExpenseList({ expenses, onDeleteExpense, onToggleActive
                 
                 <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
                   <p className="font-bold text-base sm:text-lg text-primary whitespace-nowrap">
-                    R$ {expense.amount.toFixed(2).replace('.', ',')}
+                    {formatCurrency(expense.amount)}
                   </p>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>

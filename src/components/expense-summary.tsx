@@ -8,6 +8,7 @@ import { BudgetGoal } from "@/types/budget-goal"
 import { Progress } from "@/components/ui/progress"
 import { useMemo } from "react"
 import { parseLocalDate } from "@/lib/utils"
+import { useValuesVisibility } from "@/hooks/use-values-visibility"
 
 interface ExpenseSummaryProps {
   expenses: Expense[]
@@ -147,9 +148,10 @@ export function ExpenseSummary({
 
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
+  const { isHidden } = useValuesVisibility();
 
   const formatCurrency = (value: number) => 
-    `R$ ${value.toFixed(2).replace('.', ',')}`
+    isHidden ? "R$ ***,**" : `R$ ${value.toFixed(2).replace('.', ',')}`
 
   const monthlyExpenses = useMemo(() => {
     return expenses.filter((expense) => {

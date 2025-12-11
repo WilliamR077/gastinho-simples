@@ -7,6 +7,7 @@ import { RecurringExpense } from "@/types/recurring-expense"
 import { isWithinInterval } from "date-fns"
 import { useCategories } from "@/hooks/use-categories"
 import { UserCategory } from "@/types/user-category"
+import { useValuesVisibility } from "@/hooks/use-values-visibility"
 
 interface CategorySummaryProps {
   expenses: Expense[]
@@ -35,6 +36,7 @@ export function CategorySummary({
 
   const [isOpen, setIsOpen] = useState(false)
   const { categories } = useCategories()
+  const { isHidden } = useValuesVisibility()
 
   // Helper para obter categoria por ID ou fallback
   const getCategoryInfo = (categoryId: string | null, categoryEnum: string): { id: string; name: string; icon: string } => {
@@ -129,6 +131,7 @@ export function CategorySummary({
   const totalAmount = sortedCategories.reduce((sum, [_, data]) => sum + data.total, 0)
 
   const formatCurrency = (value: number) => {
+    if (isHidden) return "R$ ***,**";
     return value.toLocaleString('pt-BR', {
       style: 'currency',
       currency: 'BRL'
