@@ -74,6 +74,12 @@ export default function Index() {
   const [editingBudgetGoal, setEditingBudgetGoal] = useState<BudgetGoal | null>(null);
   const [budgetGoalDialogOpen, setBudgetGoalDialogOpen] = useState(false);
   const [calculatorOpen, setCalculatorOpen] = useState(false);
+  const [calculatorInitialValue, setCalculatorInitialValue] = useState<number | undefined>();
+
+  const handleSendToCalculator = (value: number) => {
+    setCalculatorInitialValue(value);
+    setCalculatorOpen(true);
+  };
 
   const { user, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
@@ -1198,6 +1204,7 @@ export default function Index() {
                 expenses={displayedExpenses}
                 onDeleteExpense={deleteExpense}
                 onEditExpense={handleEditExpense}
+                onSendToCalculator={handleSendToCalculator}
                 groupMembers={groupMembers}
                 isGroupContext={currentContext.type === 'group'}
               />
@@ -1250,7 +1257,11 @@ export default function Index() {
         {/* Calculadora */}
         <CalculatorDrawer
           open={calculatorOpen}
-          onOpenChange={setCalculatorOpen}
+          onOpenChange={(open) => {
+            setCalculatorOpen(open);
+            if (!open) setCalculatorInitialValue(undefined);
+          }}
+          initialValue={calculatorInitialValue}
         />
 
         {/* Sheets de Formulário */}
