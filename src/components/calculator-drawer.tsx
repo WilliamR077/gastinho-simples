@@ -6,38 +6,64 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
-import { Delete } from "lucide-react";
+import { Delete, Plus, History, ChevronDown, ChevronUp } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ScrollArea } from "@/components/ui/scroll-area";
+
+interface HistoryItem {
+  expression: string;
+  result: string;
+}
+
+const HISTORY_STORAGE_KEY = "calculator-history";
+const MAX_HISTORY_ITEMS = 10;
 
 interface CalculatorDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialValue?: number;
+  onCreateExpense?: (value: number) => void;
 }
 
 export function CalculatorDrawer({
   open,
   onOpenChange,
   initialValue,
+  onCreateExpense,
 }: CalculatorDrawerProps) {
   const [display, setDisplay] = useState("0");
   const [previousValue, setPreviousValue] = useState<number | null>(null);
   const [operation, setOperation] = useState<string | null>(null);
   const [waitingForNewValue, setWaitingForNewValue] = useState(false);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
-  // Quando abrir com valor inicial
+  // Carregar histórico do localStorage na montagem
+  useEffect(() => {
+    const saved = localStorage.getItem(HISTORY_STORAGE_KEY);
+    if (saved) {
+      try {
+        setHistory(JSON.parse(saved));
+      } catch {
+        setHistory([]);
+      }
+    }
+  }, []);
+
+  // Salvar histórico no localStorage quando mudar
+  useEffect(() => {
+    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
+  }, [history]);
+
+  // Quando abrir com valor inicial de uma despesa
   useEffect(() => {
     if (open && initialValue !== undefined) {
       setDisplay(formatNumber(initialValue));
       setPreviousValue(null);
       setOperation(null);
       setWaitingForNewValue(false);
-    } else if (open) {
-      // Reset quando abrir sem valor
-      setDisplay("0");
-      setPreviousValue(null);
-      setOperation(null);
-      setWaitingForNewValue(false);
     }
+    // NÃO reseta quando abre sem valor - mantém o estado anterior
   }, [open, initialValue]);
 
   const formatNumber = (num: number): string => {
@@ -104,11 +130,34 @@ export function CalculatorDrawer({
 
     const currentValue = parseDisplay(display);
     const result = calculate(previousValue, currentValue, operation);
+    const resultFormatted = formatNumber(result);
 
-    setDisplay(formatNumber(result));
+    // Adicionar ao histórico
+    const expression = `${formatNumber(previousValue)} ${operation} ${display}`;
+    const newHistoryItem: HistoryItem = {
+      expression,
+      result: resultFormatted,
+    };
+    setHistory((prev) => [newHistoryItem, ...prev].slice(0, MAX_HISTORY_ITEMS));
+
+    setDisplay(resultFormatted);
     setPreviousValue(null);
     setOperation(null);
     setWaitingForNewValue(true);
+  };
+
+  const handleHistoryItemClick = (item: HistoryItem) => {
+    setDisplay(item.result);
+    setPreviousValue(null);
+    setOperation(null);
+    setWaitingForNewValue(true);
+  };
+
+  const handleCreateExpense = () => {
+    const value = parseDisplay(display);
+    if (value > 0 && onCreateExpense) {
+      onCreateExpense(value);
+    }
   };
 
   const handleClear = () => {
@@ -141,6 +190,47 @@ export function CalculatorDrawer({
         </DrawerHeader>
 
         <div className="px-4 space-y-3">
+          {/* Histórico */}
+          {history.length > 0 && (
+            <Collapsible open={historyOpen} onOpenChange={setHistoryOpen}>
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-between text-muted-foreground hover:text-foreground"
+                >
+                  <span className="flex items-center gap-2">
+                    <History className="h-4 w-4" />
+                    Histórico ({history.length})
+                  </span>
+                  {historyOpen ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <ScrollArea className="h-32 rounded-lg bg-muted/50 mt-2">
+                  <div className="p-2 space-y-1">
+                    {history.map((item, index) => (
+                      <button
+                        key={index}
+                        onClick={() => handleHistoryItemClick(item)}
+                        className="w-full text-right p-2 rounded-md hover:bg-muted transition-colors"
+                      >
+                        <span className="text-xs text-muted-foreground block">
+                          {item.expression} =
+                        </span>
+                        <span className="text-sm font-medium">{item.result}</span>
+                      </button>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
+
           {/* Display */}
           <div className="bg-muted rounded-xl p-4 min-h-[80px] flex flex-col justify-end items-end">
             {previousValue !== null && operation && (
@@ -152,6 +242,20 @@ export function CalculatorDrawer({
               {display}
             </span>
           </div>
+
+          {/* Botão Criar Despesa */}
+          {onCreateExpense && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={handleCreateExpense}
+              disabled={parseDisplay(display) <= 0}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Criar despesa com R$ {display}
+            </Button>
+          )}
 
           {/* Teclado */}
           <div className="grid grid-cols-4 gap-2">

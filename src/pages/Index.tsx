@@ -75,10 +75,17 @@ export default function Index() {
   const [budgetGoalDialogOpen, setBudgetGoalDialogOpen] = useState(false);
   const [calculatorOpen, setCalculatorOpen] = useState(false);
   const [calculatorInitialValue, setCalculatorInitialValue] = useState<number | undefined>();
+  const [expenseDefaultAmount, setExpenseDefaultAmount] = useState<number | undefined>();
 
   const handleSendToCalculator = (value: number) => {
     setCalculatorInitialValue(value);
     setCalculatorOpen(true);
+  };
+
+  const handleCreateExpenseFromCalculator = (value: number) => {
+    setExpenseDefaultAmount(value);
+    setCalculatorOpen(false);
+    setExpenseSheetOpen(true);
   };
 
   const { user, loading: authLoading, signOut } = useAuth();
@@ -1263,16 +1270,21 @@ export default function Index() {
             if (!open) setCalculatorInitialValue(undefined);
           }}
           initialValue={calculatorInitialValue}
+          onCreateExpense={handleCreateExpenseFromCalculator}
         />
 
         {/* Sheets de Formulário */}
         <ExpenseFormSheet
           open={expenseSheetOpen}
-          onOpenChange={setExpenseSheetOpen}
+          onOpenChange={(open) => {
+            setExpenseSheetOpen(open);
+            if (!open) setExpenseDefaultAmount(undefined);
+          }}
           onAddExpense={addExpense}
           budgetGoals={budgetGoals}
           expenses={expenses}
           recurringExpenses={recurringExpenses}
+          defaultAmount={expenseDefaultAmount}
         />
 
         <RecurringExpenseFormSheet
