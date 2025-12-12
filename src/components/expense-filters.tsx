@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { PaymentMethod } from "@/types/expense";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { Card as CardType } from "@/types/card";
+import { generateBillingPeriods, CreditCardConfig } from "@/utils/billing-period";
 
 export interface ExpenseFilters {
   startDate?: Date;
@@ -26,9 +27,19 @@ interface ExpenseFiltersProps {
   filters: ExpenseFilters;
   onFiltersChange: (filters: ExpenseFilters) => void;
   billingPeriods?: Array<{ value: string; label: string }>;
+  expenses?: Array<{ expense_date: string; payment_method: string; card_id?: string | null }>;
+  creditCardConfig?: CreditCardConfig | null;
+  cardsConfigMap?: Map<string, CreditCardConfig>;
 }
 
-export function ExpenseFilters({ filters, onFiltersChange, billingPeriods = [] }: ExpenseFiltersProps) {
+export function ExpenseFilters({ 
+  filters, 
+  onFiltersChange, 
+  billingPeriods = [],
+  expenses = [],
+  creditCardConfig,
+  cardsConfigMap
+}: ExpenseFiltersProps) {
   const [localFilters, setLocalFilters] = useState<ExpenseFilters>({
     ...filters,
   });
@@ -67,8 +78,40 @@ export function ExpenseFilters({ filters, onFiltersChange, billingPeriods = [] }
     }
   };
 
+  // Gerar períodos de fatura baseado no cartão selecionado
+  const filteredBillingPeriods = useMemo(() => {
+    // Se tem um cartão selecionado e temos os dados necessários
+    if (localFilters.cardId && expenses.length > 0 && cardsConfigMap) {
+      const selectedCard = cards.find(c => c.id === localFilters.cardId);
+      
+      if (selectedCard && selectedCard.opening_day !== null && selectedCard.closing_day !== null) {
+        // Filtrar despesas apenas do cartão selecionado
+        const cardExpenses = expenses.filter(e => e.card_id === localFilters.cardId);
+        
+        if (cardExpenses.length === 0) return [];
+        
+        // Gerar períodos usando a config do cartão específico
+        const cardConfig: CreditCardConfig = {
+          opening_day: selectedCard.opening_day,
+          closing_day: selectedCard.closing_day,
+        };
+        
+        return generateBillingPeriods(cardExpenses, cardConfig);
+      }
+    }
+    
+    // Se não tem cartão selecionado, usar todos os períodos
+    return billingPeriods;
+  }, [localFilters.cardId, expenses, cards, cardsConfigMap, billingPeriods]);
+
   const handleFilterChange = (key: keyof ExpenseFilters, value: any) => {
     const newFilters = { ...localFilters, [key]: value };
+    
+    // Se mudou o cartão, limpar o filtro de fatura (pois as faturas podem ser diferentes)
+    if (key === 'cardId') {
+      newFilters.billingPeriod = undefined;
+    }
+    
     setLocalFilters(newFilters);
   };
 
@@ -85,6 +128,12 @@ export function ExpenseFilters({ filters, onFiltersChange, billingPeriods = [] }
     setLocalFilters(defaultFilters);
     onFiltersChange(defaultFilters);
   };
+
+  // Verificar se o cartão selecionado é de crédito
+  const selectedCard = localFilters.cardId ? cards.find(c => c.id === localFilters.cardId) : null;
+  const showBillingPeriodFilter = 
+    (filteredBillingPeriods.length > 0) && 
+    (!localFilters.cardId || selectedCard?.card_type === 'credit' || selectedCard?.card_type === 'both');
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -184,10 +233,12 @@ export function ExpenseFilters({ filters, onFiltersChange, billingPeriods = [] }
                 </Select>
               </div>
 
-              {/* Filtro de Fatura do Cartão */}
-              {billingPeriods.length > 0 && (
+              {/* Filtro de Fatura do Cartão - só aparece para cartões de crédito */}
+              {showBillingPeriodFilter && (
                 <div className="space-y-2">
-                  <Label>Fatura do Cartão</Label>
+                  <Label>
+                    {localFilters.cardId ? `Fatura - ${selectedCard?.name}` : 'Fatura do Cartão'}
+                  </Label>
                   <Select
                     value={localFilters.billingPeriod || 'all'}
                     onValueChange={(value) => handleFilterChange('billingPeriod', value === 'all' ? undefined : value)}
@@ -197,7 +248,7 @@ export function ExpenseFilters({ filters, onFiltersChange, billingPeriods = [] }
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todas as faturas</SelectItem>
-                      {billingPeriods.map(period => (
+                      {filteredBillingPeriods.map(period => (
                         <SelectItem key={period.value} value={period.value}>
                           {period.label}
                         </SelectItem>

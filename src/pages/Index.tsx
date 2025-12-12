@@ -1172,6 +1172,9 @@ export default function Index() {
             filters={filters}
             onFiltersChange={setFilters}
             billingPeriods={billingPeriods}
+            expenses={expenses}
+            creditCardConfig={creditCardConfig}
+            cardsConfigMap={cardsConfigMap}
           />
         </div>
 
