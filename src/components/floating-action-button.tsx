@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, X, Receipt, Calendar, Target } from "lucide-react";
+import { Plus, X, Receipt, Calendar, Target, Calculator } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -7,12 +7,14 @@ interface FloatingActionButtonProps {
   onExpenseClick: () => void;
   onRecurringClick: () => void;
   onGoalClick: () => void;
+  onCalculatorClick: () => void;
 }
 
 export function FloatingActionButton({
   onExpenseClick,
   onRecurringClick,
   onGoalClick,
+  onCalculatorClick,
 }: FloatingActionButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -63,6 +65,15 @@ export function FloatingActionButton({
             <span>Despesa</span>
           </Button>
         </div>
+
+        {/* Calculator Button - always visible */}
+        <Button
+          onClick={onCalculatorClick}
+          variant="secondary"
+          className="h-10 w-10 rounded-full shadow-lg"
+        >
+          <Calculator className="h-5 w-5" />
+        </Button>
 
         {/* Main FAB Button */}
         <Button
