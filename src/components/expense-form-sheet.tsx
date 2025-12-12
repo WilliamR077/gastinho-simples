@@ -29,6 +29,7 @@ interface ExpenseFormSheetProps {
   budgetGoals?: BudgetGoal[];
   expenses?: Expense[];
   recurringExpenses?: RecurringExpense[];
+  defaultAmount?: number;
 }
 
 export function ExpenseFormSheet({
@@ -38,6 +39,7 @@ export function ExpenseFormSheet({
   budgetGoals = [],
   expenses = [],
   recurringExpenses = [],
+  defaultAmount,
 }: ExpenseFormSheetProps) {
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
@@ -61,8 +63,12 @@ export function ExpenseFormSheet({
       } else {
         setSelectedDestination("personal");
       }
+      // Preenche o valor se receber defaultAmount
+      if (defaultAmount !== undefined && defaultAmount > 0) {
+        setAmount(defaultAmount.toString());
+      }
     }
-  }, [open, currentContext]);
+  }, [open, currentContext, defaultAmount]);
 
   useEffect(() => {
     if (open) {
