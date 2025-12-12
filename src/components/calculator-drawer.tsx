@@ -56,12 +56,40 @@ export function CalculatorDrawer({
   }, [history]);
 
   // Quando abrir com valor inicial de uma despesa
+  // Usar ref para detectar quando initialValue realmente muda
+  const lastProcessedValue = useState<{ value: number | undefined; timestamp: number }>({ value: undefined, timestamp: 0 })[0];
+  
   useEffect(() => {
     if (open && initialValue !== undefined) {
-      setDisplay(formatNumber(initialValue));
-      setPreviousValue(null);
-      setOperation(null);
-      setWaitingForNewValue(false);
+      // Só processa se o valor realmente mudou (evita reprocessar ao abrir/fechar)
+      const now = Date.now();
+      if (lastProcessedValue.value === initialValue && now - lastProcessedValue.timestamp < 500) {
+        return;
+      }
+      lastProcessedValue.value = initialValue;
+      lastProcessedValue.timestamp = now;
+      
+      const formattedValue = formatNumber(initialValue);
+      
+      if (operation !== null && waitingForNewValue) {
+        // Há operação pendente aguardando segundo operando - adiciona como segundo valor
+        setDisplay(formattedValue);
+        setWaitingForNewValue(false);
+      } else if (operation !== null && !waitingForNewValue) {
+        // Há operação em andamento mas já tem segundo operando - calcula e começa nova operação de soma
+        const currentValue = parseDisplay(display);
+        const result = calculate(previousValue!, currentValue, operation);
+        setPreviousValue(result);
+        setOperation("+");
+        setDisplay(formattedValue);
+        setWaitingForNewValue(false);
+      } else {
+        // Sem operação pendente - comportamento normal
+        setDisplay(formattedValue);
+        setPreviousValue(null);
+        setOperation(null);
+        setWaitingForNewValue(false);
+      }
     }
     // NÃO reseta quando abre sem valor - mantém o estado anterior
   }, [open, initialValue]);
