@@ -2,7 +2,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { CreditCard, Smartphone, Trash2, Receipt, MoreVertical, Pencil, Users, User } from "lucide-react"
+import { CreditCard, Smartphone, Trash2, Receipt, MoreVertical, Pencil, Users, User, Calculator } from "lucide-react"
 import { Expense, categoryLabels, categoryIcons, ExpenseCategory } from "@/types/expense"
 import { SharedGroupMember } from "@/types/shared-group"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -22,6 +22,7 @@ interface ExpenseListProps {
   expenses: Expense[]
   onDeleteExpense: (id: string) => void
   onEditExpense: (expense: Expense) => void
+  onSendToCalculator?: (value: number) => void
   groupMembers?: SharedGroupMember[]
   isGroupContext?: boolean
 }
@@ -47,7 +48,7 @@ const parseLocalDate = (dateString: string) => {
   return new Date(year, month - 1, day);
 };
 
-export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, groupMembers = [], isGroupContext = false }: ExpenseListProps) {
+export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onSendToCalculator, groupMembers = [], isGroupContext = false }: ExpenseListProps) {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
   const { categories } = useCategories()
@@ -183,32 +184,44 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, groupMem
                   </div>
                 )}
                 
-                {/* Linha 5 - Preço (esquerda) e Menu (direita) */}
+                {/* Linha 5 - Preço (esquerda), Calculadora e Menu (direita) */}
                 <div className="flex items-center justify-between mt-3">
                   <p className="font-bold text-lg text-primary">
                     {formatCurrency(expense.amount)}
                   </p>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" side="top" className="bg-background">
-                      <DropdownMenuItem onClick={() => onEditExpense(expense)}>
-                        <Pencil className="mr-2 h-4 w-4" />
-                        Editar
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={() => onDeleteExpense(expense.id)}
-                        className="text-destructive focus:text-destructive"
+                  <div className="flex items-center gap-1">
+                    {onSendToCalculator && (
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 text-muted-foreground hover:text-primary"
+                        onClick={() => onSendToCalculator(expense.amount)}
                       >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Apagar
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                        <Calculator className="h-4 w-4" />
+                      </Button>
+                    )}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" side="top" className="bg-background">
+                        <DropdownMenuItem onClick={() => onEditExpense(expense)}>
+                          <Pencil className="mr-2 h-4 w-4" />
+                          Editar
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => onDeleteExpense(expense.id)}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Apagar
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
               </div>
             )
