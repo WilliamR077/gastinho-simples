@@ -63,7 +63,7 @@ export function ExpenseCharts({
     let filtered = [...expenses];
 
     if (billingPeriod && creditCardConfig) {
-      filtered = filterExpensesByBillingPeriod(filtered, billingPeriod, creditCardConfig) as Expense[];
+      filtered = filterExpensesByBillingPeriod(filtered, billingPeriod, creditCardConfig);
     } else {
       if (startDate) {
         filtered = filtered.filter(e => parseLocalDate(e.expense_date) >= startDate);
