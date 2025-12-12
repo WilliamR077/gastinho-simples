@@ -10,6 +10,7 @@ import { BudgetGoalEditDialog } from "@/components/budget-goal-edit-dialog";
 import { BudgetAlertBanner } from "@/components/budget-alert-banner";
 import { MonthNavigator } from "@/components/month-navigator";
 import { FloatingActionButton } from "@/components/floating-action-button";
+import { CalculatorDrawer } from "@/components/calculator-drawer";
 import { ExpenseFormSheet } from "@/components/expense-form-sheet";
 import { RecurringExpenseFormSheet } from "@/components/recurring-expense-form-sheet";
 import { BudgetGoalFormSheet } from "@/components/budget-goal-form-sheet";
@@ -72,6 +73,7 @@ export default function Index() {
   const [recurringExpenseDialogOpen, setRecurringExpenseDialogOpen] = useState(false);
   const [editingBudgetGoal, setEditingBudgetGoal] = useState<BudgetGoal | null>(null);
   const [budgetGoalDialogOpen, setBudgetGoalDialogOpen] = useState(false);
+  const [calculatorOpen, setCalculatorOpen] = useState(false);
 
   const { user, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
@@ -1242,6 +1244,13 @@ export default function Index() {
           onExpenseClick={() => setExpenseSheetOpen(true)}
           onRecurringClick={() => setRecurringExpenseSheetOpen(true)}
           onGoalClick={() => setBudgetGoalSheetOpen(true)}
+          onCalculatorClick={() => setCalculatorOpen(true)}
+        />
+
+        {/* Calculadora */}
+        <CalculatorDrawer
+          open={calculatorOpen}
+          onOpenChange={setCalculatorOpen}
         />
 
         {/* Sheets de Formulário */}
