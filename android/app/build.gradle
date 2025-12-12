@@ -8,8 +8,8 @@ android {
         applicationId "com.gastinhosimples.app"
         minSdkVersion 23
         targetSdkVersion 35
-        versionCode 17
-        versionName "1.17"
+        versionCode 18
+        versionName "1.18"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
