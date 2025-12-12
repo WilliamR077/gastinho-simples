@@ -34,7 +34,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LogOut, User } from "lucide-react";
-import { generateBillingPeriods, filterExpensesByBillingPeriod } from "@/utils/billing-period";
+import { generateBillingPeriods, filterExpensesByBillingPeriod, CreditCardConfig } from "@/utils/billing-period";
+import { Card as CardType } from "@/types/card";
 import { NotificationService } from "@/services/notification-service";
 import { App as CapacitorApp } from '@capacitor/app';
 import { adMobService } from "@/services/admob-service";
@@ -53,7 +54,8 @@ export default function Index() {
       endDate: endOfMonth(now),
     };
   });
-  const [creditCardConfig, setCreditCardConfig] = useState<{ opening_day: number; closing_day: number } | null>(null);
+  const [creditCardConfig, setCreditCardConfig] = useState<CreditCardConfig | null>(null);
+  const [cards, setCards] = useState<CardType[]>([]);
   const [notificationSettings, setNotificationSettings] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("expenses");
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string | null>(null);
@@ -216,8 +218,24 @@ export default function Index() {
       loadRecurringExpenses();
       loadCreditCardConfig();
       loadBudgetGoals();
+      loadCards();
     }
   }, [user, currentContext]);
+
+  const loadCards = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("cards")
+        .select("*")
+        .eq("user_id", user?.id)
+        .eq("is_active", true);
+
+      if (error) throw error;
+      setCards(data || []);
+    } catch (error) {
+      console.error("Error loading cards:", error);
+    }
+  };
 
   const loadExpenses = async () => {
     try {
@@ -826,11 +844,25 @@ export default function Index() {
     }
   };
 
+  // Criar mapa de configs de cartões
+  const cardsConfigMap = useMemo(() => {
+    const map = new Map<string, CreditCardConfig>();
+    cards.forEach(card => {
+      if (card.opening_day !== null && card.closing_day !== null) {
+        map.set(card.id, {
+          opening_day: card.opening_day,
+          closing_day: card.closing_day,
+        });
+      }
+    });
+    return map;
+  }, [cards]);
+
   // Gerar períodos de faturamento disponíveis
   const billingPeriods = useMemo(() => {
     if (!creditCardConfig) return [];
-    return generateBillingPeriods(expenses, creditCardConfig);
-  }, [expenses, creditCardConfig]);
+    return generateBillingPeriods(expenses, creditCardConfig, cardsConfigMap);
+  }, [expenses, creditCardConfig, cardsConfigMap]);
 
   // Filtrar despesas baseado nos filtros aplicados
   const filteredExpenses = useMemo(() => {
@@ -879,14 +911,15 @@ export default function Index() {
         const billingExpenses = filterExpensesByBillingPeriod(
           [expense],
           filters.billingPeriod,
-          creditCardConfig
+          creditCardConfig,
+          cardsConfigMap
         );
         if (billingExpenses.length === 0) return false;
       }
 
       return true;
     });
-  }, [expenses, filters, creditCardConfig]);
+  }, [expenses, filters, creditCardConfig, cardsConfigMap]);
 
   const handleSignOut = async () => {
     await signOut();

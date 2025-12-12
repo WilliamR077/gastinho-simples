@@ -1,14 +1,19 @@
-import { startOfMonth, endOfMonth, addMonths, format } from "date-fns";
+import { addMonths, format } from "date-fns";
 import { parseLocalDate } from "@/lib/utils";
 
-interface CreditCardConfig {
+export interface CreditCardConfig {
   opening_day: number;
   closing_day: number;
 }
 
 /**
  * Calcula o período de faturamento (mês da fatura) baseado na data do gasto
- * e na configuração do cartão de crédito
+ * e na configuração do cartão de crédito.
+ * 
+ * Exemplo com fechamento dia 29 e abertura dia 30:
+ * - Fatura de Dezembro: abre 30/Nov, fecha 29/Dez, paga em Jan
+ * - Gasto dia 05/Dez → fatura de Dezembro (2024-12)
+ * - Gasto dia 30/Dez → fatura de Janeiro (2025-01)
  */
 export function calculateBillingPeriod(
   expenseDate: Date,
@@ -16,37 +21,34 @@ export function calculateBillingPeriod(
 ): string {
   const { opening_day, closing_day } = config;
   
-  // Data atual do gasto
   const currentDay = expenseDate.getDate();
   const currentMonth = expenseDate.getMonth();
   const currentYear = expenseDate.getFullYear();
   
-  // Se o dia de abertura é maior que o dia de fechamento,
-  // significa que a fatura cruza o mês (ex: abertura dia 2, fechamento dia 1 do mês seguinte)
+  // Se opening_day > closing_day, a fatura cruza o mês
+  // Ex: abre dia 30, fecha dia 29 do próximo mês
   if (opening_day > closing_day) {
-    // Se o gasto é entre o dia 1 e o dia de fechamento
-    if (currentDay <= closing_day) {
-      // Pertence à fatura do mês seguinte (pois o fechamento é no mês seguinte)
+    // Dias 1 até closing_day: pertencem à fatura do MÊS ATUAL
+    // Dias opening_day até fim do mês: pertencem à fatura do MÊS SEGUINTE
+    if (currentDay >= opening_day) {
+      // Após o dia de abertura → fatura do próximo mês
       const nextMonth = addMonths(new Date(currentYear, currentMonth, 1), 1);
       return format(nextMonth, "yyyy-MM");
-    } else if (currentDay >= opening_day) {
-      // Se o gasto é após o dia de abertura, pertence à fatura do mês atual
-      return format(new Date(currentYear, currentMonth, 1), "yyyy-MM");
     } else {
-      // Entre o fechamento e a abertura, pertence à fatura do mês atual
+      // Antes do dia de abertura → fatura do mês atual
       return format(new Date(currentYear, currentMonth, 1), "yyyy-MM");
     }
   } else {
-    // Fatura não cruza o mês (ex: abertura dia 1, fechamento dia 30)
+    // Fatura não cruza o mês (ex: abre dia 1, fecha dia 30)
     if (currentDay >= opening_day && currentDay <= closing_day) {
-      // Pertence à fatura do mês atual
+      // Dentro do período → fatura do mês atual
       return format(new Date(currentYear, currentMonth, 1), "yyyy-MM");
     } else if (currentDay < opening_day) {
-      // Antes da abertura, pertence à fatura do mês anterior
+      // Antes da abertura → fatura do mês anterior
       const previousMonth = addMonths(new Date(currentYear, currentMonth, 1), -1);
       return format(previousMonth, "yyyy-MM");
     } else {
-      // Após o fechamento, pertence à fatura do próximo mês
+      // Após o fechamento → fatura do próximo mês
       const nextMonth = addMonths(new Date(currentYear, currentMonth, 1), 1);
       return format(nextMonth, "yyyy-MM");
     }
@@ -55,20 +57,28 @@ export function calculateBillingPeriod(
 
 /**
  * Gera uma lista de períodos de faturamento disponíveis
- * baseado nas despesas existentes
+ * baseado nas despesas existentes.
+ * 
+ * Versão que usa config de cartões específicos quando disponível.
  */
 export function generateBillingPeriods(
-  expenses: Array<{ expense_date: string; payment_method: string }>,
-  config?: CreditCardConfig
+  expenses: Array<{ expense_date: string; payment_method: string; card_id?: string | null }>,
+  fallbackConfig: CreditCardConfig,
+  cardsConfig?: Map<string, CreditCardConfig>
 ): Array<{ value: string; label: string }> {
-  if (!config) return [];
-  
   const periods = new Set<string>();
   
   expenses
     .filter(expense => expense.payment_method === "credit")
     .forEach(expense => {
       const expenseDate = parseLocalDate(expense.expense_date);
+      
+      // Tentar usar a config do cartão específico
+      let config = fallbackConfig;
+      if (expense.card_id && cardsConfig?.has(expense.card_id)) {
+        config = cardsConfig.get(expense.card_id)!;
+      }
+      
       const period = calculateBillingPeriod(expenseDate, config);
       periods.add(period);
     });
@@ -97,17 +107,24 @@ export function formatBillingPeriodLabel(period: string): string {
 /**
  * Filtra despesas por período de faturamento
  */
-export function filterExpensesByBillingPeriod(
-  expenses: Array<{ expense_date: string; payment_method: string }>,
+export function filterExpensesByBillingPeriod<T extends { expense_date: string; payment_method: string; card_id?: string | null }>(
+  expenses: T[],
   billingPeriod: string,
-  config: CreditCardConfig
-): Array<{ expense_date: string; payment_method: string }> {
+  fallbackConfig: CreditCardConfig,
+  cardsConfig?: Map<string, CreditCardConfig>
+): T[] {
   return expenses.filter(expense => {
     if (expense.payment_method !== "credit") return false;
     
     const expenseDate = parseLocalDate(expense.expense_date);
-    const expensePeriod = calculateBillingPeriod(expenseDate, config);
     
+    // Tentar usar a config do cartão específico
+    let config = fallbackConfig;
+    if (expense.card_id && cardsConfig?.has(expense.card_id)) {
+      config = cardsConfig.get(expense.card_id)!;
+    }
+    
+    const expensePeriod = calculateBillingPeriod(expenseDate, config);
     return expensePeriod === billingPeriod;
   });
 }
