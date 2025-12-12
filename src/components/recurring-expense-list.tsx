@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
-import { CreditCard, Smartphone, Trash2, Calendar, MoreVertical, Pencil } from "lucide-react"
+import { CreditCard, Smartphone, Trash2, Calendar, MoreVertical, Pencil, Calculator } from "lucide-react"
 import { RecurringExpense } from "@/types/recurring-expense"
 import { categoryLabels, categoryIcons, ExpenseCategory } from "@/types/expense"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -14,6 +14,7 @@ interface RecurringExpenseListProps {
   onDeleteExpense: (id: string) => void
   onToggleActive: (id: string, isActive: boolean) => void
   onEditRecurringExpense: (expense: RecurringExpense) => void
+  onSendToCalculator?: (value: number) => void
 }
 
 const paymentMethodConfig = {
@@ -22,7 +23,7 @@ const paymentMethodConfig = {
   credit: { label: "Crédito", icon: CreditCard, color: "bg-warning text-warning-foreground" }
 }
 
-export function RecurringExpenseList({ expenses, onDeleteExpense, onToggleActive, onEditRecurringExpense }: RecurringExpenseListProps) {
+export function RecurringExpenseList({ expenses, onDeleteExpense, onToggleActive, onEditRecurringExpense, onSendToCalculator }: RecurringExpenseListProps) {
   const { categories } = useCategories()
   const { isHidden } = useValuesVisibility()
 
@@ -120,40 +121,52 @@ export function RecurringExpenseList({ expenses, onDeleteExpense, onToggleActive
                   </div>
                 </div>
                 
-                <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
+                <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
                   <p className="font-bold text-base sm:text-lg text-primary whitespace-nowrap">
                     {formatCurrency(expense.amount)}
                   </p>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" side="top" className="bg-background">
-                      <DropdownMenuItem onClick={() => onEditRecurringExpense(expense)}>
-                        <Pencil className="mr-2 h-4 w-4" />
-                        Editar
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <div className="flex items-center justify-between px-2 py-2 text-sm">
-                        <span className="mr-2">Ativo</span>
-                        <Switch
-                          checked={expense.is_active}
-                          onCheckedChange={(checked) => onToggleActive(expense.id, checked)}
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      </div>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={() => onDeleteExpense(expense.id)}
-                        className="text-destructive focus:text-destructive"
+                  <div className="flex items-center gap-1">
+                    {onSendToCalculator && (
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 text-muted-foreground hover:text-primary"
+                        onClick={() => onSendToCalculator(expense.amount)}
                       >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Apagar
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                        <Calculator className="h-4 w-4" />
+                      </Button>
+                    )}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" side="top" className="bg-background">
+                        <DropdownMenuItem onClick={() => onEditRecurringExpense(expense)}>
+                          <Pencil className="mr-2 h-4 w-4" />
+                          Editar
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <div className="flex items-center justify-between px-2 py-2 text-sm">
+                          <span className="mr-2">Ativo</span>
+                          <Switch
+                            checked={expense.is_active}
+                            onCheckedChange={(checked) => onToggleActive(expense.id, checked)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </div>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => onDeleteExpense(expense.id)}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Apagar
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
               </div>
             )

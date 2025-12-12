@@ -1231,6 +1231,7 @@ export default function Index() {
                 onDeleteExpense={deleteRecurringExpense}
                 onToggleActive={toggleRecurringExpenseActive}
                 onEditRecurringExpense={handleEditRecurringExpense}
+                onSendToCalculator={handleSendToCalculator}
               />
             </div>
           </TabsContent>
