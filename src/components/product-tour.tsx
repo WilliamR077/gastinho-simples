@@ -14,6 +14,7 @@ export function ProductTour({ callbacks }: ProductTourProps) {
     totalSteps,
     currentStepData,
     showPremiumCta,
+    isInFormTour,
     nextStep,
     prevStep,
     skipTour,
@@ -28,6 +29,7 @@ export function ProductTour({ callbacks }: ProductTourProps) {
       <TourOverlay
         targetSelector={currentStepData?.target || ""}
         isVisible={isOpen && !showPremiumCta}
+        blockAllInteractions={isInFormTour}
       />
 
       {/* Tooltip do passo atual */}

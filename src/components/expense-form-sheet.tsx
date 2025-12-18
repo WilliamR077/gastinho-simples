@@ -30,6 +30,7 @@ interface ExpenseFormSheetProps {
   expenses?: Expense[];
   recurringExpenses?: RecurringExpense[];
   defaultAmount?: number;
+  preventClose?: boolean;
 }
 
 export function ExpenseFormSheet({
@@ -40,6 +41,7 @@ export function ExpenseFormSheet({
   expenses = [],
   recurringExpenses = [],
   defaultAmount,
+  preventClose,
 }: ExpenseFormSheetProps) {
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
@@ -214,7 +216,20 @@ export function ExpenseFormSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="h-[90vh] overflow-y-auto">
+      <SheetContent 
+        side="bottom" 
+        className="h-[90vh] overflow-y-auto"
+        onInteractOutside={(e) => {
+          if (preventClose) {
+            e.preventDefault();
+          }
+        }}
+        onEscapeKeyDown={(e) => {
+          if (preventClose) {
+            e.preventDefault();
+          }
+        }}
+      >
         <SheetHeader className="mb-4">
           <SheetTitle className="text-primary">Nova Despesa</SheetTitle>
         </SheetHeader>

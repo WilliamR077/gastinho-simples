@@ -79,6 +79,7 @@ export default function Index() {
   const [calculatorOpen, setCalculatorOpen] = useState(false);
   const [calculatorInitialValue, setCalculatorInitialValue] = useState<number | undefined>();
   const [expenseDefaultAmount, setExpenseDefaultAmount] = useState<number | undefined>();
+  const [isInFormTour, setIsInFormTour] = useState(false);
 
   const handleSendToCalculator = (value: number) => {
     setCalculatorInitialValue(value);
@@ -1100,6 +1101,7 @@ export default function Index() {
         callbacks={{
           onOpenExpenseForm: () => setExpenseSheetOpen(true),
           onCloseExpenseForm: () => setExpenseSheetOpen(false),
+          onFormTourStateChange: (inFormTour) => setIsInFormTour(inFormTour),
         }}
       />
 
@@ -1335,6 +1337,7 @@ export default function Index() {
           expenses={expenses}
           recurringExpenses={recurringExpenses}
           defaultAmount={expenseDefaultAmount}
+          preventClose={isInFormTour}
         />
 
         <RecurringExpenseFormSheet
