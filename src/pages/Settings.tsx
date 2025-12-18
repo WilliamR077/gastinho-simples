@@ -5,7 +5,7 @@ import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Settings as SettingsIcon, FileDown, FileSpreadsheet, Crown, Lock } from "lucide-react";
+import { ArrowLeft, Settings as SettingsIcon, FileDown, FileSpreadsheet, Crown, Lock, GraduationCap } from "lucide-react";
 import { useSubscription } from "@/hooks/use-subscription";
 import { FirebaseNotificationSettings } from "@/components/firebase-notification-settings";
 import { SecuritySettings } from "@/components/security-settings";
@@ -19,6 +19,8 @@ import { sanitizeErrorMessage } from "@/utils/security";
 import { Capacitor } from "@capacitor/core";
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
+
+const TOUR_STORAGE_KEY = "gastinho_tour_completed";
 
 // Helper para detectar se está no app nativo
 const isNativeApp = () => Capacitor.isNativePlatform();
@@ -417,6 +419,38 @@ export default function Settings() {
                 {!canExportPdf && <Crown className="h-4 w-4 ml-auto" />}
               </Button>
             </div>
+          </CardContent>
+        </Card>
+
+        <Separator />
+
+        {/* Seção: Tutorial */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <GraduationCap className="h-5 w-5" />
+              Tutorial
+            </CardTitle>
+            <CardDescription>
+              Aprenda como usar o aplicativo
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              onClick={() => {
+                localStorage.removeItem(TOUR_STORAGE_KEY);
+                navigate("/");
+                toast({
+                  title: "Tutorial reiniciado",
+                  description: "Volte para a tela inicial para ver o tutorial novamente.",
+                });
+              }}
+              variant="outline"
+              className="w-full gap-2"
+            >
+              <GraduationCap className="h-4 w-4" />
+              Ver tutorial novamente
+            </Button>
           </CardContent>
         </Card>
 
