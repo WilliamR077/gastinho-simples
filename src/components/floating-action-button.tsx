@@ -33,7 +33,7 @@ export function FloatingActionButton({
         />
       )}
 
-      <div className="fixed bottom-20 right-6 z-50 flex flex-col items-end gap-3">
+      <div className="fixed bottom-20 right-6 z-50 flex flex-col items-end gap-3" data-tour="fab-button">
         {/* Menu Options - appear ABOVE the button */}
         <div
           className={cn(

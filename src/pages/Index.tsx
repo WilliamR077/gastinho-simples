@@ -16,6 +16,7 @@ import { RecurringExpenseFormSheet } from "@/components/recurring-expense-form-s
 import { BudgetGoalFormSheet } from "@/components/budget-goal-form-sheet";
 import { ContextSelector } from "@/components/context-selector";
 import { useSharedGroups } from "@/hooks/use-shared-groups";
+import { ProductTour, useProductTour } from "@/components/product-tour";
 
 import { Expense, PaymentMethod, ExpenseFormData, ExpenseCategory, categoryLabels } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
@@ -1094,9 +1095,12 @@ export default function Index() {
 
   return (
     <div className="min-h-screen bg-background pb-24">
+      {/* Product Tour */}
+      <ProductTour />
+
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4" data-tour="welcome">
           <div className="flex items-center gap-3">
             <img
               src="/lovable-uploads/06a1acc2-f553-41f0-8d87-32d25b4e425e.png"
@@ -1111,6 +1115,7 @@ export default function Index() {
               size="sm"
               onClick={() => navigate("/reports")}
               className="flex items-center gap-2 text-xs sm:text-sm"
+              data-tour="reports-button"
             >
               <BarChart3 className="w-3 h-3 sm:w-4 sm:h-4" />
               <span className="hidden sm:inline">Relatórios</span>
@@ -1120,6 +1125,7 @@ export default function Index() {
               size="sm"
               onClick={() => navigate("/cards")}
               className="flex items-center gap-2 text-xs sm:text-sm"
+              data-tour="cards-button"
             >
               <CreditCard className="w-3 h-3 sm:w-4 sm:h-4" />
               <span className="hidden sm:inline">Cartões</span>
@@ -1161,13 +1167,15 @@ export default function Index() {
         <ContextSelector />
 
         {/* Navegador de Mês */}
-        <MonthNavigator
-          currentDate={currentMonth}
-          onMonthChange={handleMonthChange}
-        />
+        <div data-tour="month-navigator">
+          <MonthNavigator
+            currentDate={currentMonth}
+            onMonthChange={handleMonthChange}
+          />
+        </div>
 
         {/* Filtros */}
-        <div className="mb-8">
+        <div className="mb-8" data-tour="expense-filters">
           <ExpenseFilters
             filters={filters}
             onFiltersChange={setFilters}
@@ -1179,7 +1187,7 @@ export default function Index() {
         </div>
 
         {/* Category Summary */}
-        <div className="mb-8">
+        <div className="mb-8" data-tour="category-summary">
           <CategorySummary
             expenses={filteredExpenses}
             recurringExpenses={filteredRecurringExpenses}
@@ -1193,7 +1201,7 @@ export default function Index() {
         </div>
 
         {/* Summary Cards */}
-        <div className="mb-8">
+        <div className="mb-8" data-tour="expense-summary">
           <ExpenseSummary
             expenses={displayedExpenses}
             recurringExpenses={displayedRecurringExpenses}
@@ -1214,7 +1222,7 @@ export default function Index() {
         />
 
         {/* Main Content */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full" data-tour="tabs">
           <TabsList className="grid w-full grid-cols-3 mb-8">
             <TabsTrigger value="expenses">Despesas</TabsTrigger>
             <TabsTrigger value="recurring">Despesas Fixas</TabsTrigger>
