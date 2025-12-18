@@ -4,7 +4,6 @@ import { cn } from "@/lib/utils";
 interface TourOverlayProps {
   targetSelector: string;
   isVisible: boolean;
-  blockAllInteractions?: boolean;
 }
 
 interface TargetRect {
@@ -14,7 +13,7 @@ interface TargetRect {
   height: number;
 }
 
-export function TourOverlay({ targetSelector, isVisible, blockAllInteractions }: TourOverlayProps) {
+export function TourOverlay({ targetSelector, isVisible }: TourOverlayProps) {
   const [targetRect, setTargetRect] = useState<TargetRect | null>(null);
 
   useEffect(() => {
@@ -35,7 +34,6 @@ export function TourOverlay({ targetSelector, isVisible, blockAllInteractions }:
 
     updateTargetRect();
 
-    // Atualizar quando a janela for redimensionada
     window.addEventListener("resize", updateTargetRect);
     window.addEventListener("scroll", updateTargetRect);
 
@@ -50,27 +48,12 @@ export function TourOverlay({ targetSelector, isVisible, blockAllInteractions }:
   const padding = 8;
 
   return (
-    <div 
-      className="fixed inset-0 z-[9998] pointer-events-none"
-      onClick={blockAllInteractions ? (e) => {
-        e.stopPropagation();
-        e.preventDefault();
-      } : undefined}
-    >
+    <div className="fixed inset-0 z-[9998] pointer-events-none">
       {/* Overlay escuro com recorte para o spotlight */}
-      <svg
-        className="absolute inset-0 w-full h-full"
-        style={{ pointerEvents: blockAllInteractions ? "auto" : "auto" }}
-        onClick={blockAllInteractions ? (e) => {
-          e.stopPropagation();
-          e.preventDefault();
-        } : undefined}
-      >
+      <svg className="absolute inset-0 w-full h-full" style={{ pointerEvents: "auto" }}>
         <defs>
           <mask id="spotlight-mask">
-            {/* Fundo branco (área visível) */}
             <rect x="0" y="0" width="100%" height="100%" fill="white" />
-            {/* Recorte preto (área transparente) */}
             {targetRect && (
               <rect
                 x={targetRect.left - padding}
