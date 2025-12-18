@@ -1329,6 +1329,10 @@ export default function Index() {
         <ExpenseFormSheet
           open={expenseSheetOpen}
           onOpenChange={(open) => {
+            // Bloquear fechamento durante o tour do formulário
+            if (isInFormTour && !open) {
+              return; // Ignora tentativa de fechar
+            }
             setExpenseSheetOpen(open);
             if (!open) setExpenseDefaultAmount(undefined);
           }}
