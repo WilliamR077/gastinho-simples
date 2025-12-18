@@ -50,7 +50,7 @@ export const tourSteps: TourStep[] = [
   {
     target: "[data-tour='reports-button']",
     title: "Relatórios detalhados 📊",
-    description: "Gráficos e análises completas dos seus gastos. Recurso Premium!",
+    description: "Gráficos e análises dos seus gastos. Períodos avançados (trimestre, ano) são Premium!",
     placement: "bottom",
   },
   {
@@ -60,27 +60,9 @@ export const tourSteps: TourStep[] = [
     placement: "bottom",
   },
   {
-    target: "[data-tour='settings-button']",
-    title: "Configurações ⚙️",
-    description: "Acesse configurações do app, categorias personalizadas, notificações e muito mais.",
-    placement: "bottom",
-  },
-  {
-    target: "[data-tour='reminders-button']",
-    title: "Lembretes de vencimento 🔔",
-    description: "Veja despesas fixas próximas do vencimento. Configure alertas nas configurações!",
-    placement: "bottom",
-  },
-  {
     target: "[data-tour='values-toggle']",
     title: "Mostrar/Esconder valores 👁️",
     description: "Se alguém estiver por perto, esconda seus valores com um toque! Sua privacidade é importante.",
-    placement: "bottom",
-  },
-  {
-    target: "[data-tour='theme-toggle']",
-    title: "Tema claro/escuro 🌙",
-    description: "Alterne entre tema claro e escuro conforme sua preferência.",
     placement: "bottom",
   },
   {
@@ -111,20 +93,8 @@ export const tourSteps: TourStep[] = [
   },
   {
     target: "[data-tour='form-category']",
-    title: "Categoria 🏷️",
-    description: "Escolha uma categoria para organizar melhor seus gastos e ver relatórios detalhados.",
-    placement: "bottom",
-  },
-  {
-    target: "[data-tour='form-payment']",
-    title: "Forma de pagamento 💳",
-    description: "Escolha entre PIX, Débito ou Crédito. No crédito, você pode parcelar!",
-    placement: "top",
-  },
-  {
-    target: "[data-tour='form-submit']",
-    title: "Pronto! ✅",
-    description: "Clique aqui para salvar sua despesa. Simples assim!",
+    title: "Finalize o cadastro ✅",
+    description: "Escolha categoria, forma de pagamento e clique em Adicionar Despesa para salvar!",
     placement: "top",
   },
 ];
