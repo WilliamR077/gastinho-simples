@@ -16,7 +16,7 @@ import { RecurringExpenseFormSheet } from "@/components/recurring-expense-form-s
 import { BudgetGoalFormSheet } from "@/components/budget-goal-form-sheet";
 import { ContextSelector } from "@/components/context-selector";
 import { useSharedGroups } from "@/hooks/use-shared-groups";
-import { ProductTour, useProductTour } from "@/components/product-tour";
+import { ProductTour } from "@/components/product-tour";
 
 import { Expense, PaymentMethod, ExpenseFormData, ExpenseCategory, categoryLabels } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
@@ -1096,7 +1096,12 @@ export default function Index() {
   return (
     <div className="min-h-screen bg-background pb-24">
       {/* Product Tour */}
-      <ProductTour />
+      <ProductTour 
+        callbacks={{
+          onOpenExpenseForm: () => setExpenseSheetOpen(true),
+          onCloseExpenseForm: () => setExpenseSheetOpen(false),
+        }}
+      />
 
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         {/* Header */}
@@ -1131,6 +1136,7 @@ export default function Index() {
               <span className="hidden sm:inline">Cartões</span>
             </Button>
             <Button
+              data-tour="settings-button"
               variant="outline"
               size="sm"
               onClick={() => navigate("/settings")}

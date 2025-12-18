@@ -103,6 +103,7 @@ export function RemindersButton({ recurringExpenses }: RemindersButtonProps) {
   return (
     <>
       <Button
+        data-tour="reminders-button"
         variant="outline"
         size="sm"
         onClick={() => setDrawerOpen(true)}

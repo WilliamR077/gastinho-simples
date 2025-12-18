@@ -34,9 +34,20 @@ export function TourStepTooltip({
   useEffect(() => {
     if (!isVisible) return;
 
+    const targetElement = document.querySelector(step.target);
+    
+    // Auto-scroll para o elemento alvo
+    if (targetElement) {
+      targetElement.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+        inline: "center",
+      });
+    }
+
     const updatePosition = () => {
-      const targetElement = document.querySelector(step.target);
-      if (!targetElement) {
+      const element = document.querySelector(step.target);
+      if (!element) {
         // Se o elemento não existir, centraliza na tela
         setPosition({
           top: window.innerHeight / 2 - 100,
@@ -46,7 +57,7 @@ export function TourStepTooltip({
         return;
       }
 
-      const rect = targetElement.getBoundingClientRect();
+      const rect = element.getBoundingClientRect();
       const tooltipWidth = 320;
       const tooltipHeight = 180;
       const padding = 16;
@@ -87,8 +98,8 @@ export function TourStepTooltip({
       setIsPositioned(true);
     };
 
-    // Pequeno delay para garantir que o elemento está visível
-    const timer = setTimeout(updatePosition, 100);
+    // Delay maior para o scroll completar antes de posicionar o tooltip
+    const timer = setTimeout(updatePosition, 400);
 
     window.addEventListener("resize", updatePosition);
     window.addEventListener("scroll", updatePosition);

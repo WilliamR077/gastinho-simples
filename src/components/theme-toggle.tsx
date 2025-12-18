@@ -7,6 +7,7 @@ export function ThemeToggle() {
 
   return (
     <Button
+      data-tour="theme-toggle"
       variant="ghost"
       size="sm"
       onClick={() => setTheme(theme === "light" ? "dark" : "light")}

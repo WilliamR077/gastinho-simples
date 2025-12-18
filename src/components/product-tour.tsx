@@ -1,14 +1,13 @@
 import { TourOverlay } from "./tour-overlay";
 import { TourStepTooltip } from "./tour-step";
 import { TourPremiumCta } from "./tour-premium-cta";
-import { useProductTour, tourSteps } from "@/hooks/use-product-tour";
+import { useProductTour, tourSteps, ProductTourCallbacks } from "@/hooks/use-product-tour";
 
 interface ProductTourProps {
-  customHook?: ReturnType<typeof useProductTour>;
+  callbacks?: ProductTourCallbacks;
 }
 
-export function ProductTour({ customHook }: ProductTourProps) {
-  const defaultHook = useProductTour();
+export function ProductTour({ callbacks }: ProductTourProps) {
   const {
     isOpen,
     currentStep,
@@ -19,7 +18,7 @@ export function ProductTour({ customHook }: ProductTourProps) {
     prevStep,
     skipTour,
     closePremiumCta,
-  } = customHook || defaultHook;
+  } = useProductTour(callbacks);
 
   if (!isOpen && !showPremiumCta) return null;
 
