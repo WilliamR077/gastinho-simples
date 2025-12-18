@@ -17,6 +17,12 @@ export const tourSteps: TourStep[] = [
     placement: "bottom",
   },
   {
+    target: "[data-tour='context-selector']",
+    title: "Grupos compartilhados 👥",
+    description: "Divida gastos com família, amigos ou em viagens! Todos podem participar. Criar grupo é Premium.",
+    placement: "bottom",
+  },
+  {
     target: "[data-tour='month-navigator']",
     title: "Navegue pelos meses",
     description: "Use as setas para ver gastos de meses anteriores ou futuros.",
@@ -65,12 +71,17 @@ export const tourSteps: TourStep[] = [
     placement: "bottom",
   },
   {
+    target: "[data-tour='calculator-button']",
+    title: "Calculadora integrada 🧮",
+    description: "Precisa fazer contas? Use a calculadora e envie o resultado direto para um novo gasto!",
+    placement: "top",
+  },
+  {
     target: "[data-tour='fab-main-button']",
     title: "Adicione gastos rapidamente ➕",
     description: "Toque no '+' sempre que fizer um gasto. O formulário é simples: descrição, valor, data e categoria!",
     placement: "top",
   },
-  // Passo de conclusão
   {
     target: "[data-tour='fab-main-button']",
     title: "Tudo pronto! 🎉",

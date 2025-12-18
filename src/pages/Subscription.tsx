@@ -2,7 +2,7 @@ import { useSubscription } from "@/hooks/use-subscription";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, Crown, Sparkles, Zap, Smartphone, Wallet, BarChart3, FileDown, ArrowLeft, RefreshCw, Settings, AlertTriangle } from "lucide-react";
+import { Check, Crown, Sparkles, Zap, Smartphone, Wallet, BarChart3, FileDown, ArrowLeft, RefreshCw, Settings, AlertTriangle, Users } from "lucide-react";
 import { SUBSCRIPTION_FEATURES } from "@/types/subscription";
 import { Skeleton } from "@/components/ui/skeleton";
 import { billingService, TIER_TO_PRODUCT_ID } from "@/services/billing-service";
@@ -308,7 +308,7 @@ export default function Subscription() {
           <CardTitle className="text-2xl text-center">Por que fazer upgrade?</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-4 gap-6">
             <div className="text-center">
               <Wallet className="h-12 w-12 mx-auto mb-3 text-primary" />
               <h4 className="font-semibold mb-2">Controle Total</h4>
@@ -318,16 +318,23 @@ export default function Subscription() {
             </div>
             <div className="text-center">
               <BarChart3 className="h-12 w-12 mx-auto mb-3 text-primary" />
-              <h4 className="font-semibold mb-2">Insights Poderosos</h4>
+              <h4 className="font-semibold mb-2">Todos os Períodos</h4>
               <p className="text-sm text-muted-foreground">
-                Relatórios avançados para identificar padrões e economizar mais
+                Veja relatórios por trimestre, semestre ou ano inteiro
               </p>
             </div>
             <div className="text-center">
               <FileDown className="h-12 w-12 mx-auto mb-3 text-primary" />
               <h4 className="font-semibold mb-2">Seus Dados, Seu Controle</h4>
               <p className="text-sm text-muted-foreground">
-                Exporte para Excel ou PDF e use em qualquer ferramenta
+                Exporte para PDF ou Excel e use em qualquer ferramenta
+              </p>
+            </div>
+            <div className="text-center">
+              <Users className="h-12 w-12 mx-auto mb-3 text-primary" />
+              <h4 className="font-semibold mb-2">Grupos Compartilhados</h4>
+              <p className="text-sm text-muted-foreground">
+                Crie grupos para dividir gastos com família, amigos ou viagens
               </p>
             </div>
           </div>
@@ -385,19 +392,19 @@ export default function Subscription() {
                   <div className="flex items-start gap-2">
                     <Check className={`h-4 w-4 mt-0.5 flex-shrink-0 ${planFeatures.reports ? "text-green-500" : "text-muted-foreground"}`} />
                     <span className={planFeatures.reports ? "" : "text-muted-foreground"}>
-                      {planFeatures.reports ? "Relatórios avançados" : "Relatórios básicos"}
+                      {planFeatures.reports ? "Relatórios: todos os períodos" : "Relatórios: mês atual"}
                     </span>
                   </div>
                   <div className="flex items-start gap-2">
                     <Check className={`h-4 w-4 mt-0.5 flex-shrink-0 ${planFeatures.exportPdf ? "text-green-500" : "text-muted-foreground"}`} />
                     <span className={planFeatures.exportPdf ? "" : "text-muted-foreground"}>
-                      Exportar PDF
+                      Exportar PDF/Excel
                     </span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <Check className={`h-4 w-4 mt-0.5 flex-shrink-0 ${planFeatures.exportExcel ? "text-green-500" : "text-muted-foreground"}`} />
-                    <span className={planFeatures.exportExcel ? "" : "text-muted-foreground"}>
-                      Exportar Excel
+                    <Check className={`h-4 w-4 mt-0.5 flex-shrink-0 ${planFeatures.groups > 0 ? "text-green-500" : "text-muted-foreground"}`} />
+                    <span className={planFeatures.groups > 0 ? "" : "text-muted-foreground"}>
+                      {planFeatures.groups > 0 ? `Criar até ${planFeatures.groups} grupos` : "Participar de grupos"}
                     </span>
                   </div>
                   <div className="flex items-start gap-2">
@@ -453,10 +460,10 @@ export default function Subscription() {
         </CardHeader>
         <CardContent>
           <div className="text-sm text-muted-foreground space-y-2">
-            <p>✅ <strong>Gratuito:</strong> Perfeito para começar a organizar suas finanças</p>
-            <p>⚡ <strong>Sem Anúncios (R$ 4,90/mês):</strong> Experiência sem interrupções</p>
-            <p>👑 <strong>Premium (R$ 14,90/mês):</strong> Recursos avançados para controle total</p>
-            <p>🌟 <strong>Premium Plus (R$ 17,90/mês):</strong> Todos os recursos + sem anúncios</p>
+            <p>✅ <strong>Gratuito:</strong> Perfeito para começar • Relatórios do mês • Participar de grupos</p>
+            <p>⚡ <strong>Sem Anúncios:</strong> Experiência sem interrupções • Relatórios do mês • Participar de grupos</p>
+            <p>👑 <strong>Premium:</strong> Todos os períodos • Criar até 3 grupos • Exportar PDF/Excel</p>
+            <p>🌟 <strong>Premium Plus:</strong> Tudo do Premium + sem anúncios</p>
           </div>
         </CardContent>
       </Card>
