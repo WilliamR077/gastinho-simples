@@ -79,7 +79,7 @@ export default function Index() {
   const [calculatorOpen, setCalculatorOpen] = useState(false);
   const [calculatorInitialValue, setCalculatorInitialValue] = useState<number | undefined>();
   const [expenseDefaultAmount, setExpenseDefaultAmount] = useState<number | undefined>();
-  const [isInFormTour, setIsInFormTour] = useState(false);
+  
 
   const handleSendToCalculator = (value: number) => {
     setCalculatorInitialValue(value);
@@ -1097,13 +1097,7 @@ export default function Index() {
   return (
     <div className="min-h-screen bg-background pb-24">
       {/* Product Tour */}
-      <ProductTour 
-        callbacks={{
-          onOpenExpenseForm: () => setExpenseSheetOpen(true),
-          onCloseExpenseForm: () => setExpenseSheetOpen(false),
-          onFormTourStateChange: (inFormTour) => setIsInFormTour(inFormTour),
-        }}
-      />
+      <ProductTour />
 
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         {/* Header */}
@@ -1329,10 +1323,6 @@ export default function Index() {
         <ExpenseFormSheet
           open={expenseSheetOpen}
           onOpenChange={(open) => {
-            // Bloquear fechamento durante o tour do formulário
-            if (isInFormTour && !open) {
-              return; // Ignora tentativa de fechar
-            }
             setExpenseSheetOpen(open);
             if (!open) setExpenseDefaultAmount(undefined);
           }}
@@ -1341,7 +1331,6 @@ export default function Index() {
           expenses={expenses}
           recurringExpenses={recurringExpenses}
           defaultAmount={expenseDefaultAmount}
-          preventClose={isInFormTour}
         />
 
         <RecurringExpenseFormSheet

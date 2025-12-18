@@ -7,7 +7,6 @@ export interface TourStep {
   title: string;
   description: string;
   placement: "top" | "bottom" | "left" | "right";
-  action?: "open-expense-form";
 }
 
 export const tourSteps: TourStep[] = [
@@ -68,30 +67,22 @@ export const tourSteps: TourStep[] = [
   {
     target: "[data-tour='fab-main-button']",
     title: "Adicione gastos rapidamente ➕",
-    description: "Toque no + para adicionar despesas, despesas fixas ou metas de gastos!",
+    description: "Toque no '+' sempre que fizer um gasto. O formulário é simples: descrição, valor, data e categoria!",
     placement: "top",
-    action: "open-expense-form",
   },
-  // Passo único do formulário de despesa
+  // Passo de conclusão
   {
-    target: "[data-tour='form-description']",
-    title: "Preencha os dados do gasto 📝",
-    description: "• Descrição: o que você comprou\n• Valor: quanto custou\n• Data: quando aconteceu\n• Categoria: tipo do gasto\n• Pagamento: PIX, débito ou crédito\n\nClique em 'Adicionar Despesa' para salvar!",
+    target: "[data-tour='fab-main-button']",
+    title: "Tudo pronto! 🎉",
+    description: "Agora você sabe usar o Gastinho Simples! Comece adicionando seu primeiro gasto e veja suas finanças tomando forma.",
     placement: "top",
   },
 ];
 
-export interface ProductTourCallbacks {
-  onOpenExpenseForm?: () => void;
-  onCloseExpenseForm?: () => void;
-  onFormTourStateChange?: (isInFormTour: boolean) => void;
-}
-
-export function useProductTour(callbacks?: ProductTourCallbacks) {
+export function useProductTour() {
   const [isOpen, setIsOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [showPremiumCta, setShowPremiumCta] = useState(false);
-  const [isInFormTour, setIsInFormTour] = useState(false);
 
   useEffect(() => {
     const hasSeenTour = localStorage.getItem(TOUR_STORAGE_KEY);
@@ -107,19 +98,13 @@ export function useProductTour(callbacks?: ProductTourCallbacks) {
   const completeTour = useCallback(() => {
     localStorage.setItem(TOUR_STORAGE_KEY, "true");
     setShowPremiumCta(true);
-    setIsInFormTour(false);
-    callbacks?.onFormTourStateChange?.(false);
-    callbacks?.onCloseExpenseForm?.();
-  }, [callbacks]);
+  }, []);
 
   const closeTour = useCallback(() => {
     setIsOpen(false);
     setShowPremiumCta(false);
     setCurrentStep(0);
-    setIsInFormTour(false);
-    callbacks?.onFormTourStateChange?.(false);
-    callbacks?.onCloseExpenseForm?.();
-  }, [callbacks]);
+  }, []);
 
   const closePremiumCta = useCallback(() => {
     setShowPremiumCta(false);
@@ -127,42 +112,18 @@ export function useProductTour(callbacks?: ProductTourCallbacks) {
   }, []);
 
   const nextStep = useCallback(() => {
-    const currentStepData = tourSteps[currentStep];
-    
-    // Se o passo atual tem ação de abrir formulário
-    if (currentStepData?.action === "open-expense-form") {
-      callbacks?.onOpenExpenseForm?.();
-      setIsInFormTour(true);
-      callbacks?.onFormTourStateChange?.(true);
-      // Delay para o formulário abrir antes de mudar o passo
-      setTimeout(() => {
-        setCurrentStep(prev => prev + 1);
-      }, 500);
-      return;
-    }
-
     if (currentStep < tourSteps.length - 1) {
       setCurrentStep(prev => prev + 1);
     } else {
       completeTour();
     }
-  }, [currentStep, completeTour, callbacks]);
+  }, [currentStep, completeTour]);
 
   const prevStep = useCallback(() => {
-    const prevStepIndex = currentStep - 1;
-    const prevStepData = tourSteps[prevStepIndex];
-    
-    // Se estava no formulário e volta para o passo do FAB, fecha o formulário
-    if (isInFormTour && prevStepData?.action === "open-expense-form") {
-      callbacks?.onCloseExpenseForm?.();
-      setIsInFormTour(false);
-      callbacks?.onFormTourStateChange?.(false);
-    }
-
     if (currentStep > 0) {
       setCurrentStep(prev => prev - 1);
     }
-  }, [currentStep, isInFormTour, callbacks]);
+  }, [currentStep]);
 
   const skipTour = useCallback(() => {
     localStorage.setItem(TOUR_STORAGE_KEY, "true");
@@ -173,7 +134,6 @@ export function useProductTour(callbacks?: ProductTourCallbacks) {
     localStorage.removeItem(TOUR_STORAGE_KEY);
     setCurrentStep(0);
     setShowPremiumCta(false);
-    setIsInFormTour(false);
     setIsOpen(true);
   }, []);
 
@@ -183,7 +143,6 @@ export function useProductTour(callbacks?: ProductTourCallbacks) {
     totalSteps: tourSteps.length,
     currentStepData: tourSteps[currentStep],
     showPremiumCta,
-    isInFormTour,
     nextStep,
     prevStep,
     skipTour,

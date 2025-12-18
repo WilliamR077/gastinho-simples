@@ -1,25 +1,20 @@
 import { TourOverlay } from "./tour-overlay";
 import { TourStepTooltip } from "./tour-step";
 import { TourPremiumCta } from "./tour-premium-cta";
-import { useProductTour, tourSteps, ProductTourCallbacks } from "@/hooks/use-product-tour";
+import { useProductTour, tourSteps } from "@/hooks/use-product-tour";
 
-interface ProductTourProps {
-  callbacks?: ProductTourCallbacks;
-}
-
-export function ProductTour({ callbacks }: ProductTourProps) {
+export function ProductTour() {
   const {
     isOpen,
     currentStep,
     totalSteps,
     currentStepData,
     showPremiumCta,
-    isInFormTour,
     nextStep,
     prevStep,
     skipTour,
     closePremiumCta,
-  } = useProductTour(callbacks);
+  } = useProductTour();
 
   if (!isOpen && !showPremiumCta) return null;
 
@@ -29,7 +24,6 @@ export function ProductTour({ callbacks }: ProductTourProps) {
       <TourOverlay
         targetSelector={currentStepData?.target || ""}
         isVisible={isOpen && !showPremiumCta}
-        blockAllInteractions={isInFormTour}
       />
 
       {/* Tooltip do passo atual */}

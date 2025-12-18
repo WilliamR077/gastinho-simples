@@ -154,6 +154,7 @@ export function TourStepTooltip({
       style={{
         top: position.top,
         left: position.left,
+        pointerEvents: "auto",
       }}
     >
       {/* Header */}
