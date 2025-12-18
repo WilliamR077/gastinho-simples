@@ -35,7 +35,7 @@ export function ContextSelector() {
 
   return (
     <>
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-border/50 bg-background/95 backdrop-blur-sm">
+      <div data-tour="context-selector" className="flex items-center gap-2 px-4 py-2 border-b border-border/50 bg-background/95 backdrop-blur-sm">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button 

@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Crown, Check, X, Sparkles, BarChart3, Download, Users, Bell } from "lucide-react";
+import { Crown, Check, X, Sparkles, BarChart3, Download, Users, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface TourPremiumCtaProps {
@@ -11,23 +11,23 @@ interface TourPremiumCtaProps {
 const premiumFeatures = [
   {
     icon: BarChart3,
-    title: "Relatórios completos",
-    description: "Gráficos e análises detalhadas dos seus gastos",
+    title: "Relatórios em todos os períodos",
+    description: "Veja trimestre, semestre e ano inteiro. Gráficos mensais já são gratuitos!",
   },
   {
     icon: Download,
-    title: "Exportar dados",
-    description: "Baixe seus dados em Excel e PDF",
+    title: "Exportar PDF e Excel",
+    description: "Baixe seus dados para usar em qualquer lugar",
   },
   {
     icon: Users,
-    title: "Grupos compartilhados",
-    description: "Controle gastos em grupo com família ou amigos",
+    title: "Crie grupos compartilhados",
+    description: "Crie até 3 grupos para dividir gastos. Todos podem participar!",
   },
   {
-    icon: Bell,
-    title: "Lembretes avançados",
-    description: "Notificações personalizadas para despesas fixas",
+    icon: Wallet,
+    title: "Cartões e metas ilimitados",
+    description: "Organize suas finanças sem limites",
   },
 ];
 

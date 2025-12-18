@@ -68,6 +68,7 @@ export function FloatingActionButton({
 
         {/* Calculator Button - always visible */}
         <Button
+          data-tour="calculator-button"
           onClick={onCalculatorClick}
           variant="secondary"
           className="h-10 w-10 rounded-full shadow-lg"
