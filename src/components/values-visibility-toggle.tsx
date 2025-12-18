@@ -14,6 +14,7 @@ export function ValuesVisibilityToggle() {
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
+          data-tour="values-toggle"
           variant="ghost"
           size="icon"
           onClick={toggleVisibility}

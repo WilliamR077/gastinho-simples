@@ -254,7 +254,7 @@ export function ExpenseFormSheet({
             </div>
           )}
 
-          <div className="space-y-2">
+          <div className="space-y-2" data-tour="form-description">
             <Label htmlFor="sheet-description">Descrição</Label>
             <DescriptionAutocomplete
               value={description}
@@ -263,7 +263,7 @@ export function ExpenseFormSheet({
             />
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2" data-tour="form-amount">
             <Label htmlFor="sheet-amount">Valor (R$)</Label>
             <Input
               id="sheet-amount"
@@ -276,7 +276,7 @@ export function ExpenseFormSheet({
             />
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2" data-tour="form-date">
             <Label htmlFor="sheet-expense-date">Data do Gasto</Label>
             <Popover>
               <PopoverTrigger asChild>
@@ -306,7 +306,7 @@ export function ExpenseFormSheet({
             </Popover>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2" data-tour="form-category">
             <Label htmlFor="sheet-category">Categoria</Label>
             <CategorySelector
               value={category}
@@ -344,7 +344,7 @@ export function ExpenseFormSheet({
             )}
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2" data-tour="form-payment">
             <Label htmlFor="sheet-payment-method">Forma de Pagamento</Label>
             <Select value={paymentMethod} onValueChange={(value: PaymentMethod) => setPaymentMethod(value)}>
               <SelectTrigger>
@@ -400,13 +400,15 @@ export function ExpenseFormSheet({
             </div>
           )}
 
-          <Button
-            type="submit"
-            className="w-full bg-gradient-primary"
-            disabled={!description.trim() || !amount || !paymentMethod}
-          >
-            Adicionar Despesa
-          </Button>
+          <div data-tour="form-submit">
+            <Button
+              type="submit"
+              className="w-full bg-gradient-primary"
+              disabled={!description.trim() || !amount || !paymentMethod}
+            >
+              Adicionar Despesa
+            </Button>
+          </div>
         </form>
       </SheetContent>
     </Sheet>
