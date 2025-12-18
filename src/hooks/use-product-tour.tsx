@@ -72,29 +72,11 @@ export const tourSteps: TourStep[] = [
     placement: "top",
     action: "open-expense-form",
   },
-  // Passos do formulário de despesa
+  // Passo único do formulário de despesa
   {
     target: "[data-tour='form-description']",
-    title: "Descrição do gasto ✏️",
-    description: "Digite o que você comprou ou pagou. Ex: Almoço, Supermercado, Uber...",
-    placement: "bottom",
-  },
-  {
-    target: "[data-tour='form-amount']",
-    title: "Valor em reais 💰",
-    description: "Informe quanto custou. Use ponto ou vírgula para centavos.",
-    placement: "bottom",
-  },
-  {
-    target: "[data-tour='form-date']",
-    title: "Data do gasto 📅",
-    description: "Selecione quando o gasto aconteceu. Pode ser uma data passada!",
-    placement: "bottom",
-  },
-  {
-    target: "[data-tour='form-category']",
-    title: "Finalize o cadastro ✅",
-    description: "Escolha categoria, forma de pagamento e clique em Adicionar Despesa para salvar!",
+    title: "Preencha os dados do gasto 📝",
+    description: "• Descrição: o que você comprou\n• Valor: quanto custou\n• Data: quando aconteceu\n• Categoria: tipo do gasto\n• Pagamento: PIX, débito ou crédito\n\nClique em 'Adicionar Despesa' para salvar!",
     placement: "top",
   },
 ];
