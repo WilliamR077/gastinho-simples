@@ -377,41 +377,59 @@ export default function Subscription() {
 
               <CardContent className="space-y-3">
                 <div className="space-y-2 text-sm">
+                  {/* Cartões - sempre verde */}
                   <div className="flex items-start gap-2">
                     <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
                     <span>
                       {planFeatures.cards === Infinity ? "Cartões ilimitados" : `Até ${planFeatures.cards} cartões`}
                     </span>
                   </div>
+                  
+                  {/* Metas - sempre verde */}
                   <div className="flex items-start gap-2">
                     <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
                     <span>
                       {planFeatures.goals === Infinity ? "Metas ilimitadas" : `Até ${planFeatures.goals} meta`}
                     </span>
                   </div>
+                  
+                  {/* Relatórios - sempre verde, texto muda */}
                   <div className="flex items-start gap-2">
-                    <Check className={`h-4 w-4 mt-0.5 flex-shrink-0 ${planFeatures.reports ? "text-green-500" : "text-muted-foreground"}`} />
-                    <span className={planFeatures.reports ? "" : "text-muted-foreground"}>
+                    <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                    <span>
                       {planFeatures.reports ? "Relatórios: todos os períodos" : "Relatórios: mês atual"}
                     </span>
                   </div>
+                  
+                  {/* Exportar - SÓ aparece se tem */}
+                  {planFeatures.exportPdf && (
+                    <div className="flex items-start gap-2">
+                      <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                      <span>Exportar PDF/Excel</span>
+                    </div>
+                  )}
+                  
+                  {/* Grupos - sempre verde, texto muda */}
                   <div className="flex items-start gap-2">
-                    <Check className={`h-4 w-4 mt-0.5 flex-shrink-0 ${planFeatures.exportPdf ? "text-green-500" : "text-muted-foreground"}`} />
-                    <span className={planFeatures.exportPdf ? "" : "text-muted-foreground"}>
-                      Exportar PDF/Excel
-                    </span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <Check className={`h-4 w-4 mt-0.5 flex-shrink-0 ${planFeatures.groups > 0 ? "text-green-500" : "text-muted-foreground"}`} />
-                    <span className={planFeatures.groups > 0 ? "" : "text-muted-foreground"}>
+                    <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                    <span>
                       {planFeatures.groups > 0 ? `Criar até ${planFeatures.groups} grupos` : "Participar de grupos"}
                     </span>
                   </div>
+                  
+                  {/* Anúncios - ícone diferente se tem anúncios */}
                   <div className="flex items-start gap-2">
-                    <Check className={`h-4 w-4 mt-0.5 flex-shrink-0 ${!planFeatures.ads ? "text-green-500" : "text-muted-foreground"}`} />
-                    <span className={!planFeatures.ads ? "" : "text-muted-foreground"}>
-                      {planFeatures.ads ? "Com anúncios" : "Sem anúncios"}
-                    </span>
+                    {planFeatures.ads ? (
+                      <>
+                        <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                        <span className="text-amber-500">Com anúncios</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                        <span>Sem anúncios</span>
+                      </>
+                    )}
                   </div>
                 </div>
               </CardContent>
