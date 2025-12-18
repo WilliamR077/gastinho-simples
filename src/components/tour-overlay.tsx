@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 interface TourOverlayProps {
   targetSelector: string;
   isVisible: boolean;
+  blockAllInteractions?: boolean;
 }
 
 interface TargetRect {
@@ -13,7 +14,7 @@ interface TargetRect {
   height: number;
 }
 
-export function TourOverlay({ targetSelector, isVisible }: TourOverlayProps) {
+export function TourOverlay({ targetSelector, isVisible, blockAllInteractions }: TourOverlayProps) {
   const [targetRect, setTargetRect] = useState<TargetRect | null>(null);
 
   useEffect(() => {
@@ -49,11 +50,21 @@ export function TourOverlay({ targetSelector, isVisible }: TourOverlayProps) {
   const padding = 8;
 
   return (
-    <div className="fixed inset-0 z-[9998] pointer-events-none">
+    <div 
+      className="fixed inset-0 z-[9998] pointer-events-none"
+      onClick={blockAllInteractions ? (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+      } : undefined}
+    >
       {/* Overlay escuro com recorte para o spotlight */}
       <svg
         className="absolute inset-0 w-full h-full"
-        style={{ pointerEvents: "auto" }}
+        style={{ pointerEvents: blockAllInteractions ? "auto" : "auto" }}
+        onClick={blockAllInteractions ? (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+        } : undefined}
       >
         <defs>
           <mask id="spotlight-mask">

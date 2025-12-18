@@ -31,6 +31,24 @@ export function TourStepTooltip({
   onSkip,
   isVisible,
 }: TourStepProps) {
+  // Handlers com stopPropagation para evitar fechar o Sheet
+  const handleNext = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    onNext();
+  };
+
+  const handlePrev = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    onPrev();
+  };
+
+  const handleSkip = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    onSkip();
+  };
   const [position, setPosition] = useState<Position>({ top: 0, left: 0 });
   const [isPositioned, setIsPositioned] = useState(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
@@ -147,7 +165,7 @@ export function TourStepTooltip({
           variant="ghost"
           size="icon"
           className="h-8 w-8"
-          onClick={onSkip}
+          onClick={handleSkip}
         >
           <X className="h-4 w-4" />
         </Button>
@@ -166,7 +184,7 @@ export function TourStepTooltip({
         <Button
           variant="ghost"
           size="sm"
-          onClick={onPrev}
+          onClick={handlePrev}
           disabled={isFirstStep}
           className="gap-1 px-2"
         >
@@ -176,7 +194,7 @@ export function TourStepTooltip({
 
         <Button
           size="sm"
-          onClick={onNext}
+          onClick={handleNext}
           className="gap-1 px-2"
         >
           {isLastStep ? "Finalizar" : "Próximo"}

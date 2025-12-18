@@ -102,6 +102,7 @@ export const tourSteps: TourStep[] = [
 export interface ProductTourCallbacks {
   onOpenExpenseForm?: () => void;
   onCloseExpenseForm?: () => void;
+  onFormTourStateChange?: (isInFormTour: boolean) => void;
 }
 
 export function useProductTour(callbacks?: ProductTourCallbacks) {
@@ -125,6 +126,7 @@ export function useProductTour(callbacks?: ProductTourCallbacks) {
     localStorage.setItem(TOUR_STORAGE_KEY, "true");
     setShowPremiumCta(true);
     setIsInFormTour(false);
+    callbacks?.onFormTourStateChange?.(false);
     callbacks?.onCloseExpenseForm?.();
   }, [callbacks]);
 
@@ -133,6 +135,7 @@ export function useProductTour(callbacks?: ProductTourCallbacks) {
     setShowPremiumCta(false);
     setCurrentStep(0);
     setIsInFormTour(false);
+    callbacks?.onFormTourStateChange?.(false);
     callbacks?.onCloseExpenseForm?.();
   }, [callbacks]);
 
@@ -148,6 +151,7 @@ export function useProductTour(callbacks?: ProductTourCallbacks) {
     if (currentStepData?.action === "open-expense-form") {
       callbacks?.onOpenExpenseForm?.();
       setIsInFormTour(true);
+      callbacks?.onFormTourStateChange?.(true);
       // Delay para o formulário abrir antes de mudar o passo
       setTimeout(() => {
         setCurrentStep(prev => prev + 1);
@@ -170,6 +174,7 @@ export function useProductTour(callbacks?: ProductTourCallbacks) {
     if (isInFormTour && prevStepData?.action === "open-expense-form") {
       callbacks?.onCloseExpenseForm?.();
       setIsInFormTour(false);
+      callbacks?.onFormTourStateChange?.(false);
     }
 
     if (currentStep > 0) {
