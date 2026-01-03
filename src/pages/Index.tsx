@@ -17,6 +17,12 @@ import { BudgetGoalFormSheet } from "@/components/budget-goal-form-sheet";
 import { ContextSelector } from "@/components/context-selector";
 import { useSharedGroups } from "@/hooks/use-shared-groups";
 import { ProductTour } from "@/components/product-tour";
+import { BalanceSummary } from "@/components/balance-summary";
+import { IncomeFormSheet } from "@/components/income-form-sheet";
+import { RecurringIncomeFormSheet } from "@/components/recurring-income-form-sheet";
+import { IncomeList } from "@/components/income-list";
+import { RecurringIncomeList } from "@/components/recurring-income-list";
+import { Income, RecurringIncome as RecurringIncomeType } from "@/types/income";
 
 import { Expense, PaymentMethod, ExpenseFormData, ExpenseCategory, categoryLabels } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
@@ -47,6 +53,8 @@ export default function Index() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>([]);
   const [budgetGoals, setBudgetGoals] = useState<BudgetGoal[]>([]);
+  const [incomes, setIncomes] = useState<Income[]>([]);
+  const [recurringIncomes, setRecurringIncomes] = useState<RecurringIncomeType[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<ExpenseFiltersType>(() => {
     const now = new Date();
@@ -68,6 +76,8 @@ export default function Index() {
   const [expenseSheetOpen, setExpenseSheetOpen] = useState(false);
   const [recurringExpenseSheetOpen, setRecurringExpenseSheetOpen] = useState(false);
   const [budgetGoalSheetOpen, setBudgetGoalSheetOpen] = useState(false);
+  const [incomeSheetOpen, setIncomeSheetOpen] = useState(false);
+  const [recurringIncomeSheetOpen, setRecurringIncomeSheetOpen] = useState(false);
 
   // Estados para os modais de edição
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
@@ -221,6 +231,8 @@ export default function Index() {
       loadCreditCardConfig();
       loadBudgetGoals();
       loadCards();
+      loadIncomes();
+      loadRecurringIncomes();
     }
   }, [user, currentContext]);
 
@@ -348,6 +360,112 @@ export default function Index() {
         description: "Não foi possível carregar as metas de gastos.",
         variant: "destructive",
       });
+    }
+  };
+
+  const loadIncomes = async () => {
+    try {
+      let query = supabase
+        .from("incomes")
+        .select("*")
+        .order("income_date", { ascending: false });
+
+      // Filtrar por contexto
+      if (currentContext.type === 'personal') {
+        query = query.is('shared_group_id', null);
+      } else if (currentContext.type === 'group' && currentContext.groupId) {
+        query = query.eq('shared_group_id', currentContext.groupId);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+      setIncomes((data || []) as Income[]);
+    } catch (error) {
+      console.error("Error loading incomes:", error);
+    }
+  };
+
+  const loadRecurringIncomes = async () => {
+    try {
+      let query = supabase
+        .from("recurring_incomes")
+        .select("*")
+        .order("day_of_month", { ascending: true });
+
+      // Filtrar por contexto
+      if (currentContext.type === 'personal') {
+        query = query.is('shared_group_id', null);
+      } else if (currentContext.type === 'group' && currentContext.groupId) {
+        query = query.eq('shared_group_id', currentContext.groupId);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+      setRecurringIncomes((data || []) as RecurringIncomeType[]);
+    } catch (error) {
+      console.error("Error loading recurring incomes:", error);
+    }
+  };
+
+  const deleteIncome = async (id: string) => {
+    try {
+      const { error } = await supabase.from("incomes").delete().eq("id", id);
+      if (error) throw error;
+      setIncomes(prev => prev.filter(i => i.id !== id));
+      toast({
+        title: "Entrada removida",
+        description: "A entrada foi excluída com sucesso.",
+      });
+    } catch (error) {
+      console.error("Error deleting income:", error);
+      toast({
+        title: "Erro ao remover entrada",
+        description: "Não foi possível remover a entrada.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const deleteRecurringIncome = async (id: string) => {
+    try {
+      const { error } = await supabase.from("recurring_incomes").delete().eq("id", id);
+      if (error) throw error;
+      setRecurringIncomes(prev => prev.filter(i => i.id !== id));
+      toast({
+        title: "Entrada fixa removida",
+        description: "A entrada fixa foi excluída com sucesso.",
+      });
+    } catch (error) {
+      console.error("Error deleting recurring income:", error);
+      toast({
+        title: "Erro ao remover entrada fixa",
+        description: "Não foi possível remover a entrada fixa.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const toggleRecurringIncomeActive = async (id: string, isActive: boolean) => {
+    try {
+      const { error } = await supabase
+        .from("recurring_incomes")
+        .update({ is_active: isActive })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      setRecurringIncomes(prev =>
+        prev.map(i => (i.id === id ? { ...i, is_active: isActive } : i))
+      );
+
+      toast({
+        title: isActive ? "Entrada ativada" : "Entrada desativada",
+        description: `A entrada fixa foi ${isActive ? "ativada" : "desativada"}.`,
+      });
+    } catch (error) {
+      console.error("Error toggling recurring income:", error);
     }
   };
 
@@ -1081,6 +1199,36 @@ export default function Index() {
       .filter((item) => item.percentage >= 80);
   }, [budgetGoals, expenses, recurringExpenses]);
 
+  // Calcular totais de entradas e saídas do mês
+  const monthlyTotals = useMemo(() => {
+    const monthStart = filters.startDate || startOfMonth(new Date());
+    const monthEnd = filters.endDate || endOfMonth(new Date());
+
+    // Despesas do período
+    const periodExpenses = expenses.filter(e => {
+      const date = parseLocalDate(e.expense_date);
+      return date >= monthStart && date <= monthEnd;
+    });
+    const totalExpenses = periodExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
+    const totalRecurringExpenses = recurringExpenses
+      .filter(e => e.is_active)
+      .reduce((sum, e) => sum + Number(e.amount), 0);
+
+    // Receitas do período
+    const periodIncomes = incomes.filter(i => {
+      const date = parseLocalDate(i.income_date);
+      return date >= monthStart && date <= monthEnd;
+    });
+    const totalIncomes = periodIncomes.reduce((sum, i) => sum + Number(i.amount), 0);
+    const totalRecurringIncomes = recurringIncomes
+      .filter(i => i.is_active)
+      .reduce((sum, i) => sum + Number(i.amount), 0);
+
+    return {
+      totalIncome: totalIncomes + totalRecurringIncomes,
+      totalExpense: totalExpenses + totalRecurringExpenses,
+    };
+  }, [expenses, recurringExpenses, incomes, recurringIncomes, filters.startDate, filters.endDate]);
 
   if (authLoading || loading) {
     return (
@@ -1202,6 +1350,14 @@ export default function Index() {
           />
         </div>
 
+        {/* Balance Summary - Entradas vs Saídas */}
+        <div className="mb-4">
+          <BalanceSummary 
+            totalIncome={monthlyTotals.totalIncome}
+            totalExpense={monthlyTotals.totalExpense}
+          />
+        </div>
+
         {/* Summary Cards */}
         <div className="mb-8" data-tour="expense-summary">
           <ExpenseSummary
@@ -1225,9 +1381,10 @@ export default function Index() {
 
         {/* Main Content */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full" data-tour="tabs">
-          <TabsList className="grid w-full grid-cols-3 mb-8">
+          <TabsList className="grid w-full grid-cols-4 mb-8">
             <TabsTrigger value="expenses">Despesas</TabsTrigger>
-            <TabsTrigger value="recurring">Despesas Fixas</TabsTrigger>
+            <TabsTrigger value="recurring">Fixas</TabsTrigger>
+            <TabsTrigger value="incomes" className="text-green-600 dark:text-green-400">Entradas</TabsTrigger>
             <TabsTrigger value="goals" className="relative">
               Metas
               {goalsAtRisk.length > 0 && (
@@ -1289,6 +1446,57 @@ export default function Index() {
             </div>
           </TabsContent>
 
+          <TabsContent value="incomes">
+            <div className="space-y-6">
+              {/* Entradas únicas */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-lg flex items-center gap-2">
+                    💵 Entradas do Mês
+                  </h3>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setIncomeSheetOpen(true)}
+                    className="text-green-600 border-green-600 hover:bg-green-50 dark:hover:bg-green-950"
+                  >
+                    + Entrada
+                  </Button>
+                </div>
+                <IncomeList
+                  incomes={incomes.filter(i => {
+                    const date = parseLocalDate(i.income_date);
+                    return date >= (filters.startDate || startOfMonth(new Date())) && 
+                           date <= (filters.endDate || endOfMonth(new Date()));
+                  })}
+                  onDelete={deleteIncome}
+                />
+              </div>
+
+              {/* Entradas fixas */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-lg flex items-center gap-2">
+                    🔄 Entradas Fixas
+                  </h3>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setRecurringIncomeSheetOpen(true)}
+                    className="text-green-600 border-green-600 hover:bg-green-50 dark:hover:bg-green-950"
+                  >
+                    + Fixa
+                  </Button>
+                </div>
+                <RecurringIncomeList
+                  incomes={recurringIncomes}
+                  onDelete={deleteRecurringIncome}
+                  onToggleActive={toggleRecurringIncomeActive}
+                />
+              </div>
+            </div>
+          </TabsContent>
+
           <TabsContent value="goals">
             <BudgetProgress
               goals={budgetGoals}
@@ -1306,6 +1514,7 @@ export default function Index() {
           onRecurringClick={() => setRecurringExpenseSheetOpen(true)}
           onGoalClick={() => setBudgetGoalSheetOpen(true)}
           onCalculatorClick={() => setCalculatorOpen(true)}
+          onIncomeClick={() => setIncomeSheetOpen(true)}
         />
 
         {/* Calculadora */}
@@ -1344,6 +1553,19 @@ export default function Index() {
           onOpenChange={setBudgetGoalSheetOpen}
           onSubmit={addBudgetGoal}
           currentGoalsCount={budgetGoals.length}
+        />
+
+        {/* Sheets de Entradas */}
+        <IncomeFormSheet
+          open={incomeSheetOpen}
+          onOpenChange={setIncomeSheetOpen}
+          onSuccess={loadIncomes}
+        />
+
+        <RecurringIncomeFormSheet
+          open={recurringIncomeSheetOpen}
+          onOpenChange={setRecurringIncomeSheetOpen}
+          onSuccess={loadRecurringIncomes}
         />
 
         {/* Modais de Edição */}
