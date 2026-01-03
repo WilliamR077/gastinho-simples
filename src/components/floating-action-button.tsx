@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, X, Receipt, Calendar, Target, Calculator } from "lucide-react";
+import { Plus, X, Receipt, Calendar, Target, Calculator, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -8,6 +8,7 @@ interface FloatingActionButtonProps {
   onRecurringClick: () => void;
   onGoalClick: () => void;
   onCalculatorClick: () => void;
+  onIncomeClick?: () => void;
 }
 
 export function FloatingActionButton({
@@ -15,6 +16,7 @@ export function FloatingActionButton({
   onRecurringClick,
   onGoalClick,
   onCalculatorClick,
+  onIncomeClick,
 }: FloatingActionButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -48,6 +50,16 @@ export function FloatingActionButton({
             <Target className="h-5 w-5" />
             <span>Meta</span>
           </Button>
+
+          {onIncomeClick && (
+            <Button
+              onClick={() => handleOptionClick(onIncomeClick)}
+              className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white shadow-lg rounded-full px-4 py-2 h-auto"
+            >
+              <TrendingUp className="h-5 w-5" />
+              <span>Entrada</span>
+            </Button>
+          )}
           
           <Button
             onClick={() => handleOptionClick(onRecurringClick)}

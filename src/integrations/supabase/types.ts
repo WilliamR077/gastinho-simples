@@ -265,6 +265,50 @@ export type Database = {
           },
         ]
       }
+      incomes: {
+        Row: {
+          amount: number
+          category: Database["public"]["Enums"]["income_category"]
+          created_at: string
+          description: string
+          id: string
+          income_date: string
+          shared_group_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          category?: Database["public"]["Enums"]["income_category"]
+          created_at?: string
+          description: string
+          id?: string
+          income_date?: string
+          shared_group_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          category?: Database["public"]["Enums"]["income_category"]
+          created_at?: string
+          description?: string
+          id?: string
+          income_date?: string
+          shared_group_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "incomes_shared_group_id_fkey"
+            columns: ["shared_group_id"]
+            isOneToOne: false
+            referencedRelation: "shared_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notification_settings: {
         Row: {
           created_at: string
@@ -367,6 +411,59 @@ export type Database = {
           },
           {
             foreignKeyName: "recurring_expenses_shared_group_id_fkey"
+            columns: ["shared_group_id"]
+            isOneToOne: false
+            referencedRelation: "shared_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recurring_incomes: {
+        Row: {
+          amount: number
+          category: Database["public"]["Enums"]["income_category"]
+          created_at: string
+          day_of_month: number
+          description: string
+          end_date: string | null
+          id: string
+          is_active: boolean
+          shared_group_id: string | null
+          start_date: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          category?: Database["public"]["Enums"]["income_category"]
+          created_at?: string
+          day_of_month: number
+          description: string
+          end_date?: string | null
+          id?: string
+          is_active?: boolean
+          shared_group_id?: string | null
+          start_date?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          category?: Database["public"]["Enums"]["income_category"]
+          created_at?: string
+          day_of_month?: number
+          description?: string
+          end_date?: string | null
+          id?: string
+          is_active?: boolean
+          shared_group_id?: string | null
+          start_date?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_incomes_shared_group_id_fkey"
             columns: ["shared_group_id"]
             isOneToOne: false
             referencedRelation: "shared_groups"
@@ -617,6 +714,16 @@ export type Database = {
         | "servicos"
         | "outros"
       group_member_role: "owner" | "admin" | "member"
+      income_category:
+        | "salario"
+        | "freelance"
+        | "investimentos"
+        | "vendas"
+        | "bonus"
+        | "presente"
+        | "reembolso"
+        | "aluguel"
+        | "outros"
       payment_method: "pix" | "credit" | "debit"
       subscription_tier: "free" | "no_ads" | "premium" | "premium_plus"
     }
@@ -759,6 +866,17 @@ export const Constants = {
         "outros",
       ],
       group_member_role: ["owner", "admin", "member"],
+      income_category: [
+        "salario",
+        "freelance",
+        "investimentos",
+        "vendas",
+        "bonus",
+        "presente",
+        "reembolso",
+        "aluguel",
+        "outros",
+      ],
       payment_method: ["pix", "credit", "debit"],
       subscription_tier: ["free", "no_ads", "premium", "premium_plus"],
     },
