@@ -5,6 +5,34 @@ import { ptBR } from 'date-fns/locale';
 import { Expense, PaymentMethod, ExpenseCategory, categoryLabels } from '@/types/expense';
 import { RecurringExpense } from '@/types/recurring-expense';
 import { Card } from '@/types/card';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
+
+// Helper para detectar se está no app nativo
+const isNativeApp = () => Capacitor.isNativePlatform();
+
+// Helper para salvar e compartilhar arquivo no app
+const saveAndShareFile = async (base64Data: string, fileName: string) => {
+  try {
+    const result = await Filesystem.writeFile({
+      path: fileName,
+      data: base64Data,
+      directory: Directory.Cache,
+    });
+
+    await Share.share({
+      title: fileName,
+      url: result.uri,
+      dialogTitle: "Exportar relatório",
+    });
+
+    return true;
+  } catch (error) {
+    console.error("Erro ao salvar/compartilhar arquivo:", error);
+    throw error;
+  }
+};
 
 interface GroupMember {
   user_id: string;
@@ -711,7 +739,15 @@ export async function exportReportsToPDF(
   }
 
   const fileName = `relatorio-gastos-${format(startDate, 'yyyy-MM')}.pdf`;
-  doc.save(fileName);
+
+  if (isNativeApp()) {
+    // No app nativo: converter para base64 e compartilhar
+    const pdfBase64 = doc.output("datauristring").split(",")[1];
+    await saveAndShareFile(pdfBase64, fileName);
+  } else {
+    // No navegador: download direto
+    doc.save(fileName);
+  }
   
   return fileName;
 }
