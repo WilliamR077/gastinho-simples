@@ -91,8 +91,13 @@ export function IncomeList({ incomes, onDelete, onEdit }: IncomeListProps) {
               
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
-                    <MoreVertical className="h-4 w-4" />
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-10 w-10 min-h-[44px] min-w-[44px] shrink-0 touch-manipulation"
+                    aria-label="Mais opções"
+                  >
+                    <MoreVertical className="h-5 w-5" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="bg-background">

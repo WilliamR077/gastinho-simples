@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { parseLocalDate } from "@/lib/utils";
 import { useValuesVisibility } from "@/hooks/use-values-visibility";
+import { useCategories } from "@/hooks/use-categories";
 
 type AlertLevel = 'safe' | 'warning' | 'caution' | 'danger' | 'critical';
 
@@ -76,6 +77,7 @@ interface BudgetProgressProps {
 
 export function BudgetProgress({ goals, expenses, recurringExpenses, selectedMonth, onDelete, onEdit }: BudgetProgressProps) {
   const { isHidden } = useValuesVisibility();
+  const { categories } = useCategories();
   
   const formatCurrency = (value: number) => {
     if (isHidden) return "R$ ***,**";
@@ -102,6 +104,34 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, selectedMon
     return recurringExpenses.filter((re) => re.is_active);
   }, [recurringExpenses]);
 
+  // Função para encontrar category_ids que correspondem a uma categoria do enum
+  const getCategoryIdsForGoal = (goalCategory: string) => {
+    const goalCategoryLabel = categoryLabels[goalCategory as keyof typeof categoryLabels];
+    if (!goalCategoryLabel) return [];
+    
+    return categories
+      .filter(c => c.name.toLowerCase() === goalCategoryLabel.toLowerCase())
+      .map(c => c.id);
+  };
+
+  // Função para verificar se uma despesa corresponde à categoria da meta
+  const expenseMatchesGoalCategory = (
+    expCategory: string | undefined,
+    expCategoryId: string | null | undefined,
+    goalCategory: string
+  ) => {
+    // Match direto pelo enum (dados antigos)
+    if (expCategory === goalCategory) return true;
+    
+    // Match pelo category_id (dados novos)
+    if (expCategoryId) {
+      const matchingIds = getCategoryIdsForGoal(goalCategory);
+      return matchingIds.includes(expCategoryId);
+    }
+    
+    return false;
+  };
+
   const calculateProgress = (goal: BudgetGoal) => {
     let totalSpent = 0;
 
@@ -110,10 +140,10 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, selectedMon
       totalSpent += activeRecurringExpenses.reduce((sum, re) => sum + Number(re.amount), 0);
     } else if (goal.type === "category" && goal.category) {
       totalSpent = monthlyExpenses
-        .filter((exp) => exp.category === goal.category)
+        .filter((exp) => expenseMatchesGoalCategory(exp.category, exp.category_id, goal.category!))
         .reduce((sum, exp) => sum + Number(exp.amount), 0);
       totalSpent += activeRecurringExpenses
-        .filter((re) => re.category === goal.category)
+        .filter((re) => expenseMatchesGoalCategory(re.category, re.category_id, goal.category!))
         .reduce((sum, re) => sum + Number(re.amount), 0);
     }
 
@@ -170,8 +200,13 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, selectedMon
                 </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                      <MoreVertical className="h-4 w-4" />
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-10 w-10 min-h-[44px] min-w-[44px] shrink-0 touch-manipulation"
+                      aria-label="Mais opções"
+                    >
+                      <MoreVertical className="h-5 w-5" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="bg-background">

@@ -1160,16 +1160,16 @@ export default function Index() {
     setActiveCategoryFilter(null);
   };
 
-  // Calcular metas em risco
+  // Calcular metas em risco (usa o mês selecionado, não o mês atual)
   const goalsAtRisk = useMemo(() => {
-    const currentMonth = new Date().getMonth();
-    const currentYear = new Date().getFullYear();
+    const selectedMonthNum = currentMonth.getMonth();
+    const selectedYearNum = currentMonth.getFullYear();
 
-    const monthlyExpenses = expenses.filter((expense) => {
+    const monthlyExpensesForGoals = expenses.filter((expense) => {
       const expenseDate = parseLocalDate(expense.expense_date);
       return (
-        expenseDate.getMonth() === currentMonth &&
-        expenseDate.getFullYear() === currentYear
+        expenseDate.getMonth() === selectedMonthNum &&
+        expenseDate.getFullYear() === selectedYearNum
       );
     });
 
@@ -1180,10 +1180,13 @@ export default function Index() {
         let totalSpent = 0;
 
         if (goal.type === "monthly_total") {
-          totalSpent = monthlyExpenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
+          totalSpent = monthlyExpensesForGoals.reduce((sum, exp) => sum + Number(exp.amount), 0);
           totalSpent += activeRecurring.reduce((sum, re) => sum + Number(re.amount), 0);
         } else if (goal.type === "category" && goal.category) {
-          totalSpent = monthlyExpenses
+          // Match por enum OU por category_id que corresponda ao nome da categoria
+          const goalCategoryLabel = categoryLabels[goal.category as keyof typeof categoryLabels];
+          
+          totalSpent = monthlyExpensesForGoals
             .filter((exp) => exp.category === goal.category)
             .reduce((sum, exp) => sum + Number(exp.amount), 0);
           totalSpent += activeRecurring
@@ -1198,7 +1201,7 @@ export default function Index() {
         return { goal, totalSpent, limit, percentage, remaining };
       })
       .filter((item) => item.percentage >= 80);
-  }, [budgetGoals, expenses, recurringExpenses]);
+  }, [budgetGoals, expenses, recurringExpenses, currentMonth]);
 
   // Calcular totais de entradas e saídas do mês
   const monthlyTotals = useMemo(() => {
@@ -1464,6 +1467,12 @@ export default function Index() {
                              date <= (filters.endDate || endOfMonth(new Date()));
                     })}
                     onDelete={deleteIncome}
+                    onEdit={(income) => {
+                      toast({
+                        title: "Edição de entrada",
+                        description: "Em breve você poderá editar entradas diretamente.",
+                      });
+                    }}
                   />
                 </CardContent>
               </Card>
@@ -1480,6 +1489,12 @@ export default function Index() {
                     incomes={recurringIncomes}
                     onDelete={deleteRecurringIncome}
                     onToggleActive={toggleRecurringIncomeActive}
+                    onEdit={(income) => {
+                      toast({
+                        title: "Edição de entrada fixa",
+                        description: "Em breve você poderá editar entradas fixas diretamente.",
+                      });
+                    }}
                   />
                 </CardContent>
               </Card>
