@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, X, Receipt, Calendar, Target, Calculator, TrendingUp } from "lucide-react";
+import { Plus, X, Receipt, Calendar, Target, Calculator, TrendingUp, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -9,6 +9,7 @@ interface FloatingActionButtonProps {
   onGoalClick: () => void;
   onCalculatorClick: () => void;
   onIncomeClick?: () => void;
+  onRecurringIncomeClick?: () => void;
 }
 
 export function FloatingActionButton({
@@ -17,6 +18,7 @@ export function FloatingActionButton({
   onGoalClick,
   onCalculatorClick,
   onIncomeClick,
+  onRecurringIncomeClick,
 }: FloatingActionButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -51,6 +53,16 @@ export function FloatingActionButton({
             <span>Meta</span>
           </Button>
 
+          {onRecurringIncomeClick && (
+            <Button
+              onClick={() => handleOptionClick(onRecurringIncomeClick)}
+              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg rounded-full px-4 py-2 h-auto"
+            >
+              <RefreshCw className="h-5 w-5" />
+              <span>Entrada Fixa</span>
+            </Button>
+          )}
+
           {onIncomeClick && (
             <Button
               onClick={() => handleOptionClick(onIncomeClick)}
@@ -71,7 +83,7 @@ export function FloatingActionButton({
           
           <Button
             onClick={() => handleOptionClick(onExpenseClick)}
-            className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg rounded-full px-4 py-2 h-auto"
+            className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white shadow-lg rounded-full px-4 py-2 h-auto"
           >
             <Receipt className="h-5 w-5" />
             <span>Despesa</span>

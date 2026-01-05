@@ -95,7 +95,7 @@ export function IncomeList({ incomes, onDelete, onEdit }: IncomeListProps) {
                     <MoreVertical className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
+                <DropdownMenuContent align="end" className="bg-background">
                   {onEdit && (
                     <DropdownMenuItem onClick={() => onEdit(income)}>
                       <Pencil className="mr-2 h-4 w-4" />

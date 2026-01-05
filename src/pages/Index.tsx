@@ -39,6 +39,7 @@ import { BarChart3, CreditCard, Settings, FilterX } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LogOut, User } from "lucide-react";
 import { generateBillingPeriods, filterExpensesByBillingPeriod, CreditCardConfig } from "@/utils/billing-period";
@@ -1382,10 +1383,10 @@ export default function Index() {
         {/* Main Content */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full" data-tour="tabs">
           <TabsList className="grid w-full grid-cols-4 mb-8">
-            <TabsTrigger value="expenses">Despesas</TabsTrigger>
-            <TabsTrigger value="recurring">Fixas</TabsTrigger>
-            <TabsTrigger value="incomes" className="text-green-600 dark:text-green-400">Entradas</TabsTrigger>
-            <TabsTrigger value="goals" className="relative">
+            <TabsTrigger value="expenses" className="data-[state=active]:text-red-600 dark:data-[state=active]:text-red-400">Despesas</TabsTrigger>
+            <TabsTrigger value="recurring" className="data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400">Fixas</TabsTrigger>
+            <TabsTrigger value="incomes" className="data-[state=active]:text-green-600 dark:data-[state=active]:text-green-400">Entradas</TabsTrigger>
+            <TabsTrigger value="goals" className="relative data-[state=active]:text-amber-600 dark:data-[state=active]:text-amber-400">
               Metas
               {goalsAtRisk.length > 0 && (
                 <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
@@ -1449,51 +1450,39 @@ export default function Index() {
           <TabsContent value="incomes">
             <div className="space-y-6">
               {/* Entradas únicas */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-lg flex items-center gap-2">
+              <Card className="bg-gradient-card border-border/50 shadow-card backdrop-blur-sm">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg flex items-center gap-2 text-green-600 dark:text-green-400">
                     💵 Entradas do Mês
-                  </h3>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setIncomeSheetOpen(true)}
-                    className="text-green-600 border-green-600 hover:bg-green-50 dark:hover:bg-green-950"
-                  >
-                    + Entrada
-                  </Button>
-                </div>
-                <IncomeList
-                  incomes={incomes.filter(i => {
-                    const date = parseLocalDate(i.income_date);
-                    return date >= (filters.startDate || startOfMonth(new Date())) && 
-                           date <= (filters.endDate || endOfMonth(new Date()));
-                  })}
-                  onDelete={deleteIncome}
-                />
-              </div>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <IncomeList
+                    incomes={incomes.filter(i => {
+                      const date = parseLocalDate(i.income_date);
+                      return date >= (filters.startDate || startOfMonth(new Date())) && 
+                             date <= (filters.endDate || endOfMonth(new Date()));
+                    })}
+                    onDelete={deleteIncome}
+                  />
+                </CardContent>
+              </Card>
 
               {/* Entradas fixas */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-lg flex items-center gap-2">
+              <Card className="bg-gradient-card border-border/50 shadow-card backdrop-blur-sm">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg flex items-center gap-2 text-green-600 dark:text-green-400">
                     🔄 Entradas Fixas
-                  </h3>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setRecurringIncomeSheetOpen(true)}
-                    className="text-green-600 border-green-600 hover:bg-green-50 dark:hover:bg-green-950"
-                  >
-                    + Fixa
-                  </Button>
-                </div>
-                <RecurringIncomeList
-                  incomes={recurringIncomes}
-                  onDelete={deleteRecurringIncome}
-                  onToggleActive={toggleRecurringIncomeActive}
-                />
-              </div>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <RecurringIncomeList
+                    incomes={recurringIncomes}
+                    onDelete={deleteRecurringIncome}
+                    onToggleActive={toggleRecurringIncomeActive}
+                  />
+                </CardContent>
+              </Card>
             </div>
           </TabsContent>
 
@@ -1502,6 +1491,7 @@ export default function Index() {
               goals={budgetGoals}
               expenses={expenses}
               recurringExpenses={recurringExpenses}
+              selectedMonth={currentMonth}
               onDelete={deleteBudgetGoal}
               onEdit={handleEditBudgetGoal}
             />
@@ -1515,6 +1505,7 @@ export default function Index() {
           onGoalClick={() => setBudgetGoalSheetOpen(true)}
           onCalculatorClick={() => setCalculatorOpen(true)}
           onIncomeClick={() => setIncomeSheetOpen(true)}
+          onRecurringIncomeClick={() => setRecurringIncomeSheetOpen(true)}
         />
 
         {/* Calculadora */}
