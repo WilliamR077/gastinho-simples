@@ -69,11 +69,12 @@ interface BudgetProgressProps {
   goals: BudgetGoal[];
   expenses: Expense[];
   recurringExpenses: RecurringExpense[];
+  selectedMonth: Date;
   onDelete: (id: string) => void;
   onEdit: (goal: BudgetGoal) => void;
 }
 
-export function BudgetProgress({ goals, expenses, recurringExpenses, onDelete, onEdit }: BudgetProgressProps) {
+export function BudgetProgress({ goals, expenses, recurringExpenses, selectedMonth, onDelete, onEdit }: BudgetProgressProps) {
   const { isHidden } = useValuesVisibility();
   
   const formatCurrency = (value: number) => {
@@ -84,8 +85,8 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, onDelete, o
     }).format(value);
   };
 
-  const currentMonth = new Date().getMonth();
-  const currentYear = new Date().getFullYear();
+  const currentMonth = selectedMonth.getMonth();
+  const currentYear = selectedMonth.getFullYear();
 
   const monthlyExpenses = useMemo(() => {
     return expenses.filter((expense) => {
