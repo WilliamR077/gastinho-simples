@@ -7,6 +7,8 @@ import { CategorySummary } from "@/components/category-summary";
 import { ExpenseEditDialog } from "@/components/expense-edit-dialog";
 import { RecurringExpenseEditDialog } from "@/components/recurring-expense-edit-dialog";
 import { BudgetGoalEditDialog } from "@/components/budget-goal-edit-dialog";
+import { IncomeEditDialog, IncomeFormData } from "@/components/income-edit-dialog";
+import { RecurringIncomeEditDialog, RecurringIncomeFormData } from "@/components/recurring-income-edit-dialog";
 import { BudgetAlertBanner } from "@/components/budget-alert-banner";
 import { MonthNavigator } from "@/components/month-navigator";
 import { FloatingActionButton } from "@/components/floating-action-button";
@@ -87,6 +89,10 @@ export default function Index() {
   const [recurringExpenseDialogOpen, setRecurringExpenseDialogOpen] = useState(false);
   const [editingBudgetGoal, setEditingBudgetGoal] = useState<BudgetGoal | null>(null);
   const [budgetGoalDialogOpen, setBudgetGoalDialogOpen] = useState(false);
+  const [editingIncome, setEditingIncome] = useState<Income | null>(null);
+  const [incomeDialogOpen, setIncomeDialogOpen] = useState(false);
+  const [editingRecurringIncome, setEditingRecurringIncome] = useState<RecurringIncomeType | null>(null);
+  const [recurringIncomeDialogOpen, setRecurringIncomeDialogOpen] = useState(false);
   const [calculatorOpen, setCalculatorOpen] = useState(false);
   const [calculatorInitialValue, setCalculatorInitialValue] = useState<number | undefined>();
   const [expenseDefaultAmount, setExpenseDefaultAmount] = useState<number | undefined>();
@@ -470,7 +476,108 @@ export default function Index() {
     }
   };
 
-  // Handler para navegação por mês
+  // Handlers para edição de entradas
+  const handleEditIncome = (income: Income) => {
+    setEditingIncome(income);
+    setIncomeDialogOpen(true);
+  };
+
+  const handleEditRecurringIncome = (income: RecurringIncomeType) => {
+    setEditingRecurringIncome(income);
+    setRecurringIncomeDialogOpen(true);
+  };
+
+  const updateIncome = async (id: string, data: IncomeFormData) => {
+    try {
+      const formatDateLocal = (date: Date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
+
+      const { error } = await supabase
+        .from("incomes")
+        .update({
+          description: data.description,
+          amount: data.amount,
+          category: data.category,
+          income_date: formatDateLocal(data.incomeDate),
+        })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      setIncomes(prev =>
+        prev.map(i =>
+          i.id === id
+            ? {
+                ...i,
+                description: data.description,
+                amount: data.amount,
+                category: data.category,
+                income_date: formatDateLocal(data.incomeDate),
+              }
+            : i
+        )
+      );
+
+      toast({
+        title: "Entrada atualizada",
+        description: "A entrada foi atualizada com sucesso.",
+      });
+    } catch (error) {
+      console.error("Error updating income:", error);
+      toast({
+        title: "Erro ao atualizar entrada",
+        description: "Não foi possível atualizar a entrada.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const updateRecurringIncome = async (id: string, data: RecurringIncomeFormData) => {
+    try {
+      const { error } = await supabase
+        .from("recurring_incomes")
+        .update({
+          description: data.description,
+          amount: data.amount,
+          category: data.category,
+          day_of_month: data.dayOfMonth,
+        })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      setRecurringIncomes(prev =>
+        prev.map(i =>
+          i.id === id
+            ? {
+                ...i,
+                description: data.description,
+                amount: data.amount,
+                category: data.category,
+                day_of_month: data.dayOfMonth,
+              }
+            : i
+        )
+      );
+
+      toast({
+        title: "Entrada fixa atualizada",
+        description: "A entrada fixa foi atualizada com sucesso.",
+      });
+    } catch (error) {
+      console.error("Error updating recurring income:", error);
+      toast({
+        title: "Erro ao atualizar entrada fixa",
+        description: "Não foi possível atualizar a entrada fixa.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleMonthChange = (startDate: Date, endDate: Date) => {
     setCurrentMonth(startDate);
     setFilters(prev => ({
@@ -1467,12 +1574,7 @@ export default function Index() {
                              date <= (filters.endDate || endOfMonth(new Date()));
                     })}
                     onDelete={deleteIncome}
-                    onEdit={(income) => {
-                      toast({
-                        title: "Edição de entrada",
-                        description: "Em breve você poderá editar entradas diretamente.",
-                      });
-                    }}
+                    onEdit={handleEditIncome}
                   />
                 </CardContent>
               </Card>
@@ -1489,12 +1591,7 @@ export default function Index() {
                     incomes={recurringIncomes}
                     onDelete={deleteRecurringIncome}
                     onToggleActive={toggleRecurringIncomeActive}
-                    onEdit={(income) => {
-                      toast({
-                        title: "Edição de entrada fixa",
-                        description: "Em breve você poderá editar entradas fixas diretamente.",
-                      });
-                    }}
+                    onEdit={handleEditRecurringIncome}
                   />
                 </CardContent>
               </Card>
@@ -1594,6 +1691,20 @@ export default function Index() {
           open={budgetGoalDialogOpen}
           onOpenChange={setBudgetGoalDialogOpen}
           onSave={updateBudgetGoal}
+        />
+
+        <IncomeEditDialog
+          income={editingIncome}
+          open={incomeDialogOpen}
+          onOpenChange={setIncomeDialogOpen}
+          onSave={updateIncome}
+        />
+
+        <RecurringIncomeEditDialog
+          income={editingRecurringIncome}
+          open={recurringIncomeDialogOpen}
+          onOpenChange={setRecurringIncomeDialogOpen}
+          onSave={updateRecurringIncome}
         />
       </div>
     </div>
