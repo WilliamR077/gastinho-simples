@@ -1,24 +1,20 @@
 import { useState } from "react";
-import { Plus, X, Receipt, Calendar, Target, Calculator, TrendingUp, RefreshCw } from "lucide-react";
+import { Plus, X, Receipt, Target, Calculator, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 interface FloatingActionButtonProps {
   onExpenseClick: () => void;
-  onRecurringClick: () => void;
   onGoalClick: () => void;
   onCalculatorClick: () => void;
-  onIncomeClick?: () => void;
-  onRecurringIncomeClick?: () => void;
+  onIncomeClick: () => void;
 }
 
 export function FloatingActionButton({
   onExpenseClick,
-  onRecurringClick,
   onGoalClick,
   onCalculatorClick,
   onIncomeClick,
-  onRecurringIncomeClick,
 }: FloatingActionButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -53,32 +49,12 @@ export function FloatingActionButton({
             <span>Meta</span>
           </Button>
 
-          {onRecurringIncomeClick && (
-            <Button
-              onClick={() => handleOptionClick(onRecurringIncomeClick)}
-              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg rounded-full px-4 py-2 h-auto"
-            >
-              <RefreshCw className="h-5 w-5" />
-              <span>Entrada Fixa</span>
-            </Button>
-          )}
-
-          {onIncomeClick && (
-            <Button
-              onClick={() => handleOptionClick(onIncomeClick)}
-              className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white shadow-lg rounded-full px-4 py-2 h-auto"
-            >
-              <TrendingUp className="h-5 w-5" />
-              <span>Entrada</span>
-            </Button>
-          )}
-          
           <Button
-            onClick={() => handleOptionClick(onRecurringClick)}
-            className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white shadow-lg rounded-full px-4 py-2 h-auto"
+            onClick={() => handleOptionClick(onIncomeClick)}
+            className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white shadow-lg rounded-full px-4 py-2 h-auto"
           >
-            <Calendar className="h-5 w-5" />
-            <span>Despesa Fixa</span>
+            <TrendingUp className="h-5 w-5" />
+            <span>Entrada</span>
           </Button>
           
           <Button

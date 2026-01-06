@@ -13,15 +13,13 @@ import { BudgetAlertBanner } from "@/components/budget-alert-banner";
 import { MonthNavigator } from "@/components/month-navigator";
 import { FloatingActionButton } from "@/components/floating-action-button";
 import { CalculatorDrawer } from "@/components/calculator-drawer";
-import { ExpenseFormSheet } from "@/components/expense-form-sheet";
-import { RecurringExpenseFormSheet } from "@/components/recurring-expense-form-sheet";
+import { UnifiedExpenseFormSheet } from "@/components/unified-expense-form-sheet";
 import { BudgetGoalFormSheet } from "@/components/budget-goal-form-sheet";
 import { ContextSelector } from "@/components/context-selector";
 import { useSharedGroups } from "@/hooks/use-shared-groups";
 import { ProductTour } from "@/components/product-tour";
 import { BalanceSummary } from "@/components/balance-summary";
-import { IncomeFormSheet } from "@/components/income-form-sheet";
-import { RecurringIncomeFormSheet } from "@/components/recurring-income-form-sheet";
+import { UnifiedIncomeFormSheet } from "@/components/unified-income-form-sheet";
 import { IncomeList } from "@/components/income-list";
 import { RecurringIncomeList } from "@/components/recurring-income-list";
 import { Income, RecurringIncome as RecurringIncomeType } from "@/types/income";
@@ -70,6 +68,8 @@ export default function Index() {
   const [cards, setCards] = useState<CardType[]>([]);
   const [notificationSettings, setNotificationSettings] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("expenses");
+  const [expenseSubTab, setExpenseSubTab] = useState("monthly");
+  const [incomeSubTab, setIncomeSubTab] = useState("monthly");
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string | null>(null);
 
   // Estado para o mês atual da navegação
@@ -77,10 +77,8 @@ export default function Index() {
 
   // Estados para os sheets de formulário
   const [expenseSheetOpen, setExpenseSheetOpen] = useState(false);
-  const [recurringExpenseSheetOpen, setRecurringExpenseSheetOpen] = useState(false);
   const [budgetGoalSheetOpen, setBudgetGoalSheetOpen] = useState(false);
   const [incomeSheetOpen, setIncomeSheetOpen] = useState(false);
-  const [recurringIncomeSheetOpen, setRecurringIncomeSheetOpen] = useState(false);
 
   // Estados para os modais de edição
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
@@ -1492,9 +1490,8 @@ export default function Index() {
 
         {/* Main Content */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full" data-tour="tabs">
-          <TabsList className="grid w-full grid-cols-4 mb-8">
+          <TabsList className="grid w-full grid-cols-3 mb-4">
             <TabsTrigger value="expenses" className="data-[state=active]:text-red-600 dark:data-[state=active]:text-red-400">Despesas</TabsTrigger>
-            <TabsTrigger value="recurring" className="data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400">Fixas</TabsTrigger>
             <TabsTrigger value="incomes" className="data-[state=active]:text-green-600 dark:data-[state=active]:text-green-400">Entradas</TabsTrigger>
             <TabsTrigger value="goals" className="relative data-[state=active]:text-amber-600 dark:data-[state=active]:text-amber-400">
               Metas
@@ -1507,95 +1504,101 @@ export default function Index() {
           </TabsList>
 
           <TabsContent value="expenses">
-            <div className="space-y-4">
-              {hasActiveFilters && (
-                <div className="flex justify-end">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={clearAllFilters}
-                    className="text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    <FilterX className="h-3 w-3 mr-1" />
-                    Limpar filtros
-                  </Button>
-                </div>
-              )}
-              <ExpenseList
-                expenses={displayedExpenses}
-                onDeleteExpense={deleteExpense}
-                onEditExpense={handleEditExpense}
-                onSendToCalculator={handleSendToCalculator}
-                groupMembers={groupMembers}
-                isGroupContext={currentContext.type === 'group'}
-              />
-            </div>
-          </TabsContent>
+            <Tabs value={expenseSubTab} onValueChange={setExpenseSubTab}>
+              <TabsList className="grid w-full grid-cols-2 mb-4 bg-muted/50 h-9">
+                <TabsTrigger value="monthly" className="text-sm data-[state=active]:bg-background">
+                  Do Mês
+                </TabsTrigger>
+                <TabsTrigger value="recurring" className="text-sm data-[state=active]:bg-background">
+                  Fixas
+                </TabsTrigger>
+              </TabsList>
 
-          <TabsContent value="recurring">
-            <div className="space-y-4">
-              {hasActiveFilters && (
-                <div className="flex justify-end">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={clearAllFilters}
-                    className="text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    <FilterX className="h-3 w-3 mr-1" />
-                    Limpar filtros
-                  </Button>
+              <TabsContent value="monthly">
+                <div className="space-y-4">
+                  {hasActiveFilters && (
+                    <div className="flex justify-end">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={clearAllFilters}
+                        className="text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        <FilterX className="h-3 w-3 mr-1" />
+                        Limpar filtros
+                      </Button>
+                    </div>
+                  )}
+                  <ExpenseList
+                    expenses={displayedExpenses}
+                    onDeleteExpense={deleteExpense}
+                    onEditExpense={handleEditExpense}
+                    onSendToCalculator={handleSendToCalculator}
+                    groupMembers={groupMembers}
+                    isGroupContext={currentContext.type === 'group'}
+                  />
                 </div>
-              )}
-              <RecurringExpenseList
-                expenses={displayedRecurringExpenses}
-                onDeleteExpense={deleteRecurringExpense}
-                onToggleActive={toggleRecurringExpenseActive}
-                onEditRecurringExpense={handleEditRecurringExpense}
-                onSendToCalculator={handleSendToCalculator}
-              />
-            </div>
+              </TabsContent>
+
+              <TabsContent value="recurring">
+                <div className="space-y-4">
+                  {hasActiveFilters && (
+                    <div className="flex justify-end">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={clearAllFilters}
+                        className="text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        <FilterX className="h-3 w-3 mr-1" />
+                        Limpar filtros
+                      </Button>
+                    </div>
+                  )}
+                  <RecurringExpenseList
+                    expenses={displayedRecurringExpenses}
+                    onDeleteExpense={deleteRecurringExpense}
+                    onToggleActive={toggleRecurringExpenseActive}
+                    onEditRecurringExpense={handleEditRecurringExpense}
+                    onSendToCalculator={handleSendToCalculator}
+                  />
+                </div>
+              </TabsContent>
+            </Tabs>
           </TabsContent>
 
           <TabsContent value="incomes">
-            <div className="space-y-6">
-              {/* Entradas únicas */}
-              <Card className="bg-gradient-card border-border/50 shadow-card backdrop-blur-sm">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg flex items-center gap-2 text-green-600 dark:text-green-400">
-                    💵 Entradas do Mês
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <IncomeList
-                    incomes={incomes.filter(i => {
-                      const date = parseLocalDate(i.income_date);
-                      return date >= (filters.startDate || startOfMonth(new Date())) && 
-                             date <= (filters.endDate || endOfMonth(new Date()));
-                    })}
-                    onDelete={deleteIncome}
-                    onEdit={handleEditIncome}
-                  />
-                </CardContent>
-              </Card>
+            <Tabs value={incomeSubTab} onValueChange={setIncomeSubTab}>
+              <TabsList className="grid w-full grid-cols-2 mb-4 bg-muted/50 h-9">
+                <TabsTrigger value="monthly" className="text-sm data-[state=active]:bg-background">
+                  Do Mês
+                </TabsTrigger>
+                <TabsTrigger value="recurring" className="text-sm data-[state=active]:bg-background">
+                  Fixas
+                </TabsTrigger>
+              </TabsList>
 
-              {/* Entradas fixas */}
-              <Card className="bg-gradient-card border-border/50 shadow-card backdrop-blur-sm">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg flex items-center gap-2 text-green-600 dark:text-green-400">
-                    🔄 Entradas Fixas
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <RecurringIncomeList
-                    incomes={recurringIncomes}
-                    onDelete={deleteRecurringIncome}
-                    onToggleActive={toggleRecurringIncomeActive}
-                    onEdit={handleEditRecurringIncome}
-                  />
-                </CardContent>
-              </Card>
-            </div>
+              <TabsContent value="monthly">
+                <IncomeList
+                  incomes={incomes.filter(i => {
+                    const date = parseLocalDate(i.income_date);
+                    return date >= (filters.startDate || startOfMonth(new Date())) && 
+                           date <= (filters.endDate || endOfMonth(new Date()));
+                  })}
+                  onDelete={deleteIncome}
+                  onEdit={handleEditIncome}
+                />
+              </TabsContent>
+
+              <TabsContent value="recurring">
+                <RecurringIncomeList
+                  incomes={recurringIncomes}
+                  onDelete={deleteRecurringIncome}
+                  onToggleActive={toggleRecurringIncomeActive}
+                  onEdit={handleEditRecurringIncome}
+                />
+              </TabsContent>
+            </Tabs>
           </TabsContent>
 
           <TabsContent value="goals">
@@ -1613,11 +1616,9 @@ export default function Index() {
         {/* Floating Action Button */}
         <FloatingActionButton
           onExpenseClick={() => setExpenseSheetOpen(true)}
-          onRecurringClick={() => setRecurringExpenseSheetOpen(true)}
           onGoalClick={() => setBudgetGoalSheetOpen(true)}
           onCalculatorClick={() => setCalculatorOpen(true)}
           onIncomeClick={() => setIncomeSheetOpen(true)}
-          onRecurringIncomeClick={() => setRecurringIncomeSheetOpen(true)}
         />
 
         {/* Calculadora */}
@@ -1631,24 +1632,19 @@ export default function Index() {
           onCreateExpense={handleCreateExpenseFromCalculator}
         />
 
-        {/* Sheets de Formulário */}
-        <ExpenseFormSheet
+        {/* Sheet de Despesa Unificado */}
+        <UnifiedExpenseFormSheet
           open={expenseSheetOpen}
           onOpenChange={(open) => {
             setExpenseSheetOpen(open);
             if (!open) setExpenseDefaultAmount(undefined);
           }}
           onAddExpense={addExpense}
+          onAddRecurringExpense={addRecurringExpense}
           budgetGoals={budgetGoals}
           expenses={expenses}
           recurringExpenses={recurringExpenses}
           defaultAmount={expenseDefaultAmount}
-        />
-
-        <RecurringExpenseFormSheet
-          open={recurringExpenseSheetOpen}
-          onOpenChange={setRecurringExpenseSheetOpen}
-          onAddRecurringExpense={addRecurringExpense}
         />
 
         <BudgetGoalFormSheet
@@ -1658,17 +1654,14 @@ export default function Index() {
           currentGoalsCount={budgetGoals.length}
         />
 
-        {/* Sheets de Entradas */}
-        <IncomeFormSheet
+        {/* Sheet de Entrada Unificado */}
+        <UnifiedIncomeFormSheet
           open={incomeSheetOpen}
           onOpenChange={setIncomeSheetOpen}
-          onSuccess={loadIncomes}
-        />
-
-        <RecurringIncomeFormSheet
-          open={recurringIncomeSheetOpen}
-          onOpenChange={setRecurringIncomeSheetOpen}
-          onSuccess={loadRecurringIncomes}
+          onSuccess={() => {
+            loadIncomes();
+            loadRecurringIncomes();
+          }}
         />
 
         {/* Modais de Edição */}
