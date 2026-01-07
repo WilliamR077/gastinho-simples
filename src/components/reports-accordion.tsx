@@ -2,10 +2,11 @@ import { useMemo } from "react";
 import { Card as CardType } from "@/types/card";
 import { Expense, PaymentMethod, ExpenseCategory, categoryLabels } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
+import { Income, RecurringIncome, incomeCategoryLabels } from "@/types/income";
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, BarChart, Bar } from "recharts";
 import { format, startOfMonth, endOfMonth, eachMonthOfInterval, eachDayOfInterval, isSameDay, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { BarChart3, TrendingUp, PieChartIcon, Crown, Lock, CreditCard, Users, CalendarClock, DollarSign } from "lucide-react";
+import { BarChart3, TrendingUp, TrendingDown, PieChartIcon, Crown, Lock, CreditCard, Users, CalendarClock, DollarSign, ArrowUpDown } from "lucide-react";
 import { useSubscription } from "@/hooks/use-subscription";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
@@ -30,6 +31,8 @@ interface ReportsAccordionProps {
   expenses: Expense[];
   recurringExpenses: RecurringExpense[];
   cards: CardType[];
+  incomes: Income[];
+  recurringIncomes: RecurringIncome[];
   startDate: Date;
   endDate: Date;
   periodType: PeriodType;
@@ -66,6 +69,8 @@ export function ReportsAccordion({
   expenses, 
   recurringExpenses,
   cards,
+  incomes,
+  recurringIncomes,
   startDate,
   endDate,
   periodType,
@@ -133,6 +138,32 @@ export function ReportsAccordion({
     return months.length;
   }, [startDate, endDate]);
 
+  // Filtrar entradas para o período selecionado
+  const filteredIncomes = useMemo(() => {
+    return incomes.filter(i => {
+      const incomeDate = parseLocalDate(i.income_date);
+      return incomeDate >= startDate && incomeDate <= endDate;
+    });
+  }, [incomes, startDate, endDate]);
+
+  // Filtrar entradas recorrentes por start_date e end_date
+  const filteredRecurringIncomes = useMemo(() => {
+    return recurringIncomes.filter(ri => {
+      if (!ri.is_active && !ri.end_date) return false;
+      
+      const startDateRi = ri.start_date 
+        ? parseISO(ri.start_date) 
+        : parseLocalDate(ri.created_at);
+      
+      const endDateRi = ri.end_date ? parseISO(ri.end_date) : null;
+      
+      const startedBeforeOrDuring = startDateRi <= endDate;
+      const notEndedBeforePeriod = !endDateRi || endDateRi >= startDate;
+      
+      return startedBeforeOrDuring && notEndedBeforePeriod;
+    });
+  }, [recurringIncomes, startDate, endDate]);
+
   // Total geral do período (despesas + recorrentes * meses)
   const totalPeriod = useMemo(() => {
     const expensesTotal = filteredExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
@@ -145,6 +176,109 @@ export function ReportsAccordion({
     
     return expensesTotal + recurringPeriodTotal;
   }, [filteredExpenses, filteredRecurringExpenses, monthsInPeriod, periodType]);
+
+  // Total de entradas do período
+  const totalIncomes = useMemo(() => {
+    const incomesTotal = filteredIncomes.reduce((sum, i) => sum + Number(i.amount), 0);
+    const recurringTotal = filteredRecurringIncomes.reduce((sum, i) => sum + Number(i.amount), 0);
+    
+    const recurringPeriodTotal = periodType === "month" 
+      ? recurringTotal 
+      : recurringTotal * monthsInPeriod;
+    
+    return incomesTotal + recurringPeriodTotal;
+  }, [filteredIncomes, filteredRecurringIncomes, monthsInPeriod, periodType]);
+
+  // Saldo do período
+  const balance = useMemo(() => {
+    return totalIncomes - totalPeriod;
+  }, [totalIncomes, totalPeriod]);
+
+  // Dados para gráfico de fluxo de caixa (entradas vs saídas por período)
+  const cashFlowData = useMemo(() => {
+    if (periodType === "month") {
+      // Para mês: mostrar por DIA
+      const days = eachDayOfInterval({ start: startDate, end: endDate });
+      
+      return days.map(day => {
+        const dayExpenses = filteredExpenses.filter(expense => {
+          const expenseDate = parseLocalDate(expense.expense_date);
+          return isSameDay(expenseDate, day);
+        });
+        
+        const dayIncomes = filteredIncomes.filter(income => {
+          const incomeDate = parseLocalDate(income.income_date);
+          return isSameDay(incomeDate, day);
+        });
+        
+        const expenses = dayExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
+        const incomes = dayIncomes.reduce((sum, i) => sum + Number(i.amount), 0);
+        
+        return {
+          label: format(day, "dd"),
+          entradas: Number(incomes.toFixed(2)),
+          saidas: Number(expenses.toFixed(2)),
+          saldo: Number((incomes - expenses).toFixed(2))
+        };
+      });
+    } else {
+      // Para ano/trimestre/personalizado: mostrar por MÊS
+      const months = eachMonthOfInterval({ start: startDate, end: endDate });
+      
+      return months.map(month => {
+        const monthStart = startOfMonth(month);
+        const monthEnd = endOfMonth(month);
+
+        const monthExpenses = filteredExpenses.filter(expense => {
+          const expenseDate = parseLocalDate(expense.expense_date);
+          return expenseDate >= monthStart && expenseDate <= monthEnd;
+        });
+
+        const monthIncomes = filteredIncomes.filter(income => {
+          const incomeDate = parseLocalDate(income.income_date);
+          return incomeDate >= monthStart && incomeDate <= monthEnd;
+        });
+
+        let totalExpenses = monthExpenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
+        let totalIncomesMonth = monthIncomes.reduce((sum, income) => sum + Number(income.amount), 0);
+        
+        // Adicionar despesas recorrentes que estavam ativas naquele mês
+        filteredRecurringExpenses.forEach(recurring => {
+          const startDateRe = recurring.start_date 
+            ? parseISO(recurring.start_date) 
+            : parseLocalDate(recurring.created_at);
+          const endDateRe = recurring.end_date ? parseISO(recurring.end_date) : null;
+          
+          const wasActiveInMonth = startDateRe <= monthEnd && (!endDateRe || endDateRe >= monthStart);
+          
+          if (wasActiveInMonth) {
+            totalExpenses += Number(recurring.amount);
+          }
+        });
+
+        // Adicionar entradas recorrentes que estavam ativas naquele mês
+        filteredRecurringIncomes.forEach(recurring => {
+          const startDateRi = recurring.start_date 
+            ? parseISO(recurring.start_date) 
+            : parseLocalDate(recurring.created_at);
+          const endDateRi = recurring.end_date ? parseISO(recurring.end_date) : null;
+          
+          const wasActiveInMonth = startDateRi <= monthEnd && (!endDateRi || endDateRi >= monthStart);
+          
+          if (wasActiveInMonth) {
+            totalIncomesMonth += Number(recurring.amount);
+          }
+        });
+
+        return {
+          label: format(month, "MMM/yy", { locale: ptBR }),
+          entradas: Number(totalIncomesMonth.toFixed(2)),
+          saidas: Number(totalExpenses.toFixed(2)),
+          saldo: Number((totalIncomesMonth - totalExpenses).toFixed(2))
+        };
+      });
+    }
+  }, [filteredExpenses, filteredIncomes, filteredRecurringExpenses, filteredRecurringIncomes, startDate, endDate, periodType]);
 
   // Dados para gráfico de pizza - Por forma de pagamento
   const paymentMethodData = useMemo(() => {
@@ -415,31 +549,130 @@ export function ReportsAccordion({
 
   return (
     <div className="space-y-4">
-      {/* Card de Resumo do Período */}
-      <div className="p-4 rounded-lg bg-gradient-to-r from-primary/10 to-primary/5 border">
-        <div className="flex items-center gap-2 mb-2">
-          <DollarSign className="h-5 w-5 text-primary" />
-          <span className="text-sm text-muted-foreground font-medium">
+      {/* Card de Resumo do Período - Fluxo de Caixa */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {/* Entradas */}
+        <div className="p-4 rounded-lg bg-gradient-to-r from-green-500/10 to-green-500/5 border border-green-500/20">
+          <div className="flex items-center gap-2 mb-1">
+            <TrendingUp className="h-4 w-4 text-green-500" />
+            <span className="text-xs text-muted-foreground font-medium">Entradas</span>
+          </div>
+          <div className="text-2xl font-bold text-green-500">
+            R$ {totalIncomes.toFixed(2).replace(".", ",")}
+          </div>
+          <div className="flex gap-2 mt-1 text-xs text-muted-foreground">
+            <span>{filteredIncomes.length} entradas</span>
+            <span>+</span>
+            <span>{filteredRecurringIncomes.length} fixas</span>
+          </div>
+        </div>
+
+        {/* Saídas */}
+        <div className="p-4 rounded-lg bg-gradient-to-r from-red-500/10 to-red-500/5 border border-red-500/20">
+          <div className="flex items-center gap-2 mb-1">
+            <TrendingDown className="h-4 w-4 text-red-500" />
+            <span className="text-xs text-muted-foreground font-medium">Saídas</span>
+          </div>
+          <div className="text-2xl font-bold text-red-500">
+            R$ {totalPeriod.toFixed(2).replace(".", ",")}
+          </div>
+          <div className="flex gap-2 mt-1 text-xs text-muted-foreground">
+            <span>{filteredExpenses.length} despesas</span>
+            <span>+</span>
+            <span>{filteredRecurringExpenses.length} fixas</span>
+          </div>
+        </div>
+
+        {/* Saldo */}
+        <div className={`p-4 rounded-lg border ${balance >= 0 ? 'bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20' : 'bg-gradient-to-r from-orange-500/10 to-orange-500/5 border-orange-500/20'}`}>
+          <div className="flex items-center gap-2 mb-1">
+            <DollarSign className={`h-4 w-4 ${balance >= 0 ? 'text-primary' : 'text-orange-500'}`} />
+            <span className="text-xs text-muted-foreground font-medium">Saldo</span>
+          </div>
+          <div className={`text-2xl font-bold ${balance >= 0 ? 'text-primary' : 'text-orange-500'}`}>
+            R$ {balance.toFixed(2).replace(".", ",")}
+          </div>
+          <div className="text-xs text-muted-foreground mt-1">
             {periodLabel || "Período selecionado"}
-          </span>
-        </div>
-        <div className="text-3xl font-bold text-primary">
-          R$ {totalPeriod.toFixed(2).replace(".", ",")}
-        </div>
-        <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
-          <span>{filteredExpenses.length} despesas</span>
-          <span>+</span>
-          <span>{filteredRecurringExpenses.length} fixas</span>
-          {monthsInPeriod > 1 && (
-            <>
-              <span>×</span>
-              <span>{monthsInPeriod} meses</span>
-            </>
-          )}
+          </div>
         </div>
       </div>
 
-      <Accordion type="multiple" className="space-y-4">
+      <Accordion type="multiple" className="space-y-4" defaultValue={["cashflow"]}>
+        {/* 0. Fluxo de Caixa - Entradas vs Saídas */}
+        <AccordionItem value="cashflow" className="border rounded-lg bg-card">
+          <AccordionTrigger className="px-4 py-3 hover:no-underline">
+            <div className="flex items-center gap-3">
+              <ArrowUpDown className="w-5 h-5 text-primary" />
+              <div className="text-left">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold">Fluxo de Caixa</span>
+                  {!hasAdvancedReports && <Crown className="h-4 w-4 text-primary" />}
+                </div>
+                <span className="text-xs text-muted-foreground">Entradas vs Saídas por {periodType === "month" ? "dia" : "mês"}</span>
+              </div>
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="px-4 pb-4">
+            {hasAdvancedReports ? (
+              cashFlowData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={cashFlowData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis 
+                      dataKey="label" 
+                      stroke="hsl(var(--foreground))"
+                      style={{ fontSize: '10px' }}
+                      interval={periodType === "month" ? 2 : 0}
+                    />
+                    <YAxis 
+                      stroke="hsl(var(--foreground))"
+                      style={{ fontSize: '12px' }}
+                      tickFormatter={(value) => `R$ ${value.toFixed(0)}`}
+                    />
+                    <Tooltip 
+                      formatter={(value: number, name: string) => [
+                        `R$ ${value.toFixed(2)}`,
+                        name === 'entradas' ? 'Entradas' : name === 'saidas' ? 'Saídas' : 'Saldo'
+                      ]}
+                      labelFormatter={(label) => periodType === "month" ? `Dia ${label}` : label}
+                      {...tooltipStyle}
+                    />
+                    <Legend 
+                      formatter={(value) => value === 'entradas' ? 'Entradas' : value === 'saidas' ? 'Saídas' : 'Saldo'}
+                    />
+                    <Bar dataKey="entradas" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="saidas" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[200px] flex items-center justify-center text-muted-foreground">
+                  Nenhum dado registrado no período
+                </div>
+              )
+            ) : (
+              <div className="h-[200px] flex flex-col items-center justify-center gap-4 text-center px-4">
+                <Lock className="h-12 w-12 text-muted-foreground/40" />
+                <div>
+                  <p className="text-sm font-semibold mb-1">Recurso Premium</p>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Compare suas entradas e saídas ao longo do tempo
+                  </p>
+                  <Button 
+                    variant="default" 
+                    size="sm"
+                    onClick={() => navigate("/subscription")}
+                    className="gap-2"
+                  >
+                    <Crown className="h-4 w-4" />
+                    Fazer Upgrade
+                  </Button>
+                </div>
+              </div>
+            )}
+          </AccordionContent>
+        </AccordionItem>
+
         {/* 1. Evolução dos Gastos - ADAPTADO AO PERÍODO */}
         <AccordionItem value="evolution" className="border rounded-lg bg-card">
           <AccordionTrigger className="px-4 py-3 hover:no-underline">
