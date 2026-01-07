@@ -127,7 +127,7 @@ async function getAccessToken(): Promise<string> {
     tokenExpiresAt = now + tokenData.expires_in;
 
     console.log("✅ Access token gerado com sucesso (expira em " + tokenData.expires_in + "s)");
-    return cachedAccessToken;
+    return cachedAccessToken as string;
     
   } catch (error) {
     console.error("❌ Erro ao criar JWT:", error);
@@ -291,10 +291,11 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error("❌ Erro na Edge Function send-notification:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return new Response(
       JSON.stringify({
         success: false,
-        error: error.message,
+        error: errorMessage,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

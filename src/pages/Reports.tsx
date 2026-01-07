@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Expense } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
 import { Card } from "@/types/card";
+import { Income, RecurringIncome } from "@/types/income";
 import { ReportsAccordion } from "@/components/reports-accordion";
 import { PeriodSelector, PeriodType } from "@/components/period-selector";
 import { ContextSelector } from "@/components/context-selector";
@@ -40,6 +41,8 @@ const Reports = () => {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
+  const [incomes, setIncomes] = useState<Income[]>([]);
+  const [recurringIncomes, setRecurringIncomes] = useState<RecurringIncome[]>([]);
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
   const [isExporting, setIsExporting] = useState(false);
   const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
@@ -61,6 +64,8 @@ const Reports = () => {
     fetchExpenses();
     fetchRecurringExpenses();
     fetchCards();
+    fetchIncomes();
+    fetchRecurringIncomes();
   }, [user, navigate, currentContext]);
 
   // Buscar membros do grupo quando em contexto de grupo
@@ -142,6 +147,55 @@ const Reports = () => {
     }
 
     setCards(data || []);
+  };
+
+  const fetchIncomes = async () => {
+    if (!user) return;
+
+    let query = supabase
+      .from("incomes")
+      .select("*")
+      .order("income_date", { ascending: false });
+
+    if (isGroupContext && currentContext.groupId) {
+      query = query.eq("shared_group_id", currentContext.groupId);
+    } else {
+      query = query.eq("user_id", user.id).is("shared_group_id", null);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("Error fetching incomes:", error);
+      return;
+    }
+
+    setIncomes(data || []);
+  };
+
+  const fetchRecurringIncomes = async () => {
+    if (!user) return;
+
+    let query = supabase
+      .from("recurring_incomes")
+      .select("*")
+      .eq("is_active", true)
+      .order("created_at", { ascending: false });
+
+    if (isGroupContext && currentContext.groupId) {
+      query = query.eq("shared_group_id", currentContext.groupId);
+    } else {
+      query = query.eq("user_id", user.id).is("shared_group_id", null);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("Error fetching recurring incomes:", error);
+      return;
+    }
+
+    setRecurringIncomes(data || []);
   };
 
   const handlePeriodChange = (newStartDate: Date, newEndDate: Date, label: string, type: PeriodType) => {
@@ -232,6 +286,8 @@ const Reports = () => {
           expenses={expenses}
           recurringExpenses={recurringExpenses}
           cards={cards}
+          incomes={incomes}
+          recurringIncomes={recurringIncomes}
           startDate={startDate}
           endDate={endDate}
           periodType={periodType}
