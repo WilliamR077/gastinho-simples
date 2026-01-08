@@ -586,6 +586,57 @@ class BillingService {
       return false;
     }
   }
+
+  /**
+   * Verifica se a assinatura precisa ser sincronizada e sincroniza automaticamente
+   * Chamado ao iniciar o app para garantir que assinaturas renovadas sejam reconhecidas
+   */
+  async checkAndSyncSubscription(): Promise<void> {
+    if (!this.isNative) return;
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Buscar assinatura atual no banco
+      const { data: subscription } = await supabase
+        .from('subscriptions')
+        .select('tier, expires_at, is_active')
+        .eq('user_id', user.id)
+        .single();
+
+      // Se não tem assinatura ou é free, não precisa sincronizar
+      if (!subscription || subscription.tier === 'free') {
+        console.log('ℹ️ Sem assinatura paga para sincronizar');
+        return;
+      }
+
+      // Verificar se expirou ou expira em menos de 3 dias
+      const expiresAt = subscription.expires_at ? new Date(subscription.expires_at) : null;
+      const now = new Date();
+      
+      if (expiresAt) {
+        const daysUntilExpiry = (expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+        
+        if (daysUntilExpiry < 3) {
+          console.log(`🔄 Assinatura expira em ${daysUntilExpiry.toFixed(1)} dias, sincronizando com Google Play...`);
+          
+          // Tentar restaurar/sincronizar com Google Play
+          const result = await this.restorePurchases();
+          
+          if (result.success) {
+            console.log('✅ Assinatura sincronizada com sucesso:', result.tier);
+          } else {
+            console.log('⚠️ Não foi possível sincronizar assinatura - pode ter sido cancelada');
+          }
+        } else {
+          console.log(`✅ Assinatura válida por mais ${daysUntilExpiry.toFixed(0)} dias`);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Erro ao verificar/sincronizar assinatura:', error);
+    }
+  }
 }
 
 export const billingService = new BillingService();

@@ -11,6 +11,7 @@ import { ValuesVisibilityProvider } from "@/hooks/use-values-visibility";
 import { firebaseNotificationService } from "@/services/firebase-notification-service";
 import { adMobService } from "@/services/admob-service";
 import { appLockService } from "@/services/app-lock-service";
+import { billingService } from "@/services/billing-service";
 import { AppLockScreen } from "@/components/app-lock-screen";
 import { Capacitor } from "@capacitor/core";
 import { App as CapacitorApp } from "@capacitor/app";
@@ -95,11 +96,22 @@ const AppContent = () => {
       // Inicializar Firebase quando o usuário fizer login
       firebaseNotificationService.initialize();
       
-      // Inicializar AdMob, mostrar banner global e intersticial de boas-vindas
-      adMobService.initialize().then(() => {
-        adMobService.showBanner();
-        adMobService.showStartupInterstitial();
-      });
+      // Verificar e sincronizar assinatura com Google Play (antes do AdMob)
+      if (Capacitor.isNativePlatform()) {
+        billingService.checkAndSyncSubscription().then(() => {
+          // Inicializar AdMob após sincronizar assinatura
+          adMobService.initialize().then(() => {
+            adMobService.showBanner();
+            adMobService.showStartupInterstitial();
+          });
+        });
+      } else {
+        // Na web, inicializar AdMob diretamente
+        adMobService.initialize().then(() => {
+          adMobService.showBanner();
+          adMobService.showStartupInterstitial();
+        });
+      }
     }
 
     return () => {
