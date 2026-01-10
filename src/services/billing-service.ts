@@ -64,6 +64,9 @@ interface CdvPurchaseProduct {
   owned?: boolean;
   getOffer?: () => CdvPurchaseOffer | undefined;
   offers?: CdvPurchaseOffer[];
+  // Transaction properties for restorePurchases
+  lastTransaction?: CdvPurchaseTransaction;
+  transactions?: CdvPurchaseTransaction[];
 }
 
 interface CdvPurchaseWhen {
@@ -495,13 +498,48 @@ class BillingService {
       
       await this.store.refresh();
       
+      // Aguardar um tempo para as transações serem carregadas
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
       // Verificar produtos owned
       let highestTier = 'free';
       let highestProductId = '';
+      let purchaseToken = '';
       
       for (const productId of Object.values(PRODUCT_IDS)) {
-        const product = this.store.get(productId);
+        const product = this.store.get(productId) as CdvPurchaseProduct | undefined;
+        
+        console.log(`🔍 Verificando produto ${productId}:`, {
+          owned: product?.owned,
+          hasLastTransaction: !!(product as any)?.lastTransaction,
+          hasTransactions: !!((product as any)?.transactions?.length),
+        });
+        
         if (product?.owned) {
+          // Tentar obter o token real da transação
+          const productAny = product as any;
+          const transaction = productAny.lastTransaction || 
+                             (productAny.transactions && productAny.transactions[0]);
+          
+          if (transaction) {
+            console.log('📋 Transação encontrada:', {
+              id: transaction.id,
+              hasPurchaseToken: !!transaction.purchaseToken,
+              transactionKeys: Object.keys(transaction),
+            });
+            
+            // O purchaseToken pode estar em diferentes lugares dependendo da versão do plugin
+            if (transaction.purchaseToken) {
+              purchaseToken = transaction.purchaseToken;
+            } else if (transaction.nativePurchase?.purchaseToken) {
+              purchaseToken = transaction.nativePurchase.purchaseToken;
+            } else if (transaction.transactionId) {
+              purchaseToken = transaction.transactionId;
+            } else if (transaction.id) {
+              purchaseToken = transaction.id;
+            }
+          }
+          
           const tier = PRODUCT_ID_TO_TIER[productId];
           if (tier === 'premium_plus') {
             highestTier = 'premium_plus';
@@ -517,9 +555,22 @@ class BillingService {
         }
       }
       
+      console.log('📊 Resultado da verificação:', { highestTier, highestProductId, hasPurchaseToken: !!purchaseToken });
+      
       if (highestTier !== 'free') {
-        const success = await this.validatePurchase(highestProductId, 'restored', highestTier);
-        if (success) {
+        // Se temos um token real, usar ele. Senão, tentar sincronização via Edge Function
+        if (purchaseToken && purchaseToken !== 'restored') {
+          console.log('🔐 Validando com token real:', purchaseToken.substring(0, 20) + '...');
+          const success = await this.validatePurchase(highestProductId, purchaseToken, highestTier);
+          if (success) {
+            return { success: true, tier: highestTier };
+          }
+        }
+        
+        // Fallback: tentar sincronização manual via Edge Function
+        console.log('🔄 Tentando sincronização manual via Edge Function...');
+        const syncSuccess = await this.syncSubscriptionFromBackend(highestProductId, highestTier);
+        if (syncSuccess) {
           return { success: true, tier: highestTier };
         }
       }
@@ -528,6 +579,42 @@ class BillingService {
     } catch (error) {
       console.error('❌ Erro ao restaurar compras:', error);
       return { success: false };
+    }
+  }
+
+  /**
+   * Sincroniza assinatura diretamente pelo backend usando productId
+   * Fallback quando não temos o purchaseToken disponível
+   */
+  private async syncSubscriptionFromBackend(productId: string, tier: string): Promise<boolean> {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        console.error('❌ Usuário não autenticado');
+        return false;
+      }
+
+      console.log('🔄 Chamando sync-subscription Edge Function...');
+      
+      const response = await supabase.functions.invoke('sync-subscription', {
+        body: {
+          productId,
+          tier,
+          platform: 'android',
+        },
+      });
+
+      if (response.error) {
+        console.error('❌ Erro na sync-subscription:', response.error);
+        return false;
+      }
+
+      console.log('✅ Sincronização via backend:', response.data);
+      return response.data?.success === true;
+    } catch (error) {
+      console.error('❌ Erro ao sincronizar via backend:', error);
+      return false;
     }
   }
 
