@@ -5,8 +5,10 @@ import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Settings as SettingsIcon, FileDown, FileSpreadsheet, Crown, Lock, GraduationCap } from "lucide-react";
+import { ArrowLeft, Settings as SettingsIcon, FileDown, FileSpreadsheet, Crown, Lock, GraduationCap, Upload } from "lucide-react";
 import { useSubscription } from "@/hooks/use-subscription";
+import { useState } from "react";
+import { SpreadsheetImportSheet } from "@/components/spreadsheet-import-sheet";
 import { FirebaseNotificationSettings } from "@/components/firebase-notification-settings";
 import { SecuritySettings } from "@/components/security-settings";
 import * as XLSX from "xlsx";
@@ -52,7 +54,8 @@ const saveAndShareFile = async (base64Data: string, fileName: string, mimeType: 
 export default function Settings() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { canExportPdf, canExportExcel } = useSubscription();
+  const { canExportPdf, canExportExcel, canImportSpreadsheet, importLimit } = useSubscription();
+  const [importSheetOpen, setImportSheetOpen] = useState(false);
 
   // Audit log helper function
   const logAuditAction = async (action: string, details?: any) => {
@@ -424,7 +427,55 @@ export default function Settings() {
 
         <Separator />
 
-        {/* Seção: Tutorial */}
+        {/* Seção: Importar Planilha */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Upload className="h-5 w-5" />
+              Importar Planilha
+              {!canImportSpreadsheet && (
+                <Crown className="h-4 w-4 text-primary ml-auto" />
+              )}
+            </CardTitle>
+            <CardDescription>
+              Importe gastos de uma planilha Excel ou CSV
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!canImportSpreadsheet && (
+              <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <Crown className="h-5 w-5 text-primary mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="font-semibold mb-1">📊 Importação Premium</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Migre seus gastos de planilhas existentes para o Gastinho Simples facilmente.
+                      Premium: até 100 itens | Premium Plus: até 500 itens.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+            <Button 
+              onClick={() => setImportSheetOpen(true)} 
+              variant="outline"
+              className="w-full gap-2"
+              disabled={!canImportSpreadsheet}
+            >
+              {!canImportSpreadsheet && <Lock className="h-4 w-4" />}
+              <FileSpreadsheet className="h-4 w-4" />
+              Importar Planilha
+              {!canImportSpreadsheet && <Crown className="h-4 w-4 ml-auto" />}
+            </Button>
+            {canImportSpreadsheet && (
+              <p className="text-xs text-muted-foreground text-center">
+                Limite: até {importLimit} gastos por importação
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Separator />
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -459,6 +510,18 @@ export default function Settings() {
         {/* Seção: Notificações */}
         <FirebaseNotificationSettings />
       </div>
+      
+      {/* Import Sheet */}
+      <SpreadsheetImportSheet 
+        open={importSheetOpen} 
+        onOpenChange={setImportSheetOpen}
+        onSuccess={() => {
+          toast({
+            title: "Importação concluída!",
+            description: "Seus gastos foram importados com sucesso.",
+          });
+        }}
+      />
     </div>
   );
 }
