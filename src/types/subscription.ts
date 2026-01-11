@@ -15,6 +15,8 @@ export const SUBSCRIPTION_FEATURES = {
     exportPdf: false,
     exportExcel: false,
     ads: true,
+    importSpreadsheet: false,
+    importLimit: 0,
   },
   no_ads: {
     name: "Sem Anúncios",
@@ -26,6 +28,8 @@ export const SUBSCRIPTION_FEATURES = {
     exportPdf: false,
     exportExcel: false,
     ads: false,
+    importSpreadsheet: false,
+    importLimit: 0,
   },
   premium: {
     name: "Premium",
@@ -37,6 +41,8 @@ export const SUBSCRIPTION_FEATURES = {
     exportPdf: true,
     exportExcel: true,
     ads: true, // Mantém anúncios
+    importSpreadsheet: true,
+    importLimit: 100,
   },
   premium_plus: {
     name: "Premium Plus",
@@ -48,5 +54,7 @@ export const SUBSCRIPTION_FEATURES = {
     exportPdf: true,
     exportExcel: true,
     ads: false, // Sem anúncios
+    importSpreadsheet: true,
+    importLimit: 500,
   },
 } as const;

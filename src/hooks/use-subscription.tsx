@@ -13,6 +13,8 @@ interface UseSubscriptionReturn {
   canExportPdf: boolean;
   canExportExcel: boolean;
   shouldShowAds: boolean;
+  canImportSpreadsheet: boolean;
+  importLimit: number;
   refreshSubscription: () => Promise<void>;
 }
 
@@ -63,6 +65,8 @@ export function useSubscription(): UseSubscriptionReturn {
     canExportPdf: features.exportPdf,
     canExportExcel: features.exportExcel,
     shouldShowAds: features.ads,
+    canImportSpreadsheet: features.importSpreadsheet,
+    importLimit: features.importLimit,
     refreshSubscription: fetchSubscription,
   };
 }
