@@ -35,7 +35,8 @@ import {
   Download,
   Loader2,
   Crown,
-  Pencil
+  Pencil,
+  Trash2
 } from "lucide-react";
 
 interface SpreadsheetImportSheetProps {
@@ -240,6 +241,11 @@ export function SpreadsheetImportSheet({ open, onOpenChange, onSuccess }: Spread
       updated[index] = expense;
       return updated;
     });
+  }, []);
+
+  // Remove expense at index
+  const removeExpense = useCallback((index: number) => {
+    setMappedExpenses(prev => prev.filter((_, i) => i !== index));
   }, []);
   
   // Stats for preview
@@ -506,6 +512,7 @@ export function SpreadsheetImportSheet({ open, onOpenChange, onSuccess }: Spread
                       <TableHead className="w-28">Data</TableHead>
                       <TableHead className="w-32">Categoria</TableHead>
                       <TableHead className="w-24">Pagamento</TableHead>
+                      <TableHead className="w-10"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -581,6 +588,16 @@ export function SpreadsheetImportSheet({ open, onOpenChange, onSuccess }: Spread
                               ))}
                             </SelectContent>
                           </Select>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => removeExpense(index)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
