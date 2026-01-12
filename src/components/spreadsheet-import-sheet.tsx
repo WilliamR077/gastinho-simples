@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +22,8 @@ import {
   ColumnMapping, 
   ImportedRow 
 } from "@/services/spreadsheet-import-service";
-import { categoryLabels } from "@/types/expense";
+import { categoryLabels, ExpenseCategory } from "@/types/expense";
+import { PaymentMethod } from "@/types/expense";
 import { 
   Upload, 
   FileSpreadsheet, 
@@ -32,7 +34,8 @@ import {
   AlertCircle, 
   Download,
   Loader2,
-  Crown
+  Crown,
+  Pencil
 } from "lucide-react";
 
 interface SpreadsheetImportSheetProps {
@@ -218,6 +221,27 @@ export function SpreadsheetImportSheet({ open, onOpenChange, onSuccess }: Spread
     }
   }, [mappedExpenses, user?.id, toast, onSuccess]);
   
+  // Update expense at index
+  const updateExpense = useCallback((index: number, field: keyof ImportedRow, value: any) => {
+    setMappedExpenses(prev => {
+      const updated = [...prev];
+      const expense = { ...updated[index] };
+      
+      // Update field
+      (expense as any)[field] = value;
+      
+      // Re-validate
+      const errors: string[] = [];
+      if (!expense.description?.trim()) errors.push("Descrição obrigatória");
+      if (!expense.amount || expense.amount <= 0) errors.push("Valor inválido");
+      expense.errors = errors;
+      expense.isValid = errors.length === 0;
+      
+      updated[index] = expense;
+      return updated;
+    });
+  }, []);
+  
   // Stats for preview
   const previewStats = useMemo(() => {
     const valid = mappedExpenses.filter(e => e.isValid).length;
@@ -230,6 +254,19 @@ export function SpreadsheetImportSheet({ open, onOpenChange, onSuccess }: Spread
   const formatCurrency = (value: number) => {
     return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
   };
+
+  // Available categories
+  const categories: ExpenseCategory[] = [
+    "alimentacao", "transporte", "lazer", "saude", 
+    "educacao", "moradia", "vestuario", "servicos", "outros"
+  ];
+
+  // Available payment methods
+  const paymentMethods: { value: PaymentMethod; label: string }[] = [
+    { value: "pix", label: "PIX" },
+    { value: "credit", label: "Crédito" },
+    { value: "debit", label: "Débito" },
+  ];
   
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
@@ -452,15 +489,23 @@ export function SpreadsheetImportSheet({ open, onOpenChange, onSuccess }: Spread
                 </div>
               </div>
               
+              <Alert className="mx-4 mb-2">
+                <Pencil className="h-4 w-4" />
+                <AlertDescription>
+                  Clique nas células para editar os dados antes de importar
+                </AlertDescription>
+              </Alert>
+              
               <ScrollArea className="flex-1">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-8"></TableHead>
                       <TableHead>Descrição</TableHead>
-                      <TableHead className="text-right">Valor</TableHead>
-                      <TableHead>Data</TableHead>
-                      <TableHead>Categoria</TableHead>
+                      <TableHead className="text-right w-28">Valor</TableHead>
+                      <TableHead className="w-28">Data</TableHead>
+                      <TableHead className="w-32">Categoria</TableHead>
+                      <TableHead className="w-24">Pagamento</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -473,18 +518,69 @@ export function SpreadsheetImportSheet({ open, onOpenChange, onSuccess }: Spread
                             <X className="h-4 w-4 text-red-600" />
                           )}
                         </TableCell>
-                        <TableCell className="font-medium">
-                          {expense.description || <span className="text-muted-foreground italic">Sem descrição</span>}
+                        <TableCell>
+                          <Input
+                            value={expense.description}
+                            onChange={(e) => updateExpense(index, "description", e.target.value)}
+                            className={`h-8 text-sm ${!expense.description?.trim() ? "border-red-500" : ""}`}
+                            placeholder="Digite a descrição"
+                          />
                           {expense.errors.length > 0 && (
-                            <div className="text-xs text-red-600">{expense.errors.join(", ")}</div>
+                            <div className="text-xs text-red-600 mt-1">{expense.errors.join(", ")}</div>
                           )}
                         </TableCell>
-                        <TableCell className="text-right">{formatCurrency(expense.amount)}</TableCell>
-                        <TableCell>{expense.date}</TableCell>
+                        <TableCell className="text-right">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={expense.amount || ""}
+                            onChange={(e) => updateExpense(index, "amount", parseFloat(e.target.value) || 0)}
+                            className={`h-8 text-sm text-right ${!expense.amount || expense.amount <= 0 ? "border-red-500" : ""}`}
+                            placeholder="0,00"
+                          />
+                        </TableCell>
                         <TableCell>
-                          <Badge variant="secondary" className="text-xs">
-                            {categoryLabels[expense.category]}
-                          </Badge>
+                          <Input
+                            type="date"
+                            value={expense.date}
+                            onChange={(e) => updateExpense(index, "date", e.target.value)}
+                            className="h-8 text-sm"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Select
+                            value={expense.category}
+                            onValueChange={(v) => updateExpense(index, "category", v as ExpenseCategory)}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {categories.map((cat) => (
+                                <SelectItem key={cat} value={cat}>
+                                  {categoryLabels[cat]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <Select
+                            value={expense.paymentMethod}
+                            onValueChange={(v) => updateExpense(index, "paymentMethod", v as PaymentMethod)}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {paymentMethods.map((pm) => (
+                                <SelectItem key={pm.value} value={pm.value}>
+                                  {pm.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </TableCell>
                       </TableRow>
                     ))}
