@@ -406,14 +406,14 @@ export function SpreadsheetImportSheet({ open, onOpenChange, onSuccess }: Spread
                 <div className="grid gap-2">
                   <Label>Data (opcional)</Label>
                   <Select
-                    value={mapping.date || ""}
-                    onValueChange={(v) => setMapping({ ...mapping, date: v || null })}
+                    value={mapping.date || "__none__"}
+                    onValueChange={(v) => setMapping({ ...mapping, date: v === "__none__" ? null : v })}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Usar data de hoje" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Usar data de hoje</SelectItem>
+                      <SelectItem value="__none__">Usar data de hoje</SelectItem>
                       {parseResult.columns.map((col) => (
                         <SelectItem key={col} value={col}>{col}</SelectItem>
                       ))}
@@ -424,14 +424,14 @@ export function SpreadsheetImportSheet({ open, onOpenChange, onSuccess }: Spread
                 <div className="grid gap-2">
                   <Label>Categoria (opcional)</Label>
                   <Select
-                    value={mapping.category || ""}
-                    onValueChange={(v) => setMapping({ ...mapping, category: v || null })}
+                    value={mapping.category || "__none__"}
+                    onValueChange={(v) => setMapping({ ...mapping, category: v === "__none__" ? null : v })}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Usar 'Outros'" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Usar "Outros"</SelectItem>
+                      <SelectItem value="__none__">Usar "Outros"</SelectItem>
                       {parseResult.columns.map((col) => (
                         <SelectItem key={col} value={col}>{col}</SelectItem>
                       ))}
@@ -442,14 +442,14 @@ export function SpreadsheetImportSheet({ open, onOpenChange, onSuccess }: Spread
                 <div className="grid gap-2">
                   <Label>Forma de Pagamento (opcional)</Label>
                   <Select
-                    value={mapping.paymentMethod || ""}
-                    onValueChange={(v) => setMapping({ ...mapping, paymentMethod: v || null })}
+                    value={mapping.paymentMethod || "__none__"}
+                    onValueChange={(v) => setMapping({ ...mapping, paymentMethod: v === "__none__" ? null : v })}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Usar PIX" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Usar PIX</SelectItem>
+                      <SelectItem value="__none__">Usar PIX</SelectItem>
                       {parseResult.columns.map((col) => (
                         <SelectItem key={col} value={col}>{col}</SelectItem>
                       ))}
