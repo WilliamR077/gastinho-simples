@@ -130,19 +130,25 @@ export function RecurringExpenseList({ expenses, onDeleteExpense, onToggleActive
                       <Button 
                         variant="ghost" 
                         size="icon" 
-                        className="h-8 w-8 text-muted-foreground hover:text-primary"
+                        className="h-10 w-10 min-h-[44px] min-w-[44px] text-muted-foreground hover:text-primary touch-manipulation"
                         onClick={() => onSendToCalculator(expense.amount)}
+                        aria-label="Enviar para calculadora"
                       >
-                        <Calculator className="h-4 w-4" />
+                        <Calculator className="h-5 w-5" />
                       </Button>
                     )}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreVertical className="h-4 w-4" />
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-10 w-10 min-h-[44px] min-w-[44px] touch-manipulation"
+                          aria-label="Mais opções"
+                        >
+                          <MoreVertical className="h-5 w-5" />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" side="top" className="bg-background">
+                      <DropdownMenuContent align="end" side="top" className="bg-background z-50">
                         <DropdownMenuItem onClick={() => onEditRecurringExpense(expense)}>
                           <Pencil className="mr-2 h-4 w-4" />
                           Editar

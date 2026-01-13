@@ -99,7 +99,7 @@ export function RecurringIncomeList({
                     <MoreVertical className="h-5 w-5" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="bg-background">
+                <DropdownMenuContent align="end" side="top" className="bg-background z-50">
                   {onEdit && (
                     <DropdownMenuItem onClick={() => onEdit(income)}>
                       <Pencil className="mr-2 h-4 w-4" />
