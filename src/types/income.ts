@@ -34,6 +34,7 @@ export const incomeCategoryIcons: Record<IncomeCategory, string> = {
 };
 
 export interface Income {
+  is_active: any;
   id: string;
   user_id: string;
   description: string;
