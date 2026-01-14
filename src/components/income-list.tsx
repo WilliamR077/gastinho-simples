@@ -79,9 +79,7 @@ export function IncomeList({ incomes, onDelete, onEdit }: IncomeListProps) {
             {currentIncomes.map((income) => (
               <div
                 key={income.id}
-                className={`flex flex-col sm:flex-row items-start sm:items-center gap-3 p-4 rounded-lg border bg-card/50 hover:bg-card/80 transition-all duration-300 hover:shadow-card ${
-                  !income.is_active ? "opacity-60" : ""
-                }`}
+                className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-4 rounded-lg border bg-card/50 hover:bg-card/80 transition-all duration-300 hover:shadow-card"
               >
                 <div className="flex items-center gap-3 flex-1 w-full sm:w-auto min-w-0">
                   <div className="p-2 rounded-full shrink-0 bg-green-500">
