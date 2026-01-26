@@ -214,17 +214,40 @@ class BillingService {
         const productId = transaction.products[0]?.id;
         if (productId) {
           const tier = PRODUCT_ID_TO_TIER[productId] || this.pendingPurchaseTier;
-          const purchaseToken = transaction.purchaseToken || transaction.id;
+          
+          // Extrair purchaseToken de múltiplas fontes possíveis
+          const transactionAny = transaction as any;
+          let purchaseToken = 
+            transaction.purchaseToken ||
+            transactionAny.nativePurchase?.purchaseToken ||
+            transactionAny.transactionId ||
+            transaction.id;
+          
+          console.log('🔐 Token extraction:', {
+            hasPurchaseToken: !!transaction.purchaseToken,
+            hasNativePurchaseToken: !!transactionAny.nativePurchase?.purchaseToken,
+            hasTransactionId: !!transactionAny.transactionId,
+            usingFallbackId: purchaseToken === transaction.id,
+            tokenPrefix: purchaseToken?.substring(0, 30) + '...',
+          });
           
           // Validar no backend
           const success = await this.validatePurchase(productId, purchaseToken, tier || 'premium');
           
           if (success) {
-            console.log('✅ Compra validada no backend');
+            console.log('✅ Compra validada no backend - finalizando transação');
             transaction.finish();
             
             if (this.pendingPurchaseResolve) {
               this.pendingPurchaseResolve(true);
+              this.pendingPurchaseResolve = null;
+            }
+          } else {
+            console.warn('⚠️ Validação falhou - NÃO finalizando transação (Google Play vai pedir confirmação)');
+            // NÃO finalizamos para que o Google Play continue pedindo confirmação
+            // e o usuário possa tentar novamente
+            if (this.pendingPurchaseResolve) {
+              this.pendingPurchaseResolve(false);
               this.pendingPurchaseResolve = null;
             }
           }
@@ -402,10 +425,16 @@ class BillingService {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session) {
-        throw new Error('Usuário não autenticado');
+        console.error('❌ Usuário não autenticado para validar compra');
+        return false;
       }
 
+      console.log('🔄 Validating purchase with backend...', { productId, tier, tokenPrefix: purchaseToken?.substring(0, 20) });
+
       const response = await supabase.functions.invoke('validate-purchase', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: {
           productId,
           purchaseToken,
@@ -415,10 +444,16 @@ class BillingService {
       });
 
       if (response.error) {
-        throw response.error;
+        console.error('❌ validate-purchase error:', response.error);
+        return false;
       }
 
-      console.log('✅ Compra validada:', response.data);
+      console.log('✅ validate-purchase response:', response.data);
+      
+      if (response.data?.errorCode) {
+        console.error('❌ Backend validation error code:', response.data.errorCode);
+      }
+      
       return response.data?.valid === true;
     } catch (error) {
       console.error('❌ Erro ao validar compra:', error);
@@ -496,10 +531,21 @@ class BillingService {
 
       console.log('🔄 Restaurando compras...');
       
+      // Chamar refresh E restorePurchases para garantir que todas as transações sejam processadas
       await this.store.refresh();
       
+      // Tentar chamar restorePurchases se disponível (força reprocessamento de transações pendentes)
+      try {
+        if (typeof this.store.restorePurchases === 'function') {
+          console.log('🔄 Chamando store.restorePurchases()...');
+          await this.store.restorePurchases();
+        }
+      } catch (restoreError) {
+        console.warn('⚠️ restorePurchases falhou (pode ser normal):', restoreError);
+      }
+      
       // Aguardar um tempo para as transações serem carregadas
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
       // Verificar produtos owned
       let highestTier = 'free';
@@ -516,7 +562,7 @@ class BillingService {
         });
         
         if (product?.owned) {
-          // Tentar obter o token real da transação
+          // Tentar obter o token real da transação de múltiplas fontes
           const productAny = product as any;
           const transaction = productAny.lastTransaction || 
                              (productAny.transactions && productAny.transactions[0]);
@@ -525,18 +571,23 @@ class BillingService {
             console.log('📋 Transação encontrada:', {
               id: transaction.id,
               hasPurchaseToken: !!transaction.purchaseToken,
+              hasNativePurchaseToken: !!transaction.nativePurchase?.purchaseToken,
               transactionKeys: Object.keys(transaction),
             });
             
             // O purchaseToken pode estar em diferentes lugares dependendo da versão do plugin
             if (transaction.purchaseToken) {
               purchaseToken = transaction.purchaseToken;
+              console.log('✅ Token from transaction.purchaseToken');
             } else if (transaction.nativePurchase?.purchaseToken) {
               purchaseToken = transaction.nativePurchase.purchaseToken;
+              console.log('✅ Token from transaction.nativePurchase.purchaseToken');
             } else if (transaction.transactionId) {
               purchaseToken = transaction.transactionId;
+              console.log('✅ Token from transaction.transactionId');
             } else if (transaction.id) {
               purchaseToken = transaction.id;
+              console.log('⚠️ Using fallback transaction.id as token');
             }
           }
           
@@ -555,7 +606,7 @@ class BillingService {
         }
       }
       
-      console.log('📊 Resultado da verificação:', { highestTier, highestProductId, hasPurchaseToken: !!purchaseToken });
+      console.log('📊 Resultado da verificação:', { highestTier, highestProductId, hasPurchaseToken: !!purchaseToken, tokenPrefix: purchaseToken?.substring(0, 20) });
       
       if (highestTier !== 'free') {
         // Se temos um token real, usar ele. Senão, tentar sincronização via Edge Function
@@ -591,13 +642,16 @@ class BillingService {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session) {
-        console.error('❌ Usuário não autenticado');
+        console.error('❌ Usuário não autenticado para sync');
         return false;
       }
 
       console.log('🔄 Chamando sync-subscription Edge Function...');
       
       const response = await supabase.functions.invoke('sync-subscription', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: {
           productId,
           tier,
@@ -677,6 +731,9 @@ class BillingService {
   /**
    * Verifica se a assinatura precisa ser sincronizada e sincroniza automaticamente
    * Chamado ao iniciar o app para garantir que assinaturas renovadas sejam reconhecidas
+   * 
+   * IMPORTANTE: Também tenta restaurar compras quando o usuário está no tier free,
+   * para confirmar transações pendentes que não foram finalizadas anteriormente.
    */
   async checkAndSyncSubscription(): Promise<void> {
     if (!this.isNative) return;
@@ -688,20 +745,41 @@ class BillingService {
       // Buscar assinatura atual no banco
       const { data: subscription } = await supabase
         .from('subscriptions')
-        .select('tier, expires_at, is_active')
+        .select('tier, expires_at, is_active, updated_at')
         .eq('user_id', user.id)
         .single();
 
-      // Se não tem assinatura ou é free, não precisa sincronizar
-      if (!subscription || subscription.tier === 'free') {
-        console.log('ℹ️ Sem assinatura paga para sincronizar');
+      const currentTier = subscription?.tier || 'free';
+      const expiresAt = subscription?.expires_at ? new Date(subscription.expires_at) : null;
+      const now = new Date();
+      
+      // Lógica para tier free: tentar restaurar compras pendentes
+      // (com throttling para não chamar toda vez que abre o app)
+      if (currentTier === 'free') {
+        const lastCheck = localStorage.getItem('last_restore_check');
+        const hoursSinceLastCheck = lastCheck 
+          ? (now.getTime() - parseInt(lastCheck)) / (1000 * 60 * 60)
+          : Infinity;
+        
+        // Só verificar a cada 4 horas para não pesar
+        if (hoursSinceLastCheck > 4) {
+          console.log('🔄 Tier é free - tentando restaurar compras pendentes...');
+          localStorage.setItem('last_restore_check', now.getTime().toString());
+          
+          const result = await this.restorePurchases();
+          
+          if (result.success) {
+            console.log('✅ Compra pendente encontrada e confirmada:', result.tier);
+          } else {
+            console.log('ℹ️ Nenhuma compra pendente encontrada');
+          }
+        } else {
+          console.log(`ℹ️ Último check de restore há ${hoursSinceLastCheck.toFixed(1)}h - pulando`);
+        }
         return;
       }
 
-      // Verificar se expirou ou expira em menos de 3 dias
-      const expiresAt = subscription.expires_at ? new Date(subscription.expires_at) : null;
-      const now = new Date();
-      
+      // Lógica para tier pago: verificar se precisa sincronizar
       if (expiresAt) {
         const daysUntilExpiry = (expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
         

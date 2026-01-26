@@ -157,61 +157,75 @@ serve(async (req) => {
 async function validateGooglePlayPurchase(
   productId: string,
   purchaseToken: string
-): Promise<{ valid: boolean; expiresAt?: string }> {
+): Promise<{ valid: boolean; expiresAt?: string; errorCode?: string }> {
   try {
     const serviceAccountJson = Deno.env.get('GOOGLE_PLAY_SERVICE_ACCOUNT');
     
-    if (serviceAccountJson) {
-      // Implementação real com Service Account
-      try {
-        const serviceAccount = JSON.parse(serviceAccountJson);
-        
-        // Obter access token
-        const accessToken = await getGoogleAccessToken(serviceAccount);
-        
-        if (accessToken) {
-          // Verificar assinatura no Google Play
-          const packageName = 'com.gastinhosimples.app';
-          const apiUrl = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/purchases/subscriptions/${productId}/tokens/${purchaseToken}`;
-          
-          const response = await fetch(apiUrl, {
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-            },
-          });
-          
-          if (response.ok) {
-            const data = await response.json();
-            console.log('📦 Resposta do Google Play:', data);
-            
-            // Verificar se a assinatura está ativa
-            // paymentState: 0 = pendente, 1 = recebido, 2 = free trial, 3 = deferred
-            // expiryTimeMillis: timestamp de expiração
-            const isActive = data.paymentState === 1 || data.paymentState === 2;
-            const expiresAt = data.expiryTimeMillis 
-              ? new Date(parseInt(data.expiryTimeMillis)).toISOString()
-              : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-            
-            return {
-              valid: isActive,
-              expiresAt,
-            };
-          } else {
-            const errorData = await response.text();
-            console.error('❌ Erro na API do Google Play:', response.status, errorData);
-          }
-        }
-      } catch (parseError) {
-        console.error('❌ Erro ao processar Service Account:', parseError);
-      }
+    if (!serviceAccountJson) {
+      console.error('❌ GOOGLE_PLAY_SERVICE_ACCOUNT not configured');
+      return { valid: false, errorCode: 'SERVICE_ACCOUNT_NOT_CONFIGURED' };
     }
-    
-    // No mock fallback - Service Account must be properly configured
-    console.error('❌ GOOGLE_PLAY_SERVICE_ACCOUNT not configured or validation failed');
-    return { valid: false };
+
+    try {
+      const serviceAccount = JSON.parse(serviceAccountJson);
+      
+      // IMPORTANTE: Converter \n literais em quebras de linha reais
+      if (serviceAccount.private_key) {
+        serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+      }
+      
+      // Obter access token
+      const accessToken = await getGoogleAccessToken(serviceAccount);
+      
+      if (!accessToken) {
+        console.error('❌ Failed to obtain Google access token');
+        return { valid: false, errorCode: 'ACCESS_TOKEN_FAILED' };
+      }
+
+      // Verificar assinatura no Google Play
+      const packageName = 'com.gastinhosimples.app';
+      const apiUrl = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/purchases/subscriptions/${productId}/tokens/${purchaseToken}`;
+      
+      console.log('🔍 Calling Google Play API for subscription validation...');
+      
+      const response = await fetch(apiUrl, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('📦 Google Play API response:', {
+          paymentState: data.paymentState,
+          expiryTimeMillis: data.expiryTimeMillis,
+          acknowledgementState: data.acknowledgementState,
+          cancelReason: data.cancelReason,
+        });
+        
+        // Verificar se a assinatura está ativa
+        // paymentState: 0 = pendente, 1 = recebido, 2 = free trial, 3 = deferred
+        const isActive = data.paymentState === 1 || data.paymentState === 2;
+        const expiresAt = data.expiryTimeMillis 
+          ? new Date(parseInt(data.expiryTimeMillis)).toISOString()
+          : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        
+        return {
+          valid: isActive,
+          expiresAt,
+        };
+      } else {
+        const errorData = await response.text();
+        console.error('❌ Google Play API error:', response.status, errorData);
+        return { valid: false, errorCode: `GOOGLE_PLAY_API_ERROR_${response.status}` };
+      }
+    } catch (parseError) {
+      console.error('❌ Error parsing Service Account JSON:', parseError);
+      return { valid: false, errorCode: 'SERVICE_ACCOUNT_PARSE_ERROR' };
+    }
   } catch (error) {
-    console.error('❌ Erro ao validar compra Google Play:', error);
-    return { valid: false };
+    console.error('❌ Error validating Google Play purchase:', error);
+    return { valid: false, errorCode: 'VALIDATION_ERROR' };
   }
 }
 
