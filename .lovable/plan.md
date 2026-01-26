@@ -1,140 +1,85 @@
 
-## Plano: Corrigir Visualização de Despesas em Grupos Compartilhados
+## Plano: Corrigir Bug de Sincronização de Categorias
 
-### Problema Principal
-Quando um membro do grupo visualiza despesas criadas por outro membro:
-- A categoria aparece como "Outros" em vez da categoria correta
-- O cartão aparece apenas como "Crédito" sem o nome do cartão
-- Isso acontece porque as categorias e cartões são privados de cada usuário (RLS)
+### Problema Identificado
+Quando você cria uma nova categoria (ex: "Viagem") e imediatamente adiciona uma despesa com ela, a despesa é salva com categoria "Outros" porque:
 
-### Solução: Desnormalizar Dados de Exibição
+1. Cada componente que usa `useCategories()` tem sua **própria cópia** do estado de categorias
+2. `CategoryManager` cria a categoria e atualiza seu estado local
+3. `CategorySelector` atualiza seu estado via `refresh()`
+4. **MAS** `Index.tsx` continua com o estado antigo (sem a nova categoria)
+5. Quando `addExpense()` roda, ele busca a categoria pelo ID mas não encontra (porque está na lista desatualizada)
+6. Resultado: `selectedCategory` é `null`, então usa fallback "Outros"
 
-A solução mais simples e eficiente é **armazenar o nome e ícone da categoria, e o nome do cartão diretamente na despesa** no momento da criação. Assim, qualquer membro do grupo pode ver as informações corretas.
-
----
-
-### Mudanças no Banco de Dados
-
-**Migração SQL - Adicionar colunas de exibição:**
-
-```text
-ALTER TABLE expenses 
-  ADD COLUMN category_name TEXT,
-  ADD COLUMN category_icon TEXT DEFAULT '📦',
-  ADD COLUMN card_name TEXT;
-
-ALTER TABLE recurring_expenses 
-  ADD COLUMN category_name TEXT,
-  ADD COLUMN category_icon TEXT DEFAULT '📦',
-  ADD COLUMN card_name TEXT;
-```
+### Prova no Banco
+As despesas foram salvas corretamente com o `category_id` da categoria "Viagem":
+- `category_id`: `3fa32cb7-4682-4e38-9223-812c6064f2ae` (ID correto da categoria Viagem)
+- Porém `category_name`: "Outros" e `category_icon`: "📦" (dados errados do fallback)
 
 ---
 
-### Mudanças no Código
+### Solução: Usar React Context para Compartilhar Estado
 
-**1. Formulário de Despesa (`src/pages/Index.tsx`)**
+Transformar o hook `useCategories` em um **Context Provider** para que todos os componentes compartilhem a mesma instância do estado.
 
-Ao criar uma despesa, buscar e salvar os dados de exibição:
+**Arquivos a modificar:**
 
-```text
-// Quando inserir despesa, incluir:
-category_name: selectedCategory?.name || 'Outros',
-category_icon: selectedCategory?.icon || '📦',
-card_name: selectedCard?.name || null,
-```
-
-**2. Lista de Despesas (`src/components/expense-list.tsx`)**
-
-Modificar `getCategoryDisplay` para priorizar os campos desnormalizados:
+#### 1. Criar Context Provider (`src/hooks/use-categories.tsx`)
 
 ```text
-const getCategoryDisplay = (expense: Expense) => {
-  // Se tiver dados desnormalizados (para despesas de grupo)
-  if (expense.category_name) {
-    return { 
-      icon: expense.category_icon || '📦', 
-      label: expense.category_name 
-    };
-  }
+// Criar CategoriesContext e CategoriesProvider
+// Todos os componentes usarão o mesmo estado
+
+const CategoriesContext = createContext<CategoriesContextType | null>(null);
+
+export function CategoriesProvider({ children }) {
+  // Todo o estado atual fica aqui
+  const [categories, setCategories] = useState([]);
+  // ...resto da lógica
   
-  // Fallback para categoria do usuário atual
-  if (expense.category_id) {
-    const userCategory = categories.find(c => c.id === expense.category_id);
-    if (userCategory) {
-      return { icon: userCategory.icon, label: userCategory.name };
-    }
+  return (
+    <CategoriesContext.Provider value={...}>
+      {children}
+    </CategoriesContext.Provider>
+  );
+}
+
+export function useCategories() {
+  const context = useContext(CategoriesContext);
+  if (!context) {
+    throw new Error("useCategories deve ser usado dentro de CategoriesProvider");
   }
-  
-  // Fallback final
-  return { icon: '📦', label: 'Outros' };
-};
+  return context;
+}
 ```
 
-**3. Exibição do Cartão (`src/components/expense-list.tsx`)**
-
-Usar `card_name` quando `card` não estiver disponível:
+#### 2. Adicionar Provider no App (`src/App.tsx`)
 
 ```text
-// No Badge de pagamento:
-{config.label}
-{expense.card?.name 
-  ? ` - ${expense.card.name}` 
-  : expense.card_name 
-    ? ` - ${expense.card_name}` 
-    : ''}
+<CategoriesProvider>
+  <App />
+</CategoriesProvider>
 ```
 
-**4. Mesmas mudanças em:**
-- `src/components/recurring-expense-list.tsx`
-- `src/types/expense.ts` (adicionar campos no tipo)
+#### 3. Remover chamadas individuais do hook
+
+Nenhuma mudança necessária nos componentes que usam `useCategories()` - eles automaticamente passarão a usar o contexto compartilhado.
 
 ---
 
-### Sobre a Exclusão de Despesas em Grupo
+### Benefícios
 
-Atualmente, a política RLS só permite o criador apagar a despesa. Temos duas opções:
-
-**Opção A - Manter como está (mais seguro):**
-- Apenas o criador pode apagar suas despesas
-- Outros membros podem ver mas não apagar
-
-**Opção B - Permitir membros do grupo apagarem (mais flexível):**
-- Qualquer membro do grupo pode apagar despesas do grupo
-- Útil para correções rápidas
-
-Qual opção você prefere?
-
----
-
-### Sobre Cartões de Grupo
-
-Para resolver a questão de "cada um ter que cadastrar o cartão do Walter":
-
-**Solução Simples (recomendada):**
-- Manter sistema atual onde cada um cadastra seus cartões
-- A visualização mostrará o nome do cartão para todos (com a correção acima)
-- Quando não tiver cartão cadastrado, pode selecionar só "Crédito" e digitar descrição
-
-**Solução Avançada (futura):**
-- Criar conceito de "cartões compartilhados do grupo"
-- Todos os membros veem e podem usar os mesmos cartões
-- Mais complexo de implementar
-
----
-
-### Arquivos a Modificar
-
-1. **Migração SQL** - adicionar colunas `category_name`, `category_icon`, `card_name`
-2. `src/types/expense.ts` - adicionar tipos
-3. `src/pages/Index.tsx` - popular campos ao criar despesa
-4. `src/components/expense-list.tsx` - usar campos desnormalizados
-5. `src/components/recurring-expense-list.tsx` - mesma lógica
+- Todos os componentes veem as mesmas categorias
+- Quando uma categoria é criada, todos os componentes são atualizados instantaneamente
+- O `addExpense()` no `Index.tsx` terá acesso à categoria recém-criada
 
 ---
 
 ### Resultado Esperado
 
-- Quando você criar uma despesa com "Alimentação" e "Cartão Smiles-Walter"
-- Sua mãe verá "🍔 Alimentação" e "Crédito - Cartão Smiles-Walter"
-- Mesmo sem ter esses itens cadastrados na conta dela
+1. Você cria a categoria "Viagem" com ícone ✈️
+2. Seleciona "Viagem" no formulário de despesa
+3. A despesa é salva com:
+   - `category_id`: ID da categoria Viagem
+   - `category_name`: "Viagem"
+   - `category_icon`: "✈️"
