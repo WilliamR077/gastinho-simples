@@ -1,9 +1,23 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, createContext, useContext, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { UserCategory, UserCategoryInsert, UserCategoryUpdate } from "@/types/user-category";
 import { useToast } from "@/hooks/use-toast";
 
-export function useCategories() {
+interface CategoriesContextType {
+  categories: UserCategory[];
+  activeCategories: UserCategory[];
+  hiddenCategories: UserCategory[];
+  loading: boolean;
+  addCategory: (data: UserCategoryInsert) => Promise<UserCategory | null>;
+  updateCategory: (id: string, data: UserCategoryUpdate) => Promise<boolean>;
+  deleteCategory: (id: string) => Promise<boolean>;
+  toggleCategoryVisibility: (id: string) => Promise<boolean>;
+  refresh: () => Promise<void>;
+}
+
+const CategoriesContext = createContext<CategoriesContextType | null>(null);
+
+export function CategoriesProvider({ children }: { children: ReactNode }) {
   const [categories, setCategories] = useState<UserCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
@@ -60,7 +74,7 @@ export function useCategories() {
     loadCategories();
   }, [loadCategories]);
 
-  const addCategory = async (data: UserCategoryInsert): Promise<UserCategory | null> => {
+  const addCategory = useCallback(async (data: UserCategoryInsert): Promise<UserCategory | null> => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return null;
@@ -108,9 +122,9 @@ export function useCategories() {
       }
       return null;
     }
-  };
+  }, [categories, toast]);
 
-  const updateCategory = async (id: string, data: UserCategoryUpdate): Promise<boolean> => {
+  const updateCategory = useCallback(async (id: string, data: UserCategoryUpdate): Promise<boolean> => {
     try {
       const { error } = await supabase
         .from("user_categories")
@@ -142,16 +156,16 @@ export function useCategories() {
       }
       return false;
     }
-  };
+  }, [toast]);
 
-  const toggleCategoryVisibility = async (id: string): Promise<boolean> => {
+  const toggleCategoryVisibility = useCallback(async (id: string): Promise<boolean> => {
     const category = categories.find(c => c.id === id);
     if (!category) return false;
 
     return updateCategory(id, { is_active: !category.is_active });
-  };
+  }, [categories, updateCategory]);
 
-  const deleteCategory = async (id: string): Promise<boolean> => {
+  const deleteCategory = useCallback(async (id: string): Promise<boolean> => {
     try {
       const category = categories.find(c => c.id === id);
       if (!category) return false;
@@ -212,12 +226,12 @@ export function useCategories() {
       });
       return false;
     }
-  };
+  }, [categories, toast]);
 
   const activeCategories = useMemo(() => categories.filter(c => c.is_active), [categories]);
   const hiddenCategories = useMemo(() => categories.filter(c => !c.is_active), [categories]);
 
-  return {
+  const value = useMemo(() => ({
     categories,
     activeCategories,
     hiddenCategories,
@@ -227,5 +241,29 @@ export function useCategories() {
     deleteCategory,
     toggleCategoryVisibility,
     refresh: loadCategories,
-  };
+  }), [
+    categories,
+    activeCategories,
+    hiddenCategories,
+    loading,
+    addCategory,
+    updateCategory,
+    deleteCategory,
+    toggleCategoryVisibility,
+    loadCategories,
+  ]);
+
+  return (
+    <CategoriesContext.Provider value={value}>
+      {children}
+    </CategoriesContext.Provider>
+  );
+}
+
+export function useCategories() {
+  const context = useContext(CategoriesContext);
+  if (!context) {
+    throw new Error("useCategories deve ser usado dentro de CategoriesProvider");
+  }
+  return context;
 }
