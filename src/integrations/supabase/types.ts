@@ -193,8 +193,11 @@ export type Database = {
         Row: {
           amount: number
           card_id: string | null
+          card_name: string | null
           category: Database["public"]["Enums"]["expense_category"]
+          category_icon: string | null
           category_id: string | null
+          category_name: string | null
           created_at: string
           description: string
           expense_date: string
@@ -210,8 +213,11 @@ export type Database = {
         Insert: {
           amount: number
           card_id?: string | null
+          card_name?: string | null
           category?: Database["public"]["Enums"]["expense_category"]
+          category_icon?: string | null
           category_id?: string | null
+          category_name?: string | null
           created_at?: string
           description: string
           expense_date?: string
@@ -227,8 +233,11 @@ export type Database = {
         Update: {
           amount?: number
           card_id?: string | null
+          card_name?: string | null
           category?: Database["public"]["Enums"]["expense_category"]
+          category_icon?: string | null
           category_id?: string | null
+          category_name?: string | null
           created_at?: string
           description?: string
           expense_date?: string
@@ -346,8 +355,11 @@ export type Database = {
         Row: {
           amount: number
           card_id: string | null
+          card_name: string | null
           category: Database["public"]["Enums"]["expense_category"]
+          category_icon: string | null
           category_id: string | null
+          category_name: string | null
           created_at: string
           day_of_month: number
           description: string
@@ -363,8 +375,11 @@ export type Database = {
         Insert: {
           amount: number
           card_id?: string | null
+          card_name?: string | null
           category?: Database["public"]["Enums"]["expense_category"]
+          category_icon?: string | null
           category_id?: string | null
+          category_name?: string | null
           created_at?: string
           day_of_month: number
           description: string
@@ -380,8 +395,11 @@ export type Database = {
         Update: {
           amount?: number
           card_id?: string | null
+          card_name?: string | null
           category?: Database["public"]["Enums"]["expense_category"]
+          category_icon?: string | null
           category_id?: string | null
+          category_name?: string | null
           created_at?: string
           day_of_month?: number
           description?: string
