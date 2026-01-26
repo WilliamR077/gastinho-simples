@@ -12,6 +12,10 @@ export type RecurringExpense = Database["public"]["Tables"]["recurring_expenses"
   // Campos adicionais da migração (estarão disponíveis após types serem atualizados)
   start_date?: string | null;
   end_date?: string | null;
+  // Campos desnormalizados para exibição em grupos compartilhados
+  category_name?: string | null;
+  category_icon?: string | null;
+  card_name?: string | null;
 };
 export type RecurringExpenseInsert = Database["public"]["Tables"]["recurring_expenses"]["Insert"];
 export type PaymentMethod = Database["public"]["Enums"]["payment_method"];

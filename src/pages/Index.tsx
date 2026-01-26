@@ -17,6 +17,7 @@ import { UnifiedExpenseFormSheet } from "@/components/unified-expense-form-sheet
 import { BudgetGoalFormSheet } from "@/components/budget-goal-form-sheet";
 import { ContextSelector } from "@/components/context-selector";
 import { useSharedGroups } from "@/hooks/use-shared-groups";
+import { useCategories } from "@/hooks/use-categories";
 import { ProductTour } from "@/components/product-tour";
 import { BalanceSummary } from "@/components/balance-summary";
 import { UnifiedIncomeFormSheet } from "@/components/unified-income-form-sheet";
@@ -110,6 +111,7 @@ export default function Index() {
   const { user, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
   const { currentContext, groups, getGroupMembers } = useSharedGroups();
+  const { categories } = useCategories();
   const [groupMembers, setGroupMembers] = useState<SharedGroupMember[]>([]);
 
   // Redirect to auth if not logged in
@@ -602,6 +604,13 @@ export default function Index() {
       // Usar sharedGroupId do formulário (permite escolher destino diferente do contexto atual)
       const groupId = sharedGroupId || null;
 
+      // Buscar dados desnormalizados para exibição em grupos
+      const selectedCategory = categoryId ? categories.find(c => c.id === categoryId) : null;
+      const selectedCard = cardId ? cards.find(c => c.id === cardId) : null;
+      const categoryName = selectedCategory?.name || 'Outros';
+      const categoryIcon = selectedCategory?.icon || '📦';
+      const cardName = selectedCard?.name || null;
+
       if (installments === 1) {
         // Single expense
       const { data: insertedData, error } = await supabase
@@ -617,6 +626,10 @@ export default function Index() {
           ...(categoryId && { category_id: categoryId }),
           ...(cardId && { card_id: cardId }),
           ...(groupId && { shared_group_id: groupId }),
+          // Campos desnormalizados para visualização em grupos
+          category_name: categoryName,
+          category_icon: categoryIcon,
+          card_name: cardName,
         })
         .select(`
           *,
@@ -649,6 +662,10 @@ export default function Index() {
             ...(categoryId && { category_id: categoryId }),
             ...(cardId && { card_id: cardId }),
             ...(groupId && { shared_group_id: groupId }),
+            // Campos desnormalizados para visualização em grupos
+            category_name: categoryName,
+            category_icon: categoryIcon,
+            card_name: cardName,
           });
         }
 
@@ -719,6 +736,13 @@ export default function Index() {
     // Usar sharedGroupId do formulário (permite escolher destino diferente do contexto atual)
     const groupId = data.sharedGroupId || null;
 
+    // Buscar dados desnormalizados para exibição em grupos
+    const selectedCategory = data.categoryId ? categories.find(c => c.id === data.categoryId) : null;
+    const selectedCard = data.cardId ? cards.find(c => c.id === data.cardId) : null;
+    const categoryName = selectedCategory?.name || 'Outros';
+    const categoryIcon = selectedCategory?.icon || '📦';
+    const cardName = selectedCard?.name || null;
+
     try {
     const { data: insertedData, error } = await supabase
       .from("recurring_expenses")
@@ -731,6 +755,10 @@ export default function Index() {
         ...(data.categoryId && { category_id: data.categoryId }),
         ...(data.cardId && { card_id: data.cardId }),
         ...(groupId && { shared_group_id: groupId }),
+        // Campos desnormalizados para visualização em grupos
+        category_name: categoryName,
+        category_icon: categoryIcon,
+        card_name: cardName,
       })
       .select(`
         *,

@@ -5,6 +5,10 @@ import { SharedGroup } from "./shared-group";
 export type Expense = Database["public"]["Tables"]["expenses"]["Row"] & {
   card?: Pick<Card, 'id' | 'name' | 'color' | 'card_type'>;
   shared_group?: Pick<SharedGroup, 'id' | 'name' | 'color'>;
+  // Campos desnormalizados para exibição em grupos compartilhados
+  category_name?: string | null;
+  category_icon?: string | null;
+  card_name?: string | null;
 };
 export type ExpenseInsert = Database["public"]["Tables"]["expenses"]["Insert"];
 export type PaymentMethod = Database["public"]["Enums"]["payment_method"];

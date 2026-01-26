@@ -69,7 +69,15 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onSendTo
 
   // Helper para obter ícone e nome da categoria
   const getCategoryDisplay = (expense: Expense) => {
-    // Primeiro tenta buscar pela category_id (nova forma)
+    // Primeiro verifica campos desnormalizados (para despesas de grupo)
+    if (expense.category_name) {
+      return { 
+        icon: expense.category_icon || '📦', 
+        label: expense.category_name 
+      };
+    }
+    
+    // Tenta buscar pela category_id (nova forma)
     if (expense.category_id) {
       const userCategory = categories.find(c => c.id === expense.category_id);
       if (userCategory) {
@@ -161,7 +169,11 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onSendTo
                     style={{ backgroundColor: cardColor || '#6B7280' }}
                   >
                     {config.label}
-                    {expense.card && ` - ${expense.card.name}`}
+                    {expense.card?.name 
+                      ? ` - ${expense.card.name}` 
+                      : expense.card_name 
+                        ? ` - ${expense.card_name}` 
+                        : ''}
                   </Badge>
                   {expense.shared_group && (
                     <Badge 
