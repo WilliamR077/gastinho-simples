@@ -330,6 +330,11 @@ async function getSubscriptionFromGooglePlay(
     }
 
     const serviceAccount = JSON.parse(serviceAccountJson);
+    
+    // IMPORTANTE: Converter \n literais em quebras de linha reais
+    if (serviceAccount.private_key) {
+      serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+    }
     const accessToken = await getGoogleAccessToken(serviceAccount);
     
     if (!accessToken) {
