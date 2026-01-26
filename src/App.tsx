@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/hooks/use-theme";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { SharedGroupsProvider } from "@/hooks/use-shared-groups";
 import { ValuesVisibilityProvider } from "@/hooks/use-values-visibility";
+import { CategoriesProvider } from "@/hooks/use-categories";
 import { firebaseNotificationService } from "@/services/firebase-notification-service";
 import { adMobService } from "@/services/admob-service";
 import { appLockService } from "@/services/app-lock-service";
@@ -164,13 +165,15 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider defaultTheme="dark">
       <AuthProvider>
-        <SharedGroupsProvider>
-          <ValuesVisibilityProvider>
-            <TooltipProvider>
-              <AppContent />
-            </TooltipProvider>
-          </ValuesVisibilityProvider>
-        </SharedGroupsProvider>
+        <CategoriesProvider>
+          <SharedGroupsProvider>
+            <ValuesVisibilityProvider>
+              <TooltipProvider>
+                <AppContent />
+              </TooltipProvider>
+            </ValuesVisibilityProvider>
+          </SharedGroupsProvider>
+        </CategoriesProvider>
       </AuthProvider>
     </ThemeProvider>
   </QueryClientProvider>
