@@ -116,22 +116,82 @@ serve(async (req) => {
         type: notificationType,
         typeCode: subNotification.notificationType,
         subscriptionId: subNotification.subscriptionId,
-        purchaseToken: subNotification.purchaseToken?.substring(0, 20) + '...',
+        purchaseToken: subNotification.purchaseToken?.substring(0, 30) + '...',
       });
 
       // Buscar assinatura pelo purchase_token
-      const { data: subscription, error: findError } = await supabaseAdmin
+      let subscription: any = null;
+      const { data: foundSubscription, error: findError } = await supabaseAdmin
         .from('subscriptions')
         .select('*')
         .eq('purchase_token', subNotification.purchaseToken)
         .single();
 
       if (findError && findError.code !== 'PGRST116') {
-        console.error('❌ Erro ao buscar assinatura:', findError);
+        console.error('❌ Erro ao buscar assinatura por purchase_token:', findError);
+      }
+
+      subscription = foundSubscription;
+
+      // Se não encontrou pelo purchase_token, tentar vincular a uma assinatura recente sem token
+      if (!subscription) {
+        console.log('⚠️ Assinatura não encontrada pelo purchase_token - tentando vincular por product_id...');
+        
+        const tier = PRODUCT_ID_TO_TIER[subNotification.subscriptionId] || 'premium';
+        
+        // Buscar assinaturas criadas nas últimas 24h com o mesmo product_id e sem purchase_token
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        
+        const { data: recentSubscriptions, error: recentError } = await supabaseAdmin
+          .from('subscriptions')
+          .select('*')
+          .eq('product_id', subNotification.subscriptionId)
+          .is('purchase_token', null)
+          .gte('created_at', oneDayAgo)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (recentError) {
+          console.error('❌ Erro ao buscar assinaturas recentes:', recentError);
+        } else if (recentSubscriptions && recentSubscriptions.length > 0) {
+          subscription = recentSubscriptions[0];
+          console.log('✅ Encontrada assinatura recente para vincular:', {
+            userId: subscription.user_id,
+            tier: subscription.tier,
+            createdAt: subscription.created_at,
+          });
+          
+          // Atualizar assinatura com o purchase_token correto
+          const { error: updateError } = await supabaseAdmin
+            .from('subscriptions')
+            .update({
+              purchase_token: subNotification.purchaseToken,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', subscription.id);
+
+          if (updateError) {
+            console.error('❌ Erro ao vincular purchase_token:', updateError);
+          } else {
+            console.log('✅ purchase_token vinculado com sucesso à assinatura');
+          }
+        } else {
+          console.log('⚠️ Nenhuma assinatura recente encontrada para vincular');
+        }
       }
 
       // Processar baseado no tipo de notificação
       switch (subNotification.notificationType) {
+        case 4: // SUBSCRIPTION_PURCHASED - Nova compra!
+          await handleNewPurchase(
+            supabaseAdmin,
+            subNotification.purchaseToken,
+            subNotification.subscriptionId,
+            subscription,
+            notificationType
+          );
+          break;
+
         case 2: // SUBSCRIPTION_RENEWED
         case 1: // SUBSCRIPTION_RECOVERED
         case 7: // SUBSCRIPTION_RESTARTED
@@ -176,7 +236,8 @@ serve(async (req) => {
           messageId: body.message.messageId,
           subscriptionId: subNotification.subscriptionId,
           notificationType,
-          purchaseTokenPrefix: subNotification.purchaseToken?.substring(0, 20),
+          purchaseTokenPrefix: subNotification.purchaseToken?.substring(0, 30),
+          foundUser: !!subscription?.user_id,
           processedAt: new Date().toISOString(),
         },
       });
@@ -206,6 +267,62 @@ serve(async (req) => {
     return new Response('OK', { status: 200 });
   }
 });
+
+/**
+ * Processa nova compra de assinatura
+ */
+async function handleNewPurchase(
+  supabase: any,
+  purchaseToken: string,
+  subscriptionId: string,
+  existingSubscription: any,
+  notificationType: string
+) {
+  console.log(`🛒 Processando ${notificationType}...`);
+  
+  try {
+    // Obter detalhes da assinatura no Google Play
+    const subscriptionDetails = await getSubscriptionFromGooglePlay(subscriptionId, purchaseToken);
+    
+    if (!subscriptionDetails) {
+      console.error('❌ Não foi possível obter detalhes da assinatura no Google Play');
+      return;
+    }
+
+    const tier = PRODUCT_ID_TO_TIER[subscriptionId] || 'premium';
+    const newExpiresAt = subscriptionDetails.expiryTimeMillis 
+      ? new Date(parseInt(subscriptionDetails.expiryTimeMillis)).toISOString()
+      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    if (existingSubscription) {
+      // Atualizar assinatura existente com purchase_token e nova data de expiração
+      const { error } = await supabase
+        .from('subscriptions')
+        .update({
+          tier,
+          is_active: true,
+          expires_at: newExpiresAt,
+          purchase_token: purchaseToken, // Garantir que o token está salvo
+          product_id: subscriptionId,
+          platform: 'android',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingSubscription.id);
+
+      if (error) {
+        console.error('❌ Erro ao atualizar assinatura:', error);
+      } else {
+        console.log(`✅ Assinatura ativada via webhook: ${tier} até ${newExpiresAt}`);
+      }
+    } else {
+      // Assinatura não encontrada - não podemos criar sem saber o user_id
+      console.log('⚠️ Nova compra via webhook, mas não conseguimos vincular a um usuário');
+      console.log('ℹ️ O usuário precisará abrir o app e tocar em "Restaurar Compras"');
+    }
+  } catch (error) {
+    console.error('❌ Erro ao processar nova compra:', error);
+  }
+}
 
 /**
  * Processa renovação/recuperação de assinatura
@@ -241,6 +358,7 @@ async function handleSubscriptionRenewal(
           tier,
           is_active: true,
           expires_at: newExpiresAt,
+          purchase_token: purchaseToken, // Garantir que o token está salvo
           updated_at: new Date().toISOString(),
         })
         .eq('id', existingSubscription.id);

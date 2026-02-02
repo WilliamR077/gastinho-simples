@@ -209,6 +209,7 @@ class BillingService {
     this.store.when()
       .approved(async (transaction) => {
         console.log('✅ Transação aprovada:', transaction.id);
+        console.log('📋 Transaction object keys:', Object.keys(transaction));
         
         // Obter o produto comprado
         const productId = transaction.products[0]?.id;
@@ -217,18 +218,55 @@ class BillingService {
           
           // Extrair purchaseToken de múltiplas fontes possíveis
           const transactionAny = transaction as any;
-          let purchaseToken = 
-            transaction.purchaseToken ||
-            transactionAny.nativePurchase?.purchaseToken ||
-            transactionAny.transactionId ||
-            transaction.id;
           
-          console.log('🔐 Token extraction:', {
-            hasPurchaseToken: !!transaction.purchaseToken,
-            hasNativePurchaseToken: !!transactionAny.nativePurchase?.purchaseToken,
-            hasTransactionId: !!transactionAny.transactionId,
-            usingFallbackId: purchaseToken === transaction.id,
-            tokenPrefix: purchaseToken?.substring(0, 30) + '...',
+          // Log completo do objeto transaction para debug
+          console.log('📋 Transaction details:', JSON.stringify({
+            id: transaction.id,
+            purchaseToken: transaction.purchaseToken,
+            transactionId: transactionAny.transactionId,
+            nativePurchase: transactionAny.nativePurchase ? {
+              purchaseToken: transactionAny.nativePurchase.purchaseToken,
+              orderId: transactionAny.nativePurchase.orderId,
+            } : null,
+            originalJson: transactionAny.originalJson ? 'exists' : 'not found',
+          }, null, 2));
+          
+          let purchaseToken = '';
+          let tokenSource = '';
+          
+          // Ordem de prioridade para extração do token
+          if (transaction.purchaseToken && transaction.purchaseToken.length > 50) {
+            purchaseToken = transaction.purchaseToken;
+            tokenSource = 'transaction.purchaseToken';
+          } else if (transactionAny.nativePurchase?.purchaseToken && transactionAny.nativePurchase.purchaseToken.length > 50) {
+            purchaseToken = transactionAny.nativePurchase.purchaseToken;
+            tokenSource = 'nativePurchase.purchaseToken';
+          } else if (transactionAny.transactionId && transactionAny.transactionId.length > 50) {
+            purchaseToken = transactionAny.transactionId;
+            tokenSource = 'transactionId';
+          } else if (transactionAny.originalJson) {
+            // Tentar parsear originalJson se existir
+            try {
+              const parsed = JSON.parse(transactionAny.originalJson);
+              if (parsed.purchaseToken) {
+                purchaseToken = parsed.purchaseToken;
+                tokenSource = 'originalJson.purchaseToken';
+              }
+            } catch (e) {
+              console.warn('⚠️ Erro ao parsear originalJson:', e);
+            }
+          }
+          
+          // Fallback para ID se não encontramos um token válido
+          if (!purchaseToken) {
+            purchaseToken = transaction.id;
+            tokenSource = 'transaction.id (fallback)';
+          }
+          
+          console.log('🔐 Token extraction result:', {
+            source: tokenSource,
+            tokenLength: purchaseToken.length,
+            tokenPrefix: purchaseToken.substring(0, 40) + '...',
           });
           
           // Validar no backend
@@ -243,9 +281,12 @@ class BillingService {
               this.pendingPurchaseResolve = null;
             }
           } else {
-            console.warn('⚠️ Validação falhou - NÃO finalizando transação (Google Play vai pedir confirmação)');
+            console.warn('⚠️ Validação falhou - salvando purchase_token para retry posterior');
+            
+            // Salvar o purchase_token no banco mesmo assim para recuperação posterior
+            await this.savePurchaseTokenForRetry(productId, purchaseToken, tier || 'premium');
+            
             // NÃO finalizamos para que o Google Play continue pedindo confirmação
-            // e o usuário possa tentar novamente
             if (this.pendingPurchaseResolve) {
               this.pendingPurchaseResolve(false);
               this.pendingPurchaseResolve = null;
@@ -259,6 +300,41 @@ class BillingService {
       .updated((product) => {
         console.log('🔄 Produto atualizado:', product.id, product);
       });
+  }
+
+  /**
+   * Salva o purchase_token no banco para retry posterior
+   * Usado quando a validação falha mas queremos permitir recuperação
+   */
+  private async savePurchaseTokenForRetry(productId: string, purchaseToken: string, tier: string): Promise<void> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      console.log('💾 Salvando purchase_token para retry...');
+      
+      // Upsert para criar ou atualizar a assinatura com o token
+      const { error } = await supabase
+        .from('subscriptions')
+        .upsert({
+          user_id: user.id,
+          product_id: productId,
+          purchase_token: purchaseToken,
+          tier: tier as any,
+          platform: 'android',
+          is_active: false, // Marcar como inativo até validação bem-sucedida
+        }, {
+          onConflict: 'user_id'
+        });
+
+      if (error) {
+        console.error('❌ Erro ao salvar purchase_token:', error);
+      } else {
+        console.log('✅ purchase_token salvo para retry posterior');
+      }
+    } catch (error) {
+      console.error('❌ Erro ao salvar purchase_token:', error);
+    }
   }
 
   /**
@@ -609,17 +685,24 @@ class BillingService {
       console.log('📊 Resultado da verificação:', { highestTier, highestProductId, hasPurchaseToken: !!purchaseToken, tokenPrefix: purchaseToken?.substring(0, 20) });
       
       if (highestTier !== 'free') {
-        // Se temos um token real, usar ele. Senão, tentar sincronização via Edge Function
-        if (purchaseToken && purchaseToken !== 'restored') {
-          console.log('🔐 Validando com token real:', purchaseToken.substring(0, 20) + '...');
+        // Se temos um token real, usar ele
+        if (purchaseToken && purchaseToken !== 'restored' && purchaseToken.length > 50) {
+          console.log('🔐 Validando com token real:', purchaseToken.substring(0, 30) + '...');
           const success = await this.validatePurchase(highestProductId, purchaseToken, highestTier);
           if (success) {
+            return { success: true, tier: highestTier };
+          }
+          
+          // Se validação falhou, tentar recover-subscription
+          console.log('🔄 Tentando recover-subscription Edge Function...');
+          const recoverSuccess = await this.recoverSubscription(highestProductId, purchaseToken);
+          if (recoverSuccess) {
             return { success: true, tier: highestTier };
           }
         }
         
         // Fallback: tentar sincronização manual via Edge Function
-        console.log('🔄 Tentando sincronização manual via Edge Function...');
+        console.log('🔄 Tentando sincronização manual via sync-subscription...');
         const syncSuccess = await this.syncSubscriptionFromBackend(highestProductId, highestTier);
         if (syncSuccess) {
           return { success: true, tier: highestTier };
@@ -630,6 +713,44 @@ class BillingService {
     } catch (error) {
       console.error('❌ Erro ao restaurar compras:', error);
       return { success: false };
+    }
+  }
+
+  /**
+   * Tenta recuperar assinatura via Edge Function recover-subscription
+   * Útil quando a validação original falhou mas a compra foi confirmada no Google Play
+   */
+  async recoverSubscription(productId: string, purchaseToken: string): Promise<boolean> {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        console.error('❌ Usuário não autenticado para recover');
+        return false;
+      }
+
+      console.log('🔄 Chamando recover-subscription Edge Function...');
+      
+      const response = await supabase.functions.invoke('recover-subscription', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: {
+          productId,
+          purchaseToken,
+        },
+      });
+
+      if (response.error) {
+        console.error('❌ Erro na recover-subscription:', response.error);
+        return false;
+      }
+
+      console.log('✅ Recuperação via backend:', response.data);
+      return response.data?.success === true;
+    } catch (error) {
+      console.error('❌ Erro ao recuperar assinatura:', error);
+      return false;
     }
   }
 
