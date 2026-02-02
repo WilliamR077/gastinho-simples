@@ -1,128 +1,175 @@
 
-Objetivo
-- Fazer a assinatura “Premium Plus” finalizar corretamente no Android (sem ficar em “Confirmar plano” e sem estorno), e o app reconhecer o plano (remover anúncios / liberar recursos) logo após a compra.
 
-O que significa “Confirmar plano” (o que o print mostra)
-- Esse aviso do Google Play (“Abra este app para confirmar seu plano… senão será cancelado automaticamente”) é típico quando o Google Play está aguardando o app “confirmar/finalizar” a compra.
-- Na prática isso costuma acontecer quando o app não conclui o fluxo de compra (acknowledge/finish). O Google dá um prazo (no seu print: até 29 jan) e, se o app não confirmar, ele cancela e o valor acaba sendo estornado.
+## Diagnóstico Completo: Por que as Assinaturas Não Funcionam
 
-Diagnóstico provável (com base no código atual)
-1) O app só “finaliza” (transaction.finish()) depois que a Edge Function validate-purchase valida a compra.
-2) Hoje NÃO existe o secret GOOGLE_PLAY_SERVICE_ACCOUNT configurado no projeto (verifiquei os secrets disponíveis e só existe FIREBASE_SERVER_KEY).
-3) Sem GOOGLE_PLAY_SERVICE_ACCOUNT, a função validate-purchase retorna “Compra inválida” sempre.
-4) Resultado:
-   - a compra chega a ser criada no Google Play,
-   - mas o app não valida no backend,
-   - então o app não chama transaction.finish(),
-   - o Google Play fica pedindo “Confirmar plano” e depois cancela/estorna.
+### Problema Principal Identificado
 
-Além disso (mesmo depois de configurar o Service Account) há 2 pontos que podem quebrar a validação:
-- A chave privada do Service Account pode vir com “\\n” (texto) e o código atual não converte isso em quebra de linha real, o que faz o JWT OAuth falhar.
-- Em alguns casos o plugin não expõe purchaseToken no campo transaction.purchaseToken; o token pode estar em transaction.nativePurchase.purchaseToken (o código atual já trata isso no restorePurchases, mas não trata no fluxo de compra “approved”).
+**O secret `GOOGLE_PLAY_SERVICE_ACCOUNT` NÃO ESTÁ CONFIGURADO no Supabase!**
 
-Plano de correção (backend + app) — com foco em robustez
+Quando verifiquei os secrets disponíveis, só encontrei:
+- `FIREBASE_SERVER_KEY`
 
-1) Configuração necessária no Google / Supabase (ação sua, guiada)
-1.1) Criar/usar um Service Account com acesso ao Google Play Developer API
-- No Google Play Console: Configurações > API access
-- Vincular um projeto do Google Cloud (se ainda não estiver).
-- Criar um Service Account e dar permissões para ler assinaturas/pedidos (pelo menos “View subscriptions and purchases” / acesso para consultar compras).
-- Gerar e baixar a chave JSON do Service Account.
+**Não existe** o secret `GOOGLE_PLAY_SERVICE_ACCOUNT`, que é essencial para validar compras com a API do Google Play.
 
-1.2) Adicionar o secret no Supabase (Lovable Cloud)
-- Criar um secret chamado: GOOGLE_PLAY_SERVICE_ACCOUNT
-- Valor: o JSON completo da chave do Service Account (copiar/colar)
-Observação importante: se o JSON tiver private_key com “\\n”, está tudo bem — vamos ajustar o código para tratar isso automaticamente.
+---
 
-2) Ajustes no código das Edge Functions (para validar de verdade)
-2.1) Corrigir leitura do private_key do Service Account
-- Em validate-purchase, sync-subscription e google-play-webhook:
-  - após JSON.parse(serviceAccountJson), fazer:
-    - serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n')
-  - Isso evita falha ao gerar o JWT e obter access token.
+### Fluxo do Problema (Conta da sua mãe - vivianecolares76@gmail.com)
 
-2.2) Melhorar logs/erros retornados (para diagnosticar rápido)
-- Quando GOOGLE_PLAY_SERVICE_ACCOUNT estiver ausente:
-  - retornar erro explícito “SERVICE_ACCOUNT_NOT_CONFIGURED”
-- Quando a API do Google Play retornar erro:
-  - logar status + body
-  - retornar erro “GOOGLE_PLAY_API_ERROR”
-Isso ajuda a identificar rapidamente se é permissão, packageName, productId, token inválido etc.
+```text
+1. Usuário seleciona Premium Plus (R$17,90)
+2. Google Play processa o pagamento → SUCESSO (passa no cartão)
+3. App recebe transaction.approved()
+4. App chama validate-purchase Edge Function
+5. Edge Function tenta ler GOOGLE_PLAY_SERVICE_ACCOUNT → NÃO EXISTE
+6. Edge Function retorna { valid: false, errorCode: 'SERVICE_ACCOUNT_NOT_CONFIGURED' }
+7. App NÃO chama transaction.finish() (porque validação falhou)
+8. Google Play fica aguardando confirmação → mostra "Confirmar plano"
+9. Após 3 dias sem confirmação → Google Play cancela e reembolsa
+```
 
-3) Ajustes no app (para não ficar preso em “Confirmar plano”)
-3.1) Garantir que estamos enviando Authorization para as Edge Functions
-- Em billing-service.ts:
-  - validatePurchase() e syncSubscriptionFromBackend() devem enviar explicitamente:
-    Authorization: `Bearer ${session.access_token}`
-  - Isso evita falha silenciosa caso o invoke não esteja anexando o token em algum dispositivo.
+---
 
-3.2) Extrair purchaseToken corretamente no fluxo de compra (approved)
-- No handler .approved(transaction):
-  - tentar nesta ordem:
-    - transaction.purchaseToken
-    - (transaction as any).nativePurchase?.purchaseToken
-    - (transaction as any).transactionId
-    - transaction.id (último fallback)
-- E logar (em debug) de onde veio o token.
-Motivo: se mandarmos o token errado, a API do Google Play não encontra a assinatura e a validação falha.
+### Evidências nos Logs
 
-3.3) Reforçar “restaurar/confirmar” quando o usuário reabre o app
-- Hoje: checkAndSyncSubscription() só tenta sincronizar quando o banco já tem tier != free.
-- Problema: quando a validação falha, o banco fica free, então NUNCA roda a sincronização automática.
-- Ajuste:
-  - checkAndSyncSubscription() deve tentar restorePurchases() também quando o tier for free (com throttling simples, tipo “no máximo 1x a cada X horas”, para não pesar).
-  - Isso faz o app “confirmar” a assinatura ao abrir, mesmo se a primeira validação não tiver atualizado o banco.
+**Logs da Edge Function validate-purchase (do contexto):**
+```
+❌ Google Play API error: 400 "Invalid Value"
+```
 
-3.4) Melhorar restorePurchases()
-- Além de store.refresh(), chamar também store.restorePurchases() (quando disponível) para forçar reprocessamento de transações pendentes.
-- Se detectar compra “owned” e conseguir validar, atualizar o banco e disparar refreshSubscription().
+Isso acontece porque:
+1. Ou o `purchaseToken` está incorreto/malformado
+2. Ou o `GOOGLE_PLAY_SERVICE_ACCOUNT` retornou access token inválido (provavelmente porque o secret não existe ou está mal formatado)
 
-3.5) UX: feedback claro ao usuário
-- Se a compra foi iniciada mas a validação falhar:
-  - mostrar toast do tipo:
-    “Compra pendente. Abra novamente o app para confirmar a assinatura. Se continuar, toque em ‘Restaurar Compras’.”
-- Manter (ou destacar) o botão “Restaurar Compras” na tela de assinatura como solução imediata.
+**Logs do Audit no banco (encontrei):**
+- A compra da sua mãe em 26/01 foi registrada via webhook do Google Play:
+  - `google_play_subscription_purchased` (26/01)
+  - `google_play_subscription_revoked` (29/01) - após 3 dias sem confirmação
+  - `google_play_subscription_expired` (29/01)
 
-4) Verificações e testes (antes de publicar)
-4.1) Teste de compra real (com a conta da sua mãe)
-- Realizar compra Premium Plus
-- Confirmar que:
-  - Edge Function validate-purchase registra logs de “paymentState” e retorna valid true
-  - O app chama transaction.finish()
-  - O Google Play para de mostrar “Confirmar plano”
-  - O app muda o plano para Premium Plus e remove anúncios (Premium Plus é sem anúncios)
+Mas todas ficaram com `user_id: 00000000-0000-0000-0000-000000000000` (system user) porque o webhook não conseguiu vincular ao usuário (não tinha o `purchase_token` salvo no banco).
 
-4.2) Teste de “fechei e reabri”
-- Fechar o app logo após comprar e reabrir
-- Confirmar que a sincronização automática (restorePurchases/checkAndSyncSubscription) recupera e aplica o plano.
+---
 
-4.3) Teste de “Restaurar Compras”
-- Clicar “Restaurar Compras” e garantir que, se a assinatura existir, o app aplica o tier correto.
+### Problema na sua conta (vitor.romao0442@gmail.com)
 
-5) Hardening (recomendado após estabilizar)
-- Alterar supabase/config.toml para verify_jwt = true em validate-purchase e sync-subscription (e ajustar CORS/headers conforme necessário).
-- Isso reduz a superfície de ataque, mantendo o mesmo comportamento funcional.
+Sua assinatura expirou em `2026-02-02` e o `purchase_token` está `NULL` no banco:
 
-Entregáveis (o que eu vou implementar quando você trocar para o modo de edição)
-- Atualizações em:
-  - src/services/billing-service.ts (token extraction, headers Authorization, restorePurchases + sync start)
-  - supabase/functions/validate-purchase/index.ts (private_key fix + logs)
-  - supabase/functions/sync-subscription/index.ts (private_key fix + logs)
-  - supabase/functions/google-play-webhook/index.ts (private_key fix + logs)
-  - (opcional) supabase/config.toml (verify_jwt = true para validate-purchase e sync-subscription)
-- Orientação passo-a-passo para você criar e cadastrar o GOOGLE_PLAY_SERVICE_ACCOUNT.
+```
+purchase_token: <nil>
+expires_at: 2026-02-02 00:00:00+00
+tier: premium_plus
+```
 
-Dependências / o que eu preciso de você
-- Você precisa adicionar o secret GOOGLE_PLAY_SERVICE_ACCOUNT com o JSON do Service Account.
-Sem isso, a assinatura vai continuar falhando e o Google Play vai seguir pedindo “Confirmar plano”.
+Sem o `purchase_token` salvo, a Edge Function `sync-subscription` não consegue verificar a renovação com o Google Play.
 
-Riscos e como mitigamos
-- Se o Service Account não tiver permissão correta no Play Console, a API retorna 401/403:
-  - nossos logs vão mostrar claramente e a correção é ajustar permissões.
-- Se o purchaseToken estiver vindo de outro campo:
-  - vamos extrair por múltiplas fontes (incluindo nativePurchase.purchaseToken) e logar.
+---
 
-Resultado esperado
-- Após a compra, o app valida no backend, finaliza a transação e o Google Play não exibe mais “Confirmar plano”.
-- O plano “Premium Plus” passa a aparecer como ativo no app, e os anúncios somem automaticamente.
+### Problema no Webhook
+
+O webhook do Google Play está funcionando (recebe notificações), mas:
+1. Busca assinatura pelo `purchase_token` no banco
+2. Como não existe (está NULL), não encontra o usuário
+3. Registra no audit_log com `user_id: 00000000-0000-0000-0000-000000000000`
+4. Não atualiza a assinatura de ninguém
+
+---
+
+## Plano de Correção
+
+### 1. Configurar o Secret `GOOGLE_PLAY_SERVICE_ACCOUNT` (Ação sua)
+
+Este é o passo mais crítico. Sem ele, NADA funciona.
+
+**Como fazer:**
+1. Acesse o Google Cloud Console vinculado ao Google Play Console
+2. Crie uma Service Account (ou use uma existente) com permissão para Google Play Android Developer API
+3. Gere uma chave JSON para essa Service Account
+4. Vá em Supabase Dashboard → Settings → Functions → Secrets
+5. Adicione um novo secret:
+   - Nome: `GOOGLE_PLAY_SERVICE_ACCOUNT`
+   - Valor: o conteúdo completo do arquivo JSON
+
+### 2. Corrigir a Edge Function `validate-purchase`
+
+**Mudanças:**
+- Adicionar logs mais detalhados para diagnosticar exatamente onde falha
+- Verificar se o `purchaseToken` está chegando corretamente
+- Tratar melhor o erro quando o service account não está configurado
+
+### 3. Corrigir o `billing-service.ts` no app
+
+**Problemas identificados:**
+- O `purchaseToken` pode não estar sendo extraído corretamente da transação
+- Adicionar log completo do objeto `transaction` para debug
+- **Importante**: Quando a validação falha, salvar o `purchaseToken` mesmo assim no banco local para tentativa posterior
+
+### 4. Melhorar o Webhook para lidar com novos usuários
+
+**Problema atual:**
+- Se o `purchase_token` não está no banco, o webhook não encontra o usuário
+- A compra é "perdida"
+
+**Solução:**
+- Quando não encontrar pelo `purchase_token`, tentar buscar assinaturas que:
+  - Têm `product_id` igual ao `subscriptionId` da notificação
+  - Foram criadas recentemente (últimas 24h)
+  - Não têm `purchase_token` preenchido
+- Atualizar essas assinaturas com o `purchase_token` correto
+
+### 5. Criar um mecanismo de "recuperação" de assinaturas pendentes
+
+**Nova funcionalidade:**
+- Quando o usuário clica em "Restaurar Compras":
+  - Tentar obter o `purchaseToken` real do Google Play
+  - Validar no backend
+  - Se válido, atualizar o banco COM o `purchase_token`
+  - Isso permite que futuras renovações sejam processadas corretamente
+
+---
+
+## Arquivos a Modificar
+
+1. **`supabase/functions/validate-purchase/index.ts`**
+   - Melhorar logs de debug
+   - Retornar erro mais específico quando service account não está configurado
+
+2. **`supabase/functions/google-play-webhook/index.ts`**
+   - Adicionar lógica para vincular `purchase_token` a assinaturas recentes sem token
+   - Buscar usuário por outros critérios quando não encontrar pelo token
+
+3. **`src/services/billing-service.ts`**
+   - Melhorar extração do `purchaseToken`
+   - Salvar `purchaseToken` localmente mesmo quando validação falha
+   - Adicionar retry automático de validação
+
+4. **Nova Edge Function `recover-subscription`**
+   - Endpoint para o usuário recuperar/vincular assinatura manualmente
+   - Consulta Google Play e atualiza banco com dados corretos
+
+---
+
+## Correção Imediata para Contas Afetadas
+
+Depois de configurar o `GOOGLE_PLAY_SERVICE_ACCOUNT`:
+
+**Para sua conta (vitor.romao0442@gmail.com):**
+1. Abrir o app
+2. Tocar em "Restaurar Compras"
+3. Se a assinatura ainda estiver ativa no Google Play, será restaurada
+
+**Para a conta da sua mãe (vivianecolares76@gmail.com):**
+1. A assinatura foi reembolsada, então precisa assinar novamente
+2. Depois de configurar o secret, a nova assinatura vai funcionar
+
+---
+
+## Resumo das Prioridades
+
+| Prioridade | Ação | Quem faz |
+|------------|------|----------|
+| 1 (CRÍTICA) | Configurar `GOOGLE_PLAY_SERVICE_ACCOUNT` no Supabase | Você |
+| 2 | Atualizar Edge Functions com melhor diagnóstico | Eu (código) |
+| 3 | Melhorar billing-service.ts para extrair token corretamente | Eu (código) |
+| 4 | Adicionar lógica de vinculação no webhook | Eu (código) |
+| 5 | Testar fluxo completo | Você (no app) |
 
