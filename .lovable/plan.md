@@ -1,90 +1,95 @@
-# Plano de Correção de Assinaturas - IMPLEMENTADO ✅
 
-## Status: COMPLETO - Aguardando Teste
 
-## Problema Identificado
+## Plano: Login e Cadastro com Google
 
-O "Confirmar plano" no Google Play acontecia porque:
-1. O app só finalizava (`transaction.finish()`) após validação bem-sucedida
-2. A validação estava falhando por problemas de extração do `purchaseToken`
-3. O `purchase_token` não estava sendo salvo no banco corretamente (todos estão NULL)
-4. Sem o token salvo, renovações e webhooks não conseguem vincular ao usuário
+### O que vamos fazer
+Adicionar um botao "Entrar com Google" nas telas de Login e Cadastro, permitindo que o usuario faca login ou crie conta com um unico toque, sem precisar digitar email e senha.
 
-## Correções Implementadas
+### O que EU vou fazer (codigo)
 
-### 1. ✅ Edge Function `validate-purchase`
-- Logs detalhados para diagnóstico (token length, prefix, etc.)
-- Validação do tamanho do purchaseToken (mínimo 50 chars)
-- Retorno de errorCode específico para cada tipo de falha
-- Logs do Service Account para confirmar configuração
+**Arquivo: `src/pages/Auth.tsx`**
+- Adicionar uma funcao `handleGoogleSignIn` que chama `supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })`
+- Adicionar um botao "Entrar com Google" com icone do Google, visivel tanto na aba de Login quanto na aba de Cadastro
+- O botao ficara separado por um divisor "ou" entre ele e o formulario de email/senha
+- Layout: botao do Google no topo, divisor "ou", formulario tradicional abaixo
 
-### 2. ✅ Edge Function `google-play-webhook`
-- Adicionada busca por assinaturas recentes sem token (por product_id + created_at)
-- Vincular purchase_token automaticamente quando encontrar assinatura recente
-- Handler para `SUBSCRIPTION_PURCHASED` (type 4) - nova compra
-- Garantir que purchase_token sempre é salvo nas atualizações
+### O que VOCE precisa fazer (configuracao no Google e Supabase)
 
-### 3. ✅ Nova Edge Function `recover-subscription`
-- Permite recuperar assinatura manualmente
-- Consulta Google Play com o purchaseToken
-- Se válido, atualiza banco com todos os dados corretos
-- Útil para usuários com compras pendentes
+Sao 3 passos que voce precisa fazer no Google Cloud Console e no Supabase Dashboard:
 
-### 4. ✅ `billing-service.ts`
-- Extração melhorada do purchaseToken de múltiplas fontes:
-  - `transaction.purchaseToken`
-  - `transaction.nativePurchase.purchaseToken`
-  - `transaction.transactionId`
-  - `transaction.originalJson` (parseado)
-  - `transaction.id` (fallback)
-- Log completo do objeto transaction para debug
-- Nova função `savePurchaseTokenForRetry()` - salva token mesmo quando validação falha
-- Nova função `recoverSubscription()` - usa Edge Function recover-subscription
-- `restorePurchases()` agora tenta também recover-subscription se validação falhar
+**Passo 1 - Google Cloud Console (criar credenciais OAuth)**
+1. Acesse https://console.cloud.google.com
+2. Selecione o projeto do Gastinho Simples (o mesmo vinculado ao Google Play)
+3. Va em "APIs e Servicos" > "Tela de consentimento OAuth"
+   - Configure a tela com nome do app, email de suporte etc.
+   - Em "Dominios autorizados", adicione: `jaoldaqvbdllowepzwbr.supabase.co`
+4. Va em "APIs e Servicos" > "Credenciais"
+   - Clique "Criar credenciais" > "ID do cliente OAuth"
+   - Tipo: "Aplicativo da Web"
+   - Em "Origens JavaScript autorizadas", adicione:
+     - `https://gastinho-simples.lovable.app`
+     - `http://localhost:5173` (para testes locais)
+   - Em "URIs de redirecionamento autorizados", adicione:
+     - `https://jaoldaqvbdllowepzwbr.supabase.co/auth/v1/callback`
+   - Copie o **Client ID** e o **Client Secret** gerados
 
-### 5. ✅ Configuração
-- `supabase/config.toml` atualizado com todas as Edge Functions
+**Passo 2 - Supabase Dashboard (ativar provider Google)**
+1. Acesse https://supabase.com/dashboard/project/jaoldaqvbdllowepzwbr/auth/providers
+2. Encontre "Google" na lista e ative
+3. Cole o **Client ID** e **Client Secret** do passo anterior
+4. Salve
 
-## Edge Functions Deployadas
-- validate-purchase ✅
-- google-play-webhook ✅  
-- recover-subscription ✅
-- sync-subscription ✅
+**Passo 3 - Supabase Dashboard (verificar URLs)**
+1. Acesse https://supabase.com/dashboard/project/jaoldaqvbdllowepzwbr/auth/url-configuration (Authentication > URL Configuration)
+2. Confirme que o **Site URL** esta como: `https://gastinho-simples.lovable.app`
+3. Em **Redirect URLs**, adicione (se nao existir):
+   - `https://gastinho-simples.lovable.app/**`
+   - `com.gastinhosimples.app://` (para o app Android fazer deep link apos login)
 
-## Como Testar
+---
 
-### Para sua conta (vitor.romao0442@gmail.com):
-1. Abrir o app
-2. Ir em Minha Conta → Assinatura
-3. Tocar em "Restaurar Compras"
-4. Se a assinatura ainda estiver ativa no Google Play, será restaurada
-5. Verificar logs em: https://supabase.com/dashboard/project/jaoldaqvbdllowepzwbr/functions/validate-purchase/logs
+### Detalhes tecnicos
 
-### Para nova assinatura (conta da sua mãe):
-1. A assinatura anterior foi reembolsada
-2. Tentar assinar novamente o Premium Plus
-3. Após a compra, verificar:
-   - O app deve reconhecer imediatamente
-   - Não deve aparecer "Confirmar plano" no Google Play
-   - Verificar logs da Edge Function
+**Mudancas no codigo (`src/pages/Auth.tsx`):**
 
-### O que verificar nos logs:
-- `✅ GOOGLE_PLAY_SERVICE_ACCOUNT found, length: XXX`
-- `✅ Service Account parsed successfully`
-- `✅ Access token obtained successfully`
-- `📦 Google Play API SUCCESS response: paymentState: 1`
-- `✅ Subscription validation result: isActive: true`
+```text
+// Nova funcao:
+const handleGoogleSignIn = async () => {
+  setIsLoading(true);
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: window.location.origin,
+    },
+  });
+  if (error) {
+    toast({ title: "Erro", description: "Falha ao conectar com Google", variant: "destructive" });
+  }
+  setIsLoading(false);
+};
 
-### Possíveis erros e soluções:
-- `SERVICE_ACCOUNT_NOT_CONFIGURED`: Secret não está configurado
-- `SERVICE_ACCOUNT_PARSE_ERROR`: JSON do secret está malformado
-- `ACCESS_TOKEN_FAILED`: Service Account sem permissão no Google Play
-- `GOOGLE_PLAY_API_ERROR_400`: purchaseToken inválido ou productId errado
-- `GOOGLE_PLAY_API_ERROR_401/403`: Permissões do Service Account incorretas
+// Novo botao (em ambas as abas, Login e Cadastro):
+<Button variant="outline" className="w-full" onClick={handleGoogleSignIn}>
+  <svg ...Google icon... />
+  Entrar com Google
+</Button>
 
-## Próximos Passos
+// Divisor visual:
+<div className="relative my-4">
+  <div className="absolute inset-0 flex items-center">
+    <span className="w-full border-t" />
+  </div>
+  <div className="relative flex justify-center text-xs uppercase">
+    <span className="bg-background px-2 text-muted-foreground">ou</span>
+  </div>
+</div>
+```
 
-1. **Testar com sua conta** - Restaurar compras
-2. **Verificar logs** - Confirmar que está funcionando
-3. **Testar nova compra** - Com a conta da sua mãe
-4. **Publicar** - Após confirmação de funcionamento
+**Nenhuma mudanca no banco de dados** -- o Supabase cuida de tudo automaticamente. Se o usuario logar com Google e ja tiver uma conta com o mesmo email, o Supabase vincula as contas.
+
+### Resultado esperado
+
+1. Na tela de Login: botao "Entrar com Google" no topo, divisor "ou", e abaixo o formulario de email/senha
+2. Na tela de Cadastro: mesmo botao "Entrar com Google" no topo, divisor "ou", e abaixo o formulario de cadastro
+3. Ao clicar no botao, abre a tela de selecao de conta Google
+4. Apos selecionar, o usuario e logado/cadastrado automaticamente e redirecionado para a pagina principal
