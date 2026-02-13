@@ -12,6 +12,7 @@ import { useEffect } from "react";
 import { validatePasswordStrength, sanitizeErrorMessage, isEmailValid } from "@/utils/security";
 import { Progress } from "@/components/ui/progress";
 import { Eye, EyeOff } from "lucide-react";
+import { Capacitor } from "@capacitor/core";
 
 export default function Auth() {
   const [isLoading, setIsLoading] = useState(false);
@@ -39,10 +40,13 @@ export default function Auth() {
 
   const handleGoogleSignIn = async () => {
     setIsGoogleLoading(true);
+    const redirectTo = Capacitor.isNativePlatform()
+      ? 'com.gastinhosimples.app://'
+      : window.location.origin;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.origin,
+        redirectTo,
       },
     });
     if (error) {
