@@ -16,6 +16,7 @@ import { billingService } from "@/services/billing-service";
 import { AppLockScreen } from "@/components/app-lock-screen";
 import { Capacitor } from "@capacitor/core";
 import { App as CapacitorApp } from "@capacitor/app";
+import { supabase } from "@/integrations/supabase/client";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
@@ -34,6 +35,34 @@ const AppContent = () => {
   const { user, loading } = useAuth();
   const [isLocked, setIsLocked] = useState(false);
   const [lockChecked, setLockChecked] = useState(false);
+
+  // Listener para deep link do OAuth (Google Sign-In no Android)
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    const listenerPromise = CapacitorApp.addListener('appUrlOpen', async ({ url }) => {
+      const hashPart = url.includes('#') ? url.split('#')[1] : url.split('?')[1];
+      if (!hashPart) return;
+
+      const params = new URLSearchParams(hashPart);
+      const accessToken = params.get('access_token');
+      const refreshToken = params.get('refresh_token');
+
+      if (accessToken && refreshToken) {
+        const { error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (error) {
+          console.error('Erro ao definir sessão do deep link:', error);
+        }
+      }
+    });
+
+    return () => {
+      listenerPromise.then(listener => listener.remove());
+    };
+  }, []);
 
   // Verificar se deve bloquear ao iniciar
   useEffect(() => {
