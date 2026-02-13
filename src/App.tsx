@@ -41,20 +41,33 @@ const AppContent = () => {
     if (!Capacitor.isNativePlatform()) return;
 
     const listenerPromise = CapacitorApp.addListener('appUrlOpen', async ({ url }) => {
-      const hashPart = url.includes('#') ? url.split('#')[1] : url.split('?')[1];
-      if (!hashPart) return;
+      // PKCE flow: Supabase retorna ?code=xxx
+      try {
+        const urlObj = new URL(url);
+        const code = urlObj.searchParams.get('code');
 
-      const params = new URLSearchParams(hashPart);
-      const accessToken = params.get('access_token');
-      const refreshToken = params.get('refresh_token');
+        if (code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) {
+            console.error('Erro ao trocar code por sessão:', error);
+          }
+          return;
+        }
+      } catch (e) {
+        // URL inválida, tentar fallback
+      }
 
-      if (accessToken && refreshToken) {
-        const { error } = await supabase.auth.setSession({
-          access_token: accessToken,
-          refresh_token: refreshToken,
-        });
-        if (error) {
-          console.error('Erro ao definir sessão do deep link:', error);
+      // Fallback: fluxo implicit (access_token no hash)
+      const hashPart = url.includes('#') ? url.split('#')[1] : null;
+      if (hashPart) {
+        const params = new URLSearchParams(hashPart);
+        const accessToken = params.get('access_token');
+        const refreshToken = params.get('refresh_token');
+        if (accessToken && refreshToken) {
+          await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
         }
       }
     });
