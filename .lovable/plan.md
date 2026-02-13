@@ -1,95 +1,61 @@
 
 
-## Plano: Login e Cadastro com Google
+## Plano: Fazer Login com Google Funcionar no App Android
 
-### O que vamos fazer
-Adicionar um botao "Entrar com Google" nas telas de Login e Cadastro, permitindo que o usuario faca login ou crie conta com um unico toque, sem precisar digitar email e senha.
+### O Problema
+No app nativo (Android), ao clicar em "Entrar com Google", o navegador abre, o usuario faz login, mas depois o navegador vai para `gastinho-simples.lovable.app` em vez de voltar para o aplicativo. Falta configurar o **deep linking** para que o Android saiba redirecionar de volta ao app.
 
-### O que EU vou fazer (codigo)
+### O que precisa ser feito
 
-**Arquivo: `src/pages/Auth.tsx`**
-- Adicionar uma funcao `handleGoogleSignIn` que chama `supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })`
-- Adicionar um botao "Entrar com Google" com icone do Google, visivel tanto na aba de Login quanto na aba de Cadastro
-- O botao ficara separado por um divisor "ou" entre ele e o formulario de email/senha
-- Layout: botao do Google no topo, divisor "ou", formulario tradicional abaixo
-
-### O que VOCE precisa fazer (configuracao no Google e Supabase)
-
-Sao 3 passos que voce precisa fazer no Google Cloud Console e no Supabase Dashboard:
-
-**Passo 1 - Google Cloud Console (criar credenciais OAuth)**
-1. Acesse https://console.cloud.google.com
-2. Selecione o projeto do Gastinho Simples (o mesmo vinculado ao Google Play)
-3. Va em "APIs e Servicos" > "Tela de consentimento OAuth"
-   - Configure a tela com nome do app, email de suporte etc.
-   - Em "Dominios autorizados", adicione: `jaoldaqvbdllowepzwbr.supabase.co`
-4. Va em "APIs e Servicos" > "Credenciais"
-   - Clique "Criar credenciais" > "ID do cliente OAuth"
-   - Tipo: "Aplicativo da Web"
-   - Em "Origens JavaScript autorizadas", adicione:
-     - `https://gastinho-simples.lovable.app`
-     - `http://localhost:5173` (para testes locais)
-   - Em "URIs de redirecionamento autorizados", adicione:
-     - `https://jaoldaqvbdllowepzwbr.supabase.co/auth/v1/callback`
-   - Copie o **Client ID** e o **Client Secret** gerados
-
-**Passo 2 - Supabase Dashboard (ativar provider Google)**
-1. Acesse https://supabase.com/dashboard/project/jaoldaqvbdllowepzwbr/auth/providers
-2. Encontre "Google" na lista e ative
-3. Cole o **Client ID** e **Client Secret** do passo anterior
-4. Salve
-
-**Passo 3 - Supabase Dashboard (verificar URLs)**
-1. Acesse https://supabase.com/dashboard/project/jaoldaqvbdllowepzwbr/auth/url-configuration (Authentication > URL Configuration)
-2. Confirme que o **Site URL** esta como: `https://gastinho-simples.lovable.app`
-3. Em **Redirect URLs**, adicione (se nao existir):
-   - `https://gastinho-simples.lovable.app/**`
-   - `com.gastinhosimples.app://` (para o app Android fazer deep link apos login)
+**Sao 3 mudancas:**
 
 ---
 
-### Detalhes tecnicos
-
-**Mudancas no codigo (`src/pages/Auth.tsx`):**
+### 1. Adicionar Deep Link no AndroidManifest.xml
+Adicionar um `intent-filter` na Activity principal para que o Android reconheca URLs com o esquema `com.gastinhosimples.app://` e abra o app automaticamente.
 
 ```text
-// Nova funcao:
-const handleGoogleSignIn = async () => {
-  setIsLoading(true);
-  const { error } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
-    options: {
-      redirectTo: window.location.origin,
-    },
-  });
-  if (error) {
-    toast({ title: "Erro", description: "Falha ao conectar com Google", variant: "destructive" });
-  }
-  setIsLoading(false);
-};
-
-// Novo botao (em ambas as abas, Login e Cadastro):
-<Button variant="outline" className="w-full" onClick={handleGoogleSignIn}>
-  <svg ...Google icon... />
-  Entrar com Google
-</Button>
-
-// Divisor visual:
-<div className="relative my-4">
-  <div className="absolute inset-0 flex items-center">
-    <span className="w-full border-t" />
-  </div>
-  <div className="relative flex justify-center text-xs uppercase">
-    <span className="bg-background px-2 text-muted-foreground">ou</span>
-  </div>
-</div>
+<intent-filter>
+    <action android:name="android.intent.action.VIEW" />
+    <category android:name="android.intent.category.DEFAULT" />
+    <category android:name="android.intent.category.BROWSABLE" />
+    <data android:scheme="com.gastinhosimples.app" />
+</intent-filter>
 ```
 
-**Nenhuma mudanca no banco de dados** -- o Supabase cuida de tudo automaticamente. Se o usuario logar com Google e ja tiver uma conta com o mesmo email, o Supabase vincula as contas.
+### 2. Alterar o `redirectTo` no Auth.tsx para usar o esquema do app no Android
+No codigo do `handleGoogleSignIn`, detectar se esta rodando no app nativo e usar `com.gastinhosimples.app://` como redirect, em vez de `window.location.origin` (que aponta para o site).
 
-### Resultado esperado
+```text
+import { Capacitor } from "@capacitor/core";
 
-1. Na tela de Login: botao "Entrar com Google" no topo, divisor "ou", e abaixo o formulario de email/senha
-2. Na tela de Cadastro: mesmo botao "Entrar com Google" no topo, divisor "ou", e abaixo o formulario de cadastro
-3. Ao clicar no botao, abre a tela de selecao de conta Google
-4. Apos selecionar, o usuario e logado/cadastrado automaticamente e redirecionado para a pagina principal
+const redirectTo = Capacitor.isNativePlatform()
+  ? 'com.gastinhosimples.app://'
+  : window.location.origin;
+```
+
+### 3. Tratar o deep link no App.tsx
+Quando o app recebe o deep link de volta (com o token na URL), precisamos extrair a sessao do Supabase. Usaremos o plugin `@capacitor/app` para escutar eventos `appUrlOpen` e chamar `supabase.auth.setSession()` ou `supabase.auth.exchangeCodeForSession()`.
+
+---
+
+### Arquivos a modificar
+
+| Arquivo | Mudanca |
+|---------|---------|
+| `android/app/src/main/AndroidManifest.xml` | Adicionar intent-filter para deep link `com.gastinhosimples.app://` |
+| `src/pages/Auth.tsx` | Usar esquema nativo no `redirectTo` quando no Capacitor |
+| `src/App.tsx` | Adicionar listener para `appUrlOpen` que extrai sessao do Supabase |
+
+### O que VOCE precisa fazer (Supabase Dashboard)
+
+Confirme que `com.gastinhosimples.app://` esta adicionado nas **Redirect URLs** em:
+https://supabase.com/dashboard/project/jaoldaqvbdllowepzwbr/auth/url-configuration
+
+Se ja adicionou no passo anterior do Google OAuth, esta tudo certo.
+
+### Apos as mudancas
+1. Faca `git pull` no projeto
+2. Rode `npx cap sync`
+3. Rode `npx cap run android` para testar
+
