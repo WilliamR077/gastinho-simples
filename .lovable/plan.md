@@ -1,78 +1,68 @@
 
 
-## Plano: Vincular Assinatura ao Usuario Correto
+## Plano: Limpar dados incorretos e prevenir reativacao
 
-### O Problema
-Quando um usuario faz login com uma segunda conta no mesmo celular, o app automaticamente restaura a assinatura do Google Play e aplica para essa segunda conta, mesmo que ela nunca tenha pago. Isso acontece porque o `checkAndSyncSubscription` chama `restorePurchases` para qualquer usuario "free", e o Google Play retorna a assinatura ativa do dispositivo independente de qual conta do app esta logada.
+### Problema
+A correcao anterior adicionou verificacao de token no backend, mas a segunda conta ja tinha "Premium Plus" salvo no banco de antes da correcao. O app simplesmente le do banco e mostra o plano salvo.
 
-### Solucao
+### Solucao em 2 partes
 
-Vincular a assinatura ao usuario correto verificando no backend se aquele `purchase_token` ja pertence a outro usuario.
+**Parte 1: Limpar dados incorretos no banco**
 
-### Mudancas
+Executar uma query SQL para encontrar purchase_tokens duplicados e manter apenas o usuario mais antigo (o dono real). Resetar os outros para "free".
 
-**1. Edge Function `validate-purchase` (ou criar nova logica)**
+A query vai:
+- Encontrar tokens duplicados na tabela `subscriptions`
+- Manter o registro mais antigo (primeiro `created_at`) como dono real
+- Resetar os outros registros para `tier = 'free'`, `is_active = true`, `purchase_token = NULL`
 
-Antes de ativar a assinatura para um usuario, verificar se o `purchase_token` ja esta vinculado a outro `user_id` na tabela `subscriptions`. Se ja estiver vinculado a outro usuario, rejeitar a validacao.
+**Parte 2: Adicionar verificacao proativa no app**
 
-**2. `src/services/billing-service.ts` - `checkAndSyncSubscription`**
-
-Na logica de restore para usuarios free, apos o Google Play confirmar que existe uma assinatura ativa, enviar o `purchase_token` ao backend para validacao. O backend verifica se o token ja pertence a outro usuario. Se pertencer, nao ativa a assinatura.
+Atualizar o `checkAndSyncSubscription` para que, quando o usuario tem um tier pago, o app verifique no backend se o `purchase_token` ainda pertence a ele. Se nao pertencer (porque foi limpo), o app atualiza localmente para "free".
 
 ### Detalhes tecnicos
 
-**Arquivo: `supabase/functions/validate-purchase/index.ts`**
-
-Adicionar verificacao antes de fazer upsert:
-
+**Migracao SQL:**
 ```text
-// Verificar se o purchase_token ja pertence a outro usuario
-const { data: existingSub } = await supabaseAdmin
-  .from('subscriptions')
-  .select('user_id')
-  .eq('purchase_token', purchaseToken)
-  .neq('user_id', user.id)
-  .single();
-
-if (existingSub) {
-  // Token ja vinculado a outro usuario
-  return new Response(JSON.stringify({
-    valid: false,
-    error: 'Esta assinatura pertence a outra conta.',
-    errorCode: 'TOKEN_BELONGS_TO_OTHER_USER',
-  }), { status: 400, headers: corsHeaders });
-}
+-- Resetar subscriptions com purchase_token duplicado, mantendo o mais antigo
+UPDATE subscriptions 
+SET tier = 'free', 
+    is_active = true, 
+    purchase_token = NULL, 
+    product_id = NULL, 
+    expires_at = NULL
+WHERE id IN (
+  SELECT s.id 
+  FROM subscriptions s
+  INNER JOIN (
+    SELECT purchase_token, MIN(created_at) as first_created
+    FROM subscriptions 
+    WHERE purchase_token IS NOT NULL
+    GROUP BY purchase_token 
+    HAVING COUNT(*) > 1
+  ) dup ON s.purchase_token = dup.purchase_token 
+       AND s.created_at > dup.first_created
+);
 ```
-
-**Arquivo: `supabase/functions/recover-subscription/index.ts`**
-
-Mesma verificacao: antes de recuperar, checar se o `purchase_token` nao pertence a outro usuario.
-
-**Arquivo: `supabase/functions/sync-subscription/index.ts`**
-
-Mesma verificacao no fluxo de sincronizacao.
 
 **Arquivo: `src/services/billing-service.ts`**
 
-Na funcao `savePurchaseTokenForRetry`, tambem verificar no backend antes de salvar. E no `restorePurchases`, quando a validacao retorna `TOKEN_BELONGS_TO_OTHER_USER`, nao tentar novamente e mostrar log informativo.
+No `checkAndSyncSubscription`, quando o tier e pago, adicionar uma verificacao: se o `purchase_token` da assinatura no banco pertence a outro usuario (verificando via backend), resetar para free localmente.
+
+### Sobre APK vs Google Play
+
+A verificacao de token funciona da mesma forma no APK de debug e na versao do Google Play. O Google Play Billing Library funciona igual nos dois casos, desde que o app esteja assinado com a mesma conta do Google Play Console. A unica diferenca e que no APK de debug, voce pode estar usando uma conta de teste. Mas para esse problema especifico (dados duplicados no banco), nao faz diferenca.
 
 ### Resumo das mudancas
 
-| Arquivo | Mudanca |
+| Arquivo / Acao | Mudanca |
 |---------|---------|
-| `supabase/functions/validate-purchase/index.ts` | Verificar se purchase_token ja pertence a outro usuario antes de ativar |
-| `supabase/functions/recover-subscription/index.ts` | Mesma verificacao de propriedade do token |
-| `supabase/functions/sync-subscription/index.ts` | Mesma verificacao de propriedade do token |
-| `src/services/billing-service.ts` | Tratar erro `TOKEN_BELONGS_TO_OTHER_USER` sem retry |
+| Migracao SQL | Limpar subscriptions duplicadas, manter apenas o dono original |
+| `src/services/billing-service.ts` | Verificar propriedade do token ao sincronizar assinaturas pagas |
 
 ### Comportamento esperado apos a mudanca
 
-- **Usuario A** (que pagou): Login no celular -> assinatura Premium Plus funciona normalmente
-- **Usuario B** (conta gratuita): Login no mesmo celular -> app tenta restaurar, backend detecta que o token pertence ao Usuario A, rejeita -> Usuario B permanece no plano gratuito
-- **Usuario A** em outro celular: Login -> restaura normalmente porque o token pertence a ele
+- A segunda conta sera imediatamente resetada para "Gratuito" pela migracao SQL
+- Futuras tentativas de restaurar a assinatura na segunda conta serao bloqueadas pelo backend
+- A conta original (dona da assinatura) continua funcionando normalmente
 
-### Apos as mudancas
-1. Faca `git pull`
-2. Rode `npx cap sync`
-3. Rode `npx cap run android`
-4. Teste: logue com a conta Premium Plus e confirme que funciona. Depois troque para outra conta e confirme que ela fica como "Gratuito"
