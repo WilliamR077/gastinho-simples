@@ -40,20 +40,21 @@ export const SUBSCRIPTION_FEATURES = {
     reports: true, // Gráficos avançados
     exportPdf: true,
     exportExcel: true,
-    ads: true, // Mantém anúncios
+    ads: false, // Sem anúncios (absorveu Premium Plus)
     importSpreadsheet: true,
-    importLimit: 100,
+    importLimit: 500,
   },
+  // Mantido para compatibilidade com usuários existentes
   premium_plus: {
-    name: "Premium Plus",
-    price: "R$ 17,90/mês",
+    name: "Premium",
+    price: "R$ 14,90/mês",
     cards: Infinity,
     goals: Infinity,
-    groups: 3, // Até 3 grupos
+    groups: 3,
     reports: true,
     exportPdf: true,
     exportExcel: true,
-    ads: false, // Sem anúncios
+    ads: false,
     importSpreadsheet: true,
     importLimit: 500,
   },
