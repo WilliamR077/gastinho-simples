@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, User, Mail, Lock, Trash2, Crown, Eye, EyeOff } from "lucide-react";
+import { Capacitor } from "@capacitor/core";
 import { useSubscription } from "@/hooks/use-subscription";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { validatePasswordStrength, sanitizeErrorMessage, isEmailValid } from "@/utils/security";
@@ -287,35 +288,39 @@ export default function Account() {
         </div>
 
         <div className="grid gap-6">
-          {/* Subscription Section */}
-          <Card className="border-primary/30">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Crown className="w-5 h-5 text-primary" />
-                Assinatura e Planos
-              </CardTitle>
-              <CardDescription>
-                Gerencie sua assinatura e veja outros planos disponíveis
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
-                <p className="text-sm font-semibold mb-1">Plano Atual</p>
-                <p className="text-lg font-bold text-primary">{features.name}</p>
-                <p className="text-sm text-muted-foreground mt-1">{features.price}</p>
-              </div>
-              <Button 
-                onClick={() => navigate("/subscription")} 
-                className="w-full gap-2"
-                variant="outline"
-              >
-                <Crown className="h-4 w-4" />
-                Ver Todos os Planos
-              </Button>
-            </CardContent>
-          </Card>
+          {Capacitor.isNativePlatform() && (
+            <>
+              {/* Subscription Section */}
+              <Card className="border-primary/30">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Crown className="w-5 h-5 text-primary" />
+                    Assinatura e Planos
+                  </CardTitle>
+                  <CardDescription>
+                    Gerencie sua assinatura e veja outros planos disponíveis
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
+                    <p className="text-sm font-semibold mb-1">Plano Atual</p>
+                    <p className="text-lg font-bold text-primary">{features.name}</p>
+                    <p className="text-sm text-muted-foreground mt-1">{features.price}</p>
+                  </div>
+                  <Button 
+                    onClick={() => navigate("/subscription")} 
+                    className="w-full gap-2"
+                    variant="outline"
+                  >
+                    <Crown className="h-4 w-4" />
+                    Ver Todos os Planos
+                  </Button>
+                </CardContent>
+              </Card>
 
-          <Separator />
+              <Separator />
+            </>
+          )}
 
           {/* Password Management */}
           <Card>
