@@ -1,66 +1,65 @@
 
 
-## Plano: Redesenhar pagina de assinaturas para usuarios com plano ativo
+## Plano: Simplificar assinaturas - Remover Premium Plus e tornar Premium completo
 
-### Problema atual
-Quando o usuario ja tem o plano mais alto (Premium Plus), a pagina ainda mostra todos os 4 planos com botoes ativos para assinar planos inferiores. Isso confunde o usuario e permite que ele tente comprar um plano menor sem sentido.
+### Resumo da mudanca
 
-### Solucao
-Dividir a pagina em dois modos:
-1. **Usuario com plano pago** -- mostra apenas o plano atual com detalhes e opcoes de gerenciamento (cancelar/alterar via Google Play)
-2. **Usuario gratuito** -- mostra todos os planos disponiveis como esta hoje
+Reduzir de 4 para 3 planos:
+- **Gratuito** - basico com anuncios
+- **Sem Anuncios** (R$ 4,90/mes) - igual ao gratuito, mas sem anuncios
+- **Premium** (R$ 14,90/mes) - tudo desbloqueado + sem anuncios (absorve o que era Premium Plus)
 
-### Comportamento por tier
+### Sobre o Google Play
 
-| Tier atual | O que mostra |
-|------------|-------------|
-| `free` | Todos os 4 planos com botoes de compra (como hoje) |
-| `no_ads` | Card do plano atual + opcao de upgrade para Premium/Premium Plus + botao gerenciar no Google Play |
-| `premium` | Card do plano atual + opcao de upgrade para Premium Plus + botao gerenciar no Google Play |
-| `premium_plus` | Apenas card do plano atual + botao gerenciar no Google Play |
+Voce tem razao: nao precisa criar nada novo no Google Play. O produto `app.gastinho.subs_premium_monthly` ja existe la. Basta atualizar a descricao dele no Google Play Console para mencionar que agora tambem inclui "sem anuncios". O produto do Premium Plus pode ser desativado/arquivado no Google Play Console depois, mas nao precisa ser removido imediatamente.
 
-### Layout para usuario com plano pago
+Usuarios que ja pagam Premium Plus continuarao funcionando normalmente -- o app vai tratar `premium_plus` como equivalente a `premium` (todos os recursos + sem anuncios).
 
-1. **Header** com botao voltar e restaurar compras (igual hoje)
-2. **Card principal grande** com:
-   - Icone e nome do plano atual
-   - Preco atual
-   - Lista de todos os recursos incluidos (com checks verdes)
-   - Data de validade
-   - Botao "Gerenciar no Google Play" (para cancelar ou alterar)
-3. **Se nao for Premium Plus**: secao "Fazer upgrade" mostrando apenas os planos superiores ao atual
-4. **Card informativo** sobre compra segura via Google Play
+### Mudancas por arquivo
 
-### Detalhes tecnicos
+**1. `src/types/subscription.ts`**
 
-**Arquivo: `src/pages/Subscription.tsx`**
+- Atualizar o `premium` para ter `ads: false` (sem anuncios) e `importLimit: 500`
+- Manter `premium_plus` no objeto para compatibilidade com usuarios existentes, mas com os mesmos valores do premium
 
-Adicionar logica condicional no render:
+**2. `src/services/admob-service.ts`**
 
-```text
-// Se o usuario tem plano pago, mostrar visao simplificada
-if (tier !== "free") {
-  return (
-    // Card grande com plano atual
-    // + planos superiores para upgrade (se houver)
-    // + botao gerenciar no Google Play
-  );
-}
+- Adicionar `premium` na verificacao de premium status: `data === 'no_ads' || data === 'premium' || data === 'premium_plus'`
 
-// Se gratuito, mostrar todos os planos (como hoje)
-return (
-  // Layout atual com os 4 cards
-);
-```
+**3. `src/services/billing-service.ts`**
 
-A logica de filtro dos planos superiores:
-- Ordem dos tiers: `free` < `no_ads` < `premium` < `premium_plus`
-- Mostrar apenas planos com indice maior que o tier atual
+- Manter os mapeamentos do `premium_plus` para compatibilidade (usuarios existentes)
+- Na logica de `restorePurchases`, tratar `premium_plus` e `premium` da mesma forma
 
-### Resumo das mudancas
+**4. `src/pages/Subscription.tsx`**
+
+- Remover o card do Premium Plus da lista de planos exibidos
+- Atualizar `TIER_ORDER` para `["free", "no_ads", "premium"]` (para a UI)
+- Na visao de usuario pago: se o tier for `premium_plus`, mostrar como "Premium" (ja que sao equivalentes agora)
+
+**5. `src/hooks/use-shared-groups.tsx`**
+
+- Ja funciona corretamente (verifica `premium || premium_plus`)
+
+**6. `src/hooks/use-subscription.tsx`**
+
+- Se o tier retornado for `premium_plus`, tratar como `premium` internamente
+
+### Compatibilidade com usuarios existentes
+
+Usuarios que ja pagaram Premium Plus:
+- O banco de dados continua com `tier = 'premium_plus'`
+- O enum no Supabase continua existindo
+- O app trata `premium_plus` como equivalente a `premium`
+- Nao precisa de migracao SQL
+
+### Resumo
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `src/pages/Subscription.tsx` | Renderizar visao simplificada para usuarios com plano pago, mostrando apenas plano atual e opcoes de upgrade/gerenciamento |
+| `src/types/subscription.ts` | Premium agora tem `ads: false` e `importLimit: 500` |
+| `src/services/admob-service.ts` | Adicionar `premium` na lista de tiers sem anuncios |
+| `src/pages/Subscription.tsx` | Remover card do Premium Plus, tratar `premium_plus` como `premium` na UI |
+| `src/hooks/use-subscription.tsx` | Normalizar `premium_plus` para `premium` |
+| `src/services/billing-service.ts` | Manter compatibilidade, sem mudancas funcionais |
 
-Nenhum outro arquivo precisa ser alterado.
