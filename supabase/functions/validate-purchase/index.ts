@@ -109,6 +109,30 @@ serve(async (req) => {
       throw new Error('Compra inválida');
     }
 
+    // Verificar se o purchase_token já pertence a outro usuário
+    const { data: existingSub } = await supabaseAdmin
+      .from('subscriptions')
+      .select('user_id')
+      .eq('purchase_token', purchaseToken)
+      .neq('user_id', user.id)
+      .single();
+
+    if (existingSub) {
+      console.log('⚠️ Token já pertence a outro usuário:', existingSub.user_id);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          valid: false,
+          error: 'Esta assinatura pertence a outra conta.',
+          errorCode: 'TOKEN_BELONGS_TO_OTHER_USER',
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        }
+      );
+    }
+
     // Atualizar subscription no banco de dados
     const { error: upsertError } = await supabaseAdmin
       .from('subscriptions')

@@ -528,6 +528,12 @@ class BillingService {
       
       if (response.data?.errorCode) {
         console.error('❌ Backend validation error code:', response.data.errorCode);
+        
+        // Se o token pertence a outro usuário, não tentar novamente
+        if (response.data.errorCode === 'TOKEN_BELONGS_TO_OTHER_USER') {
+          console.log('⚠️ Esta assinatura pertence a outra conta - não será aplicada');
+          return false;
+        }
       }
       
       return response.data?.valid === true;
@@ -746,6 +752,12 @@ class BillingService {
         return false;
       }
 
+      // Se o token pertence a outro usuário, não tentar novamente
+      if (response.data?.errorCode === 'TOKEN_BELONGS_TO_OTHER_USER') {
+        console.log('⚠️ Esta assinatura pertence a outra conta - não será aplicada');
+        return false;
+      }
+
       console.log('✅ Recuperação via backend:', response.data);
       return response.data?.success === true;
     } catch (error) {
@@ -782,6 +794,12 @@ class BillingService {
 
       if (response.error) {
         console.error('❌ Erro na sync-subscription:', response.error);
+        return false;
+      }
+
+      // Se o token pertence a outro usuário, não tentar novamente
+      if (response.data?.errorCode === 'TOKEN_BELONGS_TO_OTHER_USER') {
+        console.log('⚠️ Esta assinatura pertence a outra conta - não será aplicada');
         return false;
       }
 
