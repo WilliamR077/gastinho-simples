@@ -1,68 +1,66 @@
 
 
-## Plano: Limpar dados incorretos e prevenir reativacao
+## Plano: Redesenhar pagina de assinaturas para usuarios com plano ativo
 
-### Problema
-A correcao anterior adicionou verificacao de token no backend, mas a segunda conta ja tinha "Premium Plus" salvo no banco de antes da correcao. O app simplesmente le do banco e mostra o plano salvo.
+### Problema atual
+Quando o usuario ja tem o plano mais alto (Premium Plus), a pagina ainda mostra todos os 4 planos com botoes ativos para assinar planos inferiores. Isso confunde o usuario e permite que ele tente comprar um plano menor sem sentido.
 
-### Solucao em 2 partes
+### Solucao
+Dividir a pagina em dois modos:
+1. **Usuario com plano pago** -- mostra apenas o plano atual com detalhes e opcoes de gerenciamento (cancelar/alterar via Google Play)
+2. **Usuario gratuito** -- mostra todos os planos disponiveis como esta hoje
 
-**Parte 1: Limpar dados incorretos no banco**
+### Comportamento por tier
 
-Executar uma query SQL para encontrar purchase_tokens duplicados e manter apenas o usuario mais antigo (o dono real). Resetar os outros para "free".
+| Tier atual | O que mostra |
+|------------|-------------|
+| `free` | Todos os 4 planos com botoes de compra (como hoje) |
+| `no_ads` | Card do plano atual + opcao de upgrade para Premium/Premium Plus + botao gerenciar no Google Play |
+| `premium` | Card do plano atual + opcao de upgrade para Premium Plus + botao gerenciar no Google Play |
+| `premium_plus` | Apenas card do plano atual + botao gerenciar no Google Play |
 
-A query vai:
-- Encontrar tokens duplicados na tabela `subscriptions`
-- Manter o registro mais antigo (primeiro `created_at`) como dono real
-- Resetar os outros registros para `tier = 'free'`, `is_active = true`, `purchase_token = NULL`
+### Layout para usuario com plano pago
 
-**Parte 2: Adicionar verificacao proativa no app**
-
-Atualizar o `checkAndSyncSubscription` para que, quando o usuario tem um tier pago, o app verifique no backend se o `purchase_token` ainda pertence a ele. Se nao pertencer (porque foi limpo), o app atualiza localmente para "free".
+1. **Header** com botao voltar e restaurar compras (igual hoje)
+2. **Card principal grande** com:
+   - Icone e nome do plano atual
+   - Preco atual
+   - Lista de todos os recursos incluidos (com checks verdes)
+   - Data de validade
+   - Botao "Gerenciar no Google Play" (para cancelar ou alterar)
+3. **Se nao for Premium Plus**: secao "Fazer upgrade" mostrando apenas os planos superiores ao atual
+4. **Card informativo** sobre compra segura via Google Play
 
 ### Detalhes tecnicos
 
-**Migracao SQL:**
+**Arquivo: `src/pages/Subscription.tsx`**
+
+Adicionar logica condicional no render:
+
 ```text
--- Resetar subscriptions com purchase_token duplicado, mantendo o mais antigo
-UPDATE subscriptions 
-SET tier = 'free', 
-    is_active = true, 
-    purchase_token = NULL, 
-    product_id = NULL, 
-    expires_at = NULL
-WHERE id IN (
-  SELECT s.id 
-  FROM subscriptions s
-  INNER JOIN (
-    SELECT purchase_token, MIN(created_at) as first_created
-    FROM subscriptions 
-    WHERE purchase_token IS NOT NULL
-    GROUP BY purchase_token 
-    HAVING COUNT(*) > 1
-  ) dup ON s.purchase_token = dup.purchase_token 
-       AND s.created_at > dup.first_created
+// Se o usuario tem plano pago, mostrar visao simplificada
+if (tier !== "free") {
+  return (
+    // Card grande com plano atual
+    // + planos superiores para upgrade (se houver)
+    // + botao gerenciar no Google Play
+  );
+}
+
+// Se gratuito, mostrar todos os planos (como hoje)
+return (
+  // Layout atual com os 4 cards
 );
 ```
 
-**Arquivo: `src/services/billing-service.ts`**
-
-No `checkAndSyncSubscription`, quando o tier e pago, adicionar uma verificacao: se o `purchase_token` da assinatura no banco pertence a outro usuario (verificando via backend), resetar para free localmente.
-
-### Sobre APK vs Google Play
-
-A verificacao de token funciona da mesma forma no APK de debug e na versao do Google Play. O Google Play Billing Library funciona igual nos dois casos, desde que o app esteja assinado com a mesma conta do Google Play Console. A unica diferenca e que no APK de debug, voce pode estar usando uma conta de teste. Mas para esse problema especifico (dados duplicados no banco), nao faz diferenca.
+A logica de filtro dos planos superiores:
+- Ordem dos tiers: `free` < `no_ads` < `premium` < `premium_plus`
+- Mostrar apenas planos com indice maior que o tier atual
 
 ### Resumo das mudancas
 
-| Arquivo / Acao | Mudanca |
+| Arquivo | Mudanca |
 |---------|---------|
-| Migracao SQL | Limpar subscriptions duplicadas, manter apenas o dono original |
-| `src/services/billing-service.ts` | Verificar propriedade do token ao sincronizar assinaturas pagas |
+| `src/pages/Subscription.tsx` | Renderizar visao simplificada para usuarios com plano pago, mostrando apenas plano atual e opcoes de upgrade/gerenciamento |
 
-### Comportamento esperado apos a mudanca
-
-- A segunda conta sera imediatamente resetada para "Gratuito" pela migracao SQL
-- Futuras tentativas de restaurar a assinatura na segunda conta serao bloqueadas pelo backend
-- A conta original (dona da assinatura) continua funcionando normalmente
-
+Nenhum outro arquivo precisa ser alterado.
