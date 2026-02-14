@@ -73,6 +73,31 @@ serve(async (req) => {
       .eq('user_id', user.id)
       .single();
 
+    // Verificar se o purchase_token já pertence a outro usuário
+    if (currentSub?.purchase_token) {
+      const { data: existingSub } = await supabaseAdmin
+        .from('subscriptions')
+        .select('user_id')
+        .eq('purchase_token', currentSub.purchase_token)
+        .neq('user_id', user.id)
+        .single();
+
+      if (existingSub) {
+        console.log('⚠️ Token já pertence a outro usuário:', existingSub.user_id);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Esta assinatura pertence a outra conta.',
+            errorCode: 'TOKEN_BELONGS_TO_OTHER_USER',
+          }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 400,
+          }
+        );
+      }
+    }
+
     // Se temos um purchase_token salvo, usá-lo para verificar com o Google Play
     if (currentSub?.purchase_token && platform === 'android') {
       const validationResult = await validateWithGooglePlay(
