@@ -202,6 +202,9 @@ export default function Subscription() {
     });
   };
 
+  const TIER_ORDER = ["free", "no_ads", "premium", "premium_plus"] as const;
+  const currentTierIndex = TIER_ORDER.indexOf(tier);
+
   const plans = [
     {
       tier: "free" as const,
@@ -230,6 +233,202 @@ export default function Subscription() {
     },
   ];
 
+  const renderPlanFeatures = (planTier: keyof typeof SUBSCRIPTION_FEATURES) => {
+    const planFeatures = SUBSCRIPTION_FEATURES[planTier];
+    return (
+      <div className="space-y-2 text-sm">
+        <div className="flex items-start gap-2">
+          <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+          <span>{planFeatures.cards === Infinity ? "Cartões ilimitados" : `Até ${planFeatures.cards} cartões`}</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+          <span>{planFeatures.goals === Infinity ? "Metas ilimitadas" : `Até ${planFeatures.goals} meta`}</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+          <span>{planFeatures.reports ? "Relatórios: todos os períodos" : "Relatórios: mês atual"}</span>
+        </div>
+        {planFeatures.exportPdf && (
+          <div className="flex items-start gap-2">
+            <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+            <span>Exportar PDF/Excel</span>
+          </div>
+        )}
+        <div className="flex items-start gap-2">
+          <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+          <span>{planFeatures.groups > 0 ? `Criar até ${planFeatures.groups} grupos` : "Participar de grupos"}</span>
+        </div>
+        <div className="flex items-start gap-2">
+          {planFeatures.ads ? (
+            <>
+              <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+              <span className="text-amber-500">Com anúncios</span>
+            </>
+          ) : (
+            <>
+              <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+              <span>Sem anúncios</span>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // ========== VISÃO PARA USUÁRIOS COM PLANO PAGO ==========
+  if (tier !== "free") {
+    const currentPlan = plans.find(p => p.tier === tier)!;
+    const currentFeatures = SUBSCRIPTION_FEATURES[tier];
+    const CurrentIcon = currentPlan.icon;
+    const upgradePlans = plans.filter(p => TIER_ORDER.indexOf(p.tier) > currentTierIndex);
+
+    return (
+      <div className="container mx-auto p-6 space-y-6 pb-20">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <Button variant="ghost" onClick={() => navigate(-1)} className="gap-2">
+            <ArrowLeft className="h-4 w-4" />
+            Voltar
+          </Button>
+          {isNative && (
+            <Button 
+              variant="outline" 
+              onClick={handleRestorePurchases}
+              disabled={restoring}
+              className="gap-2"
+            >
+              <RefreshCw className={`h-4 w-4 ${restoring ? 'animate-spin' : ''}`} />
+              {restoring ? 'Restaurando...' : 'Restaurar Compras'}
+            </Button>
+          )}
+        </div>
+
+        {/* Título */}
+        <div className="text-center space-y-2 mb-6">
+          <h1 className="text-3xl font-bold">Sua Assinatura</h1>
+          <p className="text-muted-foreground">Gerencie seu plano atual</p>
+        </div>
+
+        {/* Card do plano atual */}
+        <Card className="border-primary shadow-lg">
+          <CardHeader className="text-center">
+            <div className={`w-16 h-16 rounded-full ${currentPlan.bgColor} flex items-center justify-center mx-auto mb-4`}>
+              <CurrentIcon className={`h-8 w-8 ${currentPlan.color}`} />
+            </div>
+            <Badge className="mx-auto mb-2">Plano Atual</Badge>
+            <CardTitle className="text-2xl">{currentFeatures.name}</CardTitle>
+            <CardDescription>
+              <span className="text-3xl font-bold text-foreground">
+                {currentFeatures.price.split("/")[0]}
+              </span>
+              {currentFeatures.price.includes("/") && (
+                <span className="text-sm">/{currentFeatures.price.split("/")[1]}</span>
+              )}
+            </CardDescription>
+            {expiresAt && (
+              <p className="text-sm text-muted-foreground mt-2">
+                Válido até: {formatDate(expiresAt)}
+              </p>
+            )}
+          </CardHeader>
+
+          <CardContent>
+            {renderPlanFeatures(tier)}
+          </CardContent>
+
+          <CardFooter className="flex flex-col gap-3">
+            <Button 
+              variant="outline" 
+              className="w-full gap-2"
+              onClick={handleManageSubscription}
+            >
+              <Settings className="h-4 w-4" />
+              Gerenciar no Google Play
+            </Button>
+          </CardFooter>
+        </Card>
+
+        {/* Planos superiores para upgrade */}
+        {upgradePlans.length > 0 && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold text-center">Fazer Upgrade</h2>
+            <div className="grid md:grid-cols-2 gap-6">
+              {upgradePlans.map((plan) => {
+                const planFeatures = SUBSCRIPTION_FEATURES[plan.tier];
+                const Icon = plan.icon;
+
+                return (
+                  <Card key={plan.tier} className="relative">
+                    {plan.popular && (
+                      <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                        <Badge className="bg-gradient-to-r from-amber-500 to-orange-500">
+                          Mais Popular
+                        </Badge>
+                      </div>
+                    )}
+                    <CardHeader>
+                      <div className={`w-12 h-12 rounded-full ${plan.bgColor} flex items-center justify-center mb-4`}>
+                        <Icon className={`h-6 w-6 ${plan.color}`} />
+                      </div>
+                      <CardTitle>{planFeatures.name}</CardTitle>
+                      <CardDescription>
+                        <span className="text-2xl font-bold text-foreground">
+                          {planFeatures.price.split("/")[0]}
+                        </span>
+                        {planFeatures.price.includes("/") && (
+                          <span className="text-sm">/{planFeatures.price.split("/")[1]}</span>
+                        )}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {renderPlanFeatures(plan.tier)}
+                    </CardContent>
+                    <CardFooter>
+                      <Button 
+                        className="w-full gap-2"
+                        variant={plan.popular ? "default" : "outline"}
+                        onClick={() => handlePurchase(plan.tier)}
+                        disabled={purchasing !== null || !isNative}
+                      >
+                        {purchasing === plan.tier ? (
+                          "Processando..."
+                        ) : !isNative ? (
+                          "Disponível no App"
+                        ) : (
+                          "Fazer Upgrade 🚀"
+                        )}
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Info Google Play */}
+        {isNative && (
+          <Card className="border-primary/20 bg-primary/5">
+            <CardContent className="pt-6">
+              <div className="flex items-start gap-3">
+                <Smartphone className="h-5 w-5 text-primary mt-0.5" />
+                <div className="text-sm">
+                  <p className="font-semibold text-foreground mb-1">Compra Segura via Google Play</p>
+                  <p className="text-muted-foreground">
+                    Todas as compras são processadas pelo Google Play Store com segurança total. 
+                    Gerencie suas assinaturas diretamente nas configurações do Google Play.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    );
+  }
+
+  // ========== VISÃO PARA USUÁRIOS GRATUITOS ==========
   return (
     <div className="container mx-auto p-6 space-y-6 pb-20">
       {/* Header com botão voltar */}
@@ -238,8 +437,6 @@ export default function Subscription() {
           <ArrowLeft className="h-4 w-4" />
           Voltar
         </Button>
-        
-        {/* Botão Restaurar Compras */}
         {isNative && (
           <Button 
             variant="outline" 
@@ -259,48 +456,7 @@ export default function Subscription() {
         <p className="text-muted-foreground">
           Escolha o plano ideal para suas necessidades
         </p>
-        {tier !== "free" && (
-          <div className="space-y-1">
-            <Badge variant="secondary" className="text-sm">
-              Plano Atual: {SUBSCRIPTION_FEATURES[tier].name}
-            </Badge>
-            {expiresAt && (
-              <p className="text-sm text-muted-foreground">
-                Válido até: {formatDate(expiresAt)}
-              </p>
-            )}
-          </div>
-        )}
       </div>
-
-      {/* Card de Gerenciamento de Assinatura */}
-      {tier !== "free" && (
-        <Card className="border-primary/20 bg-primary/5">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Settings className="h-5 w-5" />
-              Gerenciar Assinatura
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Você pode cancelar ou modificar sua assinatura diretamente pelo Google Play.
-              A assinatura continuará ativa até o final do período pago.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Button 
-                variant="outline" 
-                onClick={handleManageSubscription}
-                className="gap-2"
-              >
-                <Settings className="h-4 w-4" />
-                Gerenciar no Google Play
-              </Button>
-              
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Seção: Por que fazer upgrade? */}
       <Card className="mb-6 bg-gradient-to-r from-primary/10 to-purple-500/10 border-primary/20">
@@ -345,12 +501,11 @@ export default function Subscription() {
         {plans.map((plan) => {
           const planFeatures = SUBSCRIPTION_FEATURES[plan.tier];
           const Icon = plan.icon;
-          const isCurrentPlan = tier === plan.tier;
 
           return (
             <Card 
               key={plan.tier}
-              className={`relative ${isCurrentPlan ? "border-primary shadow-lg" : ""}`}
+              className={`relative ${plan.popular ? "border-primary shadow-lg" : ""}`}
             >
               {plan.popular && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2">
@@ -376,72 +531,13 @@ export default function Subscription() {
               </CardHeader>
 
               <CardContent className="space-y-3">
-                <div className="space-y-2 text-sm">
-                  {/* Cartões - sempre verde */}
-                  <div className="flex items-start gap-2">
-                    <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                    <span>
-                      {planFeatures.cards === Infinity ? "Cartões ilimitados" : `Até ${planFeatures.cards} cartões`}
-                    </span>
-                  </div>
-                  
-                  {/* Metas - sempre verde */}
-                  <div className="flex items-start gap-2">
-                    <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                    <span>
-                      {planFeatures.goals === Infinity ? "Metas ilimitadas" : `Até ${planFeatures.goals} meta`}
-                    </span>
-                  </div>
-                  
-                  {/* Relatórios - sempre verde, texto muda */}
-                  <div className="flex items-start gap-2">
-                    <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                    <span>
-                      {planFeatures.reports ? "Relatórios: todos os períodos" : "Relatórios: mês atual"}
-                    </span>
-                  </div>
-                  
-                  {/* Exportar - SÓ aparece se tem */}
-                  {planFeatures.exportPdf && (
-                    <div className="flex items-start gap-2">
-                      <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                      <span>Exportar PDF/Excel</span>
-                    </div>
-                  )}
-                  
-                  {/* Grupos - sempre verde, texto muda */}
-                  <div className="flex items-start gap-2">
-                    <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                    <span>
-                      {planFeatures.groups > 0 ? `Criar até ${planFeatures.groups} grupos` : "Participar de grupos"}
-                    </span>
-                  </div>
-                  
-                  {/* Anúncios - ícone diferente se tem anúncios */}
-                  <div className="flex items-start gap-2">
-                    {planFeatures.ads ? (
-                      <>
-                        <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
-                        <span className="text-amber-500">Com anúncios</span>
-                      </>
-                    ) : (
-                      <>
-                        <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                        <span>Sem anúncios</span>
-                      </>
-                    )}
-                  </div>
-                </div>
+                {renderPlanFeatures(plan.tier)}
               </CardContent>
 
               <CardFooter>
-                {isCurrentPlan ? (
-                  <Button className="w-full" disabled>
-                    Plano Atual
-                  </Button>
-                ) : plan.tier === "free" ? (
+                {plan.tier === "free" ? (
                   <Button className="w-full" variant="outline" disabled>
-                    Plano Gratuito
+                    Plano Atual
                   </Button>
                 ) : (
                   <Button 
