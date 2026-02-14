@@ -884,7 +884,7 @@ class BillingService {
       // Buscar assinatura atual no banco
       const { data: subscription } = await supabase
         .from('subscriptions')
-        .select('tier, expires_at, is_active, updated_at')
+        .select('tier, expires_at, is_active, updated_at, purchase_token')
         .eq('user_id', user.id)
         .single();
 
@@ -918,7 +918,31 @@ class BillingService {
         return;
       }
 
-      // Lógica para tier pago: verificar se precisa sincronizar
+      // Lógica para tier pago: verificar propriedade do token
+      // Se o purchase_token foi limpo (NULL), significa que a assinatura não pertence a este usuário
+      if (!subscription?.purchase_token) {
+        console.log('⚠️ Tier pago mas sem purchase_token - resetando para free...');
+        
+        const { error } = await supabase
+          .from('subscriptions')
+          .update({
+            tier: 'free',
+            is_active: true,
+            expires_at: null,
+            product_id: null,
+            purchase_token: null,
+          })
+          .eq('user_id', user.id);
+        
+        if (!error) {
+          console.log('✅ Assinatura resetada para free - token não pertence a este usuário');
+        } else {
+          console.error('❌ Erro ao resetar assinatura:', error);
+        }
+        return;
+      }
+
+      // Lógica para tier pago com token válido: verificar se precisa sincronizar
       if (expiresAt) {
         const daysUntilExpiry = (expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
         
