@@ -50,6 +50,8 @@ const AppContent = () => {
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) {
             console.error('Erro ao trocar code por sessão:', error);
+          } else {
+            window.location.href = '/';
           }
           return;
         }
