@@ -202,8 +202,8 @@ export default function Subscription() {
     });
   };
 
-  const TIER_ORDER = ["free", "no_ads", "premium", "premium_plus"] as const;
-  const currentTierIndex = TIER_ORDER.indexOf(tier);
+  const TIER_ORDER = ["free", "no_ads", "premium"] as const;
+  const currentTierIndex = TIER_ORDER.indexOf(tier as any);
 
   const plans = [
     {
@@ -223,12 +223,6 @@ export default function Subscription() {
       icon: Crown,
       color: "text-primary",
       bgColor: "bg-primary/10",
-    },
-    {
-      tier: "premium_plus" as const,
-      icon: Crown,
-      color: "text-amber-500",
-      bgColor: "bg-amber-500/10",
       popular: true,
     },
   ];
@@ -553,8 +547,7 @@ export default function Subscription() {
                     ) : (
                       <>
                         {plan.tier === "no_ads" && "Remover Anúncios 🎯"}
-                        {plan.tier === "premium" && "Desbloquear Premium 🚀"}
-                        {plan.tier === "premium_plus" && "Ter Acesso Completo ⭐"}
+                        {plan.tier === "premium" && "Ter Acesso Completo ⭐"}
                       </>
                     )}
                   </Button>
@@ -576,8 +569,7 @@ export default function Subscription() {
           <div className="text-sm text-muted-foreground space-y-2">
             <p>✅ <strong>Gratuito:</strong> Perfeito para começar • Relatórios do mês • Participar de grupos</p>
             <p>⚡ <strong>Sem Anúncios:</strong> Experiência sem interrupções • Relatórios do mês • Participar de grupos</p>
-            <p>👑 <strong>Premium:</strong> Todos os períodos • Criar até 3 grupos • Exportar PDF/Excel</p>
-            <p>🌟 <strong>Premium Plus:</strong> Tudo do Premium + sem anúncios</p>
+            <p>👑 <strong>Premium:</strong> Tudo desbloqueado + sem anúncios • Todos os períodos • Criar até 3 grupos • Exportar PDF/Excel</p>
           </div>
         </CardContent>
       </Card>

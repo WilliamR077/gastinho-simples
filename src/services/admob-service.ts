@@ -235,7 +235,7 @@ class AdMobService {
       }
 
       // Usuário é premium se tier é 'no_ads' ou 'premium_plus' (sem anúncios)
-      const isPremium = data === 'no_ads' || data === 'premium_plus';
+      const isPremium = data === 'no_ads' || data === 'premium' || data === 'premium_plus';
       console.log(`🎯 Premium Status: ${isPremium ? 'SIM' : 'NÃO'} (Tier: ${data})`);
       
       return isPremium;

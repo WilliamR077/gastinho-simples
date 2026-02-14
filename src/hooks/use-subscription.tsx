@@ -39,7 +39,9 @@ export function useSubscription(): UseSubscriptionReturn {
         console.error("Erro ao buscar subscription:", error);
         setTier("free");
       } else {
-        setTier(data || "free");
+      // Normalizar premium_plus para premium (são equivalentes agora)
+        const normalizedTier = data === "premium_plus" ? "premium" : (data || "free");
+        setTier(normalizedTier);
       }
     } catch (error) {
       console.error("Erro ao buscar subscription:", error);

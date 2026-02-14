@@ -101,7 +101,7 @@ export function PremiumGuard({
               Que ótimo que você quer {getFeatureName()}! 🎉
             </DialogTitle>
             <DialogDescription>
-              Esse recurso está disponível nos planos Premium e Premium Plus.
+              Esse recurso está disponível no plano Premium.
               Faça upgrade para desbloquear todo o potencial do Gastinho Simples!
             </DialogDescription>
           </DialogHeader>
