@@ -45,6 +45,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LogOut, User } from "lucide-react";
 import { generateBillingPeriods, filterExpensesByBillingPeriod, CreditCardConfig } from "@/utils/billing-period";
 import { Card as CardType } from "@/types/card";
+import { Footer } from "@/components/footer";
 import { NotificationService } from "@/services/notification-service";
 import { App as CapacitorApp } from '@capacitor/app';
 import { adMobService } from "@/services/admob-service";
@@ -1728,6 +1729,7 @@ export default function Index() {
           onSave={updateRecurringIncome}
         />
       </div>
+      <Footer />
     </div>
   );
 }

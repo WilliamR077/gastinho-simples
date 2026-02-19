@@ -2,6 +2,7 @@ import { CardManager } from "@/components/card-manager";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Footer } from "@/components/footer";
 
 export default function Cards() {
   const navigate = useNavigate();
@@ -34,6 +35,7 @@ export default function Cards() {
 
         {/* Card Manager */}
         <CardManager />
+        <Footer />
       </div>
     </div>
   );

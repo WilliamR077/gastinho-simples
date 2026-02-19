@@ -17,6 +17,7 @@ import { startOfMonth, endOfMonth } from "date-fns";
 import { exportReportsToPDF } from "@/services/pdf-export-service";
 import { toast } from "sonner";
 import { useSubscription } from "@/hooks/use-subscription";
+import { Footer } from "@/components/footer";
 import {
   Dialog,
   DialogContent,
@@ -338,6 +339,7 @@ const Reports = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <Footer />
     </div>
   );
 };

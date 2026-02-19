@@ -14,6 +14,7 @@ import { useSubscription } from "@/hooks/use-subscription";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { validatePasswordStrength, sanitizeErrorMessage, isEmailValid } from "@/utils/security";
 import { Progress } from "@/components/ui/progress";
+import { Footer } from "@/components/footer";
 
 export default function Account() {
   const { user, signOut } = useAuth();
@@ -537,6 +538,7 @@ export default function Account() {
             </CardContent>
           </Card>
         </div>
+        <Footer />
       </div>
     </div>
   );

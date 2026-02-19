@@ -21,6 +21,7 @@ import { sanitizeErrorMessage } from "@/utils/security";
 import { Capacitor } from "@capacitor/core";
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
+import { Footer } from "@/components/footer";
 
 const TOUR_STORAGE_KEY = "gastinho_tour_completed";
 
@@ -522,6 +523,7 @@ export default function Settings() {
           });
         }}
       />
+      <Footer />
     </div>
   );
 }
