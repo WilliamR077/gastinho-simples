@@ -674,6 +674,10 @@ export type Database = {
     }
     Functions: {
       can_create_group: { Args: { user_id_param: string }; Returns: boolean }
+      delete_group_and_data: {
+        Args: { action_param: string; group_id_param: string }
+        Returns: undefined
+      }
       find_group_by_invite_code: {
         Args: { invite_code_param: string }
         Returns: {
