@@ -13,6 +13,7 @@ import { validatePasswordStrength, sanitizeErrorMessage, isEmailValid } from "@/
 import { Progress } from "@/components/ui/progress";
 import { Eye, EyeOff } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
+import { Footer } from "@/components/footer";
 
 export default function Auth() {
   const [isLoading, setIsLoading] = useState(false);
@@ -423,6 +424,7 @@ export default function Auth() {
           </Tabs>
         </CardContent>
       </Card>
+      <Footer />
     </div>
   );
 }

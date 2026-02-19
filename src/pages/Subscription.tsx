@@ -11,6 +11,7 @@ import { useState, useEffect } from "react";
 import { Capacitor } from "@capacitor/core";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { Footer } from "@/components/footer";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -418,6 +419,7 @@ export default function Subscription() {
             </CardContent>
           </Card>
         )}
+        <Footer />
       </div>
     );
   }
@@ -604,6 +606,7 @@ export default function Subscription() {
           </CardContent>
         </Card>
       )}
+      <Footer />
     </div>
   );
 }
