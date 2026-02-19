@@ -1,34 +1,44 @@
 
 
-## Plano: Adicionar Footer com mensagem
+## Plano: Footer profissional com links rapidos e identidade visual
 
-### Mudanca
+### O que sera feito
 
-Criar um componente `Footer` reutilizavel e adiciona-lo nas paginas principais do sistema.
+Redesenhar o componente `Footer` para ter um layout profissional com:
 
-**1. Novo arquivo `src/components/footer.tsx`**
+- Logo do Gastinho Simples (usando a imagem ja existente em `/lovable-uploads/06a1acc2-f553-41f0-8d87-32d25b4e425e.png`)
+- Links rapidos para as paginas principais (Inicio, Relatorios, Cartoes, Configuracoes, Minha Conta, Assinatura)
+- Link para a Politica de Privacidade
+- A mensagem "Toda Honra e Gloria a Jesus Cristo" mantida na parte inferior
+- Ano atual com copyright
 
-Componente simples com a mensagem "Toda Honra e Gloria a Jesus Cristo", estilizado de forma discreta e centralizada.
+### Layout do footer
 
-**2. Paginas que receberao o footer**
+```text
++--------------------------------------------------+
+|  [Logo] Gastinho Simples                         |
+|  Controle seus gastos de forma simples           |
+|                                                  |
+|  Links Rapidos          Conta                    |
+|  - Inicio               - Minha Conta            |
+|  - Relatorios            - Assinatura             |
+|  - Cartoes               - Configuracoes          |
+|                                                  |
+|  Politica de Privacidade                         |
+|                                                  |
+|  ──────────────────────────────────────────       |
+|  Toda Honra e Gloria a Jesus Cristo              |
+|  (c) 2025 Gastinho Simples                       |
++--------------------------------------------------+
+```
 
-Adicionar o `<Footer />` no final do conteudo das seguintes paginas:
-- `src/pages/Index.tsx` - Pagina principal
-- `src/pages/Account.tsx` - Minha Conta
-- `src/pages/Settings.tsx` - Configuracoes
-- `src/pages/Reports.tsx` - Relatorios
-- `src/pages/Subscription.tsx` - Assinaturas
-- `src/pages/Cards.tsx` - Cartoes
-- `src/pages/Auth.tsx` - Login
+### Mudancas tecnicas
 
-### Visual
+| Arquivo | Mudanca |
+|---------|---------|
+| `src/components/footer.tsx` | Redesenhar com logo, links rapidos organizados em colunas, separador e mensagem final |
 
-O footer sera centralizado, com texto pequeno e discreto na cor `text-muted-foreground`, com um pequeno padding na parte inferior para nao ficar colado no conteudo.
+O componente usara `useNavigate` do React Router para os links internos. Sera responsivo: em telas pequenas as colunas ficam empilhadas, em telas maiores ficam lado a lado. O estilo seguira o tema do app usando cores `muted-foreground`, `border`, e `primary`.
 
-### Resumo
-
-| Local | Mudanca |
-|-------|---------|
-| `src/components/footer.tsx` | Novo componente Footer |
-| 7 paginas | Importar e renderizar o Footer no final |
+Nenhuma outra pagina precisa ser alterada pois todas ja importam e renderizam o `<Footer />`.
 
