@@ -62,7 +62,7 @@ export const Footer = () => {
           <div className="col-span-2 space-y-2 sm:col-span-1">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Legal</h4>
             <button
-              onClick={() => navigate("/privacy-policy")}
+              onClick={() => navigate("/privacy")}
               className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
               Política de Privacidade
