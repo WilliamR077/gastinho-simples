@@ -371,50 +371,10 @@ export function SharedGroupsProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      if (action === 'move_to_personal') {
-        // Mover despesas para o usuário pessoal (remover shared_group_id)
-        await supabase
-          .from('expenses')
-          .update({ shared_group_id: null })
-          .eq('shared_group_id', groupId)
-          .eq('user_id', user.id);
-
-        // Mover despesas recorrentes
-        await supabase
-          .from('recurring_expenses')
-          .update({ shared_group_id: null })
-          .eq('shared_group_id', groupId)
-          .eq('user_id', user.id);
-
-        // Mover metas
-        await supabase
-          .from('budget_goals')
-          .update({ shared_group_id: null })
-          .eq('shared_group_id', groupId)
-          .eq('user_id', user.id);
-      } else {
-        // action === 'delete_all': deletar manualmente ANTES de deletar o grupo
-        // (O ON DELETE SET NULL do banco não deleta, apenas seta NULL)
-        await supabase
-          .from('expenses')
-          .delete()
-          .eq('shared_group_id', groupId);
-
-        await supabase
-          .from('recurring_expenses')
-          .delete()
-          .eq('shared_group_id', groupId);
-
-        await supabase
-          .from('budget_goals')
-          .delete()
-          .eq('shared_group_id', groupId);
-      }
-
-      const { error } = await supabase
-        .from('shared_groups')
-        .delete()
-        .eq('id', groupId);
+      const { error } = await supabase.rpc('delete_group_and_data', {
+        group_id_param: groupId,
+        action_param: action,
+      });
 
       if (error) throw error;
 
