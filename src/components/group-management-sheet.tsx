@@ -34,8 +34,10 @@ import {
   LogOut,
   Loader2,
   Pencil,
-  X
+  X,
+  Share2
 } from 'lucide-react';
+import { Share } from '@capacitor/share';
 import { toast } from 'sonner';
 import { SharedGroup, SharedGroupMember, GroupMemberRole } from '@/types/shared-group';
 
@@ -110,6 +112,30 @@ export function GroupManagementSheet({ open, onOpenChange, groupId }: GroupManag
       setTimeout(() => setCopied(false), 2000);
     } catch {
       toast.error('Erro ao copiar código');
+    }
+  };
+
+  const handleShareCode = async () => {
+    if (!group) return;
+    const shareMessage = `Entre no meu grupo "${group.name}" no Gastinho Simples! Use o código: ${group.invite_code}`;
+    
+    try {
+      await Share.share({
+        text: shareMessage,
+        dialogTitle: 'Compartilhar código do grupo',
+      });
+    } catch {
+      // Capacitor share failed or was cancelled, try web fallback
+      try {
+        if (navigator.share) {
+          await navigator.share({ text: shareMessage });
+        } else {
+          await navigator.clipboard.writeText(shareMessage);
+          toast.success('Mensagem copiada para a área de transferência!');
+        }
+      } catch {
+        // User cancelled or fallback failed
+      }
     }
   };
 
@@ -233,6 +259,13 @@ export function GroupManagementSheet({ open, onOpenChange, groupId }: GroupManag
                   ) : (
                     <Copy className="h-4 w-4" />
                   )}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="icon"
+                  onClick={handleShareCode}
+                >
+                  <Share2 className="h-4 w-4" />
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
