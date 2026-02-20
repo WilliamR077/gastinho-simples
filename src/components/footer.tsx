@@ -74,7 +74,8 @@ export const Footer = () => {
 
         {/* Bottom */}
         <div className="space-y-1 text-center text-xs text-muted-foreground">
-          <p className="italic">Toda Honra e Glória a Jesus Cristo</p>
+          <p className="italic">"Pois dele, por ele e para ele são todas as coisas. A ele seja a glória para sempre! Amém."</p>
+          <p className="text-[10px] font-medium">— Romanos 11:36 (NVI)</p>
           <p>© {currentYear} Gastinho Simples</p>
         </div>
       </div>
