@@ -1,53 +1,34 @@
 
 
-## Plano: Configurar PWA para iPhone
+## Plano: Corrigir erro de build do PWA e otimizar cache
 
-O app atualmente **nao tem nenhuma configuracao PWA**. Quando um usuario de iPhone adiciona a tela inicial, aparece sem icone, sem nome correto e abre como uma aba do Safari. Vamos configurar tudo.
+### Problema atual
 
-### O que sera feito
+O build esta falhando porque um arquivo JS tem 2.43 MB, acima do limite padrao de 2 MB do Workbox. Precisamos aumentar esse limite e tambem melhorar a estrategia de cache para uma experiencia mais rapida no iPhone.
 
-**1. Criar `public/manifest.json`**
+### Mudancas no `vite.config.ts`
 
-Arquivo de manifesto com:
-- `name`: "Gastinho Simples"
-- `short_name`: "Gastinho"
-- `start_url`: "/"
-- `display`: "standalone" (abre como app, sem barra do Safari)
-- `background_color` e `theme_color` com as cores do app
-- Icones usando a imagem `Gastinho_Simples_icone.png` que ja existe no projeto
+**1. Corrigir o erro de build** adicionando `maximumFileSizeToCacheInBytes: 3 * 1024 * 1024` (3 MB) na configuracao do workbox.
 
-**2. Atualizar `index.html`**
+**2. Otimizar cache com runtime caching** para que o app carregue mais rapido em acessos futuros:
 
-Adicionar as meta tags necessarias para iOS:
-- `<link rel="manifest">` apontando para o manifest.json
-- `<meta name="apple-mobile-web-app-capable" content="yes">` (abre em tela cheia)
-- `<meta name="apple-mobile-web-app-status-bar-style">` (estilo da barra de status)
-- `<meta name="apple-mobile-web-app-title" content="Gastinho Simples">` (nome na tela inicial)
-- `<link rel="apple-touch-icon">` apontando para o icone (isso e o que define o icone no iPhone)
-- `<meta name="theme-color">` para a cor da barra do navegador
+- **Imagens**: Cache com estrategia `CacheFirst` (busca no cache primeiro, so vai na rede se nao tiver). Expira em 30 dias, maximo 50 imagens.
+- **Google Fonts**: `CacheFirst` com expiracao de 1 ano (fontes raramente mudam).
+- **API do Supabase**: `NetworkFirst` (tenta a rede primeiro para dados frescos, mas se estiver offline usa o cache). Expiracao de 1 dia.
 
-**3. Instalar e configurar `vite-plugin-pwa`**
+### Resultado para o usuario iPhone
 
-- Instalar o pacote
-- Configurar no `vite.config.ts` com:
-  - Service worker para cache offline
-  - `navigateFallbackDenylist` com `/~oauth` (obrigatorio para nao quebrar login)
-  - Manifest com dados do app
+| Aspecto | Antes | Depois |
+|---------|-------|--------|
+| Build | Falhando (erro de tamanho) | Funcionando |
+| Abertura do app | Carrega tudo da rede | JS/CSS cacheados, abre quase instantaneo |
+| Imagens | Baixa toda vez | Cacheadas por 30 dias |
+| Dados (gastos, etc) | Sem cache | Cache de fallback quando offline |
+| Offline | Tela em branco | App abre com dados do ultimo acesso |
 
-### Resultado final
-
-Quando o usuario de iPhone seguir os passos do tutorial na pagina de Contato:
-- O icone do Gastinho Simples aparece na tela inicial
-- O nome "Gastinho Simples" aparece embaixo do icone
-- Ao abrir, o app funciona em tela cheia (sem barra do Safari)
-- Funciona offline com cache basico
-
-### Arquivos afetados
+### Arquivo afetado
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `public/manifest.json` | Novo - manifesto PWA |
-| `index.html` | Adicionar meta tags Apple e link do manifest |
-| `vite.config.ts` | Adicionar plugin vite-plugin-pwa |
-| `package.json` | Adicionar dependencia vite-plugin-pwa |
+| `vite.config.ts` | Adicionar `maximumFileSizeToCacheInBytes` e `runtimeCaching` |
 
