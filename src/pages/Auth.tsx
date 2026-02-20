@@ -13,7 +13,7 @@ import { validatePasswordStrength, sanitizeErrorMessage, isEmailValid } from "@/
 import { Progress } from "@/components/ui/progress";
 import { Eye, EyeOff } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
-import { Footer } from "@/components/footer";
+
 
 export default function Auth() {
   const [isLoading, setIsLoading] = useState(false);
@@ -197,10 +197,11 @@ export default function Auth() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-secondary/20 p-4">
       <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl text-center">AppGastos</CardTitle>
+        <CardHeader className="space-y-1 flex flex-col items-center">
+          <img src="/lovable-uploads/06a1acc2-f553-41f0-8d87-32d25b4e425e.png" alt="Gastinho Simples" className="h-16 w-16 mb-2" />
+          <CardTitle className="text-2xl text-center">Gastinho Simples</CardTitle>
           <CardDescription className="text-center">
-            Gerencie seus gastos de forma simples
+            Controle seus gastos de forma simples
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -424,7 +425,6 @@ export default function Auth() {
           </Tabs>
         </CardContent>
       </Card>
-      <Footer />
     </div>
   );
 }
