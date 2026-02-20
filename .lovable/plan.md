@@ -1,34 +1,33 @@
 
 
-## Plano: Corrigir erro de build do PWA e otimizar cache
+## Plano: Melhorar footer logado e pagina de Politica de Privacidade
 
-### Problema atual
+### 1. Footer - Remover "Sobre" e "Contato" para usuarios logados
 
-O build esta falhando porque um arquivo JS tem 2.43 MB, acima do limite padrao de 2 MB do Workbox. Precisamos aumentar esse limite e tambem melhorar a estrategia de cache para uma experiencia mais rapida no iPhone.
+No arquivo `src/components/footer.tsx`, na coluna "Mais" do footer autenticado (linhas 78-83), remover os botoes "Sobre" e "Contato", deixando apenas "Politica de Privacidade".
 
-### Mudancas no `vite.config.ts`
+### 2. Pagina de Politica de Privacidade - Redesign completo
 
-**1. Corrigir o erro de build** adicionando `maximumFileSizeToCacheInBytes: 3 * 1024 * 1024` (3 MB) na configuracao do workbox.
+No arquivo `src/pages/PrivacyPolicy.tsx`:
 
-**2. Otimizar cache com runtime caching** para que o app carregue mais rapido em acessos futuros:
+**Header novo:**
+- Substituir o header atual (logo grande + botoes "Minha Conta" e "Sair") por um header simples com:
+  - Botao de voltar (seta) que navega para `/` (home)
+  - Logo pequeno + titulo "Politica de Privacidade"
+  - Mesmo estilo do header da pagina About
 
-- **Imagens**: Cache com estrategia `CacheFirst` (busca no cache primeiro, so vai na rede se nao tiver). Expira em 30 dias, maximo 50 imagens.
-- **Google Fonts**: `CacheFirst` com expiracao de 1 ano (fontes raramente mudam).
-- **API do Supabase**: `NetworkFirst` (tenta a rede primeiro para dados frescos, mas se estiver offline usa o cache). Expiracao de 1 dia.
+**Conteudo com melhor formatacao:**
+- Envolver o conteudo em um Card com padding adequado
+- Adicionar espacamento entre secoes (cada h2 com margem superior)
+- Usar `space-y` e separadores visuais entre secoes para o texto nao ficar "tudo junto"
+- Manter todo o texto legal exatamente como esta, apenas melhorar a apresentacao visual
 
-### Resultado para o usuario iPhone
+**Rodape:**
+- Adicionar o componente `<Footer />` no final da pagina (com `isAuthenticated={false}` ja que e uma pagina publica)
 
-| Aspecto | Antes | Depois |
-|---------|-------|--------|
-| Build | Falhando (erro de tamanho) | Funcionando |
-| Abertura do app | Carrega tudo da rede | JS/CSS cacheados, abre quase instantaneo |
-| Imagens | Baixa toda vez | Cacheadas por 30 dias |
-| Dados (gastos, etc) | Sem cache | Cache de fallback quando offline |
-| Offline | Tela em branco | App abre com dados do ultimo acesso |
-
-### Arquivo afetado
+### Resumo de mudancas
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `vite.config.ts` | Adicionar `maximumFileSizeToCacheInBytes` e `runtimeCaching` |
-
+| `src/components/footer.tsx` | Remover links "Sobre" e "Contato" da coluna "Mais" (logado) |
+| `src/pages/PrivacyPolicy.tsx` | Novo header com botao voltar, conteudo em Card com espacamento, adicionar Footer |
