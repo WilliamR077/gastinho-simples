@@ -1,0 +1,239 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { create, getNumericDate } from "https://deno.land/x/djwt@v3.0.1/mod.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const FIREBASE_SERVICE_ACCOUNT_JSON = Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON");
+const INTERNAL_API_SECRET = Deno.env.get("INTERNAL_API_SECRET");
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-internal-secret",
+};
+
+interface ServiceAccount {
+  project_id: string;
+  private_key: string;
+  client_email: string;
+}
+
+interface NotifyGroupExpensePayload {
+  group_id: string;
+  user_id: string;
+  description: string;
+  amount: number;
+  category_name?: string;
+  group_name: string;
+}
+
+// Cache do access token OAuth 2.0
+let cachedAccessToken: string | null = null;
+let tokenExpiresAt = 0;
+
+async function importPrivateKey(pemKey: string): Promise<CryptoKey> {
+  const pemContents = pemKey
+    .replace(/-----BEGIN PRIVATE KEY-----/, "")
+    .replace(/-----END PRIVATE KEY-----/, "")
+    .replace(/\s/g, "");
+
+  const binaryDer = Uint8Array.from(atob(pemContents), (c) => c.charCodeAt(0));
+
+  return await crypto.subtle.importKey(
+    "pkcs8",
+    binaryDer,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+}
+
+async function getAccessToken(): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  if (cachedAccessToken && tokenExpiresAt > now + 300) {
+    return cachedAccessToken;
+  }
+
+  if (!FIREBASE_SERVICE_ACCOUNT_JSON) {
+    throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON não configurada");
+  }
+
+  const serviceAccount: ServiceAccount = JSON.parse(FIREBASE_SERVICE_ACCOUNT_JSON);
+  const private_key_pem = serviceAccount.private_key.replace(/\\n/g, "\n");
+  const private_key = await importPrivateKey(private_key_pem);
+
+  const jwt = await create(
+    { alg: "RS256", typ: "JWT" },
+    {
+      iss: serviceAccount.client_email,
+      scope: "https://www.googleapis.com/auth/firebase.messaging",
+      aud: "https://oauth2.googleapis.com/token",
+      iat: getNumericDate(0),
+      exp: getNumericDate(60 * 60),
+    },
+    private_key
+  );
+
+  const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
+  });
+
+  if (!tokenResponse.ok) {
+    const error = await tokenResponse.text();
+    console.error("❌ Erro ao obter access token:", error);
+    throw new Error("Falha na autenticação OAuth 2.0");
+  }
+
+  const tokenData = await tokenResponse.json();
+  cachedAccessToken = tokenData.access_token;
+  tokenExpiresAt = now + tokenData.expires_in;
+  return cachedAccessToken as string;
+}
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    // Validar secret interno
+    const providedSecret = req.headers.get("x-internal-secret");
+    if (!INTERNAL_API_SECRET || providedSecret !== INTERNAL_API_SECRET) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Unauthorized" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 401 }
+      );
+    }
+
+    const payload: NotifyGroupExpensePayload = await req.json();
+    const { group_id, user_id, description, amount, category_name, group_name } = payload;
+
+    console.log(`📤 Notificando grupo ${group_name} sobre despesa de ${user_id}`);
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Buscar email do autor
+    const { data: authorData } = await supabase.auth.admin.getUserById(user_id);
+    const authorEmail = authorData?.user?.email || "Alguém";
+
+    // Buscar membros do grupo (exceto o autor)
+    const { data: members, error: membersError } = await supabase
+      .from("shared_group_members")
+      .select("user_id")
+      .eq("group_id", group_id)
+      .neq("user_id", user_id);
+
+    if (membersError) {
+      console.error("❌ Erro ao buscar membros:", membersError);
+      throw new Error("Erro ao buscar membros do grupo");
+    }
+
+    if (!members || members.length === 0) {
+      console.log("ℹ️ Nenhum outro membro no grupo");
+      return new Response(
+        JSON.stringify({ success: true, sent: 0, message: "Nenhum outro membro" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const memberUserIds = members.map((m) => m.user_id);
+
+    // Buscar FCM tokens de todos os membros
+    const { data: tokens, error: tokensError } = await supabase
+      .from("user_fcm_tokens")
+      .select("fcm_token, user_id")
+      .in("user_id", memberUserIds);
+
+    if (tokensError) {
+      console.error("❌ Erro ao buscar tokens:", tokensError);
+      throw new Error("Erro ao buscar FCM tokens");
+    }
+
+    if (!tokens || tokens.length === 0) {
+      console.log("ℹ️ Nenhum FCM token encontrado para membros do grupo");
+      return new Response(
+        JSON.stringify({ success: true, sent: 0, message: "Nenhum token encontrado" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Formatar valor
+    const formattedAmount = `R$${Number(amount).toFixed(2).replace(".", ",")}`;
+    const categoryText = category_name ? ` (${category_name})` : "";
+
+    const title = group_name;
+    const body = `${authorEmail} adicionou ${formattedAmount}${categoryText}`;
+
+    console.log(`📱 Enviando para ${tokens.length} token(s): "${body}"`);
+
+    // Obter access token e enviar via FCM
+    const accessToken = await getAccessToken();
+    const serviceAccount: ServiceAccount = JSON.parse(FIREBASE_SERVICE_ACCOUNT_JSON!);
+    const FCM_ENDPOINT = `https://fcm.googleapis.com/v1/projects/${serviceAccount.project_id}/messages:send`;
+
+    const results = await Promise.allSettled(
+      tokens.map(async ({ fcm_token }) => {
+        const response = await fetch(FCM_ENDPOINT, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            message: {
+              token: fcm_token,
+              notification: { title, body },
+              data: { type: "group_expense", group_id },
+              android: {
+                priority: "high",
+                notification: { sound: "default", channelId: "default" },
+              },
+            },
+          }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          console.error(`❌ FCM Error token •••${fcm_token.slice(-8)}:`, JSON.stringify(result));
+
+          const errorCode = result?.error?.status || result?.error?.code;
+          const errorMessage = result?.error?.message || "";
+          const isInvalidToken =
+            errorCode === "INVALID_ARGUMENT" ||
+            errorCode === "NOT_FOUND" ||
+            errorMessage.includes("not a valid FCM registration token") ||
+            errorMessage.includes("Requested entity was not found");
+
+          if (isInvalidToken) {
+            await supabase.from("user_fcm_tokens").delete().eq("fcm_token", fcm_token);
+            console.log(`🗑️ Token inválido removido: •••${fcm_token.slice(-8)}`);
+          }
+
+          throw new Error(result?.error?.message || "Erro ao enviar notificação");
+        }
+
+        return result;
+      })
+    );
+
+    const successful = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.filter((r) => r.status === "rejected").length;
+
+    console.log(`📊 Resultado: ${successful} enviadas, ${failed} falhas`);
+
+    return new Response(
+      JSON.stringify({ success: true, sent: successful, failed, total: tokens.length }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  } catch (error) {
+    console.error("❌ Erro na notify-group-expense:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: error instanceof Error ? error.message : "Unknown error" }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+    );
+  }
+});
