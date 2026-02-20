@@ -1,50 +1,58 @@
 
 
-## Plano: Corrigir erro ao adicionar despesa quando categorias nao estao inicializadas
+## Plano: Mover despesas para pessoal de TODOS os membros ao excluir grupo
 
 ### Problema
 
-Quando um usuario entra em um grupo compartilhado mas nunca teve suas categorias personalizadas criadas no banco de dados, o seletor de categorias faz um fallback para as categorias estaticas (enum). O problema e que nesse caso o **valor selecionado e o nome do enum** (ex: `"moradia"`) em vez de um **UUID**. Esse valor e enviado como `category_id` para o Supabase, que espera um UUID, causando o erro `invalid input syntax for type uuid: "moradia"`.
-
-### Causa raiz
-
-No arquivo `src/components/category-selector.tsx`, linha 42:
-
-```
-const useStaticCategories = loading || activeCategories.length === 0;
-```
-
-Quando `activeCategories` esta vazio (usuario sem categorias inicializadas), o select mostra os itens estaticos com `value={key}` (ex: `"moradia"`). Esse valor vai parar no campo `categoryId` do formulario, que e enviado como `category_id` (tipo UUID) no insert.
+Na funcao `delete_group_and_data`, quando a acao e `move_to_personal`, apenas as despesas do dono do grupo sao movidas para pessoal. As despesas dos outros membros sao deletadas, fazendo com que eles percam seus registros.
 
 ### Solucao
 
-Duas mudancas complementares:
+Alterar a funcao `delete_group_and_data` no banco de dados para que, na acao `move_to_personal`, o `shared_group_id` seja removido (setado como `NULL`) de TODOS os registros do grupo, nao apenas do dono.
 
-**1. `src/pages/Index.tsx` - Validar categoryId antes de enviar**
+### Mudanca na funcao SQL
 
-Na funcao `addExpense`, antes de montar o objeto de insert, verificar se `categoryId` e realmente um UUID valido. Se nao for (ex: `"moradia"`), usar o valor como campo `category` (enum) em vez de `category_id`.
+O trecho atual do `move_to_personal`:
 
-Isso garante que mesmo com o fallback estatico, a despesa e salva corretamente.
+```text
+-- Mover dados do owner para pessoal
+UPDATE expenses SET shared_group_id = NULL WHERE shared_group_id = group_id_param AND user_id = caller_id;
+-- ... (mesma logica para recurring_expenses, incomes, etc.)
 
-**2. `src/components/category-selector.tsx` - Inicializar categorias automaticamente**
+-- Deletar dados dos outros membros
+DELETE FROM expenses WHERE shared_group_id = group_id_param AND user_id != caller_id;
+-- ... (mesma logica para outras tabelas)
+```
 
-Quando `activeCategories.length === 0` e o loading terminou, chamar automaticamente a funcao `initialize_user_categories` do banco para criar as categorias do usuario. Isso garante que na proxima vez o seletor ja mostra as categorias corretas com UUIDs.
+Sera substituido por:
 
-### Detalhes tecnicos
+```text
+-- Mover dados de TODOS os membros para pessoal
+UPDATE expenses SET shared_group_id = NULL WHERE shared_group_id = group_id_param;
+UPDATE recurring_expenses SET shared_group_id = NULL WHERE shared_group_id = group_id_param;
+UPDATE incomes SET shared_group_id = NULL WHERE shared_group_id = group_id_param;
+UPDATE recurring_incomes SET shared_group_id = NULL WHERE shared_group_id = group_id_param;
+UPDATE budget_goals SET shared_group_id = NULL WHERE shared_group_id = group_id_param;
+
+-- Remover alertas de metas do grupo (nao faz sentido mover alertas)
+DELETE FROM budget_goal_alerts WHERE goal_id IN (
+  SELECT id FROM budget_goals WHERE shared_group_id = group_id_param
+);
+```
+
+Nao precisa mais do bloco de DELETE dos outros membros, pois todos os dados sao movidos.
+
+### Resultado
+
+| Cenario | Antes | Depois |
+|---------|-------|--------|
+| Dono exclui grupo (mover) | So despesas do dono movem | Despesas de todos movem |
+| Membro do grupo | Perde suas despesas | Mantem suas despesas como pessoais |
+
+### Arquivo afetado
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `src/pages/Index.tsx` | Na funcao `addExpense`: validar se `categoryId` e UUID antes de usar como `category_id`. Se for string enum, colocar no campo `category` e omitir `category_id` |
-| `src/components/category-selector.tsx` | Adicionar `useEffect` para chamar `initialize_user_categories` via Supabase RPC quando categorias estao vazias apos o loading |
+| Migracao SQL | Recriar funcao `delete_group_and_data` com UPDATE sem filtro de user_id |
 
-### Validacao de UUID
-
-Usar regex simples para verificar se o valor e UUID:
-
-```typescript
-const isUUID = (value: string) => 
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
-```
-
-Se `categoryId` nao passar nessa validacao, tratar como nome de enum e colocar no campo `category` do insert.
-
+Nenhum arquivo de codigo precisa mudar, apenas a funcao no banco.
