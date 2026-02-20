@@ -932,15 +932,19 @@ export default function Index() {
       const contextLabel = currentContext.type === 'group' && currentContext.groupName 
         ? ` (${currentContext.groupName})` 
         : '';
+      const isIncome = data.type.startsWith('income_');
+      const goalLabel = isIncome ? 'meta de entradas' : 'meta de gastos';
       toast({
         title: "Meta adicionada!",
-        description: `Sua meta de gastos foi criada com sucesso${contextLabel}.`,
+        description: `Sua ${goalLabel} foi criada com sucesso${contextLabel}.`,
       });
     } catch (error) {
       console.error("Error adding budget goal:", error);
+      const isIncome = data.type.startsWith('income_');
+      const goalLabel = isIncome ? 'meta de entradas' : 'meta de gastos';
       toast({
         title: "Erro ao adicionar meta",
-        description: "Não foi possível adicionar a meta de gastos.",
+        description: `Não foi possível adicionar a ${goalLabel}.`,
         variant: "destructive",
       });
     }
