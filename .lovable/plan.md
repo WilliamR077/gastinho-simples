@@ -1,85 +1,88 @@
 
 
-## Plano: Criar Landing Page, pagina Sobre e pagina de Contato
+## Plano: Melhorias na Landing Page e Footer
 
-### Visao Geral
+### Resumo das mudancas
 
-Criar 3 novas paginas publicas (sem precisar de login) que apresentam o Gastinho Simples para visitantes:
+4 alteracoes principais:
 
-1. **Landing Page** (`/landing`) - Pagina inicial para quem nao esta logado
-2. **Sobre** (`/about`) - Missao, valores e detalhes do app
-3. **Contato / Links** (`/contact`) - Redes sociais, download Play Store e instrucoes PWA iPhone
-
-### Fluxo de navegacao
-
-Quando o usuario nao estiver logado e acessar `/`, sera redirecionado para `/landing` em vez de `/auth`. A landing page tera botoes para ir ao login, sobre e contato.
-
-```text
-Visitante acessa /
-       |
-       v
-  /landing (publica)
-   |       |       |
-   v       v       v
- /auth   /about  /contact
-```
+1. **Header de navegacao na Landing** com botoes para Sobre, Contato e Entrar
+2. **Footer condicional** (links diferentes para logado vs nao logado)
+3. **Corrigir precos e detalhes dos planos** copiando da pagina de assinaturas
+4. **Landing como pagina principal** (rota `/` mostra Landing quando nao logado)
 
 ---
 
-### 1. Landing Page (`src/pages/Landing.tsx`)
+### 1. Header de navegacao na Landing Page
 
-Secoes da pagina:
-- **Hero**: Logo, nome "Gastinho Simples", tagline, botao "Comecar Agora" (vai para /auth) e botao "Saiba Mais" (ancora para secao abaixo)
-- **Funcionalidades**: Cards explicando as principais funcionalidades (controle de despesas, entradas, relatorios, metas, cartoes, grupos compartilhados)
-- **Planos**: Resumo dos 3 planos (Gratis, Sem Anuncios, Premium) com precos e botao para ver mais detalhes
-- **CTA final**: Chamada para acao com botao de cadastro
-- **Footer**: Reutilizar o componente Footer existente (adicionando links para /about e /contact)
-
-### 2. Pagina Sobre (`src/pages/About.tsx`)
-
-Secoes:
-- **Header**: "Sobre o Gastinho Simples"
-- **Missao**: Ajudar as pessoas a terem controle financeiro de forma simples e acessivel
-- **Feito no Brasil**: Destaque que e um app brasileiro
-- **Valores**: Simplicidade, transparencia, acessibilidade
-- **O que oferecemos**: Lista detalhada de recursos
-- **Footer**
-
-### 3. Pagina de Contato / Links (`src/pages/Contact.tsx`)
-
-Esta e a pagina que vai no link do Instagram. Secoes:
-- **Header**: Logo + nome
-- **Botao Play Store**: Destaque grande para baixar no Android (link placeholder por enquanto)
-- **Botao iPhone/PWA**: Ao clicar, abre um modal/dialog explicando passo a passo como instalar via Safari (Add to Home Screen), com instrucoes em texto
-- **Redes sociais**: Botoes/icones para Instagram, Twitter/X, YouTube e TikTok (links placeholder)
-- **Email de contato** (opcional)
-
-### 4. Alteracoes em arquivos existentes
+Adicionar uma barra de navegacao no topo da landing com:
+- Logo + nome "Gastinho Simples" (esquerda)
+- Botoes: "Sobre", "Contato", "Entrar" (direita)
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `src/App.tsx` | Adicionar rotas `/landing`, `/about`, `/contact` |
-| `src/pages/Index.tsx` | Mudar redirect de `/auth` para `/landing` quando nao logado |
-| `src/components/footer.tsx` | Adicionar links para "Sobre" e "Contato" na secao Legal |
-
-### 5. Novos arquivos
-
-| Arquivo | Descricao |
-|---------|-----------|
-| `src/pages/Landing.tsx` | Landing page completa |
-| `src/pages/About.tsx` | Pagina sobre |
-| `src/pages/Contact.tsx` | Pagina de contato/links |
+| `src/pages/Landing.tsx` | Adicionar header com navegacao |
 
 ---
 
-### Detalhes tecnicos
+### 2. Footer condicional (logado vs nao logado)
 
-- Todas as 3 paginas sao publicas (sem autenticacao)
-- Usam os componentes UI existentes (Card, Button, Dialog, etc.)
-- Responsivas com Tailwind CSS
-- Tema escuro/claro funciona automaticamente
-- Links das redes sociais ficam como placeholder (`#`) para trocar depois
-- Link da Play Store fica como placeholder ate o usuario enviar
-- Modal do iPhone usa o componente Dialog existente com instrucoes passo a passo em texto
-- O versiculo de Romanos 11:36 continua no footer em todas as paginas
+O Footer vai receber uma prop `isAuthenticated` (opcional, padrao `true` para nao quebrar nada).
+
+**Quando NAO logado**, mostra:
+- Links Rapidos: Inicio, Sobre, Contato
+- Mais: Politica de Privacidade, Criar Conta (leva para /auth)
+
+**Quando logado** (comportamento atual):
+- Links Rapidos: Inicio, Relatorios, Cartoes
+- Conta: Minha Conta, Assinatura, Configuracoes
+- Mais: Sobre, Contato, Politica de Privacidade
+
+| Arquivo | Mudanca |
+|---------|---------|
+| `src/components/footer.tsx` | Adicionar prop `isAuthenticated` e renderizar links diferentes |
+| `src/pages/Landing.tsx` | Passar `isAuthenticated={false}` ao Footer |
+| `src/pages/About.tsx` | Passar `isAuthenticated={false}` ao Footer (pagina publica) |
+| `src/pages/Contact.tsx` | Passar `isAuthenticated={false}` ao Footer (pagina publica) |
+
+---
+
+### 3. Corrigir precos e features dos planos
+
+Copiar os dados exatos da pagina de assinaturas (`SUBSCRIPTION_FEATURES`):
+
+| Plano | Preco correto | Features |
+|-------|---------------|----------|
+| Gratuito | R$ 0 | Ate 2 cartoes, 1 meta, relatorios do mes atual, participar de grupos, com anuncios |
+| Sem Anuncios | R$ 4,90/mes | Ate 2 cartoes, 1 meta, relatorios do mes atual, participar de grupos, sem anuncios |
+| Premium | R$ 14,90/mes | Cartoes e metas ilimitados, todos os periodos, criar ate 3 grupos, exportar PDF/Excel, sem anuncios |
+
+A ordem dos cards sera: Gratuito, Sem Anuncios, Premium (igual a pagina de assinaturas).
+
+| Arquivo | Mudanca |
+|---------|---------|
+| `src/pages/Landing.tsx` | Corrigir array `plans` com precos e features corretos |
+
+---
+
+### 4. Landing como pagina principal
+
+Quando o usuario nao esta logado e acessa `/`, a pagina Index ja redireciona para `/landing`. A mudanca aqui e fazer a rota `/` renderizar a Landing diretamente quando nao logado, sem redirect. Isso evita o flash de redirecionamento.
+
+| Arquivo | Mudanca |
+|---------|---------|
+| `src/App.tsx` | Trocar rota `/` para renderizar um componente que decide entre Index (logado) e Landing (nao logado) |
+
+Alternativa mais simples: manter o redirect atual no `Index.tsx` que ja faz `navigate("/landing")`, mas mudar para que a landing fique na rota `/` e o dashboard fique em `/dashboard` ou mantenha em `/`. Vou usar a abordagem mais simples: a rota `/` continua apontando para Index, que redireciona para `/landing` (ja funciona assim). Nenhuma mudanca necessaria aqui pois ja esta implementado.
+
+---
+
+### Arquivos afetados
+
+| Arquivo | Tipo de mudanca |
+|---------|----------------|
+| `src/pages/Landing.tsx` | Header de navegacao + corrigir planos |
+| `src/components/footer.tsx` | Prop `isAuthenticated` para links condicionais |
+| `src/pages/About.tsx` | Passar `isAuthenticated={false}` ao Footer |
+| `src/pages/Contact.tsx` | Passar `isAuthenticated={false}` ao Footer |
 
