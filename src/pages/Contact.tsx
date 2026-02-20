@@ -26,7 +26,7 @@ const socialLinks = [
   {
     icon: Instagram,
     label: "Instagram",
-    url: "#",
+    url: "https://www.instagram.com/gastinhosimples/",
     color: "hover:text-pink-500",
   },
   {
@@ -38,7 +38,7 @@ const socialLinks = [
   {
     icon: Youtube,
     label: "YouTube",
-    url: "#",
+    url: "https://www.youtube.com/@GastinhoSimples",
     color: "hover:text-red-500",
   },
   {
@@ -104,7 +104,7 @@ export default function Contact() {
               <Button
                 className="w-full gap-3 text-base"
                 size="lg"
-                onClick={() => window.open("#", "_blank")}
+                onClick={() => window.open("https://play.google.com/store/apps/details?id=com.gastinhosimples.app", "_blank")}
               >
                 <Download className="h-5 w-5" />
                 Baixar na Google Play Store
