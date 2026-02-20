@@ -75,6 +75,7 @@ export default function Index() {
   const [expenseSubTab, setExpenseSubTab] = useState("monthly");
   const [incomeSubTab, setIncomeSubTab] = useState("monthly");
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string | null>(null);
+  const [activeIncomeCategoryFilter, setActiveIncomeCategoryFilter] = useState<string | null>(null);
 
   // Estado para o mês atual da navegação
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
@@ -1307,9 +1308,10 @@ export default function Index() {
       filters.maxAmount !== undefined ||
       filters.paymentMethod ||
       filters.cardId ||
-      activeCategoryFilter
+      activeCategoryFilter ||
+      activeIncomeCategoryFilter
     );
-  }, [filters, activeCategoryFilter]);
+  }, [filters, activeCategoryFilter, activeIncomeCategoryFilter]);
 
   // Função para limpar todos os filtros
   const clearAllFilters = () => {
@@ -1322,7 +1324,44 @@ export default function Index() {
       cardId: undefined,
     }));
     setActiveCategoryFilter(null);
+    setActiveIncomeCategoryFilter(null);
   };
+
+  // Handler para filtro de categoria de entrada
+  const handleIncomeCategoryFilter = (category: string) => {
+    setActiveIncomeCategoryFilter(prev => {
+      if (prev === category) {
+        toast({
+          title: "Filtro removido",
+          description: "Exibindo todas as categorias de entrada",
+        });
+        return null;
+      } else {
+        toast({
+          title: "Filtro aplicado",
+          description: "Filtrando por categoria de entrada selecionada",
+        });
+        return category;
+      }
+    });
+  };
+
+  // Entradas filtradas por categoria
+  const displayedIncomes = useMemo(() => {
+    const dateFiltered = incomes.filter(i => {
+      const date = parseLocalDate(i.income_date);
+      return date >= (filters.startDate || startOfMonth(new Date())) && 
+             date <= (filters.endDate || endOfMonth(new Date()));
+    });
+    if (!activeIncomeCategoryFilter) return dateFiltered;
+    return dateFiltered.filter(i => i.category === activeIncomeCategoryFilter);
+  }, [incomes, filters.startDate, filters.endDate, activeIncomeCategoryFilter]);
+
+  // Entradas recorrentes filtradas por categoria
+  const displayedRecurringIncomes = useMemo(() => {
+    if (!activeIncomeCategoryFilter) return recurringIncomes;
+    return recurringIncomes.filter(i => i.category === activeIncomeCategoryFilter);
+  }, [recurringIncomes, activeIncomeCategoryFilter]);
 
   // Calcular metas em risco (usa o mês selecionado, não o mês atual)
   const goalsAtRisk = useMemo(() => {
@@ -1640,6 +1679,8 @@ export default function Index() {
                 recurringIncomes={recurringIncomes}
                 startDate={filters.startDate}
                 endDate={filters.endDate}
+                onCategoryClick={handleIncomeCategoryFilter}
+                activeCategory={activeIncomeCategoryFilter || undefined}
               />
             </div>
             <Tabs value={incomeSubTab} onValueChange={setIncomeSubTab}>
@@ -1653,24 +1694,50 @@ export default function Index() {
               </TabsList>
 
               <TabsContent value="monthly">
-                <IncomeList
-                  incomes={incomes.filter(i => {
-                    const date = parseLocalDate(i.income_date);
-                    return date >= (filters.startDate || startOfMonth(new Date())) && 
-                           date <= (filters.endDate || endOfMonth(new Date()));
-                  })}
-                  onDelete={deleteIncome}
-                  onEdit={handleEditIncome}
-                />
+                <div className="space-y-4">
+                  {activeIncomeCategoryFilter && (
+                    <div className="flex justify-end">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setActiveIncomeCategoryFilter(null)}
+                        className="text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        <FilterX className="h-3 w-3 mr-1" />
+                        Limpar filtro de categoria
+                      </Button>
+                    </div>
+                  )}
+                  <IncomeList
+                    incomes={displayedIncomes}
+                    onDelete={deleteIncome}
+                    onEdit={handleEditIncome}
+                  />
+                </div>
               </TabsContent>
 
               <TabsContent value="recurring">
-                <RecurringIncomeList
-                  incomes={recurringIncomes}
-                  onDelete={deleteRecurringIncome}
-                  onToggleActive={toggleRecurringIncomeActive}
-                  onEdit={handleEditRecurringIncome}
-                />
+                <div className="space-y-4">
+                  {activeIncomeCategoryFilter && (
+                    <div className="flex justify-end">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setActiveIncomeCategoryFilter(null)}
+                        className="text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        <FilterX className="h-3 w-3 mr-1" />
+                        Limpar filtro de categoria
+                      </Button>
+                    </div>
+                  )}
+                  <RecurringIncomeList
+                    incomes={displayedRecurringIncomes}
+                    onDelete={deleteRecurringIncome}
+                    onToggleActive={toggleRecurringIncomeActive}
+                    onEdit={handleEditRecurringIncome}
+                  />
+                </div>
               </TabsContent>
             </Tabs>
           </TabsContent>

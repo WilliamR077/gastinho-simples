@@ -11,6 +11,8 @@ interface IncomeCategorySummaryProps {
   recurringIncomes?: RecurringIncome[]
   startDate?: Date
   endDate?: Date
+  onCategoryClick?: (category: string) => void
+  activeCategory?: string
 }
 
 export function IncomeCategorySummary({
@@ -18,6 +20,8 @@ export function IncomeCategorySummary({
   recurringIncomes = [],
   startDate,
   endDate,
+  onCategoryClick,
+  activeCategory,
 }: IncomeCategorySummaryProps) {
   const [isOpen, setIsOpen] = useState(false)
   const { isHidden } = useValuesVisibility()
@@ -105,7 +109,11 @@ export function IncomeCategorySummary({
                 const percentage = totalAmount > 0 ? (data.total / totalAmount) * 100 : 0
 
                 return (
-                  <div key={categoryKey} className="space-y-2 rounded-lg p-2">
+                  <div
+                    key={categoryKey}
+                    className={`space-y-2 rounded-lg p-2 cursor-pointer hover:bg-muted/50 transition-colors ${activeCategory === categoryKey ? 'bg-muted ring-2 ring-green-500 ring-offset-2 ring-offset-background' : ''}`}
+                    onClick={() => onCategoryClick?.(categoryKey)}
+                  >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="text-2xl">{data.icon}</span>
