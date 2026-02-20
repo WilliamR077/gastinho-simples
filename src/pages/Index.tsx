@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { ExpenseSummary } from "@/components/expense-summary";
 import { ExpenseList } from "@/components/expense-list";
-import { ExpenseFilters, ExpenseFilters as ExpenseFiltersType } from "@/components/expense-filters";
+import { ExpenseFilters, ExpenseFilters as ExpenseFiltersType, FilterTab } from "@/components/expense-filters";
 import { CategorySummary } from "@/components/category-summary";
 import { ExpenseEditDialog } from "@/components/expense-edit-dialog";
 import { RecurringExpenseEditDialog } from "@/components/recurring-expense-edit-dialog";
@@ -76,6 +76,7 @@ export default function Index() {
   const [incomeSubTab, setIncomeSubTab] = useState("monthly");
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string | null>(null);
   const [activeIncomeCategoryFilter, setActiveIncomeCategoryFilter] = useState<string | null>(null);
+  const [filterTab, setFilterTab] = useState<FilterTab>("expenses");
 
   // Estado para o mês atual da navegação
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
@@ -1592,6 +1593,10 @@ export default function Index() {
             expenses={expenses}
             creditCardConfig={creditCardConfig}
             cardsConfigMap={cardsConfigMap}
+            activeFilterTab={filterTab}
+            onFilterTabChange={setFilterTab}
+            monthStartDate={startOfMonth(currentMonth)}
+            monthEndDate={endOfMonth(currentMonth)}
           />
         </div>
 
