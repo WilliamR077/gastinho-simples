@@ -62,7 +62,7 @@ export function DeleteGroupDialog({
                   Mover para meus gastos pessoais
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Todas as despesas e metas do grupo serão transferidas para sua conta pessoal
+                  As despesas de cada membro serão movidas para a conta pessoal de cada um. As metas do grupo serão removidas.
                 </p>
               </Label>
             </div>
