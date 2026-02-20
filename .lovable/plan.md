@@ -1,46 +1,59 @@
 
-## Plano: Botao de Compartilhar codigo de convite via Share nativo
+
+## Plano: Notificacao push quando alguem adiciona despesa no grupo
 
 ### O que sera feito
 
-Adicionar um botao "Compartilhar" ao lado do botao de copiar no `GroupManagementSheet`. Esse botao usara a API `navigator.share()` (Web Share API / Capacitor Share) para abrir o menu nativo de compartilhamento do celular com uma mensagem pre-formatada.
+Quando um membro adicionar uma despesa em um grupo compartilhado, todos os **outros** membros do grupo receberao uma notificacao push tipo: "Joao adicionou R$800,00 (Mercado) no grupo Viagem SP".
 
-### Como funciona
+### Arquitetura
 
-1. Ao clicar no botao "Compartilhar", o app monta uma mensagem como:
-   `Entre no meu grupo "Viagem SP" no Gastinho Simples! Codigo: ABC123`
-2. Chama `Share.share()` do `@capacitor/share` (ja instalado no projeto) que abre o share nativo do celular (WhatsApp, Telegram, SMS, etc.)
-3. Como fallback para navegadores web, usa `navigator.share()` se disponivel, senao copia para a area de transferencia
+A notificacao sera disparada pelo frontend apos inserir a despesa com sucesso. Uma nova edge function `notify-group-expense` recebe os dados da despesa e envia push para todos os membros do grupo, exceto quem adicionou.
 
 ### Mudancas
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `src/components/group-management-sheet.tsx` | Adicionar import do `Share` do `@capacitor/share`. Criar funcao `handleShareCode` que monta a mensagem e chama `Share.share({ text, dialogTitle })`. Adicionar botao com icone `Share2` ao lado do botao de copiar. Fallback para `navigator.share()` ou copiar. |
+| `supabase/functions/notify-group-expense/index.ts` | **Nova edge function** - Recebe `group_id`, `user_id` (quem adicionou), `description`, `amount`, `category_name` e `group_name`. Busca todos os membros do grupo (exceto o autor), busca seus FCM tokens e envia notificacao via a logica existente do `send-notification`. |
+| `supabase/config.toml` | Adicionar entrada `[functions.notify-group-expense]` com `verify_jwt = false` |
+| `src/pages/Index.tsx` | Na funcao `addExpense`, apos inserir com sucesso e quando `groupId` estiver definido, chamar `supabase.functions.invoke("notify-group-expense", ...)` de forma assincrona (fire-and-forget, sem bloquear o fluxo). |
 
-### Visual
+### Fluxo
 
-A area do codigo de convite ficara assim:
+1. Usuario adiciona despesa no grupo
+2. Despesa e inserida no banco com sucesso (fluxo atual)
+3. Frontend chama `notify-group-expense` em background (sem await bloqueante)
+4. Edge function busca membros do grupo (exceto o autor)
+5. Para cada membro, busca FCM tokens e envia push via Firebase FCM HTTP v1 API
+6. Membros recebem: "Joao adicionou R$800,00 (Mercado) no grupo Viagem SP"
+
+### Detalhes da Edge Function
+
+A edge function `notify-group-expense`:
+- Recebe: `{ group_id, user_id, description, amount, category_name, group_name }`
+- Usa `SUPABASE_SERVICE_ROLE_KEY` para buscar membros do grupo na tabela `shared_group_members`
+- Busca email do autor na tabela `auth.users` para usar o nome no push
+- Para cada membro (exceto autor), busca tokens em `user_fcm_tokens`
+- Reutiliza a mesma logica de autenticacao OAuth2 + FCM HTTP v1 do `send-notification`
+- Notificacao nao e critica: se falhar, nao afeta o fluxo do usuario
+
+### Formato da notificacao
 
 ```text
-+------------------------------------------+
-|  Codigo de Convite                       |
-|  [   A B C 1 2 3   ]  [Copiar] [Share]  |
-|  Compartilhe este codigo para convidar.  |
-+------------------------------------------+
+Titulo: "[Nome do Grupo]"
+Corpo: "joao@email.com adicionou R$800,00 (Mercado)"
 ```
 
-Dois botoes lado a lado: o de copiar (ja existe) e o novo de compartilhar.
+### Seguranca
 
-### Mensagem de compartilhamento
+- A funcao valida o `INTERNAL_API_SECRET` igual ao `send-notification`
+- Nao precisa de JWT pois a autenticacao e feita via secret interno
+- O frontend envia o header `x-internal-secret` que ja esta configurado como secret no Supabase
 
-```text
-Entre no meu grupo "Viagem SP" no Gastinho Simples! Use o codigo: ABC123
-```
+### Observacoes
 
-### Detalhes tecnicos
-
-- O pacote `@capacitor/share` ja esta instalado (`^7.0.2`)
-- No ambiente nativo (Android/iOS), `Share.share()` abre o menu nativo automaticamente
-- No ambiente web, usa `navigator.share()` como fallback, e se nao disponivel, copia o texto e mostra toast
+- O disparo e fire-and-forget: nao bloqueia a UI do usuario
+- Se o usuario nao tiver FCM token (ex: nao usa app nativo), simplesmente ignora
+- Funciona apenas para despesas normais (nao recorrentes, por enquanto)
 - Nenhuma mudanca no banco de dados necessaria
+
