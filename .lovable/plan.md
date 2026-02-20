@@ -1,59 +1,24 @@
 
-
-## Plano: Notificacao push quando alguem adiciona despesa no grupo
+## Plano: Corrigir texto do dialog de exclusao de grupo
 
 ### O que sera feito
 
-Quando um membro adicionar uma despesa em um grupo compartilhado, todos os **outros** membros do grupo receberao uma notificacao push tipo: "Joao adicionou R$800,00 (Mercado) no grupo Viagem SP".
+Atualizar o texto da opcao "Mover para meus gastos pessoais" no dialog de exclusao de grupo para refletir que as despesas de **todos** os membros serao movidas para suas respectivas contas pessoais, nao apenas para a conta de quem esta excluindo.
 
-### Arquitetura
-
-A notificacao sera disparada pelo frontend apos inserir a despesa com sucesso. Uma nova edge function `notify-group-expense` recebe os dados da despesa e envia push para todos os membros do grupo, exceto quem adicionou.
-
-### Mudancas
+### Mudanca
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `supabase/functions/notify-group-expense/index.ts` | **Nova edge function** - Recebe `group_id`, `user_id` (quem adicionou), `description`, `amount`, `category_name` e `group_name`. Busca todos os membros do grupo (exceto o autor), busca seus FCM tokens e envia notificacao via a logica existente do `send-notification`. |
-| `supabase/config.toml` | Adicionar entrada `[functions.notify-group-expense]` com `verify_jwt = false` |
-| `src/pages/Index.tsx` | Na funcao `addExpense`, apos inserir com sucesso e quando `groupId` estiver definido, chamar `supabase.functions.invoke("notify-group-expense", ...)` de forma assincrona (fire-and-forget, sem bloquear o fluxo). |
+| `src/components/delete-group-dialog.tsx` | Alterar o texto da descricao da opcao `move_to_personal` |
 
-### Fluxo
+### De/Para
 
-1. Usuario adiciona despesa no grupo
-2. Despesa e inserida no banco com sucesso (fluxo atual)
-3. Frontend chama `notify-group-expense` em background (sem await bloqueante)
-4. Edge function busca membros do grupo (exceto o autor)
-5. Para cada membro, busca FCM tokens e envia push via Firebase FCM HTTP v1 API
-6. Membros recebem: "Joao adicionou R$800,00 (Mercado) no grupo Viagem SP"
+**Antes:**
+> "Todas as despesas e metas do grupo serao transferidas para sua conta pessoal"
 
-### Detalhes da Edge Function
+**Depois:**
+> "As despesas de cada membro serao movidas para a conta pessoal de cada um. As metas do grupo serao removidas."
 
-A edge function `notify-group-expense`:
-- Recebe: `{ group_id, user_id, description, amount, category_name, group_name }`
-- Usa `SUPABASE_SERVICE_ROLE_KEY` para buscar membros do grupo na tabela `shared_group_members`
-- Busca email do autor na tabela `auth.users` para usar o nome no push
-- Para cada membro (exceto autor), busca tokens em `user_fcm_tokens`
-- Reutiliza a mesma logica de autenticacao OAuth2 + FCM HTTP v1 do `send-notification`
-- Notificacao nao e critica: se falhar, nao afeta o fluxo do usuario
+### Detalhes tecnicos
 
-### Formato da notificacao
-
-```text
-Titulo: "[Nome do Grupo]"
-Corpo: "joao@email.com adicionou R$800,00 (Mercado)"
-```
-
-### Seguranca
-
-- A funcao valida o `INTERNAL_API_SECRET` igual ao `send-notification`
-- Nao precisa de JWT pois a autenticacao e feita via secret interno
-- O frontend envia o header `x-internal-secret` que ja esta configurado como secret no Supabase
-
-### Observacoes
-
-- O disparo e fire-and-forget: nao bloqueia a UI do usuario
-- Se o usuario nao tiver FCM token (ex: nao usa app nativo), simplesmente ignora
-- Funciona apenas para despesas normais (nao recorrentes, por enquanto)
-- Nenhuma mudanca no banco de dados necessaria
-
+Apenas uma linha de texto alterada no arquivo `src/components/delete-group-dialog.tsx`, linha 65.
