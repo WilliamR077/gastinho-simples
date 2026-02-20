@@ -1504,20 +1504,6 @@ export default function Index() {
           />
         </div>
 
-        {/* Category Summary */}
-        <div className="mb-8" data-tour="category-summary">
-          <CategorySummary
-            expenses={filteredExpenses}
-            recurringExpenses={filteredRecurringExpenses}
-            billingPeriod={filters.billingPeriod}
-            startDate={filters.startDate}
-            endDate={filters.endDate}
-            creditCardConfig={creditCardConfig || undefined}
-            onCategoryClick={handleCategoryFilter}
-            activeCategory={activeCategoryFilter || undefined}
-          />
-        </div>
-
         {/* Balance Summary - Entradas vs Saídas */}
         <div className="mb-4">
           <BalanceSummary 
@@ -1572,6 +1558,18 @@ export default function Index() {
           </TabsList>
 
           <TabsContent value="expenses">
+            <div className="mb-4" data-tour="category-summary">
+              <CategorySummary
+                expenses={filteredExpenses}
+                recurringExpenses={filteredRecurringExpenses}
+                billingPeriod={filters.billingPeriod}
+                startDate={filters.startDate}
+                endDate={filters.endDate}
+                creditCardConfig={creditCardConfig || undefined}
+                onCategoryClick={handleCategoryFilter}
+                activeCategory={activeCategoryFilter || undefined}
+              />
+            </div>
             <Tabs value={expenseSubTab} onValueChange={setExpenseSubTab}>
               <TabsList className="grid w-full grid-cols-2 mb-4 bg-muted/50 h-9">
                 <TabsTrigger value="monthly" className="text-sm data-[state=active]:bg-background">

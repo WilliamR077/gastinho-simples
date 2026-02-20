@@ -425,10 +425,29 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
     </DropdownMenu>
   );
 
+  const expenseGoals = goals.filter(g => !isIncomeGoal(g.type));
+  const incomeGoals = goals.filter(g => isIncomeGoal(g.type));
+
   return (
-    <div className="space-y-4">
-      {goals.map((goal) => 
-        isIncomeGoal(goal.type) ? renderIncomeGoal(goal) : renderExpenseGoal(goal)
+    <div className="space-y-6">
+      {expenseGoals.length > 0 && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <TrendingDown className="h-5 w-5 text-destructive" />
+            Metas de Gastos
+          </h3>
+          {expenseGoals.map((goal) => renderExpenseGoal(goal))}
+        </div>
+      )}
+
+      {incomeGoals.length > 0 && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-green-600 dark:text-green-400" />
+            Metas de Entradas
+          </h3>
+          {incomeGoals.map((goal) => renderIncomeGoal(goal))}
+        </div>
       )}
     </div>
   );
