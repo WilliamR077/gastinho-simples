@@ -1,21 +1,18 @@
 
 
-## Plano: Corrigir pagina de login
+## Plano: Trocar mensagem do footer por Romanos 11:36 (NVI)
 
-### Problemas identificados
+### Mudanca
 
-1. **Footer na pagina de login** - O footer esta aparecendo ao lado do card de login, quebrando o layout. Deve ser removido dessa pagina.
-2. **Nome errado** - O titulo mostra "AppGastos" em vez de "Gastinho Simples".
-3. **Falta o icone/logo** - A pagina de login nao tem o icone do sistema.
+| Arquivo | O que muda |
+|---------|------------|
+| `src/components/footer.tsx` | Substituir "Toda Honra e Gloria a Jesus Cristo" por o versiculo Romanos 11:36 na versao NVI |
 
-### Correcoes
+### Texto atual
+> *Toda Honra e Gloria a Jesus Cristo*
 
-| Arquivo | Mudanca |
-|---------|---------|
-| `src/pages/Auth.tsx` | Remover a importacao e o uso do `<Footer />` |
-| `src/pages/Auth.tsx` | Trocar "AppGastos" por "Gastinho Simples" no titulo |
-| `src/pages/Auth.tsx` | Adicionar a imagem do logo acima do titulo (usando `/lovable-uploads/06a1acc2-f553-41f0-8d87-32d25b4e425e.png`) |
-| `src/pages/Auth.tsx` | Trocar a descricao "Gerencie seus gastos de forma simples" por "Controle seus gastos de forma simples" para ficar consistente com o footer |
+### Novo texto
+> *"Pois dele, por ele e para ele sao todas as coisas. A ele seja a gloria para sempre! Amem."* -- Romanos 11:36
 
-Sao apenas alteracoes no arquivo `Auth.tsx`. As demais paginas permanecem com o footer normalmente.
+Apenas uma linha alterada no footer. Nenhum outro arquivo afetado.
 
