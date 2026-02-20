@@ -704,6 +704,24 @@ export default function Index() {
           : `${description} - ${installments}x de R$ ${(amount / installments).toFixed(2)}${contextLabel}`,
       });
 
+      // Notificar membros do grupo (fire-and-forget)
+      const groupId_ = data.sharedGroupId || (currentContext.type === 'group' ? currentContext.groupId : null);
+      if (groupId_) {
+        const selectedGroup_ = groups.find(g => g.id === groupId_);
+        const catName = categories.find(c => c.id === data.categoryId)?.name;
+        supabase.functions.invoke("notify-group-expense", {
+          body: {
+            group_id: groupId_,
+            user_id: user.id,
+            description: data.description,
+            amount: data.amount,
+            category_name: catName || categoryName,
+            group_name: selectedGroup_?.name || currentContext.groupName || "Grupo",
+          },
+          headers: { "x-internal-secret": import.meta.env.VITE_INTERNAL_API_SECRET || "" },
+        }).catch(err => console.warn("⚠️ Falha ao notificar grupo:", err));
+      }
+
       // Incrementar contador de despesas para controlar exibição de anúncios
       adMobService.incrementExpenseCount();
     } catch (error) {
