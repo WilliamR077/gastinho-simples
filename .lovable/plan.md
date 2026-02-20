@@ -1,43 +1,37 @@
 
 
-## Plano: Filtros com sub-abas (Despesas/Entradas) + Filtro de Data Personalizada
+## Plano: Reorganizar Metas com sub-abas e formulario melhorado
 
-### 1. Sub-abas dentro dos filtros
+### 1. Sub-abas na aba Metas
 
-Dentro da aba dobravel de filtros, adicionar duas sub-abas: **Despesas** e **Entradas**.
+Igual ao que ja existe em Despesas (Do Mes / Fixas) e Entradas (Do Mes / Fixas), a aba Metas tera duas sub-abas:
 
-- **Aba Despesas**: mostra os filtros atuais (descricao, valor min/max, forma de pagamento, cartao, fatura)
-- **Aba Entradas**: mostra apenas filtros relevantes para entradas (descricao, valor min/max)
+- **Metas de Despesa**: mostra apenas metas do tipo `monthly_total` e `category`
+- **Metas de Entrada**: mostra apenas metas do tipo `income_monthly_total` e `income_category`
 
-Metas nao precisam de aba propria -- os filtros de descricao e valor ja se aplicam automaticamente.
+### 2. Formulario de criacao com escolha inicial
 
-### 2. Filtro de Data Personalizada
-
-Adicionar um campo de intervalo de datas dentro dos filtros, acima das sub-abas. Quando preenchido, sobrescreve o periodo do MonthNavigator, permitindo filtrar por qualquer intervalo (ex: dia 10 a 20 de fevereiro).
-
-Ao limpar os filtros, a data volta ao mes selecionado no MonthNavigator.
-
-### 3. Layout dos filtros ao abrir
+Ao abrir o sheet de nova meta, antes do formulario, mostrar duas opcoes claras com textos explicativos:
 
 ```text
 +------------------------------------+
-| Filtros                       [v]  |
+| Definir Nova Meta                  |
 +------------------------------------+
-| Data Inicio: [__/__/____]          |
-| Data Fim:    [__/__/____]          |
 |                                    |
-| [Despesas] [Entradas]              |
+| [Meta de Despesa]                  |
+|  Defina um limite maximo de        |
+|  gastos para controlar seus        |
+|  gastos mensais ou por categoria.  |
 |                                    |
-| Aba Despesas:                      |
-|   Descricao | Valor Min | Valor Max|
-|   Pagamento | Cartao | Fatura     |
+| [Meta de Entrada]                  |
+|  Defina uma meta de ganhos para    |
+|  acompanhar suas receitas          |
+|  mensais ou por categoria.         |
 |                                    |
-| Aba Entradas:                      |
-|   Descricao | Valor Min | Valor Max|
-|                                    |
-| [Aplicar Filtros]  [Limpar]        |
 +------------------------------------+
 ```
+
+Ao clicar em uma das opcoes, o formulario aparece com os campos relevantes (tipo + categoria + valor).
 
 ---
 
@@ -45,14 +39,15 @@ Ao limpar os filtros, a data volta ao mes selecionado no MonthNavigator.
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `src/components/expense-filters.tsx` | (1) Adicionar `Tabs` com duas abas: "Despesas" e "Entradas". Na aba Despesas, manter todos os filtros atuais. Na aba Entradas, mostrar apenas descricao, valor min e valor max. (2) Acima das tabs, adicionar dois campos de data (Data Inicio e Data Fim) usando `Popover` + `Calendar` (date picker). Esses campos permitem sobrescrever o `startDate` e `endDate` dos filtros. (3) Renomear a interface para `GlobalFilters` ou manter `ExpenseFilters` e adicionar um campo `filterTab` para saber qual aba esta ativa. (4) Adicionar prop `activeFilterTab` e `onFilterTabChange` para que o `Index.tsx` saiba qual aba de filtro esta ativa e aplique os filtros corretos. |
-| `src/pages/Index.tsx` | (1) Adicionar estado `filterTab` para rastrear se o usuario esta filtrando despesas ou entradas. (2) Quando `filterTab === 'incomes'`, aplicar os filtros de descricao/valor apenas nas entradas. Quando `filterTab === 'expenses'`, aplicar nos despesas (comportamento atual). (3) Ajustar logica do `clearFilters` para restaurar as datas do MonthNavigator. |
+| `src/components/budget-goal-form-sheet.tsx` | (1) Adicionar estado `goalScope` com valores `null`, `'expense'` ou `'income'`. (2) Quando `goalScope === null`, mostrar duas cards clicaveis com icones e descricoes. (3) Quando selecionado, mostrar o formulario filtrado: se `expense`, mostrar opcoes `monthly_total` e `category`; se `income`, mostrar `income_monthly_total` e `income_category`. (4) Adicionar botao "Voltar" para trocar a escolha. |
+| `src/pages/Index.tsx` | (1) Adicionar estado `goalSubTab` com valores `'expense'` e `'income'`. (2) Dentro de `TabsContent value="goals"`, adicionar sub-tabs com `TabsList` de 2 colunas. (3) Filtrar `budgetGoals` em duas listas: `expenseGoals` (tipos sem prefixo `income_`) e `incomeGoals` (tipos com prefixo `income_`). (4) Passar a lista filtrada correspondente para `BudgetProgress` em cada sub-tab. |
+| `src/components/budget-progress.tsx` | Nenhuma mudanca necessaria -- ja renderiza corretamente metas de despesa e entrada separadamente. |
 
 ### Resumo
 
-- 2 arquivos modificados (`expense-filters.tsx`, `Index.tsx`)
+- 2 arquivos modificados (`budget-goal-form-sheet.tsx`, `Index.tsx`)
 - Nenhum arquivo novo
 - Nenhuma mudanca no banco de dados
-- Filtro de data personalizada permite ver periodos customizados
-- Sub-abas separam filtros de despesas e entradas de forma clara
+- Formulario com escolha visual clara entre meta de despesa e meta de entrada
+- Sub-abas na aba Metas separando os dois tipos
 
