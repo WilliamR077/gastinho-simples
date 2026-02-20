@@ -1,53 +1,46 @@
 
-
-## Plano: Resumo de gastos por membro no grupo
+## Plano: Botao de Compartilhar codigo de convite via Share nativo
 
 ### O que sera feito
 
-Criar um novo componente `GroupMemberSummary` que aparece **apenas quando o usuario esta no contexto de um grupo**. Ele mostra quanto cada membro gastou no periodo selecionado, com o email do membro e o total formatado em moeda.
-
-### Onde aparece
-
-Na pagina Index.tsx, logo abaixo do `BalanceSummary` e acima do `ExpenseSummary`, visivel apenas quando `currentContext.type === 'group'`.
+Adicionar um botao "Compartilhar" ao lado do botao de copiar no `GroupManagementSheet`. Esse botao usara a API `navigator.share()` (Web Share API / Capacitor Share) para abrir o menu nativo de compartilhamento do celular com uma mensagem pre-formatada.
 
 ### Como funciona
 
-1. Usar os dados ja carregados: `filteredExpenses` (despesas do periodo) + `recurringExpenses` ativas + `groupMembers` (ja carregados com email via RPC)
-2. Agrupar despesas por `user_id`, somar valores
-3. Cruzar com `groupMembers` para mostrar o email de cada membro
-4. Incluir tambem despesas recorrentes ativas de cada membro
+1. Ao clicar no botao "Compartilhar", o app monta uma mensagem como:
+   `Entre no meu grupo "Viagem SP" no Gastinho Simples! Codigo: ABC123`
+2. Chama `Share.share()` do `@capacitor/share` (ja instalado no projeto) que abre o share nativo do celular (WhatsApp, Telegram, SMS, etc.)
+3. Como fallback para navegadores web, usa `navigator.share()` se disponivel, senao copia para a area de transferencia
 
-### Detalhes tecnicos
+### Mudancas
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `src/components/group-member-summary.tsx` | **Novo componente** - Recebe `expenses`, `recurringExpenses` e `groupMembers` como props. Agrupa por `user_id`, exibe card com avatar colorido, email truncado e total. Respeita o toggle de visibilidade de valores. |
-| `src/pages/Index.tsx` | Importar e renderizar `GroupMemberSummary` entre `BalanceSummary` e `ExpenseSummary`, condicionado a `currentContext.type === 'group'`. Passar `filteredExpenses`, `recurringExpenses` filtradas e `groupMembers`. |
+| `src/components/group-management-sheet.tsx` | Adicionar import do `Share` do `@capacitor/share`. Criar funcao `handleShareCode` que monta a mensagem e chama `Share.share({ text, dialogTitle })`. Adicionar botao com icone `Share2` ao lado do botao de copiar. Fallback para `navigator.share()` ou copiar. |
 
-### Visual do componente
+### Visual
 
-Um card compacto com lista horizontal ou vertical dos membros:
+A area do codigo de convite ficara assim:
 
 ```text
 +------------------------------------------+
-|  Gastos por Membro                       |
-|  ----------------------------------------|
-|  🔵 joao@email.com         R$ 860,00    |
-|  🟢 maria@email.com        R$ 330,00    |
+|  Codigo de Convite                       |
+|  [   A B C 1 2 3   ]  [Copiar] [Share]  |
+|  Compartilhe este codigo para convidar.  |
 +------------------------------------------+
 ```
 
-- Cada membro tem um circulo colorido gerado a partir do indice
-- Email truncado para caber em telas pequenas
-- Valores respeitam o toggle "ocultar valores" (mostra `R$ ****` quando oculto)
-- Ordenado do maior gasto para o menor
+Dois botoes lado a lado: o de copiar (ja existe) e o novo de compartilhar.
 
-### Dados necessarios
+### Mensagem de compartilhamento
 
-Todos os dados ja estao disponiveis no Index.tsx:
-- `filteredExpenses` - despesas do periodo filtrado (ja filtradas por grupo via `loadExpenses`)
-- `recurringExpenses` - despesas recorrentes (ja filtradas por grupo)
-- `groupMembers` - membros do grupo com email (ja carregados via `getGroupMembers` RPC)
+```text
+Entre no meu grupo "Viagem SP" no Gastinho Simples! Use o codigo: ABC123
+```
 
-Nao precisa de mudancas no banco de dados.
+### Detalhes tecnicos
 
+- O pacote `@capacitor/share` ja esta instalado (`^7.0.2`)
+- No ambiente nativo (Android/iOS), `Share.share()` abre o menu nativo automaticamente
+- No ambiente web, usa `navigator.share()` como fallback, e se nao disponivel, copia o texto e mostra toast
+- Nenhuma mudanca no banco de dados necessaria
