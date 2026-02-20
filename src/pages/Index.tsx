@@ -591,6 +591,10 @@ export default function Index() {
   const addExpense = async (data: ExpenseFormData) => {
     if (!user) return;
 
+    // Validar se categoryId é UUID válido
+    const isUUID = (value: string) =>
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+
     try {
       const { description, amount, paymentMethod, expenseDate, installments = 1, categoryId, cardId, sharedGroupId } = data;
 
@@ -605,10 +609,14 @@ export default function Index() {
       // Usar sharedGroupId do formulário (permite escolher destino diferente do contexto atual)
       const groupId = sharedGroupId || null;
 
+      // Determinar se categoryId é UUID ou enum string
+      const categoryIsUUID = categoryId ? isUUID(categoryId) : false;
+      const categoryEnumValue = categoryId && !categoryIsUUID ? categoryId as ExpenseCategory : undefined;
+
       // Buscar dados desnormalizados para exibição em grupos
-      const selectedCategory = categoryId ? categories.find(c => c.id === categoryId) : null;
+      const selectedCategory = categoryIsUUID ? categories.find(c => c.id === categoryId) : null;
       const selectedCard = cardId ? cards.find(c => c.id === cardId) : null;
-      const categoryName = selectedCategory?.name || 'Outros';
+      const categoryName = selectedCategory?.name || (categoryEnumValue ? categoryLabels[categoryEnumValue] : 'Outros');
       const categoryIcon = selectedCategory?.icon || '📦';
       const cardName = selectedCard?.name || null;
 
@@ -624,7 +632,8 @@ export default function Index() {
           expense_date: formatDateLocal(expenseDate),
           total_installments: 1,
           installment_number: 1,
-          ...(categoryId && { category_id: categoryId }),
+          ...(categoryIsUUID && { category_id: categoryId }),
+          ...(categoryEnumValue && { category: categoryEnumValue }),
           ...(cardId && { card_id: cardId }),
           ...(groupId && { shared_group_id: groupId }),
           // Campos desnormalizados para visualização em grupos
@@ -660,7 +669,8 @@ export default function Index() {
             total_installments: installments,
             installment_number: i,
             installment_group_id: installmentGroupId,
-            ...(categoryId && { category_id: categoryId }),
+            ...(categoryIsUUID && { category_id: categoryId }),
+            ...(categoryEnumValue && { category: categoryEnumValue }),
             ...(cardId && { card_id: cardId }),
             ...(groupId && { shared_group_id: groupId }),
             // Campos desnormalizados para visualização em grupos

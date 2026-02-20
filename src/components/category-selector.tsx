@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -6,6 +6,7 @@ import { Settings, Loader2 } from "lucide-react";
 import { useCategories } from "@/hooks/use-categories";
 import { CategoryManager } from "@/components/category-manager";
 import { categoryLabels, categoryIcons, ExpenseCategory } from "@/types/expense";
+import { supabase } from "@/integrations/supabase/client";
 
 interface CategorySelectorProps {
   value: string;
@@ -37,6 +38,25 @@ export function CategorySelector({
       refresh();
     }
   };
+
+  // Auto-inicializar categorias quando o usuário não tem nenhuma
+  useEffect(() => {
+    const initCategories = async () => {
+      if (!loading && activeCategories.length === 0) {
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            await supabase.rpc("initialize_user_categories", { user_id_param: user.id });
+            await supabase.rpc("migrate_expense_categories", { user_id_param: user.id });
+            refresh();
+          }
+        } catch (error) {
+          console.error("Erro ao inicializar categorias:", error);
+        }
+      }
+    };
+    initCategories();
+  }, [loading, activeCategories.length, refresh]);
 
   // Se ainda está carregando ou não tem categorias personalizadas, usar as estáticas
   const useStaticCategories = loading || activeCategories.length === 0;
