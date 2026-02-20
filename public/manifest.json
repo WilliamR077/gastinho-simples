@@ -1,0 +1,16 @@
+{
+  "name": "Gastinho Simples",
+  "short_name": "Gastinho",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1a2e",
+  "theme_color": "#7c3aed",
+  "icons": [
+    {
+      "src": "/Gastinho_Simples_icone.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
