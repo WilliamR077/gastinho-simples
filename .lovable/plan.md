@@ -1,65 +1,74 @@
 
-## Plano: Metas de Entrada + Entradas por Categoria
 
-Duas melhorias para equiparar o sistema de entradas ao de despesas:
+## Plano: Reorganizar layout da pagina inicial
 
-### 1. Metas de Entrada (Income Goals)
+Tres mudancas para deixar a pagina mais limpa e organizada:
 
-Permitir que o usuario defina metas de ganho (ex: "quero ganhar R$4.000 esse mes com Uber") e acompanhe o progresso conforme adiciona entradas.
+### 1. Mover "Gastos por Categoria" para dentro da aba Despesas
 
-**Banco de dados:**
-- Adicionar novos valores ao enum `budget_goal_type`: `income_monthly_total` e `income_category`
-- A tabela `budget_goals` ja suporta isso sem alteracoes estruturais (usa `type` + `category` + `limit_amount`)
+Atualmente o `CategorySummary` fica acima das tabs, visivel sempre. Sera movido para dentro da aba "Despesas", logo acima das sub-abas "Do Mes" / "Fixas" -- mesma posicao que o `IncomeCategorySummary` ja ocupa na aba "Entradas".
 
-**Componentes modificados:**
+O filtro por categoria continuara funcionando tanto para despesas do mes quanto para fixas.
 
-| Arquivo | Mudanca |
-|---------|---------|
-| `supabase/migrations/` | Migrar enum `budget_goal_type` para incluir `income_monthly_total` e `income_category` |
-| `src/components/budget-goal-form-sheet.tsx` | Adicionar opcoes de meta de entrada (Total mensal de entradas, Por categoria de entrada). Mostrar categorias de entrada (`incomeCategoryLabels`) quando tipo for `income_category` |
-| `src/components/budget-goal-edit-dialog.tsx` | Mesma logica: suportar os novos tipos de meta no formulario de edicao |
-| `src/components/budget-progress.tsx` | Calcular progresso usando `incomes` + `recurringIncomes` em vez de `expenses` quando o tipo for `income_*`. Mudar visual: em vez de "Gasto", mostrar "Ganho". Quando atingir 100%, mostrar mensagem de parabens em vez de alerta |
-| `src/pages/Index.tsx` | Passar `incomes` e `recurringIncomes` como props para `BudgetProgress` |
-| `supabase/functions/check-budget-goals/index.ts` | Adicionar logica para metas de entrada: buscar `incomes` e `recurring_incomes` quando o tipo for `income_*`. Enviar notificacao de parabens quando atingir a meta |
+### 2. Mover Filtros para acima das tabs
 
-**Comportamento das metas de entrada:**
-- Barra de progresso verde (em vez de vermelha)
-- Ao atingir 80%: "Quase la! Voce ja atingiu 80% da sua meta"
-- Ao atingir 100%: "Parabens! Voce bateu sua meta de R$4.000!"
-- Ao ultrapassar: "Incrivel! Voce superou sua meta em R$500!"
+O componente `ExpenseFilters` sera movido para acima das tres abas (Despesas, Entradas, Metas), ficando logo apos o MonthNavigator. A ideia eh que o filtro possa ser aplicado globalmente. Por enquanto ele ja filtra despesas; futuramente pode ser expandido para entradas e metas.
 
-### 2. Entradas por Categoria (Income Category Summary)
+### 3. Separar metas de despesas e metas de entradas na aba Metas
 
-Componente similar ao `CategorySummary` existente, mas para entradas.
+Na aba "Metas", criar duas secoes visuais separadas:
+- **Metas de Gastos** - metas do tipo `monthly_total` e `category`
+- **Metas de Entradas** - metas do tipo `income_monthly_total` e `income_category`
 
-| Arquivo | Mudanca |
-|---------|---------|
-| `src/components/income-category-summary.tsx` | **Novo componente** - Similar ao `CategorySummary`, mas usando `incomeCategoryLabels` e `incomeCategoryIcons`. Mostra totais por categoria de entrada com barras de progresso |
-| `src/pages/Index.tsx` | Adicionar `IncomeCategorySummary` acima da lista de entradas na tab "Entradas", similar a como `CategorySummary` aparece para despesas |
+Cada secao tera seu proprio titulo/icone para facilitar a visualizacao.
+
+---
 
 ### Detalhes tecnicos
 
-**Migracao SQL:**
-```sql
-ALTER TYPE budget_goal_type ADD VALUE 'income_monthly_total';
-ALTER TYPE budget_goal_type ADD VALUE 'income_category';
+| Arquivo | Mudanca |
+|---------|---------|
+| `src/pages/Index.tsx` | (1) Remover `CategorySummary` de antes das tabs (linhas 1507-1519) e colocar dentro de `TabsContent value="expenses"`, acima das sub-abas. (2) Os filtros (`ExpenseFilters`) ja estao acima das tabs -- manter na mesma posicao (linhas 1496-1505), apenas remover o `CategorySummary` que ficava abaixo. (3) Na aba "goals", separar as metas passando filtros para `BudgetProgress` ou criando dois blocos separados. |
+| `src/components/budget-progress.tsx` | Adicionar prop opcional `filterType` ou separar internamente as metas em dois grupos: despesas (`monthly_total`, `category`) e entradas (`income_monthly_total`, `income_category`), renderizando com titulos separados. |
+
+### Resultado visual
+
+```text
++---------------------------+
+| Header + Botoes           |
++---------------------------+
+| Context Selector          |
++---------------------------+
+| Navegador de Mes          |
++---------------------------+
+| Filtros (colapsavel)      |
++---------------------------+
+| Balance Summary           |
++---------------------------+
+| [Despesas] [Entradas] [Metas] |
++---------------------------+
+
+Aba Despesas:
+  - Gastos por Categoria
+  - [Do Mes] [Fixas]
+  - Lista de despesas
+
+Aba Entradas:
+  - Entradas por Categoria
+  - [Do Mes] [Fixas]
+  - Lista de entradas
+
+Aba Metas:
+  - Metas de Gastos (titulo)
+  - Cards de metas de despesa
+  - Metas de Entradas (titulo)
+  - Cards de metas de entrada
 ```
 
-**Logica de progresso para metas de entrada no `BudgetProgress`:**
-- Se `goal.type` comecar com `income_`, calcular usando entradas em vez de despesas
-- Cores invertidas: verde quando progresso alto (bom!), em vez de vermelho
-- Labels: "Ganho" em vez de "Gasto", "Falta" em vez de "Restam", "Meta atingida!" em vez de "Meta estourada!"
+### Resumo
 
-**`IncomeCategorySummary`:**
-- Reutiliza a mesma estrutura visual do `CategorySummary`
-- Usa `incomeCategoryLabels` e `incomeCategoryIcons` do `src/types/income.ts`
-- Cores em tons de verde em vez de gradiente primario
-- Titulo: "Entradas por Categoria"
+- 2 arquivos modificados (`Index.tsx`, `budget-progress.tsx`)
+- Nenhum arquivo novo
+- Nenhuma mudanca no banco de dados
+- Apenas reorganizacao visual de componentes existentes
 
-### Resumo das mudancas
-
-- 1 migracao SQL (enum)
-- 1 novo componente (`income-category-summary.tsx`)
-- 4 componentes modificados (budget-goal-form-sheet, budget-goal-edit-dialog, budget-progress, Index)
-- 1 edge function atualizada (check-budget-goals)
-- Nenhuma nova tabela necessaria
