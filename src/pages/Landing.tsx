@@ -12,7 +12,9 @@ import {
   ArrowRight,
   Check,
   Sparkles,
+  AlertTriangle,
 } from "lucide-react";
+import { SUBSCRIPTION_FEATURES } from "@/types/subscription";
 
 const features = [
   {
@@ -47,54 +49,57 @@ const features = [
   },
 ];
 
-const plans = [
-  {
-    name: "Gratuito",
-    price: "R$ 0",
-    period: "/mês",
-    description: "Para quem está começando",
-    features: [
-      "Controle de despesas e entradas",
-      "Categorias personalizadas",
-      "1 grupo compartilhado",
-      "Relatórios básicos",
-    ],
-    highlight: false,
-  },
-  {
-    name: "Premium",
-    price: "R$ 9,90",
-    period: "/mês",
-    description: "Para controle financeiro completo",
-    features: [
-      "Tudo do plano gratuito",
-      "Sem anúncios",
-      "Grupos ilimitados",
-      "Relatórios avançados",
-      "Exportação PDF",
-      "Metas de gastos",
-    ],
-    highlight: true,
-  },
-  {
-    name: "Sem Anúncios",
-    price: "R$ 4,90",
-    period: "/mês",
-    description: "Experiência limpa",
-    features: [
-      "Tudo do plano gratuito",
-      "Sem anúncios",
-      "Navegação mais rápida",
-    ],
-    highlight: false,
-  },
-];
+const PLAN_TIERS = ["free", "no_ads", "premium"] as const;
+
+const planMeta = {
+  free: { description: "Para quem está começando", highlight: false },
+  no_ads: { description: "Experiência limpa", highlight: false },
+  premium: { description: "Para controle financeiro completo", highlight: true },
+} as const;
+
+const renderPlanFeatures = (planTier: keyof typeof SUBSCRIPTION_FEATURES) => {
+  const f = SUBSCRIPTION_FEATURES[planTier];
+  const items: { label: string; warn?: boolean }[] = [
+    { label: f.cards === Infinity ? "Cartões ilimitados" : `Até ${f.cards} cartões` },
+    { label: f.goals === Infinity ? "Metas ilimitadas" : `Até ${f.goals} meta` },
+    { label: f.reports ? "Relatórios: todos os períodos" : "Relatórios: mês atual" },
+  ];
+  if (f.exportPdf) items.push({ label: "Exportar PDF/Excel" });
+  items.push({ label: f.groups > 0 ? `Criar até ${f.groups} grupos` : "Participar de grupos" });
+  items.push({ label: f.ads ? "Com anúncios" : "Sem anúncios", warn: f.ads });
+  return items;
+};
 
 export default function Landing() {
   const navigate = useNavigate();
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6 py-3">
+        <div className="mx-auto flex max-w-5xl items-center justify-between">
+          <button onClick={() => navigate("/landing")} className="flex items-center gap-2.5">
+            <img
+              src="/lovable-uploads/06a1acc2-f553-41f0-8d87-32d25b4e425e.png"
+              alt="Gastinho Simples"
+              className="h-8 w-8 rounded-lg"
+            />
+            <span className="text-base font-semibold text-foreground">Gastinho Simples</span>
+          </button>
+          <nav className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" onClick={() => navigate("/about")}>
+              Sobre
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => navigate("/contact")}>
+              Contato
+            </Button>
+            <Button size="sm" onClick={() => navigate("/auth")}>
+              Entrar
+            </Button>
+          </nav>
+        </div>
+      </header>
+
       {/* Hero */}
       <section className="relative overflow-hidden px-6 py-20 text-center">
         <div className="absolute inset-0 bg-gradient-to-b from-primary/5 to-transparent" />
@@ -160,49 +165,63 @@ export default function Landing() {
           </div>
 
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {plans.map((plan) => (
-              <Card
-                key={plan.name}
-                className={`relative transition-shadow hover:shadow-md ${
-                  plan.highlight
-                    ? "border-primary shadow-md ring-1 ring-primary/20"
-                    : "border-border/50"
-                }`}
-              >
-                {plan.highlight && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground">
-                      <Sparkles className="h-3 w-3" /> Mais popular
-                    </span>
-                  </div>
-                )}
-                <CardContent className="flex flex-col gap-4 p-6 pt-8">
-                  <div>
-                    <h3 className="text-lg font-semibold text-foreground">{plan.name}</h3>
-                    <p className="text-sm text-muted-foreground">{plan.description}</p>
-                  </div>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-bold text-foreground">{plan.price}</span>
-                    <span className="text-sm text-muted-foreground">{plan.period}</span>
-                  </div>
-                  <ul className="space-y-2">
-                    {plan.features.map((f) => (
-                      <li key={f} className="flex items-start gap-2 text-sm text-muted-foreground">
-                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-                  <Button
-                    variant={plan.highlight ? "default" : "outline"}
-                    className="mt-auto w-full"
-                    onClick={() => navigate("/auth")}
-                  >
-                    Começar
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
+            {PLAN_TIERS.map((tierKey) => {
+              const plan = SUBSCRIPTION_FEATURES[tierKey];
+              const meta = planMeta[tierKey];
+              const items = renderPlanFeatures(tierKey);
+
+              return (
+                <Card
+                  key={tierKey}
+                  className={`relative transition-shadow hover:shadow-md ${
+                    meta.highlight
+                      ? "border-primary shadow-md ring-1 ring-primary/20"
+                      : "border-border/50"
+                  }`}
+                >
+                  {meta.highlight && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground">
+                        <Sparkles className="h-3 w-3" /> Mais popular
+                      </span>
+                    </div>
+                  )}
+                  <CardContent className="flex flex-col gap-4 p-6 pt-8">
+                    <div>
+                      <h3 className="text-lg font-semibold text-foreground">{plan.name}</h3>
+                      <p className="text-sm text-muted-foreground">{meta.description}</p>
+                    </div>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-3xl font-bold text-foreground">{plan.price.split("/")[0]}</span>
+                      {plan.price.includes("/") && (
+                        <span className="text-sm text-muted-foreground">/{plan.price.split("/")[1]}</span>
+                      )}
+                    </div>
+                    <ul className="space-y-2">
+                      {items.map((item) => (
+                        <li key={item.label} className="flex items-start gap-2 text-sm">
+                          {item.warn ? (
+                            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                          ) : (
+                            <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                          )}
+                          <span className={item.warn ? "text-amber-500" : "text-muted-foreground"}>
+                            {item.label}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    <Button
+                      variant={meta.highlight ? "default" : "outline"}
+                      className="mt-auto w-full"
+                      onClick={() => navigate("/auth")}
+                    >
+                      Começar
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </div>
       </section>
@@ -222,7 +241,7 @@ export default function Landing() {
         </div>
       </section>
 
-      <Footer />
+      <Footer isAuthenticated={false} />
     </div>
   );
 }

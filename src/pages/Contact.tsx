@@ -202,7 +202,7 @@ export default function Contact() {
         </DialogContent>
       </Dialog>
 
-      <Footer />
+      <Footer isAuthenticated={false} />
     </div>
   );
 }
