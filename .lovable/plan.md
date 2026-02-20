@@ -1,53 +1,51 @@
 
+## Corrigir erro ao adicionar meta de entrada
 
-## Plano: Reorganizar Metas com sub-abas e formulario melhorado
+### Problema
+O banco de dados tem uma constraint `valid_category_for_type` que so permite dois tipos: `monthly_total` (sem categoria) e `category` (com categoria). Os novos tipos `income_monthly_total` e `income_category` nao estao incluidos nessa regra, causando o erro.
 
-### 1. Sub-abas na aba Metas
-
-Igual ao que ja existe em Despesas (Do Mes / Fixas) e Entradas (Do Mes / Fixas), a aba Metas tera duas sub-abas:
-
-- **Metas de Despesa**: mostra apenas metas do tipo `monthly_total` e `category`
-- **Metas de Entrada**: mostra apenas metas do tipo `income_monthly_total` e `income_category`
-
-### 2. Formulario de criacao com escolha inicial
-
-Ao abrir o sheet de nova meta, antes do formulario, mostrar duas opcoes claras com textos explicativos:
-
-```text
-+------------------------------------+
-| Definir Nova Meta                  |
-+------------------------------------+
-|                                    |
-| [Meta de Despesa]                  |
-|  Defina um limite maximo de        |
-|  gastos para controlar seus        |
-|  gastos mensais ou por categoria.  |
-|                                    |
-| [Meta de Entrada]                  |
-|  Defina uma meta de ganhos para    |
-|  acompanhar suas receitas          |
-|  mensais ou por categoria.         |
-|                                    |
-+------------------------------------+
+### Constraint atual
+```sql
+CHECK (
+  (type = 'monthly_total' AND category IS NULL) OR
+  (type = 'category' AND category IS NOT NULL)
+)
 ```
 
-Ao clicar em uma das opcoes, o formulario aparece com os campos relevantes (tipo + categoria + valor).
+### Solucao
+
+**1. Atualizar a constraint no banco de dados (migracao SQL)**
+
+Remover a constraint antiga e criar uma nova que inclui os 4 tipos:
+
+```sql
+ALTER TABLE budget_goals DROP CONSTRAINT valid_category_for_type;
+ALTER TABLE budget_goals ADD CONSTRAINT valid_category_for_type CHECK (
+  (type = 'monthly_total' AND category IS NULL) OR
+  (type = 'category' AND category IS NOT NULL) OR
+  (type = 'income_monthly_total' AND category IS NULL) OR
+  (type = 'income_category' AND category IS NOT NULL)
+);
+```
+
+**2. Corrigir mensagem de sucesso/erro no Index.tsx**
+
+Atualmente a mensagem diz "meta de gastos" mesmo para metas de entrada. Corrigir para mostrar a mensagem correta dependendo do tipo:
+- `income_*` -> "meta de entradas"
+- outros -> "meta de gastos"
 
 ---
 
 ### Detalhes tecnicos
 
-| Arquivo | Mudanca |
-|---------|---------|
-| `src/components/budget-goal-form-sheet.tsx` | (1) Adicionar estado `goalScope` com valores `null`, `'expense'` ou `'income'`. (2) Quando `goalScope === null`, mostrar duas cards clicaveis com icones e descricoes. (3) Quando selecionado, mostrar o formulario filtrado: se `expense`, mostrar opcoes `monthly_total` e `category`; se `income`, mostrar `income_monthly_total` e `income_category`. (4) Adicionar botao "Voltar" para trocar a escolha. |
-| `src/pages/Index.tsx` | (1) Adicionar estado `goalSubTab` com valores `'expense'` e `'income'`. (2) Dentro de `TabsContent value="goals"`, adicionar sub-tabs com `TabsList` de 2 colunas. (3) Filtrar `budgetGoals` em duas listas: `expenseGoals` (tipos sem prefixo `income_`) e `incomeGoals` (tipos com prefixo `income_`). (4) Passar a lista filtrada correspondente para `BudgetProgress` em cada sub-tab. |
-| `src/components/budget-progress.tsx` | Nenhuma mudanca necessaria -- ja renderiza corretamente metas de despesa e entrada separadamente. |
+| Arquivo / Recurso | Mudanca |
+|---|---|
+| Migracao SQL | Atualizar constraint `valid_category_for_type` para incluir `income_monthly_total` e `income_category` |
+| `src/pages/Index.tsx` | Corrigir mensagens de toast na funcao `addBudgetGoal` para diferenciar entre meta de gastos e meta de entradas |
 
 ### Resumo
 
-- 2 arquivos modificados (`budget-goal-form-sheet.tsx`, `Index.tsx`)
-- Nenhum arquivo novo
-- Nenhuma mudanca no banco de dados
-- Formulario com escolha visual clara entre meta de despesa e meta de entrada
-- Sub-abas na aba Metas separando os dois tipos
-
+- 1 migracao SQL
+- 1 arquivo modificado (`Index.tsx`)
+- Corrige o erro que impede criar metas de entrada
+- Corrige mensagens para refletir o tipo correto de meta
