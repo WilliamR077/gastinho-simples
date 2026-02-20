@@ -1,20 +1,35 @@
 import { useNavigate } from "react-router-dom";
 import { Separator } from "@/components/ui/separator";
 
-export const Footer = () => {
+interface FooterProps {
+  isAuthenticated?: boolean;
+}
+
+export const Footer = ({ isAuthenticated = true }: FooterProps) => {
   const navigate = useNavigate();
   const currentYear = new Date().getFullYear();
 
-  const quickLinks = [
+  const authenticatedQuickLinks = [
     { label: "Início", path: "/" },
     { label: "Relatórios", path: "/reports" },
     { label: "Cartões", path: "/cards" },
   ];
 
-  const accountLinks = [
+  const authenticatedAccountLinks = [
     { label: "Minha Conta", path: "/account" },
     { label: "Assinatura", path: "/subscription" },
     { label: "Configurações", path: "/settings" },
+  ];
+
+  const visitorQuickLinks = [
+    { label: "Início", path: "/landing" },
+    { label: "Sobre", path: "/about" },
+    { label: "Contato", path: "/contact" },
+  ];
+
+  const visitorMoreLinks = [
+    { label: "Política de Privacidade", path: "/privacy" },
+    { label: "Criar Conta", path: "/auth" },
   ];
 
   return (
@@ -34,53 +49,67 @@ export const Footer = () => {
         </div>
 
         {/* Links */}
-        <div className="grid grid-cols-2 gap-6 sm:grid-cols-3">
-          <div className="space-y-2">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Links Rápidos</h4>
-            {quickLinks.map((link) => (
-              <button
-                key={link.path}
-                onClick={() => navigate(link.path)}
-                className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
-              >
-                {link.label}
-              </button>
-            ))}
+        {isAuthenticated ? (
+          <div className="grid grid-cols-2 gap-6 sm:grid-cols-3">
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Links Rápidos</h4>
+              {authenticatedQuickLinks.map((link) => (
+                <button
+                  key={link.path}
+                  onClick={() => navigate(link.path)}
+                  className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  {link.label}
+                </button>
+              ))}
+            </div>
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Conta</h4>
+              {authenticatedAccountLinks.map((link) => (
+                <button
+                  key={link.path}
+                  onClick={() => navigate(link.path)}
+                  className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  {link.label}
+                </button>
+              ))}
+            </div>
+            <div className="col-span-2 space-y-2 sm:col-span-1">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Mais</h4>
+              <button onClick={() => navigate("/about")} className="block text-sm text-muted-foreground transition-colors hover:text-foreground">Sobre</button>
+              <button onClick={() => navigate("/contact")} className="block text-sm text-muted-foreground transition-colors hover:text-foreground">Contato</button>
+              <button onClick={() => navigate("/privacy")} className="block text-sm text-muted-foreground transition-colors hover:text-foreground">Política de Privacidade</button>
+            </div>
           </div>
-          <div className="space-y-2">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Conta</h4>
-            {accountLinks.map((link) => (
-              <button
-                key={link.path}
-                onClick={() => navigate(link.path)}
-                className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
-              >
-                {link.label}
-              </button>
-            ))}
+        ) : (
+          <div className="grid grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Navegação</h4>
+              {visitorQuickLinks.map((link) => (
+                <button
+                  key={link.path}
+                  onClick={() => navigate(link.path)}
+                  className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  {link.label}
+                </button>
+              ))}
+            </div>
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Mais</h4>
+              {visitorMoreLinks.map((link) => (
+                <button
+                  key={link.path}
+                  onClick={() => navigate(link.path)}
+                  className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  {link.label}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="col-span-2 space-y-2 sm:col-span-1">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Mais</h4>
-            <button
-              onClick={() => navigate("/about")}
-              className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
-            >
-              Sobre
-            </button>
-            <button
-              onClick={() => navigate("/contact")}
-              className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
-            >
-              Contato
-            </button>
-            <button
-              onClick={() => navigate("/privacy")}
-              className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
-            >
-              Política de Privacidade
-            </button>
-          </div>
-        </div>
+        )}
 
         <Separator />
 

@@ -146,7 +146,7 @@ export default function About() {
         </div>
       </section>
 
-      <Footer />
+      <Footer isAuthenticated={false} />
     </div>
   );
 }
