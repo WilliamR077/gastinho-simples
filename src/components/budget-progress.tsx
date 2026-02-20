@@ -84,9 +84,12 @@ interface BudgetProgressProps {
   selectedMonth: Date;
   onDelete: (id: string) => void;
   onEdit: (goal: BudgetGoal) => void;
+  descriptionFilter?: string;
+  minAmountFilter?: number;
+  maxAmountFilter?: number;
 }
 
-export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, recurringIncomes, selectedMonth, onDelete, onEdit }: BudgetProgressProps) {
+export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, recurringIncomes, selectedMonth, onDelete, onEdit, descriptionFilter, minAmountFilter, maxAmountFilter }: BudgetProgressProps) {
   const { isHidden } = useValuesVisibility();
   const { categories } = useCategories();
   
@@ -195,12 +198,36 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
     return { totalValue, limit, percentage, remaining, isOver };
   };
 
-  if (goals.length === 0) {
+  // Filtrar metas baseado nos filtros globais
+  const filteredGoals = useMemo(() => {
+    return goals.filter(goal => {
+      // Filtro de descrição - buscar pelo nome da meta (tipo + categoria)
+      if (descriptionFilter) {
+        const goalName = goal.type === 'monthly_total' ? 'Limite Mensal Total'
+          : goal.type === 'income_monthly_total' ? 'Meta Mensal de Entradas'
+          : goal.category ? (isIncomeGoal(goal.type) 
+            ? (incomeCategoryLabels[goal.category as keyof typeof incomeCategoryLabels] || goal.category)
+            : (categoryLabels[goal.category as keyof typeof categoryLabels] || goal.category))
+          : '';
+        if (!goalName.toLowerCase().includes(descriptionFilter.toLowerCase())) return false;
+      }
+      // Filtro de valor mínimo (limit_amount)
+      if (minAmountFilter !== undefined && goal.limit_amount < minAmountFilter) return false;
+      // Filtro de valor máximo (limit_amount)
+      if (maxAmountFilter !== undefined && goal.limit_amount > maxAmountFilter) return false;
+      return true;
+    });
+  }, [goals, descriptionFilter, minAmountFilter, maxAmountFilter]);
+
+  if (filteredGoals.length === 0) {
+    const hasFilters = !!(descriptionFilter || minAmountFilter !== undefined || maxAmountFilter !== undefined);
     return (
       <Card>
         <CardContent className="pt-6">
           <p className="text-center text-muted-foreground">
-            Nenhuma meta definida. Adicione uma meta para começar a acompanhar seus gastos ou ganhos.
+            {hasFilters 
+              ? "Nenhuma meta encontrada com os filtros aplicados."
+              : "Nenhuma meta definida. Adicione uma meta para começar a acompanhar seus gastos ou ganhos."}
           </p>
         </CardContent>
       </Card>
@@ -425,8 +452,8 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
     </DropdownMenu>
   );
 
-  const expenseGoals = goals.filter(g => !isIncomeGoal(g.type));
-  const incomeGoals = goals.filter(g => isIncomeGoal(g.type));
+  const expenseGoals = filteredGoals.filter(g => !isIncomeGoal(g.type));
+  const incomeGoals = filteredGoals.filter(g => isIncomeGoal(g.type));
 
   return (
     <div className="space-y-6">
