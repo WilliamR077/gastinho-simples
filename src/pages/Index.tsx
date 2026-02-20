@@ -1346,22 +1346,36 @@ export default function Index() {
     });
   };
 
-  // Entradas filtradas por categoria
+  // Entradas filtradas por categoria e filtros globais
   const displayedIncomes = useMemo(() => {
     const dateFiltered = incomes.filter(i => {
       const date = parseLocalDate(i.income_date);
       return date >= (filters.startDate || startOfMonth(new Date())) && 
              date <= (filters.endDate || endOfMonth(new Date()));
     });
-    if (!activeIncomeCategoryFilter) return dateFiltered;
-    return dateFiltered.filter(i => i.category === activeIncomeCategoryFilter);
-  }, [incomes, filters.startDate, filters.endDate, activeIncomeCategoryFilter]);
+    return dateFiltered.filter(i => {
+      // Filtro de categoria
+      if (activeIncomeCategoryFilter && i.category !== activeIncomeCategoryFilter) return false;
+      // Filtro de descrição
+      if (filters.description && !i.description.toLowerCase().includes(filters.description.toLowerCase())) return false;
+      // Filtro de valor mínimo
+      if (filters.minAmount !== undefined && i.amount < filters.minAmount) return false;
+      // Filtro de valor máximo
+      if (filters.maxAmount !== undefined && i.amount > filters.maxAmount) return false;
+      return true;
+    });
+  }, [incomes, filters.startDate, filters.endDate, filters.description, filters.minAmount, filters.maxAmount, activeIncomeCategoryFilter]);
 
-  // Entradas recorrentes filtradas por categoria
+  // Entradas recorrentes filtradas por categoria e filtros globais
   const displayedRecurringIncomes = useMemo(() => {
-    if (!activeIncomeCategoryFilter) return recurringIncomes;
-    return recurringIncomes.filter(i => i.category === activeIncomeCategoryFilter);
-  }, [recurringIncomes, activeIncomeCategoryFilter]);
+    return recurringIncomes.filter(i => {
+      if (activeIncomeCategoryFilter && i.category !== activeIncomeCategoryFilter) return false;
+      if (filters.description && !i.description.toLowerCase().includes(filters.description.toLowerCase())) return false;
+      if (filters.minAmount !== undefined && i.amount < filters.minAmount) return false;
+      if (filters.maxAmount !== undefined && i.amount > filters.maxAmount) return false;
+      return true;
+    });
+  }, [recurringIncomes, filters.description, filters.minAmount, filters.maxAmount, activeIncomeCategoryFilter]);
 
   // Calcular metas em risco (usa o mês selecionado, não o mês atual)
   const goalsAtRisk = useMemo(() => {
@@ -1531,18 +1545,6 @@ export default function Index() {
           />
         </div>
 
-        {/* Filtros */}
-        <div className="mb-8" data-tour="expense-filters">
-          <ExpenseFilters
-            filters={filters}
-            onFiltersChange={setFilters}
-            billingPeriods={billingPeriods}
-            expenses={expenses}
-            creditCardConfig={creditCardConfig}
-            cardsConfigMap={cardsConfigMap}
-          />
-        </div>
-
         {/* Balance Summary - Entradas vs Saídas */}
         <div className="mb-4">
           <BalanceSummary 
@@ -1580,6 +1582,18 @@ export default function Index() {
           goalsAtRisk={goalsAtRisk}
           onNavigateToGoals={() => setActiveTab("goals")}
         />
+
+        {/* Filtros Globais */}
+        <div className="mb-4" data-tour="expense-filters">
+          <ExpenseFilters
+            filters={filters}
+            onFiltersChange={setFilters}
+            billingPeriods={billingPeriods}
+            expenses={expenses}
+            creditCardConfig={creditCardConfig}
+            cardsConfigMap={cardsConfigMap}
+          />
+        </div>
 
         {/* Main Content */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full" data-tour="tabs">
@@ -1752,6 +1766,9 @@ export default function Index() {
               selectedMonth={currentMonth}
               onDelete={deleteBudgetGoal}
               onEdit={handleEditBudgetGoal}
+              descriptionFilter={filters.description}
+              minAmountFilter={filters.minAmount}
+              maxAmountFilter={filters.maxAmount}
             />
           </TabsContent>
         </Tabs>
