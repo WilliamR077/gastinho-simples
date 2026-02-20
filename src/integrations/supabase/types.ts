@@ -724,7 +724,11 @@ export type Database = {
       }
     }
     Enums: {
-      budget_goal_type: "monthly_total" | "category"
+      budget_goal_type:
+        | "monthly_total"
+        | "category"
+        | "income_monthly_total"
+        | "income_category"
       expense_category:
         | "alimentacao"
         | "transporte"
@@ -875,7 +879,12 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      budget_goal_type: ["monthly_total", "category"],
+      budget_goal_type: [
+        "monthly_total",
+        "category",
+        "income_monthly_total",
+        "income_category",
+      ],
       expense_category: [
         "alimentacao",
         "transporte",

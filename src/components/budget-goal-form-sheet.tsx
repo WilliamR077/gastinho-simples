@@ -8,12 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { ExpenseCategory, categoryLabels } from "@/types/expense";
+import { incomeCategoryLabels } from "@/types/income";
 import { BudgetGoalType } from "@/types/budget-goal";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useNavigate } from "react-router-dom";
 
 const budgetGoalSchema = z.object({
-  type: z.enum(["monthly_total", "category"] as const),
+  type: z.enum(["monthly_total", "category", "income_monthly_total", "income_category"] as const),
   category: z.string().optional(),
   limitAmount: z.number().positive("O valor deve ser maior que zero"),
 });
@@ -33,7 +34,7 @@ export function BudgetGoalFormSheet({
   onSubmit,
   currentGoalsCount,
 }: BudgetGoalFormSheetProps) {
-  const [goalType, setGoalType] = useState<"monthly_total" | "category">("monthly_total");
+  const [goalType, setGoalType] = useState<string>("monthly_total");
   const { canAddGoal, features } = useSubscription();
   const navigate = useNavigate();
 
@@ -79,7 +80,7 @@ export function BudgetGoalFormSheet({
             <Select
               value={goalType}
               onValueChange={(value) => {
-                setGoalType(value as "monthly_total" | "category");
+                setGoalType(value);
                 setValue("type", value as "monthly_total" | "category");
               }}
             >
@@ -89,11 +90,13 @@ export function BudgetGoalFormSheet({
               <SelectContent>
                 <SelectItem value="monthly_total">Limite Mensal Total</SelectItem>
                 <SelectItem value="category">Limite por Categoria</SelectItem>
+                <SelectItem value="income_monthly_total">Meta Mensal de Entradas</SelectItem>
+                <SelectItem value="income_category">Meta por Categoria de Entrada</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          {goalType === "category" && (
+          {(goalType === "category" || goalType === "income_category") && (
             <div className="space-y-2">
               <Label htmlFor="goal-sheet-category">Categoria</Label>
               <Select onValueChange={(value) => setValue("category", value)}>
@@ -101,7 +104,7 @@ export function BudgetGoalFormSheet({
                   <SelectValue placeholder="Selecione a categoria" />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(categoryLabels).map(([key, label]) => (
+                  {Object.entries(goalType === "income_category" ? incomeCategoryLabels : categoryLabels).map(([key, label]) => (
                     <SelectItem key={key} value={key}>
                       {label}
                     </SelectItem>

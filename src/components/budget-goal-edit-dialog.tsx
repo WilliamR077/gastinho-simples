@@ -9,9 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BudgetGoal } from "@/types/budget-goal";
 import { categoryLabels } from "@/types/expense";
+import { incomeCategoryLabels } from "@/types/income";
 
 const budgetGoalEditSchema = z.object({
-  type: z.enum(["monthly_total", "category"] as const),
+  type: z.enum(["monthly_total", "category", "income_monthly_total", "income_category"] as const),
   category: z.string().optional(),
   limitAmount: z.number().positive("Valor limite deve ser positivo"),
 });
@@ -81,6 +82,8 @@ export function BudgetGoalEditDialog({ goal, open, onOpenChange, onSave }: Budge
                     <SelectContent className="bg-background">
                       <SelectItem value="monthly_total">Limite Mensal Total</SelectItem>
                       <SelectItem value="category">Limite por Categoria</SelectItem>
+                      <SelectItem value="income_monthly_total">Meta Mensal de Entradas</SelectItem>
+                      <SelectItem value="income_category">Meta por Categoria de Entrada</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -88,7 +91,7 @@ export function BudgetGoalEditDialog({ goal, open, onOpenChange, onSave }: Budge
               )}
             />
 
-            {goalType === "category" && (
+            {(goalType === "category" || goalType === "income_category") && (
               <FormField
                 control={form.control}
                 name="category"
@@ -102,7 +105,7 @@ export function BudgetGoalEditDialog({ goal, open, onOpenChange, onSave }: Budge
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent className="bg-background">
-                        {Object.entries(categoryLabels).map(([key, label]) => (
+                        {Object.entries(goalType === "income_category" ? incomeCategoryLabels : categoryLabels).map(([key, label]) => (
                           <SelectItem key={key} value={key}>
                             {label}
                           </SelectItem>
