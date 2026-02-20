@@ -77,8 +77,6 @@ export const Footer = ({ isAuthenticated = true }: FooterProps) => {
             </div>
             <div className="col-span-2 space-y-2 sm:col-span-1">
               <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Mais</h4>
-              <button onClick={() => navigate("/about")} className="block text-sm text-muted-foreground transition-colors hover:text-foreground">Sobre</button>
-              <button onClick={() => navigate("/contact")} className="block text-sm text-muted-foreground transition-colors hover:text-foreground">Contato</button>
               <button onClick={() => navigate("/privacy")} className="block text-sm text-muted-foreground transition-colors hover:text-foreground">Política de Privacidade</button>
             </div>
           </div>
