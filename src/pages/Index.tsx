@@ -25,6 +25,7 @@ import { UnifiedIncomeFormSheet } from "@/components/unified-income-form-sheet";
 import { IncomeList } from "@/components/income-list";
 import { RecurringIncomeList } from "@/components/recurring-income-list";
 import { Income, RecurringIncome as RecurringIncomeType } from "@/types/income";
+import { IncomeCategorySummary } from "@/components/income-category-summary";
 
 import { Expense, PaymentMethod, ExpenseFormData, ExpenseCategory, categoryLabels } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
@@ -1091,7 +1092,7 @@ export default function Index() {
       const { error } = await supabase
         .from("budget_goals")
         .update({
-          type: data.type as "monthly_total" | "category",
+          type: data.type as any,
           category: (data.category as any) || null,
           limit_amount: data.limitAmount,
         })
@@ -1103,7 +1104,7 @@ export default function Index() {
         if (g.id === id) {
           return {
             ...g,
-            type: data.type as "monthly_total" | "category",
+            type: data.type as any,
             category: (data.category as any) || null,
             limit_amount: data.limitAmount
           };
@@ -1635,6 +1636,14 @@ export default function Index() {
           </TabsContent>
 
           <TabsContent value="incomes">
+            <div className="mb-4">
+              <IncomeCategorySummary
+                incomes={incomes}
+                recurringIncomes={recurringIncomes}
+                startDate={filters.startDate}
+                endDate={filters.endDate}
+              />
+            </div>
             <Tabs value={incomeSubTab} onValueChange={setIncomeSubTab}>
               <TabsList className="grid w-full grid-cols-2 mb-4 bg-muted/50 h-9">
                 <TabsTrigger value="monthly" className="text-sm data-[state=active]:bg-background">
@@ -1673,6 +1682,8 @@ export default function Index() {
               goals={budgetGoals}
               expenses={expenses}
               recurringExpenses={recurringExpenses}
+              incomes={incomes}
+              recurringIncomes={recurringIncomes}
               selectedMonth={currentMonth}
               onDelete={deleteBudgetGoal}
               onEdit={handleEditBudgetGoal}

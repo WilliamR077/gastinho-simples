@@ -13,7 +13,7 @@ const corsHeaders = {
 interface BudgetGoal {
   id: string;
   user_id: string;
-  type: "monthly_total" | "category";
+  type: "monthly_total" | "category" | "income_monthly_total" | "income_category";
   category: string | null;
   limit_amount: number;
 }
@@ -30,14 +30,24 @@ interface RecurringExpense {
   is_active: boolean;
 }
 
+interface Income {
+  amount: number;
+  category: string;
+  income_date: string;
+}
+
+interface RecurringIncome {
+  amount: number;
+  category: string;
+  is_active: boolean;
+}
+
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Validate internal API secret
     const providedSecret = req.headers.get("x-internal-secret");
     if (providedSecret !== INTERNAL_API_SECRET) {
       console.error("Invalid or missing internal API secret");
@@ -51,7 +61,6 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Buscar todas as metas ativas
     const { data: goals, error: goalsError } = await supabase
       .from("budget_goals")
       .select("*");
@@ -66,67 +75,114 @@ serve(async (req) => {
     const currentMonth = new Date().getMonth();
     const currentYear = new Date().getFullYear();
     const today = new Date().toISOString().split("T")[0];
+    const monthStart = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-01`;
 
     let alertsSent = 0;
 
-    // Processar cada meta
     for (const goal of goals || []) {
       console.log(`Processing goal ${goal.id} for user ${goal.user_id}`);
 
-      // Buscar despesas do mês atual
-      const { data: expenses } = await supabase
-        .from("expenses")
-        .select("amount, category, expense_date")
-        .eq("user_id", goal.user_id)
-        .gte("expense_date", `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-01`);
+      const isIncomeGoal = goal.type.startsWith("income_");
+      let totalValue = 0;
 
-      // Buscar despesas recorrentes ativas
-      const { data: recurringExpenses } = await supabase
-        .from("recurring_expenses")
-        .select("amount, category, is_active")
-        .eq("user_id", goal.user_id)
-        .eq("is_active", true);
+      if (isIncomeGoal) {
+        // Fetch incomes for the current month
+        const { data: incomes } = await supabase
+          .from("incomes")
+          .select("amount, category, income_date")
+          .eq("user_id", goal.user_id)
+          .gte("income_date", monthStart);
 
-      // Calcular total gasto
-      let totalSpent = 0;
+        const { data: recurringIncomes } = await supabase
+          .from("recurring_incomes")
+          .select("amount, category, is_active")
+          .eq("user_id", goal.user_id)
+          .eq("is_active", true);
 
-      if (goal.type === "monthly_total") {
-        totalSpent = (expenses || []).reduce((sum: number, exp: Expense) => sum + Number(exp.amount), 0);
-        totalSpent += (recurringExpenses || []).reduce((sum: number, re: RecurringExpense) => sum + Number(re.amount), 0);
-      } else if (goal.type === "category" && goal.category) {
-        totalSpent = (expenses || [])
-          .filter((exp: Expense) => exp.category === goal.category)
-          .reduce((sum: number, exp: Expense) => sum + Number(exp.amount), 0);
-        totalSpent += (recurringExpenses || [])
-          .filter((re: RecurringExpense) => re.category === goal.category)
-          .reduce((sum: number, re: RecurringExpense) => sum + Number(re.amount), 0);
+        if (goal.type === "income_monthly_total") {
+          totalValue = (incomes || []).reduce((sum: number, inc: Income) => sum + Number(inc.amount), 0);
+          totalValue += (recurringIncomes || []).reduce((sum: number, ri: RecurringIncome) => sum + Number(ri.amount), 0);
+        } else if (goal.type === "income_category" && goal.category) {
+          totalValue = (incomes || [])
+            .filter((inc: Income) => inc.category === goal.category)
+            .reduce((sum: number, inc: Income) => sum + Number(inc.amount), 0);
+          totalValue += (recurringIncomes || [])
+            .filter((ri: RecurringIncome) => ri.category === goal.category)
+            .reduce((sum: number, ri: RecurringIncome) => sum + Number(ri.amount), 0);
+        }
+      } else {
+        // Expense goals (existing logic)
+        const { data: expenses } = await supabase
+          .from("expenses")
+          .select("amount, category, expense_date")
+          .eq("user_id", goal.user_id)
+          .gte("expense_date", monthStart);
+
+        const { data: recurringExpenses } = await supabase
+          .from("recurring_expenses")
+          .select("amount, category, is_active")
+          .eq("user_id", goal.user_id)
+          .eq("is_active", true);
+
+        if (goal.type === "monthly_total") {
+          totalValue = (expenses || []).reduce((sum: number, exp: Expense) => sum + Number(exp.amount), 0);
+          totalValue += (recurringExpenses || []).reduce((sum: number, re: RecurringExpense) => sum + Number(re.amount), 0);
+        } else if (goal.type === "category" && goal.category) {
+          totalValue = (expenses || [])
+            .filter((exp: Expense) => exp.category === goal.category)
+            .reduce((sum: number, exp: Expense) => sum + Number(exp.amount), 0);
+          totalValue += (recurringExpenses || [])
+            .filter((re: RecurringExpense) => re.category === goal.category)
+            .reduce((sum: number, re: RecurringExpense) => sum + Number(re.amount), 0);
+        }
       }
 
       const limit = Number(goal.limit_amount);
-      const percentage = (totalSpent / limit) * 100;
+      const percentage = (totalValue / limit) * 100;
 
-      console.log(`Goal ${goal.id}: ${percentage.toFixed(1)}% used (${totalSpent}/${limit})`);
+      console.log(`Goal ${goal.id}: ${percentage.toFixed(1)}% (${totalValue}/${limit})`);
 
-      // Determinar nível de alerta
       let alertLevel: number | null = null;
       let alertTitle = "";
       let alertBody = "";
 
-      if (percentage >= 100) {
-        alertLevel = 100;
-        alertTitle = "🚨 Meta estourada!";
-        alertBody = `Você excedeu o limite em R$ ${(totalSpent - limit).toFixed(2)}.`;
-      } else if (percentage >= 95) {
-        alertLevel = 95;
-        alertTitle = "⚠️ Alerta crítico!";
-        alertBody = `Você está a R$ ${(limit - totalSpent).toFixed(2)} de estourar sua meta.`;
-      } else if (percentage >= 80) {
-        alertLevel = 80;
-        alertTitle = "⚠️ Atenção!";
-        alertBody = `Você já usou ${percentage.toFixed(0)}% da sua meta.`;
+      if (isIncomeGoal) {
+        // Income goal alerts - celebratory messages
+        const goalName = goal.type === "income_category" && goal.category
+          ? `Meta de ${goal.category}`
+          : "Meta Mensal de Entradas";
+
+        if (percentage >= 100) {
+          alertLevel = 100;
+          const exceeded = totalValue - limit;
+          alertTitle = exceeded > 0
+            ? `🌟 ${goalName}: Meta superada!`
+            : `🎉 ${goalName}: Meta atingida!`;
+          alertBody = exceeded > 0
+            ? `Incrível! Você superou sua meta em R$ ${exceeded.toFixed(2)}!`
+            : `Parabéns! Você bateu sua meta de R$ ${limit.toFixed(2)}!`;
+        } else if (percentage >= 80) {
+          alertLevel = 80;
+          alertTitle = `💪 ${goalName}: Quase lá!`;
+          alertBody = `Você já atingiu ${percentage.toFixed(0)}% da sua meta. Faltam R$ ${(limit - totalValue).toFixed(2)}!`;
+        }
+      } else {
+        // Expense goal alerts (existing logic)
+        if (percentage >= 100) {
+          alertLevel = 100;
+          alertTitle = "🚨 Meta estourada!";
+          alertBody = `Você excedeu o limite em R$ ${(totalValue - limit).toFixed(2)}.`;
+        } else if (percentage >= 95) {
+          alertLevel = 95;
+          alertTitle = "⚠️ Alerta crítico!";
+          alertBody = `Você está a R$ ${(limit - totalValue).toFixed(2)} de estourar sua meta.`;
+        } else if (percentage >= 80) {
+          alertLevel = 80;
+          alertTitle = "⚠️ Atenção!";
+          alertBody = `Você já usou ${percentage.toFixed(0)}% da sua meta.`;
+        }
       }
 
-      // Se há alerta, verificar se já foi enviado hoje
       if (alertLevel) {
         const { data: existingAlert } = await supabase
           .from("budget_goal_alerts")
@@ -139,11 +195,10 @@ serve(async (req) => {
         if (!existingAlert) {
           console.log(`Sending alert level ${alertLevel} for goal ${goal.id}`);
 
-          const goalName = goal.type === "category" && goal.category
-            ? `Meta de ${goal.category}`
-            : "Meta Mensal Total";
+          const goalName = isIncomeGoal
+            ? (goal.type === "income_category" && goal.category ? `Meta de ${goal.category}` : "Meta Mensal de Entradas")
+            : (goal.type === "category" && goal.category ? `Meta de ${goal.category}` : "Meta Mensal Total");
 
-          // Use send-notification edge function instead of direct FCM call
           const { error: notificationError } = await supabase.functions.invoke(
             "send-notification",
             {
@@ -152,10 +207,10 @@ serve(async (req) => {
               },
               body: {
                 user_id: goal.user_id,
-                title: `${goalName}: ${alertTitle}`,
+                title: alertTitle,
                 body: alertBody,
                 data: {
-                  type: "budget_alert",
+                  type: isIncomeGoal ? "income_goal_alert" : "budget_alert",
                   goal_id: goal.id,
                   percentage: percentage.toFixed(1),
                 },
@@ -166,7 +221,6 @@ serve(async (req) => {
           if (notificationError) {
             console.error(`Error sending notification for goal ${goal.id}:`, notificationError);
           } else {
-            // Registrar alerta
             await supabase
               .from("budget_goal_alerts")
               .insert({
