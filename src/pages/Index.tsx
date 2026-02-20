@@ -118,7 +118,7 @@ export default function Index() {
   // Redirect to auth if not logged in
   useEffect(() => {
     if (!authLoading && !user) {
-      navigate("/auth");
+      navigate("/landing");
     }
   }, [user, authLoading, navigate]);
 
