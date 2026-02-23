@@ -9,7 +9,6 @@ import { Income, RecurringIncome, incomeCategoryLabels, incomeCategoryIcons } fr
 import { useIncomeCategories } from "@/hooks/use-income-categories";
 import { categoryLabels, categoryIcons } from "@/types/expense";
 import { AlertTriangle, TrendingDown, TrendingUp, MoreVertical, Pencil, Trash2, AlertCircle, Check, PartyPopper, Star, Scale } from "lucide-react";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { parseLocalDate } from "@/lib/utils";
@@ -558,64 +557,11 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
     );
   };
 
-  const availableTabs = [
-    ...(expenseGoals.length > 0 ? ['expenses'] : []),
-    ...(incomeGoals.length > 0 ? ['income'] : []),
-    ...(balanceGoals.length > 0 ? ['balance'] : []),
-  ];
-  const defaultTab = availableTabs[0] || 'expenses';
-
-  // If only one type exists, no need for tabs
-  if (availableTabs.length <= 1) {
-    return (
-      <div className="space-y-4">
-        {expenseGoals.map((goal) => renderExpenseGoal(goal))}
-        {incomeGoals.map((goal) => renderIncomeGoal(goal))}
-        {balanceGoals.map((goal) => renderBalanceGoal(goal))}
-      </div>
-    );
-  }
-
   return (
-    <Tabs defaultValue={defaultTab} className="space-y-4">
-      <TabsList className="w-full">
-        {expenseGoals.length > 0 && (
-          <TabsTrigger value="expenses" className="flex-1 gap-1.5">
-            <TrendingDown className="h-4 w-4 text-destructive" />
-            <span>Despesas ({expenseGoals.length})</span>
-          </TabsTrigger>
-        )}
-        {incomeGoals.length > 0 && (
-          <TabsTrigger value="income" className="flex-1 gap-1.5">
-            <TrendingUp className="h-4 w-4 text-green-600 dark:text-green-400" />
-            <span>Entradas ({incomeGoals.length})</span>
-          </TabsTrigger>
-        )}
-        {balanceGoals.length > 0 && (
-          <TabsTrigger value="balance" className="flex-1 gap-1.5">
-            <Scale className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-            <span>Saldo ({balanceGoals.length})</span>
-          </TabsTrigger>
-        )}
-      </TabsList>
-
-      {expenseGoals.length > 0 && (
-        <TabsContent value="expenses" className="space-y-4">
-          {expenseGoals.map((goal) => renderExpenseGoal(goal))}
-        </TabsContent>
-      )}
-
-      {incomeGoals.length > 0 && (
-        <TabsContent value="income" className="space-y-4">
-          {incomeGoals.map((goal) => renderIncomeGoal(goal))}
-        </TabsContent>
-      )}
-
-      {balanceGoals.length > 0 && (
-        <TabsContent value="balance" className="space-y-4">
-          {balanceGoals.map((goal) => renderBalanceGoal(goal))}
-        </TabsContent>
-      )}
-    </Tabs>
+    <div className="space-y-4">
+      {expenseGoals.map((goal) => renderExpenseGoal(goal))}
+      {incomeGoals.map((goal) => renderIncomeGoal(goal))}
+      {balanceGoals.map((goal) => renderBalanceGoal(goal))}
+    </div>
   );
 }

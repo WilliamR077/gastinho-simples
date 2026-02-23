@@ -1790,18 +1790,21 @@ export default function Index() {
 
           <TabsContent value="goals">
             <Tabs defaultValue="expense" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-4 bg-muted/50 h-9">
+              <TabsList className="grid w-full grid-cols-3 mb-4 bg-muted/50 h-9">
                 <TabsTrigger value="expense" className="text-sm data-[state=active]:bg-background data-[state=active]:text-destructive">
-                  Metas de Despesa
+                  Despesas
                 </TabsTrigger>
                 <TabsTrigger value="income" className="text-sm data-[state=active]:bg-background data-[state=active]:text-green-600 dark:data-[state=active]:text-green-400">
-                  Metas de Entrada
+                  Entradas
+                </TabsTrigger>
+                <TabsTrigger value="balance" className="text-sm data-[state=active]:bg-background data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400">
+                  Saldo
                 </TabsTrigger>
               </TabsList>
 
               <TabsContent value="expense">
                 <BudgetProgress
-                  goals={budgetGoals.filter(g => g.type === "monthly_total" || g.type === "category" || g.type === "balance_target")}
+                  goals={budgetGoals.filter(g => g.type === "monthly_total" || g.type === "category")}
                   expenses={expenses}
                   recurringExpenses={recurringExpenses}
                   incomes={incomes}
@@ -1818,6 +1821,22 @@ export default function Index() {
               <TabsContent value="income">
                 <BudgetProgress
                   goals={budgetGoals.filter(g => g.type === "income_monthly_total" || g.type === "income_category")}
+                  expenses={expenses}
+                  recurringExpenses={recurringExpenses}
+                  incomes={incomes}
+                  recurringIncomes={recurringIncomes}
+                  selectedMonth={currentMonth}
+                  onDelete={deleteBudgetGoal}
+                  onEdit={handleEditBudgetGoal}
+                  descriptionFilter={filters.description}
+                  minAmountFilter={filters.minAmount}
+                  maxAmountFilter={filters.maxAmount}
+                />
+              </TabsContent>
+
+              <TabsContent value="balance">
+                <BudgetProgress
+                  goals={budgetGoals.filter(g => g.type === "balance_target")}
                   expenses={expenses}
                   recurringExpenses={recurringExpenses}
                   incomes={incomes}
