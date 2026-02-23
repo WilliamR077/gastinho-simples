@@ -178,11 +178,20 @@ serve(async (req) => {
       let alertTitle = "";
       let alertBody = "";
 
-      if (isIncomeGoal || isBalanceGoal) {
+      if (isBalanceGoal) {
+        // Balance goal alerts - motivational messages
+        if (percentage >= 100) {
+          alertLevel = 100;
+          alertTitle = "🌟 Meta de Saldo atingida!";
+          alertBody = `Incrível! Sua meta de saldo foi atingida! Seu saldo está positivo em R$ ${totalValue.toFixed(2)}!`;
+        } else if (percentage >= 80) {
+          alertLevel = 80;
+          alertTitle = "💪 Meta de Saldo: Quase lá!";
+          alertBody = `Falta pouco para cumprir sua meta de saldo! Você já está em ${percentage.toFixed(0)}%, continue assim! Faltam R$ ${(limit - totalValue).toFixed(2)}!`;
+        }
+      } else if (isIncomeGoal) {
         // Income goal alerts - celebratory messages
-        const goalName = isBalanceGoal
-          ? "Meta de Saldo"
-          : goal.type === "income_category" && goal.category
+        const goalName = goal.type === "income_category" && goal.category
           ? `Meta de ${goal.category}`
           : "Meta Mensal de Entradas";
 
@@ -193,27 +202,31 @@ serve(async (req) => {
             ? `🌟 ${goalName}: Meta superada!`
             : `🎉 ${goalName}: Meta atingida!`;
           alertBody = exceeded > 0
-            ? `Incrível! Você superou sua meta em R$ ${exceeded.toFixed(2)}!`
-            : `Parabéns! Você bateu sua meta de R$ ${limit.toFixed(2)}!`;
+            ? `Incrível! Você superou sua meta em R$ ${exceeded.toFixed(2)}! Continue assim!`
+            : `Parabéns! Você bateu sua meta de R$ ${limit.toFixed(2)}! Continue assim!`;
         } else if (percentage >= 80) {
           alertLevel = 80;
           alertTitle = `💪 ${goalName}: Quase lá!`;
-          alertBody = `Você já atingiu ${percentage.toFixed(0)}% da sua meta. Faltam R$ ${(limit - totalValue).toFixed(2)}!`;
+          alertBody = `Você está quase lá! Já atingiu ${percentage.toFixed(0)}% da sua meta de entradas. Faltam R$ ${(limit - totalValue).toFixed(2)}, vai com tudo!`;
         }
       } else {
-        // Expense goal alerts (existing logic)
+        // Expense goal alerts - warning messages
+        const goalName = goal.type === "category" && goal.category
+          ? `Meta de ${goal.category}`
+          : "Meta Mensal Total";
+
         if (percentage >= 100) {
           alertLevel = 100;
-          alertTitle = "🚨 Meta estourada!";
-          alertBody = `Você excedeu o limite em R$ ${(totalValue - limit).toFixed(2)}.`;
+          alertTitle = `🚨 ${goalName}: Meta estourada!`;
+          alertBody = `Você excedeu em R$ ${(totalValue - limit).toFixed(2)}. Hora de se reorganizar!`;
         } else if (percentage >= 95) {
           alertLevel = 95;
-          alertTitle = "⚠️ Alerta crítico!";
-          alertBody = `Você está a R$ ${(limit - totalValue).toFixed(2)} de estourar sua meta.`;
+          alertTitle = `⚠️ ${goalName}: Alerta crítico!`;
+          alertBody = `Faltam apenas R$ ${(limit - totalValue).toFixed(2)} para estourar sua meta. Segure os gastos!`;
         } else if (percentage >= 80) {
           alertLevel = 80;
-          alertTitle = "⚠️ Atenção!";
-          alertBody = `Você já usou ${percentage.toFixed(0)}% da sua meta.`;
+          alertTitle = `⚠️ ${goalName}: Atenção!`;
+          alertBody = `Cuidado! Você já usou ${percentage.toFixed(0)}% da sua meta de despesa. Fique atento aos seus gastos!`;
         }
       }
 
@@ -244,7 +257,7 @@ serve(async (req) => {
                 title: alertTitle,
                 body: alertBody,
                 data: {
-                  type: isIncomeGoal ? "income_goal_alert" : "budget_alert",
+                  type: isBalanceGoal ? "balance_goal_alert" : isIncomeGoal ? "income_goal_alert" : "budget_alert",
                   goal_id: goal.id,
                   percentage: percentage.toFixed(1),
                 },

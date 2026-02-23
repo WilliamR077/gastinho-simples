@@ -11,6 +11,7 @@ import { IncomeEditDialog, IncomeFormData } from "@/components/income-edit-dialo
 import { RecurringIncomeEditDialog, RecurringIncomeFormData } from "@/components/recurring-income-edit-dialog";
 import { BudgetAlertBanner } from "@/components/budget-alert-banner";
 import { IncomeGoalBanner } from "@/components/income-goal-banner";
+import { BalanceGoalBanner } from "@/components/balance-goal-banner";
 import { MonthNavigator } from "@/components/month-navigator";
 import { FloatingActionButton } from "@/components/floating-action-button";
 import { CalculatorDrawer } from "@/components/calculator-drawer";
@@ -1607,6 +1608,17 @@ export default function Index() {
           budgetGoals={budgetGoals}
           incomes={incomes}
           recurringIncomes={recurringIncomes}
+          selectedMonth={currentMonth}
+          onNavigateToGoals={() => setActiveTab("goals")}
+        />
+
+        {/* Balance Goal Celebration Banner */}
+        <BalanceGoalBanner
+          budgetGoals={budgetGoals}
+          incomes={incomes}
+          recurringIncomes={recurringIncomes}
+          expenses={expenses}
+          recurringExpenses={recurringExpenses}
           selectedMonth={currentMonth}
           onNavigateToGoals={() => setActiveTab("goals")}
         />
