@@ -1,56 +1,43 @@
 
 
-## Corrigir constraint do banco de dados para metas de entrada
+## Corrigir coluna category para aceitar categorias de entrada
 
-### Problema confirmado
+### Problema raiz
 
-A constraint `valid_category_for_type` na tabela `budget_goals` ainda esta com a definicao antiga:
+A coluna `category` na tabela `budget_goals` usa o tipo enum `expense_category`, que so contem valores de despesa:
+`alimentacao, transporte, lazer, saude, educacao, moradia, vestuario, servicos, outros`
 
-```sql
-CHECK (
-  (type = 'monthly_total' AND category IS NULL) OR
-  (type = 'category' AND category IS NOT NULL)
-)
-```
-
-Os tipos `income_monthly_total` e `income_category` nao estao incluidos, causando erro 400 ao tentar inserir metas de entrada.
+Quando voce tenta criar uma meta de entrada com categoria `freelance`, o banco rejeita porque `freelance` nao existe no enum `expense_category`. A constraint `valid_category_for_type` ja foi corrigida - o problema agora e o tipo da coluna.
 
 ### Solucao
 
-**1. Migracao SQL - Atualizar a constraint**
+**Migracao SQL - Alterar o tipo da coluna `category` para `text`**
 
-Executar uma migracao que:
-- Remove a constraint antiga
-- Cria uma nova com os 4 tipos aceitos
-- Notifica o PostgREST para recarregar o schema
+Mudar o tipo de `expense_category` para `text` permite que tanto categorias de despesa quanto de entrada sejam armazenadas. Isso e mais flexivel e evita ter que manter dois enums separados.
 
 ```sql
-ALTER TABLE budget_goals DROP CONSTRAINT IF EXISTS valid_category_for_type;
-ALTER TABLE budget_goals ADD CONSTRAINT valid_category_for_type CHECK (
-  (type = 'monthly_total' AND category IS NULL) OR
-  (type = 'category' AND category IS NOT NULL) OR
-  (type = 'income_monthly_total' AND category IS NULL) OR
-  (type = 'income_category' AND category IS NOT NULL)
-);
+ALTER TABLE budget_goals 
+  ALTER COLUMN category TYPE text 
+  USING category::text;
 NOTIFY pgrst, 'reload schema';
 ```
-
-**2. Corrigir mensagens de toast no Index.tsx**
-
-Na funcao `addBudgetGoal`, as mensagens dizem "meta de gastos" mesmo para metas de entrada. Corrigir para mostrar "meta de entradas" quando o tipo comecar com `income_`.
-
----
 
 ### Detalhes tecnicos
 
 | Recurso | Mudanca |
 |---|---|
-| Migracao SQL | `DROP` + `ADD CONSTRAINT` com 4 tipos + `NOTIFY pgrst` |
-| `src/pages/Index.tsx` | Mensagens de toast diferenciadas por tipo de meta |
+| Migracao SQL | `ALTER COLUMN category TYPE text` na tabela `budget_goals` + `NOTIFY pgrst` |
+
+### Por que `text` em vez de criar um novo enum?
+
+- A tabela `budget_goals` precisa aceitar categorias de dois dominios diferentes (despesas e entradas)
+- A constraint `valid_category_for_type` ja garante que `category` so e preenchida quando o tipo exige
+- A validacao de quais categorias sao validas ja e feita no frontend (Select com opcoes fixas)
+- Nenhum outro arquivo precisa ser alterado - o codigo ja envia as categorias como strings
 
 ### Resumo
 
-- 1 migracao SQL (esta e a mudanca principal que resolve o erro)
-- 1 arquivo modificado (`Index.tsx`) para mensagens corretas
-- O `NOTIFY pgrst, 'reload schema'` garante que o PostgREST reconheca a mudanca imediatamente
+- 1 migracao SQL (alterar tipo da coluna de `expense_category` para `text`)
+- 0 arquivos de codigo modificados
+- Resolve definitivamente o erro 400 ao criar metas de entrada com categorias como `freelance`, `salario`, etc.
 
