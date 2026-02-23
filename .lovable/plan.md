@@ -1,47 +1,28 @@
 
 
-## Ajustes finais nas Metas
+## Reorganizar Metas em 3 Sub-abas
 
-### 1. Corrigir 0% no card "Total" para metas por categoria
+### O que muda
 
-**Problema**: No `expense-summary.tsx` (linhas 177-183), o calculo de `budgetProgress` para metas do tipo `category` compara apenas `exp.category === goal.category`. Porem, despesas mais recentes usam `category_id` (UUID) em vez do enum legado. O componente `budget-progress.tsx` ja resolve isso com a funcao `expenseMatchesGoalCategory` que verifica ambos os campos, mas o mini-resumo no card Total nao tem essa logica.
+Dentro da aba "Metas" do dashboard, trocar as 2 sub-abas atuais por 3:
 
-**Solucao**: Adicionar no `expense-summary.tsx` a mesma logica de matching duplo:
-- Importar `useCategories` 
-- Criar funcao `expenseMatchesGoalCategory` que compara tanto `exp.category` quanto `exp.category_id` com a categoria da meta (mapeando pelo nome via `categoryLabels`)
-- Aplicar essa funcao nos filtros das linhas 178-183 (despesas mensais e recorrentes)
-
-**Arquivo**: `src/components/expense-summary.tsx`
-
----
-
-### 2. Organizar metas em abas (Tabs)
-
-**Problema atual**: As metas sao exibidas em secoes empilhadas (Metas de Gastos, Metas de Entradas, Metas de Saldo) com headers `h3`. O usuario prefere abas para melhor organizacao.
-
-**Solucao**: Substituir a estrutura de secoes no `budget-progress.tsx` por um componente `Tabs` com tres abas:
-- Aba "Despesas" (icone TrendingDown vermelho)
-- Aba "Entradas" (icone TrendingUp verde)  
-- Aba "Saldo" (icone Scale azul)
-
-Cada aba so aparece se houver metas daquele tipo. A aba padrao sera a primeira que tiver metas.
-
-**Arquivo**: `src/components/budget-progress.tsx`
-
----
+```text
+                    Metas
+ Despesas  |  Entradas  |  Saldo
+```
 
 ### Detalhes tecnicos
 
-**Arquivo `src/components/expense-summary.tsx`**:
-- Importar `useCategories` de `@/hooks/use-categories`
-- Adicionar hook `const { categories: expenseCategories } = useCategories()` dentro do componente
-- Criar funcao helper `getCategoryIdsForGoal` que mapeia enum -> UUID via nome
-- Criar funcao `expenseMatchesGoalCategory` que verifica `exp.category === goalCategory` OU `exp.category_id` esta nos IDs mapeados
-- Atualizar o filtro em `budgetProgress` para usar essa funcao nos dois `.filter()` de categoria
+**Arquivo `src/pages/Index.tsx` (linhas 1791-1833)**:
+- Trocar `grid-cols-2` por `grid-cols-3` no TabsList
+- Adicionar terceira sub-aba "Saldo" com estilo azul
+- Separar o filtro de goals:
+  - Despesas: `monthly_total` e `category`
+  - Entradas: `income_monthly_total` e `income_category`
+  - Saldo: `balance_target` (removido da aba de despesas)
+- Adicionar terceiro `TabsContent` com `BudgetProgress` para metas de saldo
 
-**Arquivo `src/components/budget-progress.tsx`**:
-- Importar `Tabs, TabsList, TabsTrigger, TabsContent` de `@/components/ui/tabs`
-- Substituir o bloco de retorno (linhas 560-592) por estrutura de Tabs
-- Definir `defaultTab` dinamicamente baseado em qual tipo tem metas
-- Mostrar contadores nas abas (ex: "Despesas (2)")
+**Arquivo `src/components/budget-progress.tsx` (linhas 561-619)**:
+- Remover a logica interna de tabs (linhas 561-619) ja que o pai agora controla a separacao
+- Simplificar o retorno para apenas renderizar as goals recebidas diretamente (sem sub-abas internas), mantendo os renders `renderExpenseGoal`, `renderIncomeGoal` e `renderBalanceGoal`
 
