@@ -81,7 +81,7 @@ export type Database = {
       }
       budget_goals: {
         Row: {
-          category: Database["public"]["Enums"]["expense_category"] | null
+          category: string | null
           created_at: string
           id: string
           limit_amount: number
@@ -91,7 +91,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          category?: Database["public"]["Enums"]["expense_category"] | null
+          category?: string | null
           created_at?: string
           id?: string
           limit_amount: number
@@ -101,7 +101,7 @@ export type Database = {
           user_id: string
         }
         Update: {
-          category?: Database["public"]["Enums"]["expense_category"] | null
+          category?: string | null
           created_at?: string
           id?: string
           limit_amount?: number
