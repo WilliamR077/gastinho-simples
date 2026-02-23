@@ -278,9 +278,12 @@ export type Database = {
         Row: {
           amount: number
           category: Database["public"]["Enums"]["income_category"]
+          category_icon: string | null
+          category_name: string | null
           created_at: string
           description: string
           id: string
+          income_category_id: string | null
           income_date: string
           shared_group_id: string | null
           updated_at: string
@@ -289,9 +292,12 @@ export type Database = {
         Insert: {
           amount: number
           category?: Database["public"]["Enums"]["income_category"]
+          category_icon?: string | null
+          category_name?: string | null
           created_at?: string
           description: string
           id?: string
+          income_category_id?: string | null
           income_date?: string
           shared_group_id?: string | null
           updated_at?: string
@@ -300,15 +306,25 @@ export type Database = {
         Update: {
           amount?: number
           category?: Database["public"]["Enums"]["income_category"]
+          category_icon?: string | null
+          category_name?: string | null
           created_at?: string
           description?: string
           id?: string
+          income_category_id?: string | null
           income_date?: string
           shared_group_id?: string | null
           updated_at?: string
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "incomes_income_category_id_fkey"
+            columns: ["income_category_id"]
+            isOneToOne: false
+            referencedRelation: "user_income_categories"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "incomes_shared_group_id_fkey"
             columns: ["shared_group_id"]
@@ -440,11 +456,14 @@ export type Database = {
         Row: {
           amount: number
           category: Database["public"]["Enums"]["income_category"]
+          category_icon: string | null
+          category_name: string | null
           created_at: string
           day_of_month: number
           description: string
           end_date: string | null
           id: string
+          income_category_id: string | null
           is_active: boolean
           shared_group_id: string | null
           start_date: string | null
@@ -454,11 +473,14 @@ export type Database = {
         Insert: {
           amount: number
           category?: Database["public"]["Enums"]["income_category"]
+          category_icon?: string | null
+          category_name?: string | null
           created_at?: string
           day_of_month: number
           description: string
           end_date?: string | null
           id?: string
+          income_category_id?: string | null
           is_active?: boolean
           shared_group_id?: string | null
           start_date?: string | null
@@ -468,11 +490,14 @@ export type Database = {
         Update: {
           amount?: number
           category?: Database["public"]["Enums"]["income_category"]
+          category_icon?: string | null
+          category_name?: string | null
           created_at?: string
           day_of_month?: number
           description?: string
           end_date?: string | null
           id?: string
+          income_category_id?: string | null
           is_active?: boolean
           shared_group_id?: string | null
           start_date?: string | null
@@ -480,6 +505,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "recurring_incomes_income_category_id_fkey"
+            columns: ["income_category_id"]
+            isOneToOne: false
+            referencedRelation: "user_income_categories"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "recurring_incomes_shared_group_id_fkey"
             columns: ["shared_group_id"]
@@ -668,6 +700,45 @@ export type Database = {
         }
         Relationships: []
       }
+      user_income_categories: {
+        Row: {
+          color: string | null
+          created_at: string | null
+          display_order: number | null
+          icon: string
+          id: string
+          is_active: boolean | null
+          is_default: boolean | null
+          name: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string | null
+          display_order?: number | null
+          icon?: string
+          id?: string
+          is_active?: boolean | null
+          is_default?: boolean | null
+          name: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string | null
+          display_order?: number | null
+          icon?: string
+          id?: string
+          is_active?: boolean | null
+          is_default?: boolean | null
+          name?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -713,12 +784,20 @@ export type Database = {
         Args: { user_id_param: string }
         Returns: undefined
       }
+      initialize_user_income_categories: {
+        Args: { user_id_param: string }
+        Returns: undefined
+      }
       is_group_member: {
         Args: { group_id_param: string; user_id_param: string }
         Returns: boolean
       }
       migrate_credit_card_config: { Args: never; Returns: undefined }
       migrate_expense_categories: {
+        Args: { user_id_param: string }
+        Returns: undefined
+      }
+      migrate_income_categories: {
         Args: { user_id_param: string }
         Returns: undefined
       }

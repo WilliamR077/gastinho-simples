@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { BudgetGoal } from "@/types/budget-goal";
 import { categoryLabels } from "@/types/expense";
 import { incomeCategoryLabels } from "@/types/income";
+import { useIncomeCategories } from "@/hooks/use-income-categories";
 
 const budgetGoalEditSchema = z.object({
   type: z.enum(["monthly_total", "category", "income_monthly_total", "income_category"] as const),
@@ -27,6 +28,7 @@ interface BudgetGoalEditDialogProps {
 }
 
 export function BudgetGoalEditDialog({ goal, open, onOpenChange, onSave }: BudgetGoalEditDialogProps) {
+  const { activeCategories: incomeActiveCategories } = useIncomeCategories();
   const form = useForm<BudgetGoalEditFormData>({
     resolver: zodResolver(budgetGoalEditSchema),
     defaultValues: {
@@ -105,11 +107,19 @@ export function BudgetGoalEditDialog({ goal, open, onOpenChange, onSave }: Budge
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent className="bg-background">
-                        {Object.entries(goalType === "income_category" ? incomeCategoryLabels : categoryLabels).map(([key, label]) => (
-                          <SelectItem key={key} value={key}>
-                            {label}
-                          </SelectItem>
-                        ))}
+                        {goalType === "income_category" ? (
+                          incomeActiveCategories.map((cat) => (
+                            <SelectItem key={cat.id} value={cat.id}>
+                              {cat.icon} {cat.name}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          Object.entries(categoryLabels).map(([key, label]) => (
+                            <SelectItem key={key} value={key}>
+                              {label}
+                            </SelectItem>
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
                     <FormMessage />

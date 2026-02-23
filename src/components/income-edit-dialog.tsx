@@ -12,8 +12,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Income, IncomeCategory, incomeCategoryLabels, incomeCategoryIcons } from "@/types/income";
+import { Income, IncomeCategory } from "@/types/income";
 import { cn, parseLocalDate, normalizeToLocalDate } from "@/lib/utils";
+import { IncomeCategorySelector } from "@/components/income-category-selector";
+import { useIncomeCategories } from "@/hooks/use-income-categories";
 
 const incomeEditSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
@@ -29,6 +31,9 @@ export interface IncomeFormData {
   amount: number;
   category: IncomeCategory;
   incomeDate: Date;
+  incomeCategoryId?: string | null;
+  categoryName?: string | null;
+  categoryIcon?: string | null;
 }
 
 interface IncomeEditDialogProps {
@@ -40,6 +45,7 @@ interface IncomeEditDialogProps {
 
 export function IncomeEditDialog({ income, open, onOpenChange, onSave }: IncomeEditDialogProps) {
   const lastIncomeIdRef = useRef<string | null>(null);
+  const { activeCategories } = useIncomeCategories();
 
   const form = useForm<IncomeEditFormData>({
     resolver: zodResolver(incomeEditSchema),
@@ -59,7 +65,7 @@ export function IncomeEditDialog({ income, open, onOpenChange, onSave }: IncomeE
       form.reset({
         description: income.description,
         amount: Number(income.amount),
-        category: income.category,
+        category: (income as any).income_category_id || income.category,
         incomeDate: parseLocalDate(income.income_date),
       });
     }
@@ -73,17 +79,21 @@ export function IncomeEditDialog({ income, open, onOpenChange, onSave }: IncomeE
   const handleSubmit = (data: IncomeEditFormData) => {
     if (!income) return;
     
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.category);
+    const selectedCategory = isUUID ? activeCategories.find(c => c.id === data.category) : null;
+
     const formData: IncomeFormData = {
       description: data.description,
       amount: data.amount,
-      category: data.category as IncomeCategory,
+      category: isUUID ? ("outros" as IncomeCategory) : (data.category as IncomeCategory),
       incomeDate: data.incomeDate,
+      incomeCategoryId: isUUID ? data.category : null,
+      categoryName: selectedCategory?.name || null,
+      categoryIcon: selectedCategory?.icon || null,
     };
     onSave(income.id, formData);
     onOpenChange(false);
   };
-
-  const categories = Object.entries(incomeCategoryLabels) as [IncomeCategory, string][];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -133,23 +143,9 @@ export function IncomeEditDialog({ income, open, onOpenChange, onSave }: IncomeE
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Categoria</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione a categoria" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent className="bg-background">
-                      {categories.map(([value, label]) => (
-                        <SelectItem key={value} value={value}>
-                          <span className="flex items-center gap-2">
-                            <span>{incomeCategoryIcons[value]}</span>
-                            <span>{label}</span>
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormControl>
+                    <IncomeCategorySelector value={field.value} onValueChange={field.onChange} />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}

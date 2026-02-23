@@ -12,21 +12,15 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CalendarIcon, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import { IncomeCategory, incomeCategoryLabels, incomeCategoryIcons } from "@/types/income";
 import { useSharedGroups } from "@/hooks/use-shared-groups";
+import { IncomeCategorySelector } from "@/components/income-category-selector";
+import { useIncomeCategories } from "@/hooks/use-income-categories";
 
 interface IncomeFormSheetProps {
   open: boolean;
@@ -37,19 +31,25 @@ interface IncomeFormSheetProps {
 export function IncomeFormSheet({ open, onOpenChange, onSuccess }: IncomeFormSheetProps) {
   const { user } = useAuth();
   const { currentContext } = useSharedGroups();
+  const { activeCategories } = useIncomeCategories();
   const [isLoading, setIsLoading] = useState(false);
   
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState<IncomeCategory>("salario");
+  const [categoryValue, setCategoryValue] = useState("");
   const [incomeDate, setIncomeDate] = useState<Date>(new Date());
 
   const isGroupContext = currentContext.type === 'group';
 
+  // Set default category when categories load
+  if (!categoryValue && activeCategories.length > 0) {
+    setCategoryValue(activeCategories[0].id);
+  }
+
   const resetForm = () => {
     setDescription("");
     setAmount("");
-    setCategory("salario");
+    setCategoryValue(activeCategories.length > 0 ? activeCategories[0].id : "");
     setIncomeDate(new Date());
   };
 
@@ -75,14 +75,21 @@ export function IncomeFormSheet({ open, onOpenChange, onSuccess }: IncomeFormShe
     setIsLoading(true);
 
     try {
+      // Determine if value is UUID (custom category) or enum
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(categoryValue);
+      const selectedCategory = isUUID ? activeCategories.find(c => c.id === categoryValue) : null;
+
       const { error } = await supabase.from("incomes").insert({
         user_id: user.id,
         description: description.trim(),
         amount: amountValue,
-        category,
+        category: isUUID ? "outros" : categoryValue,
         income_date: incomeDate.toISOString(),
         shared_group_id: isGroupContext ? currentContext.groupId : null,
-      });
+        income_category_id: isUUID ? categoryValue : null,
+        category_name: selectedCategory?.name || null,
+        category_icon: selectedCategory?.icon || null,
+      } as any);
 
       if (error) throw error;
 
@@ -98,8 +105,6 @@ export function IncomeFormSheet({ open, onOpenChange, onSuccess }: IncomeFormShe
     }
   };
 
-  const categories = Object.entries(incomeCategoryLabels) as [IncomeCategory, string][];
-
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="h-[85vh] rounded-t-xl">
@@ -114,7 +119,6 @@ export function IncomeFormSheet({ open, onOpenChange, onSuccess }: IncomeFormShe
         </SheetHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 mt-6">
-          {/* Descrição */}
           <div className="space-y-2">
             <Label htmlFor="description">Descrição</Label>
             <Input
@@ -126,7 +130,6 @@ export function IncomeFormSheet({ open, onOpenChange, onSuccess }: IncomeFormShe
             />
           </div>
 
-          {/* Valor */}
           <div className="space-y-2">
             <Label htmlFor="amount">Valor (R$)</Label>
             <Input
@@ -139,27 +142,11 @@ export function IncomeFormSheet({ open, onOpenChange, onSuccess }: IncomeFormShe
             />
           </div>
 
-          {/* Categoria */}
           <div className="space-y-2">
             <Label>Categoria</Label>
-            <Select value={category} onValueChange={(v) => setCategory(v as IncomeCategory)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {categories.map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    <span className="flex items-center gap-2">
-                      <span>{incomeCategoryIcons[value]}</span>
-                      <span>{label}</span>
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <IncomeCategorySelector value={categoryValue} onValueChange={setCategoryValue} />
           </div>
 
-          {/* Data */}
           <div className="space-y-2">
             <Label>Data</Label>
             <Popover>
@@ -187,7 +174,6 @@ export function IncomeFormSheet({ open, onOpenChange, onSuccess }: IncomeFormShe
             </Popover>
           </div>
 
-          {/* Botões */}
           <div className="flex gap-3 pt-4">
             <Button
               type="button"

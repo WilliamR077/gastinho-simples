@@ -508,7 +508,10 @@ export default function Index() {
           amount: data.amount,
           category: data.category,
           income_date: formatDateLocal(data.incomeDate),
-        })
+          income_category_id: data.incomeCategoryId || null,
+          category_name: data.categoryName || null,
+          category_icon: data.categoryIcon || null,
+        } as any)
         .eq("id", id);
 
       if (error) throw error;
@@ -522,6 +525,9 @@ export default function Index() {
                 amount: data.amount,
                 category: data.category,
                 income_date: formatDateLocal(data.incomeDate),
+                income_category_id: data.incomeCategoryId || null,
+                category_name: data.categoryName || null,
+                category_icon: data.categoryIcon || null,
               }
             : i
         )
@@ -550,7 +556,10 @@ export default function Index() {
           amount: data.amount,
           category: data.category,
           day_of_month: data.dayOfMonth,
-        })
+          income_category_id: data.incomeCategoryId || null,
+          category_name: data.categoryName || null,
+          category_icon: data.categoryIcon || null,
+        } as any)
         .eq("id", id);
 
       if (error) throw error;
@@ -564,6 +573,9 @@ export default function Index() {
                 amount: data.amount,
                 category: data.category,
                 day_of_month: data.dayOfMonth,
+                income_category_id: data.incomeCategoryId || null,
+                category_name: data.categoryName || null,
+                category_icon: data.categoryIcon || null,
               }
             : i
         )

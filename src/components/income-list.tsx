@@ -1,6 +1,7 @@
 // income-list.tsx (substitua o arquivo atual)
 import { useState } from "react";
 import { Income, incomeCategoryLabels, incomeCategoryIcons } from "@/types/income";
+import { useIncomeCategories } from "@/hooks/use-income-categories";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useValuesVisibility } from "@/hooks/use-values-visibility";
@@ -32,8 +33,19 @@ interface IncomeListProps {
 
 export function IncomeList({ incomes, onDelete, onEdit }: IncomeListProps) {
   const { isHidden } = useValuesVisibility();
+  const { categories: incomeCats } = useIncomeCategories();
   const [currentPage, setCurrentPage] = useState(1);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const getIncomeCatInfo = (income: Income) => {
+    const catId = (income as any).income_category_id;
+    if (catId) {
+      const custom = incomeCats.find(c => c.id === catId);
+      if (custom) return { icon: custom.icon, name: custom.name };
+      if ((income as any).category_name) return { icon: (income as any).category_icon || "📦", name: (income as any).category_name };
+    }
+    return { icon: incomeCategoryIcons[income.category] || "📦", name: incomeCategoryLabels[income.category] || income.category };
+  };
   const itemsPerPage = 10;
 
   const totalPages = Math.ceil(incomes.length / itemsPerPage);
@@ -84,18 +96,17 @@ export function IncomeList({ incomes, onDelete, onEdit }: IncomeListProps) {
                 <div className="flex items-center gap-3 flex-1 w-full sm:w-auto min-w-0">
                   <div className="p-2 rounded-full shrink-0 bg-green-500">
                     <span className="sr-only">Ícone</span>
-                    {/* ícone categórico */}
-                    <span className="h-4 w-4 inline-block">{incomeCategoryIcons[income.category]}</span>
+                    <span className="h-4 w-4 inline-block">{getIncomeCatInfo(income).icon}</span>
                   </div>
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-lg">{incomeCategoryIcons[income.category]}</span>
+                      <span className="text-lg">{getIncomeCatInfo(income).icon}</span>
                       <p className="font-medium text-foreground truncate">{income.description}</p>
                     </div>
 
                     <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                      <span>{incomeCategoryLabels[income.category]}</span>
+                      <span>{getIncomeCatInfo(income).name}</span>
                       <span>•</span>
                       <span>{format(parseLocalDate(income.income_date), "dd/MM/yyyy", { locale: ptBR })}</span>
                     </div>
