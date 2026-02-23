@@ -327,7 +327,7 @@ export function ExpenseSummary({
                         <span className="text-muted-foreground">
                           {goal.type === "category" && goal.category
                             ? categoryLabels[goal.category]
-                            : "Total"}
+                            : "Limite Mensal"}
                         </span>
                       </div>
                       <span className={`font-medium ${percentage >= 100 ? 'text-destructive' : percentage >= 85 ? 'text-orange-500' : 'text-muted-foreground'}`}>

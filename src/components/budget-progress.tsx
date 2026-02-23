@@ -8,7 +8,7 @@ import { RecurringExpense } from "@/types/recurring-expense";
 import { Income, RecurringIncome, incomeCategoryLabels, incomeCategoryIcons } from "@/types/income";
 import { useIncomeCategories } from "@/hooks/use-income-categories";
 import { categoryLabels, categoryIcons } from "@/types/expense";
-import { AlertTriangle, TrendingDown, TrendingUp, MoreVertical, Pencil, Trash2, AlertCircle, Check, PartyPopper, Star } from "lucide-react";
+import { AlertTriangle, TrendingDown, TrendingUp, MoreVertical, Pencil, Trash2, AlertCircle, Check, PartyPopper, Star, Scale } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { parseLocalDate } from "@/lib/utils";
@@ -159,33 +159,37 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
   };
 
   const isIncomeGoal = (goalType: string) => goalType.startsWith('income_');
+  const isBalanceGoal = (goalType: string) => goalType === 'balance_target';
 
   const calculateProgress = (goal: BudgetGoal) => {
     let totalValue = 0;
     const isIncome = isIncomeGoal(goal.type);
+    const isBalance = isBalanceGoal(goal.type);
 
-    if (isIncome) {
+    if (isBalance) {
+      // Balance goal: saldo = entradas - despesas
+      const totalIncomeValue = monthlyIncomes.reduce((sum, inc) => sum + Number(inc.amount), 0)
+        + activeRecurringIncomes.reduce((sum, ri) => sum + Number(ri.amount), 0);
+      const totalExpenseValue = monthlyExpenses.reduce((sum, exp) => sum + Number(exp.amount), 0)
+        + activeRecurringExpenses.reduce((sum, re) => sum + Number(re.amount), 0);
+      totalValue = totalIncomeValue - totalExpenseValue;
+    } else if (isIncome) {
       // Income goals
       if (goal.type === "income_monthly_total") {
         totalValue = monthlyIncomes.reduce((sum, inc) => sum + Number(inc.amount), 0);
         totalValue += activeRecurringIncomes.reduce((sum, ri) => sum + Number(ri.amount), 0);
       } else if (goal.type === "income_category" && goal.category) {
-        // goal.category can be a UUID (custom category) or enum value
         const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(goal.category);
         
         totalValue = monthlyIncomes
           .filter((inc) => {
-            if (isUUID) {
-              return (inc as any).income_category_id === goal.category;
-            }
+            if (isUUID) return (inc as any).income_category_id === goal.category;
             return inc.category === goal.category;
           })
           .reduce((sum, inc) => sum + Number(inc.amount), 0);
         totalValue += activeRecurringIncomes
           .filter((ri) => {
-            if (isUUID) {
-              return (ri as any).income_category_id === goal.category;
-            }
+            if (isUUID) return (ri as any).income_category_id === goal.category;
             return ri.category === goal.category;
           })
           .reduce((sum, ri) => sum + Number(ri.amount), 0);
@@ -206,9 +210,9 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
     }
 
     const limit = Number(goal.limit_amount);
-    const percentage = (totalValue / limit) * 100;
+    const percentage = isBalance ? (totalValue / limit) * 100 : (totalValue / limit) * 100;
     const remaining = limit - totalValue;
-    const isOver = totalValue > limit;
+    const isOver = isBalance ? totalValue >= limit : totalValue > limit;
 
     return { totalValue, limit, percentage, remaining, isOver };
   };
@@ -220,6 +224,7 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
       if (descriptionFilter) {
         const goalName = goal.type === 'monthly_total' ? 'Limite Mensal Total'
           : goal.type === 'income_monthly_total' ? 'Meta Mensal de Entradas'
+          : goal.type === 'balance_target' ? 'Meta de Saldo'
           : goal.category ? (isIncomeGoal(goal.type) 
             ? (incomeCategoriesList.find(c => c.id === goal.category)?.name || incomeCategoryLabels[goal.category as keyof typeof incomeCategoryLabels] || goal.category)
             : (categoryLabels[goal.category as keyof typeof categoryLabels] || goal.category))
@@ -471,8 +476,86 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
     </DropdownMenu>
   );
 
-  const expenseGoals = filteredGoals.filter(g => !isIncomeGoal(g.type));
+  const expenseGoals = filteredGoals.filter(g => !isIncomeGoal(g.type) && !isBalanceGoal(g.type));
   const incomeGoals = filteredGoals.filter(g => isIncomeGoal(g.type));
+  const balanceGoals = filteredGoals.filter(g => isBalanceGoal(g.type));
+
+  const renderBalanceGoal = (goal: BudgetGoal) => {
+    const { totalValue, limit, percentage, remaining, isOver } = calculateProgress(goal);
+    const progressValue = Math.min(Math.max(percentage, 0), 100);
+    const isPositive = totalValue >= 0;
+
+    return (
+      <Card
+        key={goal.id}
+        className={`transition-all ${
+          isOver ? 'border-blue-500 bg-blue-500/10' :
+          percentage >= 80 ? 'border-blue-400/50 bg-blue-400/5' :
+          ''
+        }`}
+      >
+        <CardHeader>
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Scale className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                Meta de Saldo
+              </CardTitle>
+              <CardDescription>
+                Meta: {formatCurrency(limit)}
+              </CardDescription>
+            </div>
+            {renderGoalMenu(goal)}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span>Saldo atual: {formatCurrency(totalValue)}</span>
+              <span className={isOver ? "text-blue-600 dark:text-blue-400 font-medium" : "text-muted-foreground"}>
+                {percentage.toFixed(1)}%
+              </span>
+            </div>
+            <Progress
+              value={progressValue}
+              className="[&>div]:bg-blue-500"
+            />
+            <div className="flex items-center justify-between text-sm">
+              {isOver ? (
+                <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400 font-medium">
+                  <TrendingUp className="h-4 w-4" />
+                  <span>Meta atingida! Saldo excede em {formatCurrency(Math.abs(remaining))}</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1 text-muted-foreground">
+                  <TrendingDown className="h-4 w-4" />
+                  <span>Faltam {formatCurrency(remaining)} para a meta</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {isOver && (
+            <Alert className="border-blue-500 bg-blue-500/10">
+              <Star className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <AlertDescription className="text-blue-600 dark:text-blue-400">
+                <strong>Parabéns! Seu saldo está acima da meta! 🎯</strong>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {!isOver && percentage >= 80 && (
+            <Alert className="border-blue-400/50 bg-blue-400/5">
+              <TrendingUp className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <AlertDescription className="text-blue-600 dark:text-blue-400">
+                <strong>Quase lá! Você está a {formatCurrency(remaining)} da meta! 💪</strong>
+              </AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -493,6 +576,16 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
             Metas de Entradas
           </h3>
           {incomeGoals.map((goal) => renderIncomeGoal(goal))}
+        </div>
+      )}
+
+      {balanceGoals.length > 0 && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <Scale className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            Metas de Saldo
+          </h3>
+          {balanceGoals.map((goal) => renderBalanceGoal(goal))}
         </div>
       )}
     </div>
