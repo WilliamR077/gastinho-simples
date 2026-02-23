@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress"
 import { useMemo } from "react"
 import { parseLocalDate } from "@/lib/utils"
 import { useValuesVisibility } from "@/hooks/use-values-visibility"
+import { useCategories } from "@/hooks/use-categories"
 
 interface ExpenseSummaryProps {
   expenses: Expense[]
@@ -149,6 +150,29 @@ export function ExpenseSummary({
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
   const { isHidden } = useValuesVisibility();
+  const { categories: expenseCategories } = useCategories();
+
+  // Match category by enum OR by category_id (UUID)
+  const getCategoryIdsForGoal = (goalCategory: string) => {
+    const goalCategoryLabel = categoryLabels[goalCategory as keyof typeof categoryLabels];
+    if (!goalCategoryLabel) return [];
+    return expenseCategories
+      .filter(c => c.name.toLowerCase() === goalCategoryLabel.toLowerCase())
+      .map(c => c.id);
+  };
+
+  const expenseMatchesGoalCategory = (
+    expCategory: string | undefined,
+    expCategoryId: string | null | undefined,
+    goalCategory: string
+  ) => {
+    if (expCategory === goalCategory) return true;
+    if (expCategoryId) {
+      const matchingIds = getCategoryIdsForGoal(goalCategory);
+      return matchingIds.includes(expCategoryId);
+    }
+    return false;
+  };
 
   const formatCurrency = (value: number) => 
     isHidden ? "R$ ***,**" : `R$ ${value.toFixed(2).replace('.', ',')}`
@@ -176,10 +200,10 @@ export function ExpenseSummary({
         totalSpent += recurringActive.reduce((sum, re) => sum + Number(re.amount), 0);
       } else if (goal.type === "category" && goal.category) {
         totalSpent = monthlyExpenses
-          .filter((exp) => exp.category === goal.category)
+          .filter((exp) => expenseMatchesGoalCategory(exp.category, exp.category_id, goal.category!))
           .reduce((sum, exp) => sum + Number(exp.amount), 0);
         totalSpent += recurringActive
-          .filter((re) => re.category === goal.category)
+          .filter((re) => expenseMatchesGoalCategory(re.category, re.category_id, goal.category!))
           .reduce((sum, re) => sum + Number(re.amount), 0);
       }
 
