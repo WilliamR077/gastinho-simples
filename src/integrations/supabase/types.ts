@@ -808,6 +808,7 @@ export type Database = {
         | "category"
         | "income_monthly_total"
         | "income_category"
+        | "balance_target"
       expense_category:
         | "alimentacao"
         | "transporte"
@@ -963,6 +964,7 @@ export const Constants = {
         "category",
         "income_monthly_total",
         "income_category",
+        "balance_target",
       ],
       expense_category: [
         "alimentacao",
