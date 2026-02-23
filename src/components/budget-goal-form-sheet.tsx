@@ -14,17 +14,17 @@ import { useIncomeCategories } from "@/hooks/use-income-categories";
 import { BudgetGoalType } from "@/types/budget-goal";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, TrendingDown, TrendingUp } from "lucide-react";
+import { ArrowLeft, TrendingDown, TrendingUp, Scale } from "lucide-react";
 
 const budgetGoalSchema = z.object({
-  type: z.enum(["monthly_total", "category", "income_monthly_total", "income_category"] as const),
+  type: z.enum(["monthly_total", "category", "income_monthly_total", "income_category", "balance_target"] as const),
   category: z.string().optional(),
   limitAmount: z.number().positive("O valor deve ser maior que zero"),
 });
 
 type BudgetGoalFormData = z.infer<typeof budgetGoalSchema>;
 
-type GoalScope = null | "expense" | "income";
+type GoalScope = null | "expense" | "income" | "balance";
 
 interface BudgetGoalFormSheetProps {
   open: boolean;
@@ -81,9 +81,9 @@ export function BudgetGoalFormSheet({
     onOpenChange(open);
   };
 
-  const handleScopeSelect = (scope: "expense" | "income") => {
+  const handleScopeSelect = (scope: "expense" | "income" | "balance") => {
     setGoalScope(scope);
-    const defaultType = scope === "expense" ? "monthly_total" : "income_monthly_total";
+    const defaultType = scope === "expense" ? "monthly_total" : scope === "balance" ? "balance_target" : "income_monthly_total";
     setGoalType(defaultType);
     setValue("type", defaultType as any);
   };
@@ -137,6 +137,23 @@ export function BudgetGoalFormSheet({
                 </div>
               </CardContent>
             </Card>
+
+            <Card
+              className="cursor-pointer hover:border-blue-500/50 transition-colors"
+              onClick={() => handleScopeSelect("balance")}
+            >
+              <CardContent className="p-4 flex items-start gap-3">
+                <div className="rounded-full bg-blue-500/10 p-2 mt-0.5">
+                  <Scale className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <p className="font-semibold text-foreground">Meta de Saldo</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Defina um saldo mínimo desejado. A meta é atingida quando entradas - despesas ≥ valor definido.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         ) : (
           <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4 pb-24">
@@ -154,33 +171,35 @@ export function BudgetGoalFormSheet({
               Voltar
             </Button>
 
-            <div className="space-y-2">
-              <Label htmlFor="goal-sheet-type">Tipo de Meta</Label>
-              <Select
-                value={goalType}
-                onValueChange={(value) => {
-                  setGoalType(value);
-                  setValue("type", value as any);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {goalScope === "expense" ? (
-                    <>
-                      <SelectItem value="monthly_total">Limite Mensal Total</SelectItem>
-                      <SelectItem value="category">Limite por Categoria</SelectItem>
-                    </>
-                  ) : (
-                    <>
-                      <SelectItem value="income_monthly_total">Meta Mensal de Entradas</SelectItem>
-                      <SelectItem value="income_category">Meta por Categoria de Entrada</SelectItem>
-                    </>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
+            {goalScope !== "balance" && (
+              <div className="space-y-2">
+                <Label htmlFor="goal-sheet-type">Tipo de Meta</Label>
+                <Select
+                  value={goalType}
+                  onValueChange={(value) => {
+                    setGoalType(value);
+                    setValue("type", value as any);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {goalScope === "expense" ? (
+                      <>
+                        <SelectItem value="monthly_total">Limite Mensal Total</SelectItem>
+                        <SelectItem value="category">Limite por Categoria</SelectItem>
+                      </>
+                    ) : (
+                      <>
+                        <SelectItem value="income_monthly_total">Meta Mensal de Entradas</SelectItem>
+                        <SelectItem value="income_category">Meta por Categoria de Entrada</SelectItem>
+                      </>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {(goalType === "category" || goalType === "income_category") && (
               <div className="space-y-2">
@@ -213,7 +232,7 @@ export function BudgetGoalFormSheet({
 
             <div className="space-y-2">
               <Label htmlFor="goal-sheet-limitAmount">
-                {goalScope === "expense" ? "Limite (R$)" : "Meta (R$)"}
+                {goalScope === "expense" ? "Limite (R$)" : goalScope === "balance" ? "Saldo Mínimo Desejado (R$)" : "Meta (R$)"}
               </Label>
               <Input
                 id="goal-sheet-limitAmount"

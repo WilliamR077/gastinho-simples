@@ -10,6 +10,7 @@ import { BudgetGoalEditDialog } from "@/components/budget-goal-edit-dialog";
 import { IncomeEditDialog, IncomeFormData } from "@/components/income-edit-dialog";
 import { RecurringIncomeEditDialog, RecurringIncomeFormData } from "@/components/recurring-income-edit-dialog";
 import { BudgetAlertBanner } from "@/components/budget-alert-banner";
+import { IncomeGoalBanner } from "@/components/income-goal-banner";
 import { MonthNavigator } from "@/components/month-navigator";
 import { FloatingActionButton } from "@/components/floating-action-button";
 import { CalculatorDrawer } from "@/components/calculator-drawer";
@@ -1410,6 +1411,7 @@ export default function Index() {
     const activeRecurring = recurringExpenses.filter((re) => re.is_active);
 
     return budgetGoals
+      .filter((goal) => goal.type === "monthly_total" || goal.type === "category")
       .map((goal) => {
         let totalSpent = 0;
 
@@ -1590,13 +1592,22 @@ export default function Index() {
             creditCardConfig={creditCardConfig || undefined}
             onPaymentMethodClick={handlePaymentMethodFilter}
             activePaymentMethod={filters.paymentMethod}
-            budgetGoals={budgetGoals}
+            budgetGoals={budgetGoals.filter(g => g.type === "monthly_total" || g.type === "category")}
           />
         </div>
 
         {/* Budget Alert Banner */}
         <BudgetAlertBanner
           goalsAtRisk={goalsAtRisk}
+          onNavigateToGoals={() => setActiveTab("goals")}
+        />
+
+        {/* Income Goal Celebration Banner */}
+        <IncomeGoalBanner
+          budgetGoals={budgetGoals}
+          incomes={incomes}
+          recurringIncomes={recurringIncomes}
+          selectedMonth={currentMonth}
           onNavigateToGoals={() => setActiveTab("goals")}
         />
 
@@ -1790,7 +1801,7 @@ export default function Index() {
 
               <TabsContent value="expense">
                 <BudgetProgress
-                  goals={budgetGoals.filter(g => g.type === "monthly_total" || g.type === "category")}
+                  goals={budgetGoals.filter(g => g.type === "monthly_total" || g.type === "category" || g.type === "balance_target")}
                   expenses={expenses}
                   recurringExpenses={recurringExpenses}
                   incomes={incomes}

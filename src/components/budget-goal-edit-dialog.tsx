@@ -13,7 +13,7 @@ import { incomeCategoryLabels } from "@/types/income";
 import { useIncomeCategories } from "@/hooks/use-income-categories";
 
 const budgetGoalEditSchema = z.object({
-  type: z.enum(["monthly_total", "category", "income_monthly_total", "income_category"] as const),
+  type: z.enum(["monthly_total", "category", "income_monthly_total", "income_category", "balance_target"] as const),
   category: z.string().optional(),
   limitAmount: z.number().positive("Valor limite deve ser positivo"),
 });
@@ -55,7 +55,7 @@ export function BudgetGoalEditDialog({ goal, open, onOpenChange, onSave }: Budge
     if (!goal) return;
     onSave(goal.id, {
       type: data.type,
-      category: data.type === "category" ? data.category : undefined,
+      category: (data.type === "category" || data.type === "income_category") ? data.category : undefined,
       limitAmount: data.limitAmount,
     });
     onOpenChange(false);
@@ -86,6 +86,7 @@ export function BudgetGoalEditDialog({ goal, open, onOpenChange, onSave }: Budge
                       <SelectItem value="category">Limite por Categoria</SelectItem>
                       <SelectItem value="income_monthly_total">Meta Mensal de Entradas</SelectItem>
                       <SelectItem value="income_category">Meta por Categoria de Entrada</SelectItem>
+                      <SelectItem value="balance_target">Meta de Saldo</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />

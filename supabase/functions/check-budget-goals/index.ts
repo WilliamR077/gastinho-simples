@@ -13,7 +13,7 @@ const corsHeaders = {
 interface BudgetGoal {
   id: string;
   user_id: string;
-  type: "monthly_total" | "category" | "income_monthly_total" | "income_category";
+  type: "monthly_total" | "category" | "income_monthly_total" | "income_category" | "balance_target";
   category: string | null;
   limit_amount: number;
 }
@@ -83,9 +83,41 @@ serve(async (req) => {
       console.log(`Processing goal ${goal.id} for user ${goal.user_id}`);
 
       const isIncomeGoal = goal.type.startsWith("income_");
+      const isBalanceGoal = goal.type === "balance_target";
       let totalValue = 0;
 
-      if (isIncomeGoal) {
+      if (isBalanceGoal) {
+        // Balance goal: saldo = entradas - despesas
+        const { data: incomeData } = await supabase
+          .from("incomes")
+          .select("amount")
+          .eq("user_id", goal.user_id)
+          .gte("income_date", monthStart);
+
+        const { data: recurringIncomeData } = await supabase
+          .from("recurring_incomes")
+          .select("amount")
+          .eq("user_id", goal.user_id)
+          .eq("is_active", true);
+
+        const { data: expenseData } = await supabase
+          .from("expenses")
+          .select("amount")
+          .eq("user_id", goal.user_id)
+          .gte("expense_date", monthStart);
+
+        const { data: recurringExpenseData } = await supabase
+          .from("recurring_expenses")
+          .select("amount")
+          .eq("user_id", goal.user_id)
+          .eq("is_active", true);
+
+        const totalIncome = (incomeData || []).reduce((sum: number, i: any) => sum + Number(i.amount), 0)
+          + (recurringIncomeData || []).reduce((sum: number, i: any) => sum + Number(i.amount), 0);
+        const totalExpense = (expenseData || []).reduce((sum: number, e: any) => sum + Number(e.amount), 0)
+          + (recurringExpenseData || []).reduce((sum: number, e: any) => sum + Number(e.amount), 0);
+        totalValue = totalIncome - totalExpense;
+      } else if (isIncomeGoal) {
         // Fetch incomes for the current month
         const { data: incomes } = await supabase
           .from("incomes")
@@ -146,9 +178,11 @@ serve(async (req) => {
       let alertTitle = "";
       let alertBody = "";
 
-      if (isIncomeGoal) {
+      if (isIncomeGoal || isBalanceGoal) {
         // Income goal alerts - celebratory messages
-        const goalName = goal.type === "income_category" && goal.category
+        const goalName = isBalanceGoal
+          ? "Meta de Saldo"
+          : goal.type === "income_category" && goal.category
           ? `Meta de ${goal.category}`
           : "Meta Mensal de Entradas";
 
