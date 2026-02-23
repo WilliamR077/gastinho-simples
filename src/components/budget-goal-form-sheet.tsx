@@ -10,6 +10,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Card, CardContent } from "@/components/ui/card";
 import { ExpenseCategory, categoryLabels } from "@/types/expense";
 import { incomeCategoryLabels } from "@/types/income";
+import { useIncomeCategories } from "@/hooks/use-income-categories";
 import { BudgetGoalType } from "@/types/budget-goal";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useNavigate } from "react-router-dom";
@@ -41,6 +42,7 @@ export function BudgetGoalFormSheet({
   const [goalScope, setGoalScope] = useState<GoalScope>(null);
   const [goalType, setGoalType] = useState<string>("monthly_total");
   const { canAddGoal, features } = useSubscription();
+  const { activeCategories: incomeActiveCategories } = useIncomeCategories();
   const navigate = useNavigate();
 
   const {
@@ -188,11 +190,19 @@ export function BudgetGoalFormSheet({
                     <SelectValue placeholder="Selecione a categoria" />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.entries(goalType === "income_category" ? incomeCategoryLabels : categoryLabels).map(([key, label]) => (
-                      <SelectItem key={key} value={key}>
-                        {label}
-                      </SelectItem>
-                    ))}
+                    {goalType === "income_category" ? (
+                      incomeActiveCategories.map((cat) => (
+                        <SelectItem key={cat.id} value={cat.id}>
+                          {cat.icon} {cat.name}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      Object.entries(categoryLabels).map(([key, label]) => (
+                        <SelectItem key={key} value={key}>
+                          {label}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
                 {errors.category && (

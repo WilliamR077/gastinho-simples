@@ -7,7 +7,9 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RecurringIncome, IncomeCategory, incomeCategoryLabels, incomeCategoryIcons } from "@/types/income";
+import { RecurringIncome, IncomeCategory } from "@/types/income";
+import { IncomeCategorySelector } from "@/components/income-category-selector";
+import { useIncomeCategories } from "@/hooks/use-income-categories";
 
 const recurringIncomeEditSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
@@ -23,6 +25,9 @@ export interface RecurringIncomeFormData {
   amount: number;
   category: IncomeCategory;
   dayOfMonth: number;
+  incomeCategoryId?: string | null;
+  categoryName?: string | null;
+  categoryIcon?: string | null;
 }
 
 interface RecurringIncomeEditDialogProps {
@@ -34,6 +39,7 @@ interface RecurringIncomeEditDialogProps {
 
 export function RecurringIncomeEditDialog({ income, open, onOpenChange, onSave }: RecurringIncomeEditDialogProps) {
   const lastIncomeIdRef = useRef<string | null>(null);
+  const { activeCategories } = useIncomeCategories();
 
   const form = useForm<RecurringIncomeEditFormData>({
     resolver: zodResolver(recurringIncomeEditSchema),
@@ -53,7 +59,7 @@ export function RecurringIncomeEditDialog({ income, open, onOpenChange, onSave }
       form.reset({
         description: income.description,
         amount: Number(income.amount),
-        category: income.category,
+        category: (income as any).income_category_id || income.category,
         dayOfMonth: income.day_of_month,
       });
     }
@@ -67,17 +73,21 @@ export function RecurringIncomeEditDialog({ income, open, onOpenChange, onSave }
   const handleSubmit = (data: RecurringIncomeEditFormData) => {
     if (!income) return;
     
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.category);
+    const selectedCategory = isUUID ? activeCategories.find(c => c.id === data.category) : null;
+
     const formData: RecurringIncomeFormData = {
       description: data.description,
       amount: data.amount,
-      category: data.category as IncomeCategory,
+      category: isUUID ? ("outros" as IncomeCategory) : (data.category as IncomeCategory),
       dayOfMonth: data.dayOfMonth,
+      incomeCategoryId: isUUID ? data.category : null,
+      categoryName: selectedCategory?.name || null,
+      categoryIcon: selectedCategory?.icon || null,
     };
     onSave(income.id, formData);
     onOpenChange(false);
   };
-
-  const categories = Object.entries(incomeCategoryLabels) as [IncomeCategory, string][];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -127,23 +137,9 @@ export function RecurringIncomeEditDialog({ income, open, onOpenChange, onSave }
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Categoria</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione a categoria" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent className="bg-background">
-                      {categories.map(([value, label]) => (
-                        <SelectItem key={value} value={value}>
-                          <span className="flex items-center gap-2">
-                            <span>{incomeCategoryIcons[value]}</span>
-                            <span>{label}</span>
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormControl>
+                    <IncomeCategorySelector value={field.value} onValueChange={field.onChange} />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}

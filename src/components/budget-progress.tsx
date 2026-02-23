@@ -6,6 +6,7 @@ import { BudgetGoal } from "@/types/budget-goal";
 import { Expense } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
 import { Income, RecurringIncome, incomeCategoryLabels, incomeCategoryIcons } from "@/types/income";
+import { useIncomeCategories } from "@/hooks/use-income-categories";
 import { categoryLabels, categoryIcons } from "@/types/expense";
 import { AlertTriangle, TrendingDown, TrendingUp, MoreVertical, Pencil, Trash2, AlertCircle, Check, PartyPopper, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -91,7 +92,8 @@ interface BudgetProgressProps {
 
 export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, recurringIncomes, selectedMonth, onDelete, onEdit, descriptionFilter, minAmountFilter, maxAmountFilter }: BudgetProgressProps) {
   const { isHidden } = useValuesVisibility();
-  const { categories } = useCategories();
+  const { categories: expenseCategories } = useCategories();
+  const { categories: incomeCategoriesList } = useIncomeCategories();
   
   const formatCurrency = (value: number) => {
     if (isHidden) return "R$ ***,**";
@@ -137,7 +139,7 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
     const goalCategoryLabel = categoryLabels[goalCategory as keyof typeof categoryLabels];
     if (!goalCategoryLabel) return [];
     
-    return categories
+    return expenseCategories
       .filter(c => c.name.toLowerCase() === goalCategoryLabel.toLowerCase())
       .map(c => c.id);
   };
@@ -168,11 +170,24 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
         totalValue = monthlyIncomes.reduce((sum, inc) => sum + Number(inc.amount), 0);
         totalValue += activeRecurringIncomes.reduce((sum, ri) => sum + Number(ri.amount), 0);
       } else if (goal.type === "income_category" && goal.category) {
+        // goal.category can be a UUID (custom category) or enum value
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(goal.category);
+        
         totalValue = monthlyIncomes
-          .filter((inc) => inc.category === goal.category)
+          .filter((inc) => {
+            if (isUUID) {
+              return (inc as any).income_category_id === goal.category;
+            }
+            return inc.category === goal.category;
+          })
           .reduce((sum, inc) => sum + Number(inc.amount), 0);
         totalValue += activeRecurringIncomes
-          .filter((ri) => ri.category === goal.category)
+          .filter((ri) => {
+            if (isUUID) {
+              return (ri as any).income_category_id === goal.category;
+            }
+            return ri.category === goal.category;
+          })
           .reduce((sum, ri) => sum + Number(ri.amount), 0);
       }
     } else {
@@ -206,7 +221,7 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
         const goalName = goal.type === 'monthly_total' ? 'Limite Mensal Total'
           : goal.type === 'income_monthly_total' ? 'Meta Mensal de Entradas'
           : goal.category ? (isIncomeGoal(goal.type) 
-            ? (incomeCategoryLabels[goal.category as keyof typeof incomeCategoryLabels] || goal.category)
+            ? (incomeCategoriesList.find(c => c.id === goal.category)?.name || incomeCategoryLabels[goal.category as keyof typeof incomeCategoryLabels] || goal.category)
             : (categoryLabels[goal.category as keyof typeof categoryLabels] || goal.category))
           : '';
         if (!goalName.toLowerCase().includes(descriptionFilter.toLowerCase())) return false;
@@ -331,6 +346,10 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
     const progressValue = Math.min(percentage, 100);
     const incomeLevel = getIncomeAlertLevel(percentage);
     const categoryKey = goal.category as keyof typeof incomeCategoryLabels;
+    const isUUID = goal.category ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(goal.category) : false;
+    const customIncomeCat = isUUID ? incomeCategoriesList.find(c => c.id === goal.category) : null;
+    const incomeCatIcon = customIncomeCat?.icon || incomeCategoryIcons[categoryKey] || "📦";
+    const incomeCatName = customIncomeCat?.name || incomeCategoryLabels[categoryKey] || goal.category;
 
     return (
       <Card 
@@ -347,12 +366,12 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
             <div className="flex-1">
               <CardTitle className="text-lg flex items-center gap-2">
                 {goal.type === "income_category" && goal.category && (
-                  <span>{incomeCategoryIcons[categoryKey] || "📦"}</span>
+                  <span>{incomeCatIcon}</span>
                 )}
                 {goal.type === "income_monthly_total"
                   ? "🎯 Meta Mensal de Entradas"
                   : goal.category
-                  ? incomeCategoryLabels[categoryKey] || goal.category
+                  ? incomeCatName
                   : "Categoria"}
               </CardTitle>
               <CardDescription>

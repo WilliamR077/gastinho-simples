@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { RecurringIncome, incomeCategoryLabels, incomeCategoryIcons } from "@/types/income";
+import { useIncomeCategories } from "@/hooks/use-income-categories";
 import { useValuesVisibility } from "@/hooks/use-values-visibility";
 import {
   DropdownMenu,
@@ -37,7 +38,18 @@ export function RecurringIncomeList({
   onEdit 
 }: RecurringIncomeListProps) {
   const { isHidden } = useValuesVisibility();
+  const { categories: incomeCats } = useIncomeCategories();
   const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const getIncomeCatInfo = (income: RecurringIncome) => {
+    const catId = (income as any).income_category_id;
+    if (catId) {
+      const custom = incomeCats.find(c => c.id === catId);
+      if (custom) return { icon: custom.icon, name: custom.name };
+      if ((income as any).category_name) return { icon: (income as any).category_icon || "📦", name: (income as any).category_name };
+    }
+    return { icon: incomeCategoryIcons[income.category] || "📦", name: incomeCategoryLabels[income.category] || income.category };
+  };
 
   const formatCurrency = (value: number) => 
     isHidden ? "R$ ***,**" : `R$ ${value.toFixed(2).replace('.', ',')}`;
@@ -78,11 +90,11 @@ export function RecurringIncomeList({
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-lg">{incomeCategoryIcons[income.category]}</span>
+                      <span className="text-lg">{getIncomeCatInfo(income).icon}</span>
                       <p className="font-medium text-foreground truncate">{income.description}</p>
                     </div>
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-xs sm:text-sm text-muted-foreground">
-                      <span>{incomeCategoryLabels[income.category]}</span>
+                      <span>{getIncomeCatInfo(income).name}</span>
                       <span className="hidden sm:inline">•</span>
                       <span>Recebimento: Dia {income.day_of_month}</span>
                     </div>

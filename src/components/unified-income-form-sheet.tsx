@@ -12,22 +12,16 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CalendarIcon, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import { IncomeCategory, incomeCategoryLabels, incomeCategoryIcons } from "@/types/income";
 import { useSharedGroups } from "@/hooks/use-shared-groups";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { IncomeCategorySelector } from "@/components/income-category-selector";
+import { useIncomeCategories } from "@/hooks/use-income-categories";
 
 type IncomeType = "monthly" | "recurring";
 
@@ -40,20 +34,25 @@ interface UnifiedIncomeFormSheetProps {
 export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess }: UnifiedIncomeFormSheetProps) {
   const { user } = useAuth();
   const { currentContext } = useSharedGroups();
+  const { activeCategories } = useIncomeCategories();
   const [isLoading, setIsLoading] = useState(false);
   
   const [incomeType, setIncomeType] = useState<IncomeType>("monthly");
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState<IncomeCategory>("salario");
+  const [categoryValue, setCategoryValue] = useState("");
   const [incomeDate, setIncomeDate] = useState<Date>(new Date());
   const [dayOfMonth, setDayOfMonth] = useState("5");
 
   const isGroupContext = currentContext.type === 'group';
 
+  // Set default category
+  if (!categoryValue && activeCategories.length > 0) {
+    setCategoryValue(activeCategories[0].id);
+  }
+
   useEffect(() => {
     if (open) {
-      // Reset form when opened
       setIncomeType("monthly");
     }
   }, [open]);
@@ -62,7 +61,7 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess }: Unifie
     setIncomeType("monthly");
     setDescription("");
     setAmount("");
-    setCategory("salario");
+    setCategoryValue(activeCategories.length > 0 ? activeCategories[0].id : "");
     setIncomeDate(new Date());
     setDayOfMonth("5");
   };
@@ -89,15 +88,21 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess }: Unifie
     setIsLoading(true);
 
     try {
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(categoryValue);
+      const selectedCategory = isUUID ? activeCategories.find(c => c.id === categoryValue) : null;
+
       if (incomeType === "monthly") {
         const { error } = await supabase.from("incomes").insert({
           user_id: user.id,
           description: description.trim(),
           amount: amountValue,
-          category,
+          category: isUUID ? "outros" : categoryValue,
           income_date: incomeDate.toISOString(),
           shared_group_id: isGroupContext ? currentContext.groupId : null,
-        });
+          income_category_id: isUUID ? categoryValue : null,
+          category_name: selectedCategory?.name || null,
+          category_icon: selectedCategory?.icon || null,
+        } as any);
 
         if (error) throw error;
         toast.success("Entrada adicionada com sucesso!");
@@ -113,10 +118,13 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess }: Unifie
           user_id: user.id,
           description: description.trim(),
           amount: amountValue,
-          category,
+          category: isUUID ? "outros" : categoryValue,
           day_of_month: day,
           shared_group_id: isGroupContext ? currentContext.groupId : null,
-        });
+          income_category_id: isUUID ? categoryValue : null,
+          category_name: selectedCategory?.name || null,
+          category_icon: selectedCategory?.icon || null,
+        } as any);
 
         if (error) throw error;
         toast.success("Entrada fixa adicionada com sucesso!");
@@ -133,8 +141,6 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess }: Unifie
     }
   };
 
-  const categories = Object.entries(incomeCategoryLabels) as [IncomeCategory, string][];
-
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="h-[85vh] rounded-t-xl overflow-y-auto">
@@ -149,7 +155,6 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess }: Unifie
         </SheetHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 mt-6 pb-24">
-          {/* Tipo de Entrada */}
           <div className="space-y-3 p-3 rounded-lg bg-muted/50 border border-border">
             <Label className="text-sm font-medium">Tipo de Entrada</Label>
             <RadioGroup
@@ -172,7 +177,6 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess }: Unifie
             </RadioGroup>
           </div>
 
-          {/* Descrição */}
           <div className="space-y-2">
             <Label htmlFor="description">Descrição</Label>
             <Input
@@ -184,7 +188,6 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess }: Unifie
             />
           </div>
 
-          {/* Valor */}
           <div className="space-y-2">
             <Label htmlFor="amount">Valor (R$)</Label>
             <Input
@@ -197,27 +200,11 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess }: Unifie
             />
           </div>
 
-          {/* Categoria */}
           <div className="space-y-2">
             <Label>Categoria</Label>
-            <Select value={category} onValueChange={(v) => setCategory(v as IncomeCategory)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {categories.map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    <span className="flex items-center gap-2">
-                      <span>{incomeCategoryIcons[value]}</span>
-                      <span>{label}</span>
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <IncomeCategorySelector value={categoryValue} onValueChange={setCategoryValue} />
           </div>
 
-          {/* Campo condicional: Data (do mês) ou Dia do recebimento (fixa) */}
           {incomeType === "monthly" ? (
             <div className="space-y-2">
               <Label>Data</Label>
@@ -263,7 +250,6 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess }: Unifie
             </div>
           )}
 
-          {/* Botões */}
           <div className="flex gap-3 pt-4">
             <Button
               type="button"

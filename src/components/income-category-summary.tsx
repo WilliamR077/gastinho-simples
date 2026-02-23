@@ -5,6 +5,7 @@ import { TrendingUp, ChevronDown } from "lucide-react"
 import { Income, RecurringIncome, incomeCategoryLabels, incomeCategoryIcons, IncomeCategory } from "@/types/income"
 import { useValuesVisibility } from "@/hooks/use-values-visibility"
 import { parseLocalDate } from "@/lib/utils"
+import { useIncomeCategories } from "@/hooks/use-income-categories"
 
 interface IncomeCategorySummaryProps {
   incomes: Income[]
@@ -25,36 +26,47 @@ export function IncomeCategorySummary({
 }: IncomeCategorySummaryProps) {
   const [isOpen, setIsOpen] = useState(false)
   const { isHidden } = useValuesVisibility()
+  const { categories: incomeCategories } = useIncomeCategories()
 
   const categoryTotals: Record<string, { total: number; name: string; icon: string }> = {}
 
-  // Filter incomes by date range
   const filteredIncomes = incomes.filter(income => {
     if (!startDate || !endDate) return true
     const date = parseLocalDate(income.income_date)
     return date >= startDate && date <= endDate
   })
 
-  filteredIncomes.forEach(income => {
-    const cat = income.category as IncomeCategory
-    const label = incomeCategoryLabels[cat] || cat
-    const icon = incomeCategoryIcons[cat] || "📦"
-    if (!categoryTotals[cat]) {
-      categoryTotals[cat] = { total: 0, name: label, icon }
+  const getCategoryInfo = (income: { category: string; income_category_id?: string | null; category_name?: string | null; category_icon?: string | null }) => {
+    const incomeCatId = (income as any).income_category_id;
+    if (incomeCatId) {
+      const customCat = incomeCategories.find(c => c.id === incomeCatId);
+      if (customCat) {
+        return { key: incomeCatId, name: customCat.name, icon: customCat.icon };
+      }
+      // Fallback to cached name/icon
+      if ((income as any).category_name) {
+        return { key: incomeCatId, name: (income as any).category_name, icon: (income as any).category_icon || "📦" };
+      }
     }
-    categoryTotals[cat].total += Number(income.amount)
+    const cat = income.category as IncomeCategory;
+    return { key: cat, name: incomeCategoryLabels[cat] || cat, icon: incomeCategoryIcons[cat] || "📦" };
+  }
+
+  filteredIncomes.forEach(income => {
+    const { key, name, icon } = getCategoryInfo(income)
+    if (!categoryTotals[key]) {
+      categoryTotals[key] = { total: 0, name, icon }
+    }
+    categoryTotals[key].total += Number(income.amount)
   })
 
-  // Add active recurring incomes
   recurringIncomes.forEach(income => {
     if (!income.is_active) return
-    const cat = income.category as IncomeCategory
-    const label = incomeCategoryLabels[cat] || cat
-    const icon = incomeCategoryIcons[cat] || "📦"
-    if (!categoryTotals[cat]) {
-      categoryTotals[cat] = { total: 0, name: label, icon }
+    const { key, name, icon } = getCategoryInfo(income as any)
+    if (!categoryTotals[key]) {
+      categoryTotals[key] = { total: 0, name, icon }
     }
-    categoryTotals[cat].total += Number(income.amount)
+    categoryTotals[key].total += Number(income.amount)
   })
 
   const sortedCategories = Object.entries(categoryTotals)
