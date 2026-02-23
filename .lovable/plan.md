@@ -1,76 +1,47 @@
 
 
-## Ajustes nas Metas e Novidades
+## Ajustes finais nas Metas
 
-### Problemas identificados e solucoes
+### 1. Corrigir 0% no card "Total" para metas por categoria
 
----
+**Problema**: No `expense-summary.tsx` (linhas 177-183), o calculo de `budgetProgress` para metas do tipo `category` compara apenas `exp.category === goal.category`. Porem, despesas mais recentes usam `category_id` (UUID) em vez do enum legado. O componente `budget-progress.tsx` ja resolve isso com a funcao `expenseMatchesGoalCategory` que verifica ambos os campos, mas o mini-resumo no card Total nao tem essa logica.
 
-### 1. Card "Total" mostrando metas de entrada (bug)
+**Solucao**: Adicionar no `expense-summary.tsx` a mesma logica de matching duplo:
+- Importar `useCategories` 
+- Criar funcao `expenseMatchesGoalCategory` que compara tanto `exp.category` quanto `exp.category_id` com a categoria da meta (mapeando pelo nome via `categoryLabels`)
+- Aplicar essa funcao nos filtros das linhas 178-183 (despesas mensais e recorrentes)
 
-**Problema**: O componente `ExpenseSummary` recebe todas as `budgetGoals` (incluindo `income_monthly_total` e `income_category`) e exibe no mini-resumo "Metas do Mes". Como as metas de entrada nao sao calculadas nesse componente (ele so calcula `monthly_total` e `category`), elas aparecem com 0%.
-
-**Solucao**: No `Index.tsx`, ao passar `budgetGoals` para `<ExpenseSummary>`, filtrar apenas metas de despesa:
-
-```
-budgetGoals={budgetGoals.filter(g => g.type === "monthly_total" || g.type === "category")}
-```
-
-Tambem no `expense-summary.tsx`, melhorar o label para nao exibir "Total" duplicado - usar "Limite Mensal" em vez de "Total" para `monthly_total`.
+**Arquivo**: `src/components/expense-summary.tsx`
 
 ---
 
-### 2. Banner de alerta (`goalsAtRisk`) incluindo metas de entrada
+### 2. Organizar metas em abas (Tabs)
 
-**Problema**: O calculo de `goalsAtRisk` no `Index.tsx` processa todas as metas, mas so calcula corretamente as de despesa. Metas de entrada (`income_*`) ficam com `totalSpent = 0`, logo nao atingem 80%, mas poderiam causar confusao futura.
+**Problema atual**: As metas sao exibidas em secoes empilhadas (Metas de Gastos, Metas de Entradas, Metas de Saldo) com headers `h3`. O usuario prefere abas para melhor organizacao.
 
-**Solucao**: Filtrar `goalsAtRisk` para considerar apenas metas de despesa (`monthly_total` e `category`).
+**Solucao**: Substituir a estrutura de secoes no `budget-progress.tsx` por um componente `Tabs` com tres abas:
+- Aba "Despesas" (icone TrendingDown vermelho)
+- Aba "Entradas" (icone TrendingUp verde)  
+- Aba "Saldo" (icone Scale azul)
 
----
+Cada aba so aparece se houver metas daquele tipo. A aba padrao sera a primeira que tiver metas.
 
-### 3. Novo tipo de meta: Meta de Saldo
-
-**Solucao**: Criar um novo tipo `balance_target` no enum `budget_goal_type`.
-
-- **Migracao SQL**: Adicionar `'balance_target'` ao enum
-- **Logica**: Saldo = (entradas do mes + recorrentes ativas) - (despesas do mes + recorrentes ativas). A meta e atingida quando saldo >= `limit_amount`
-- **UI no `budget-goal-form-sheet.tsx`**: Adicionar uma terceira opcao no seletor de tipo: "Meta de Saldo" com explicacao
-- **UI no `budget-progress.tsx`**: Renderizar meta de saldo com visual proprio (azul/neutro), mostrando saldo atual vs meta
-- **Constraint**: `balance_target` exige `category IS NULL` (nao faz sentido por categoria)
-
----
-
-### 4. Banner celebratorio para metas de entrada na tela principal
-
-**Solucao**: Criar um componente `IncomeBudgetAlertBanner` (ou expandir o existente) com visual verde/positivo, que apareca na tela principal quando:
-- Meta de entrada >= 80%: "Quase la! Voce atingiu X% da sua meta de entrada"
-- Meta de entrada >= 100%: "Parabens! Voce bateu/superou sua meta de entrada!"
-
-Este banner sera posicionado logo abaixo do banner de alertas de despesa existente.
+**Arquivo**: `src/components/budget-progress.tsx`
 
 ---
 
 ### Detalhes tecnicos
 
-**Arquivos modificados**:
+**Arquivo `src/components/expense-summary.tsx`**:
+- Importar `useCategories` de `@/hooks/use-categories`
+- Adicionar hook `const { categories: expenseCategories } = useCategories()` dentro do componente
+- Criar funcao helper `getCategoryIdsForGoal` que mapeia enum -> UUID via nome
+- Criar funcao `expenseMatchesGoalCategory` que verifica `exp.category === goalCategory` OU `exp.category_id` esta nos IDs mapeados
+- Atualizar o filtro em `budgetProgress` para usar essa funcao nos dois `.filter()` de categoria
 
-| Arquivo | Mudanca |
-|---|---|
-| `src/pages/Index.tsx` | Filtrar budgetGoals para ExpenseSummary; filtrar goalsAtRisk so para despesas; calcular incomeGoalsAchieved; renderizar IncomeBudgetAlertBanner |
-| `src/components/expense-summary.tsx` | Melhorar label de "Total" para "Limite Mensal" |
-| `src/components/budget-alert-banner.tsx` | (sem mudanca, ja funciona so para despesas apos filtro no Index) |
-| `src/components/budget-goal-form-sheet.tsx` | Adicionar opcao "Meta de Saldo" no seletor de tipo |
-| `src/components/budget-goal-edit-dialog.tsx` | Suportar tipo `balance_target` |
-| `src/components/budget-progress.tsx` | Adicionar `renderBalanceGoal` com calculo saldo = entradas - despesas |
-| `supabase/functions/check-budget-goals/index.ts` | Adicionar logica para `balance_target` |
-
-**Novos arquivos**:
-
-| Arquivo | Descricao |
-|---|---|
-| `src/components/income-goal-banner.tsx` | Banner verde celebratorio para metas de entrada atingidas/quase atingidas |
-
-**Migracao SQL**:
-- Adicionar `'balance_target'` ao enum `budget_goal_type`
-- Atualizar constraint `valid_category_for_type` para incluir `balance_target` (categoria deve ser null)
+**Arquivo `src/components/budget-progress.tsx`**:
+- Importar `Tabs, TabsList, TabsTrigger, TabsContent` de `@/components/ui/tabs`
+- Substituir o bloco de retorno (linhas 560-592) por estrutura de Tabs
+- Definir `defaultTab` dinamicamente baseado em qual tipo tem metas
+- Mostrar contadores nas abas (ex: "Despesas (2)")
 
