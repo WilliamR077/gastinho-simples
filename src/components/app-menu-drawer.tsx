@@ -104,8 +104,13 @@ export function AppMenuDrawer({ open, onOpenChange, onSignOut, recurringExpenses
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent side="right" className="flex flex-col w-72 sm:w-80">
           <SheetHeader className="pb-2">
-            <SheetTitle className="text-left">Menu</SheetTitle>
+            <SheetTitle className="sr-only">Menu</SheetTitle>
             <SheetDescription className="sr-only">Menu de navegação</SheetDescription>
+            <img
+              src="/lovable-uploads/06a1acc2-f553-41f0-8d87-32d25b4e425e.png"
+              alt="Gastinho Simples"
+              className="h-10 w-auto"
+            />
           </SheetHeader>
 
           <nav className="flex flex-col gap-1 flex-1">

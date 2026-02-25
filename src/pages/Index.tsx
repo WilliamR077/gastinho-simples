@@ -1487,7 +1487,6 @@ export default function Index() {
 
       {/* App Header */}
       <AppHeader
-        currentMonth={currentMonth}
         recurringExpenses={recurringExpenses}
         onSignOut={handleSignOut}
       />
