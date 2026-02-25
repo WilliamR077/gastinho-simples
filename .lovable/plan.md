@@ -1,64 +1,44 @@
 
 
-## Plano: Refatorar a App Bar do Index
+## Plano: Ajustes finos no Header e Menu Drawer
 
-### Situacao atual
-O header em `src/pages/Index.tsx` (linhas 1493-1554) renderiza uma fileira de botoes inline: Relatorios, Cartoes, Configuracoes, Conta, Sair, Lembretes, Olho, Tema. No mobile ficam apertados e sem hierarquia visual.
+### Alteracoes em `src/components/app-header.tsx`
 
-### O que sera feito
+1. **Logo maior e mais colada a esquerda**:
+   - Mudar de `h-9 sm:h-10` para `h-11 sm:h-12` para ficar legivel
+   - Reduzir padding esquerdo no container: trocar `px-4` por `px-2 sm:px-4` para colar mais no canto
 
-**1. Criar componente `src/components/app-header.tsx`**
+2. **Remover o mes central** ("Fevereiro de 2026"):
+   - Deletar linhas 41-44 (o `<span>` com `monthLabel`)
+   - Remover imports de `format`, `date-fns` e `ptBR` (ficam sem uso)
+   - Remover `currentMonth` da interface de props (ja nao sera usado)
+   - Mudar layout de `justify-between` para `justify-between` mantido, mas sem o elemento central o logo e botoes ficam nos extremos naturalmente
 
-Novo componente dedicado que encapsula toda a logica do header. Recebe via props: `currentMonth`, `onMonthChange`, `recurringExpenses`, e `onSignOut`.
+3. **Botoes mais colados a direita no desktop**:
+   - Reduzir padding direito: trocar `px-4` por `px-2 sm:px-4` ja resolve, ou usar `pr-2 sm:pr-3`
+   - Reduzir gap dos botoes de `gap-1` para `gap-0.5` no desktop para ficarem mais juntos
 
-Layout:
+### Alteracoes em `src/components/app-menu-drawer.tsx`
+
+4. **Trocar titulo "Menu" pelo logo do Gastinho**:
+   - No `SheetHeader`, remover `<SheetTitle>Menu</SheetTitle>`
+   - Substituir por uma `<img>` com o logo (`/lovable-uploads/06a1acc2-f553-41f0-8d87-32d25b4e425e.png`) com tamanho `h-10 w-auto`
+   - Manter `<SheetTitle className="sr-only">Menu</SheetTitle>` para acessibilidade (screen readers)
+
+### Alteracoes em `src/pages/Index.tsx`
+
+5. **Remover prop `currentMonth` do `<AppHeader>`** ja que nao sera mais usado no header
+
+### Resumo visual
+
 ```text
-+------------------------------------------------------+
-| [Logo]          Fevereiro de 2026      [📊] [👁] [☰] |
-+------------------------------------------------------+
+ANTES:
++--[px-4]--[Logo h-9]----[Fev 2026]----[📊][👁][☰]--[px-4]--+
+
+DEPOIS:
++--[px-2]--[Logo h-12]------------------[📊][👁][☰]--[px-2]--+
 ```
 
-- **Esquerda**: Logo clicavel (navega para `/`), menor que o atual (h-10 em vez de h-20)
-- **Centro**: Mes atual formatado (usando `format` do date-fns). No mobile, fonte menor
-- **Direita**: 3 icon-buttons com area de toque de 44x44px:
-  - `BarChart3` - navega para `/reports`
-  - `Eye`/`EyeOff` - toggle de visibilidade (usa `useValuesVisibility`)
-  - `Menu` (hamburger) - abre o drawer "Mais"
-
-**2. Criar componente `src/components/app-menu-drawer.tsx`**
-
-Drawer/Sheet lateral (usa o componente Sheet existente, side="right") com os itens secundarios:
-
-- Cartoes (`CreditCard` icon, navega para `/cards`)
-- Configuracoes (`Settings` icon, navega para `/settings`)
-- Conta (`User` icon, navega para `/account`)
-- Lembretes (`Bell` icon, abre o RemindersDrawer - com badge de contagem)
-- Tema (`Moon`/`Sun` toggle inline com Switch)
-- Separador (`<Separator />`)
-- Sair (cor `text-destructive`, icone `LogOut`, fixo no rodape do drawer)
-
-**3. Atualizar `src/pages/Index.tsx`**
-
-- Remover toda a secao do header atual (linhas 1493-1555)
-- Substituir pelo novo `<AppHeader />` com estilo `sticky top-0 z-40 bg-background/95 backdrop-blur`
-- Remover o `MonthNavigator` separado pois o mes ja esta no header
-- Manter `ContextSelector` logo abaixo do header
-- Remover imports nao utilizados (`ThemeToggle`, `ValuesVisibilityToggle`, `RemindersButton`, `LogOut`, `User`, `CreditCard`, `Settings` do topo)
-
-### Detalhes tecnicos
-
-- O header usa `position: sticky` para ficar fixo ao rolar
-- Icon-buttons usam classe `h-11 w-11 touch-manipulation` para area de toque confortavel no mobile
-- O drawer do menu usa o componente `Sheet` (side="right") que ja existe no projeto
-- O `RemindersButton` sera adaptado: em vez de renderizar seu proprio botao no header, a logica de contagem de lembretes sera reutilizada dentro do drawer como um item de menu com badge
-- O toggle de tema dentro do drawer usa o componente `Switch` existente com `useTheme`
-- O botao "Sair" fica separado por `<Separator />` e com `text-destructive` para destaque visual de acao perigosa
-- Navegacao por mes (setas esquerda/direita) permanece como `MonthNavigator` abaixo do header, nao muda
-
-### Arquivos criados
-- `src/components/app-header.tsx`
-- `src/components/app-menu-drawer.tsx`
-
-### Arquivos modificados
-- `src/pages/Index.tsx` (remover header antigo, usar novos componentes)
+Drawer antes: titulo "Menu"
+Drawer depois: logo Gastinho Simples (imagem)
 
