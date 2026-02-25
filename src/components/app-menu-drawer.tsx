@@ -109,7 +109,7 @@ export function AppMenuDrawer({ open, onOpenChange, onSignOut, recurringExpenses
             <img
               src="/lovable-uploads/06a1acc2-f553-41f0-8d87-32d25b4e425e.png"
               alt="Gastinho Simples"
-              className="h-10 w-auto"
+              className="h-10 max-w-[160px] object-contain"
             />
           </SheetHeader>
 
