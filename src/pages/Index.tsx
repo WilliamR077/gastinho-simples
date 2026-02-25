@@ -36,17 +36,14 @@ import { RecurringExpenseList } from "@/components/recurring-expense-list";
 import { RecurringExpenseFormData } from "@/types/recurring-expense";
 import { BudgetGoal } from "@/types/budget-goal";
 import { BudgetProgress } from "@/components/budget-progress";
-import { RemindersButton } from "@/components/reminders-button";
 import { toast } from "@/hooks/use-toast";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { ValuesVisibilityToggle } from "@/components/values-visibility-toggle";
-import { BarChart3, CreditCard, Settings, FilterX } from "lucide-react";
+import { FilterX } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LogOut, User } from "lucide-react";
+import { AppHeader } from "@/components/app-header";
 import { generateBillingPeriods, filterExpensesByBillingPeriod, CreditCardConfig } from "@/utils/billing-period";
 import { Card as CardType } from "@/types/card";
 import { Footer } from "@/components/footer";
@@ -1488,71 +1485,14 @@ export default function Index() {
       {/* Product Tour */}
       <ProductTour />
 
-      <div className="container mx-auto px-4 py-8 max-w-6xl">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4" data-tour="welcome">
-          <div className="flex items-center gap-3">
-            <img
-              src="/lovable-uploads/06a1acc2-f553-41f0-8d87-32d25b4e425e.png"
-              alt="Gastinho Simples - Controle de Gastos"
-              className="h-20 w-auto cursor-pointer hover:opacity-80 transition-opacity"
-              onClick={() => navigate("/")}
-            />
-          </div>
-          <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate("/reports")}
-              className="flex items-center gap-2 text-xs sm:text-sm"
-              data-tour="reports-button"
-            >
-              <BarChart3 className="w-3 h-3 sm:w-4 sm:h-4" />
-              <span className="hidden sm:inline">Relatórios</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate("/cards")}
-              className="flex items-center gap-2 text-xs sm:text-sm"
-              data-tour="cards-button"
-            >
-              <CreditCard className="w-3 h-3 sm:w-4 sm:h-4" />
-              <span className="hidden sm:inline">Cartões</span>
-            </Button>
-            <Button
-              data-tour="settings-button"
-              variant="outline"
-              size="sm"
-              onClick={() => navigate("/settings")}
-              className="flex items-center gap-2 text-xs sm:text-sm"
-            >
-              <Settings className="w-3 h-3 sm:w-4 sm:h-4" />
-              <span className="hidden sm:inline">Configurações</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate("/account")}
-              className="flex items-center gap-2 text-xs sm:text-sm"
-            >
-              <User className="w-3 h-3 sm:w-4 sm:h-4" />
-              <span className="hidden sm:inline">Conta</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSignOut}
-              className="flex items-center gap-2 text-xs sm:text-sm"
-            >
-              <LogOut className="w-3 h-3 sm:w-4 sm:h-4" />
-              <span className="hidden sm:inline">Sair</span>
-            </Button>
-            <RemindersButton recurringExpenses={recurringExpenses} />
-            <ValuesVisibilityToggle />
-            <ThemeToggle />
-          </div>
-        </div>
+      {/* App Header */}
+      <AppHeader
+        currentMonth={currentMonth}
+        recurringExpenses={recurringExpenses}
+        onSignOut={handleSignOut}
+      />
+
+      <div className="container mx-auto px-4 py-6 max-w-6xl" data-tour="welcome">
 
         {/* Context Selector */}
         <ContextSelector />
