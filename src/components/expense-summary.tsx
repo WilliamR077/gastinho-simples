@@ -307,8 +307,8 @@ export function ExpenseSummary({
       </div>
 
       {/* Total transactions summary */}
-      <div className="flex items-center justify-between pt-2 mt-1 border-t border-border/50">
-        <span className="text-xs text-muted-foreground">
+      <div className="pt-2 border-t border-border/50 flex-col flex items-end justify-between my-0 mb-0 mt-0 py-0">
+        <span className="text-xs text-muted-foreground mb-[10px]">
           {expenses.length} despesa{expenses.length !== 1 ? 's' : ''}
           {activeRecurringExpenses.length > 0 &&
           <> + {activeRecurringExpenses.length} fixa{activeRecurringExpenses.length !== 1 ? 's' : ''}</>
