@@ -2,8 +2,9 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { ExpenseSummary } from "@/components/expense-summary";
 import { ExpenseList } from "@/components/expense-list";
-import { ExpenseFilters, ExpenseFilters as ExpenseFiltersType, FilterTab } from "@/components/expense-filters";
-import { CategorySummary } from "@/components/category-summary";
+import { ExpenseFilters as ExpenseFiltersType, FilterTab } from "@/components/expense-filters";
+import { CompactFilterBar } from "@/components/compact-filter-bar";
+import { CategoryInsightCard } from "@/components/category-insight-card";
 import { ExpenseEditDialog } from "@/components/expense-edit-dialog";
 import { RecurringExpenseEditDialog } from "@/components/recurring-expense-edit-dialog";
 import { BudgetGoalEditDialog } from "@/components/budget-goal-edit-dialog";
@@ -27,7 +28,8 @@ import { UnifiedIncomeFormSheet } from "@/components/unified-income-form-sheet";
 import { IncomeList } from "@/components/income-list";
 import { RecurringIncomeList } from "@/components/recurring-income-list";
 import { Income, RecurringIncome as RecurringIncomeType } from "@/types/income";
-import { IncomeCategorySummary } from "@/components/income-category-summary";
+import { IncomeCategoryInsightCard } from "@/components/income-category-insight-card";
+import { Separator } from "@/components/ui/separator";
 
 import { Expense, PaymentMethod, ExpenseFormData, ExpenseCategory, categoryLabels } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
@@ -51,7 +53,7 @@ import { NotificationService } from "@/services/notification-service";
 import { App as CapacitorApp } from '@capacitor/app';
 import { adMobService } from "@/services/admob-service";
 import { startOfMonth, endOfMonth } from "date-fns";
-import { parseLocalDate } from "@/lib/utils";
+import { parseLocalDate, cn } from "@/lib/utils";
 
 export default function Index() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -75,7 +77,7 @@ export default function Index() {
   const [incomeSubTab, setIncomeSubTab] = useState("monthly");
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string | null>(null);
   const [activeIncomeCategoryFilter, setActiveIncomeCategoryFilter] = useState<string | null>(null);
-  const [filterTab, setFilterTab] = useState<FilterTab>("expenses");
+  // filterTab removed - CompactFilterBar adapts automatically to activeTab
 
   // Estado para o mês atual da navegação
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
@@ -1522,7 +1524,7 @@ export default function Index() {
         )}
 
         {/* Summary Cards */}
-        <div className="mb-8" data-tour="expense-summary">
+        <div className="mb-4" data-tour="expense-summary">
           <ExpenseSummary
             expenses={displayedExpenses}
             recurringExpenses={displayedRecurringExpenses}
@@ -1562,17 +1564,16 @@ export default function Index() {
           onNavigateToGoals={() => setActiveTab("goals")}
         />
 
-        {/* Filtros Globais */}
-        <div className="mb-4" data-tour="expense-filters">
-          <ExpenseFilters
+        {/* Compact Filter Bar */}
+        <div className="mb-4">
+          <CompactFilterBar
             filters={filters}
             onFiltersChange={setFilters}
             billingPeriods={billingPeriods}
             expenses={expenses}
             creditCardConfig={creditCardConfig}
             cardsConfigMap={cardsConfigMap}
-            activeFilterTab={filterTab}
-            onFilterTabChange={setFilterTab}
+            activeTab={activeTab as "expenses" | "incomes" | "goals"}
             monthStartDate={startOfMonth(currentMonth)}
             monthEndDate={endOfMonth(currentMonth)}
           />
@@ -1594,8 +1595,9 @@ export default function Index() {
           </TabsList>
 
           <TabsContent value="expenses">
+            {/* Category insight card */}
             <div className="mb-4" data-tour="category-summary">
-              <CategorySummary
+              <CategoryInsightCard
                 expenses={filteredExpenses}
                 recurringExpenses={filteredRecurringExpenses}
                 billingPeriod={filters.billingPeriod}
@@ -1606,72 +1608,73 @@ export default function Index() {
                 activeCategory={activeCategoryFilter || undefined}
               />
             </div>
-            <Tabs value={expenseSubTab} onValueChange={setExpenseSubTab}>
-              <TabsList className="grid w-full grid-cols-2 mb-4 bg-muted/50 h-9">
-                <TabsTrigger value="monthly" className="text-sm data-[state=active]:bg-background">
+
+            {/* Sub-tab chips: Do Mês / Fixas */}
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-foreground">
+                {expenseSubTab === "monthly" ? "Despesas do Mês" : "Despesas Fixas"}
+              </h3>
+              <div className="flex gap-1.5">
+                <button
+                  onClick={() => setExpenseSubTab("monthly")}
+                  className={cn(
+                    "px-3 py-1 rounded-full text-xs font-medium transition-colors border",
+                    expenseSubTab === "monthly"
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-transparent text-muted-foreground border-border hover:border-foreground/30"
+                  )}
+                >
                   Do Mês
-                </TabsTrigger>
-                <TabsTrigger value="recurring" className="text-sm data-[state=active]:bg-background">
+                </button>
+                <button
+                  onClick={() => setExpenseSubTab("recurring")}
+                  className={cn(
+                    "px-3 py-1 rounded-full text-xs font-medium transition-colors border",
+                    expenseSubTab === "recurring"
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-transparent text-muted-foreground border-border hover:border-foreground/30"
+                  )}
+                >
                   Fixas
-                </TabsTrigger>
-              </TabsList>
+                </button>
+              </div>
+            </div>
 
-              <TabsContent value="monthly">
-                <div className="space-y-4">
-                  {hasActiveFilters && (
-                    <div className="flex justify-end">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={clearAllFilters}
-                        className="text-xs text-muted-foreground hover:text-foreground"
-                      >
-                        <FilterX className="h-3 w-3 mr-1" />
-                        Limpar filtros
-                      </Button>
-                    </div>
-                  )}
-                  <ExpenseList
-                    expenses={displayedExpenses}
-                    onDeleteExpense={deleteExpense}
-                    onEditExpense={handleEditExpense}
-                    onSendToCalculator={handleSendToCalculator}
-                    groupMembers={groupMembers}
-                    isGroupContext={currentContext.type === 'group'}
-                  />
+            {/* Content based on sub-tab */}
+            <div className="space-y-4">
+              {hasActiveFilters && (
+                <div className="flex justify-end">
+                  <Button variant="ghost" size="sm" onClick={clearAllFilters} className="text-xs text-muted-foreground hover:text-foreground">
+                    <FilterX className="h-3 w-3 mr-1" />
+                    Limpar filtros
+                  </Button>
                 </div>
-              </TabsContent>
-
-              <TabsContent value="recurring">
-                <div className="space-y-4">
-                  {hasActiveFilters && (
-                    <div className="flex justify-end">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={clearAllFilters}
-                        className="text-xs text-muted-foreground hover:text-foreground"
-                      >
-                        <FilterX className="h-3 w-3 mr-1" />
-                        Limpar filtros
-                      </Button>
-                    </div>
-                  )}
-                  <RecurringExpenseList
-                    expenses={displayedRecurringExpenses}
-                    onDeleteExpense={deleteRecurringExpense}
-                    onToggleActive={toggleRecurringExpenseActive}
-                    onEditRecurringExpense={handleEditRecurringExpense}
-                    onSendToCalculator={handleSendToCalculator}
-                  />
-                </div>
-              </TabsContent>
-            </Tabs>
+              )}
+              {expenseSubTab === "monthly" ? (
+                <ExpenseList
+                  expenses={displayedExpenses}
+                  onDeleteExpense={deleteExpense}
+                  onEditExpense={handleEditExpense}
+                  onSendToCalculator={handleSendToCalculator}
+                  groupMembers={groupMembers}
+                  isGroupContext={currentContext.type === 'group'}
+                />
+              ) : (
+                <RecurringExpenseList
+                  expenses={displayedRecurringExpenses}
+                  onDeleteExpense={deleteRecurringExpense}
+                  onToggleActive={toggleRecurringExpenseActive}
+                  onEditRecurringExpense={handleEditRecurringExpense}
+                  onSendToCalculator={handleSendToCalculator}
+                />
+              )}
+            </div>
           </TabsContent>
 
           <TabsContent value="incomes">
+            {/* Income category insight card */}
             <div className="mb-4">
-              <IncomeCategorySummary
+              <IncomeCategoryInsightCard
                 incomes={incomes}
                 recurringIncomes={recurringIncomes}
                 startDate={filters.startDate}
@@ -1680,127 +1683,136 @@ export default function Index() {
                 activeCategory={activeIncomeCategoryFilter || undefined}
               />
             </div>
-            <Tabs value={incomeSubTab} onValueChange={setIncomeSubTab}>
-              <TabsList className="grid w-full grid-cols-2 mb-4 bg-muted/50 h-9">
-                <TabsTrigger value="monthly" className="text-sm data-[state=active]:bg-background">
+
+            {/* Sub-tab chips: Do Mês / Fixas */}
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-foreground">
+                {incomeSubTab === "monthly" ? "Entradas do Mês" : "Entradas Fixas"}
+              </h3>
+              <div className="flex gap-1.5">
+                <button
+                  onClick={() => setIncomeSubTab("monthly")}
+                  className={cn(
+                    "px-3 py-1 rounded-full text-xs font-medium transition-colors border",
+                    incomeSubTab === "monthly"
+                      ? "bg-green-500 text-white border-green-500"
+                      : "bg-transparent text-muted-foreground border-border hover:border-foreground/30"
+                  )}
+                >
                   Do Mês
-                </TabsTrigger>
-                <TabsTrigger value="recurring" className="text-sm data-[state=active]:bg-background">
+                </button>
+                <button
+                  onClick={() => setIncomeSubTab("recurring")}
+                  className={cn(
+                    "px-3 py-1 rounded-full text-xs font-medium transition-colors border",
+                    incomeSubTab === "recurring"
+                      ? "bg-green-500 text-white border-green-500"
+                      : "bg-transparent text-muted-foreground border-border hover:border-foreground/30"
+                  )}
+                >
                   Fixas
-                </TabsTrigger>
-              </TabsList>
+                </button>
+              </div>
+            </div>
 
-              <TabsContent value="monthly">
-                <div className="space-y-4">
-                  {activeIncomeCategoryFilter && (
-                    <div className="flex justify-end">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setActiveIncomeCategoryFilter(null)}
-                        className="text-xs text-muted-foreground hover:text-foreground"
-                      >
-                        <FilterX className="h-3 w-3 mr-1" />
-                        Limpar filtro de categoria
-                      </Button>
-                    </div>
-                  )}
-                  <IncomeList
-                    incomes={displayedIncomes}
-                    onDelete={deleteIncome}
-                    onEdit={handleEditIncome}
-                  />
+            {/* Content based on sub-tab */}
+            <div className="space-y-4">
+              {activeIncomeCategoryFilter && (
+                <div className="flex justify-end">
+                  <Button variant="ghost" size="sm" onClick={() => setActiveIncomeCategoryFilter(null)} className="text-xs text-muted-foreground hover:text-foreground">
+                    <FilterX className="h-3 w-3 mr-1" />
+                    Limpar filtro de categoria
+                  </Button>
                 </div>
-              </TabsContent>
-
-              <TabsContent value="recurring">
-                <div className="space-y-4">
-                  {activeIncomeCategoryFilter && (
-                    <div className="flex justify-end">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setActiveIncomeCategoryFilter(null)}
-                        className="text-xs text-muted-foreground hover:text-foreground"
-                      >
-                        <FilterX className="h-3 w-3 mr-1" />
-                        Limpar filtro de categoria
-                      </Button>
-                    </div>
-                  )}
-                  <RecurringIncomeList
-                    incomes={displayedRecurringIncomes}
-                    onDelete={deleteRecurringIncome}
-                    onToggleActive={toggleRecurringIncomeActive}
-                    onEdit={handleEditRecurringIncome}
-                  />
-                </div>
-              </TabsContent>
-            </Tabs>
+              )}
+              {incomeSubTab === "monthly" ? (
+                <IncomeList
+                  incomes={displayedIncomes}
+                  onDelete={deleteIncome}
+                  onEdit={handleEditIncome}
+                />
+              ) : (
+                <RecurringIncomeList
+                  incomes={displayedRecurringIncomes}
+                  onDelete={deleteRecurringIncome}
+                  onToggleActive={toggleRecurringIncomeActive}
+                  onEdit={handleEditRecurringIncome}
+                />
+              )}
+            </div>
           </TabsContent>
 
           <TabsContent value="goals">
-            <Tabs defaultValue="expense" className="w-full">
-              <TabsList className="grid w-full grid-cols-3 mb-4 bg-muted/50 h-9">
-                <TabsTrigger value="expense" className="text-sm data-[state=active]:bg-background data-[state=active]:text-destructive">
-                  Despesas
-                </TabsTrigger>
-                <TabsTrigger value="income" className="text-sm data-[state=active]:bg-background data-[state=active]:text-green-600 dark:data-[state=active]:text-green-400">
-                  Entradas
-                </TabsTrigger>
-                <TabsTrigger value="balance" className="text-sm data-[state=active]:bg-background data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400">
-                  Saldo
-                </TabsTrigger>
-              </TabsList>
+            <div className="space-y-6">
+              {/* Limites de Despesas */}
+              {budgetGoals.some(g => g.type === "monthly_total" || g.type === "category") && (
+                <div>
+                  <h3 className="text-sm font-semibold text-destructive mb-3">Limites de Despesas</h3>
+                  <BudgetProgress
+                    goals={budgetGoals.filter(g => g.type === "monthly_total" || g.type === "category")}
+                    expenses={expenses}
+                    recurringExpenses={recurringExpenses}
+                    incomes={incomes}
+                    recurringIncomes={recurringIncomes}
+                    selectedMonth={currentMonth}
+                    onDelete={deleteBudgetGoal}
+                    onEdit={handleEditBudgetGoal}
+                    descriptionFilter={filters.description}
+                    minAmountFilter={filters.minAmount}
+                    maxAmountFilter={filters.maxAmount}
+                  />
+                </div>
+              )}
 
-              <TabsContent value="expense">
-                <BudgetProgress
-                  goals={budgetGoals.filter(g => g.type === "monthly_total" || g.type === "category")}
-                  expenses={expenses}
-                  recurringExpenses={recurringExpenses}
-                  incomes={incomes}
-                  recurringIncomes={recurringIncomes}
-                  selectedMonth={currentMonth}
-                  onDelete={deleteBudgetGoal}
-                  onEdit={handleEditBudgetGoal}
-                  descriptionFilter={filters.description}
-                  minAmountFilter={filters.minAmount}
-                  maxAmountFilter={filters.maxAmount}
-                />
-              </TabsContent>
+              {/* Metas de Entradas */}
+              {budgetGoals.some(g => g.type === "income_monthly_total" || g.type === "income_category") && (
+                <div>
+                  {budgetGoals.some(g => g.type === "monthly_total" || g.type === "category") && <Separator className="mb-4" />}
+                  <h3 className="text-sm font-semibold text-green-600 dark:text-green-400 mb-3">Metas de Entradas</h3>
+                  <BudgetProgress
+                    goals={budgetGoals.filter(g => g.type === "income_monthly_total" || g.type === "income_category")}
+                    expenses={expenses}
+                    recurringExpenses={recurringExpenses}
+                    incomes={incomes}
+                    recurringIncomes={recurringIncomes}
+                    selectedMonth={currentMonth}
+                    onDelete={deleteBudgetGoal}
+                    onEdit={handleEditBudgetGoal}
+                    descriptionFilter={filters.description}
+                    minAmountFilter={filters.minAmount}
+                    maxAmountFilter={filters.maxAmount}
+                  />
+                </div>
+              )}
 
-              <TabsContent value="income">
-                <BudgetProgress
-                  goals={budgetGoals.filter(g => g.type === "income_monthly_total" || g.type === "income_category")}
-                  expenses={expenses}
-                  recurringExpenses={recurringExpenses}
-                  incomes={incomes}
-                  recurringIncomes={recurringIncomes}
-                  selectedMonth={currentMonth}
-                  onDelete={deleteBudgetGoal}
-                  onEdit={handleEditBudgetGoal}
-                  descriptionFilter={filters.description}
-                  minAmountFilter={filters.minAmount}
-                  maxAmountFilter={filters.maxAmount}
-                />
-              </TabsContent>
+              {/* Metas de Saldo */}
+              {budgetGoals.some(g => g.type === "balance_target") && (
+                <div>
+                  {budgetGoals.some(g => g.type !== "balance_target") && <Separator className="mb-4" />}
+                  <h3 className="text-sm font-semibold text-blue-600 dark:text-blue-400 mb-3">Metas de Saldo</h3>
+                  <BudgetProgress
+                    goals={budgetGoals.filter(g => g.type === "balance_target")}
+                    expenses={expenses}
+                    recurringExpenses={recurringExpenses}
+                    incomes={incomes}
+                    recurringIncomes={recurringIncomes}
+                    selectedMonth={currentMonth}
+                    onDelete={deleteBudgetGoal}
+                    onEdit={handleEditBudgetGoal}
+                    descriptionFilter={filters.description}
+                    minAmountFilter={filters.minAmount}
+                    maxAmountFilter={filters.maxAmount}
+                  />
+                </div>
+              )}
 
-              <TabsContent value="balance">
-                <BudgetProgress
-                  goals={budgetGoals.filter(g => g.type === "balance_target")}
-                  expenses={expenses}
-                  recurringExpenses={recurringExpenses}
-                  incomes={incomes}
-                  recurringIncomes={recurringIncomes}
-                  selectedMonth={currentMonth}
-                  onDelete={deleteBudgetGoal}
-                  onEdit={handleEditBudgetGoal}
-                  descriptionFilter={filters.description}
-                  minAmountFilter={filters.minAmount}
-                  maxAmountFilter={filters.maxAmount}
-                />
-              </TabsContent>
-            </Tabs>
+              {/* Empty state */}
+              {budgetGoals.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground text-sm">
+                  Nenhuma meta cadastrada. Use o botão + para criar uma.
+                </div>
+              )}
+            </div>
           </TabsContent>
         </Tabs>
 

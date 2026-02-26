@@ -34,8 +34,8 @@ export function FloatingActionButton({
       )}
 
       {/* Container with pointer-events-none to prevent blocking touches */}
-      <div className="fixed bottom-20 right-6 z-40 flex flex-col items-end gap-3 pointer-events-none">
-        {/* Menu Options - only render when open to avoid invisible blocking */}
+      <div className="fixed bottom-20 right-6 z-40 flex flex-col items-end gap-2 pointer-events-none">
+        {/* Menu Options */}
         {isOpen && (
           <div className="flex flex-col gap-2 pointer-events-auto">
             <Button
@@ -53,7 +53,7 @@ export function FloatingActionButton({
               <TrendingUp className="h-5 w-5" />
               <span>Entrada</span>
             </Button>
-            
+
             <Button
               onClick={() => handleOptionClick(onExpenseClick)}
               className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white shadow-lg rounded-full px-4 py-2 h-auto min-h-[44px] touch-manipulation"
@@ -61,20 +61,20 @@ export function FloatingActionButton({
               <Receipt className="h-5 w-5" />
               <span>Despesa</span>
             </Button>
+
+            <Button
+              data-tour="calculator-button"
+              onClick={() => handleOptionClick(onCalculatorClick)}
+              variant="secondary"
+              className="flex items-center gap-2 shadow-lg rounded-full px-4 py-2 h-auto min-h-[44px] touch-manipulation"
+            >
+              <Calculator className="h-5 w-5" />
+              <span>Calculadora</span>
+            </Button>
           </div>
         )}
 
-        {/* Calculator Button - always visible with pointer-events-auto */}
-        <Button
-          data-tour="calculator-button"
-          onClick={onCalculatorClick}
-          variant="secondary"
-          className="h-12 w-12 min-h-[44px] min-w-[44px] rounded-full shadow-lg pointer-events-auto touch-manipulation"
-        >
-          <Calculator className="h-5 w-5" />
-        </Button>
-
-        {/* Main FAB Button with pointer-events-auto */}
+        {/* Main FAB Button */}
         <Button
           data-tour="fab-main-button"
           onClick={() => setIsOpen(!isOpen)}
