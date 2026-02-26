@@ -289,7 +289,7 @@ export function ExpenseSummary({
 
               {/* Card details */}
               {hasCardDetails &&
-              <div className="pl-8 pb-2 flex flex-wrap gap-x-4 gap-y-1">
+              <div className="pl-8 pb-2 flex flex-wrap gap-x-4 gap-y-1 px-0">
                   {Object.entries(cardTotals).map(([cardName, data]) =>
                 <div key={cardName} className="flex items-center gap-1.5 text-xs text-muted-foreground">
                       <div
