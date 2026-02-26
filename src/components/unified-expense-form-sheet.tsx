@@ -25,6 +25,19 @@ import { DescriptionAutocomplete } from "@/components/description-autocomplete";
 
 type ExpenseType = "monthly" | "recurring";
 
+export interface ExpenseInitialData {
+  description: string;
+  amount: number;
+  paymentMethod: PaymentMethod;
+  expenseDate?: Date;
+  categoryId?: string;
+  cardId?: string;
+  expenseType: "monthly" | "recurring";
+  dayOfMonth?: number;
+  installments?: number;
+  sharedGroupId?: string | null;
+}
+
 interface UnifiedExpenseFormSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -35,6 +48,7 @@ interface UnifiedExpenseFormSheetProps {
   recurringExpenses?: RecurringExpense[];
   defaultAmount?: number;
   preventClose?: boolean;
+  initialData?: ExpenseInitialData;
 }
 
 export function UnifiedExpenseFormSheet({
@@ -47,6 +61,7 @@ export function UnifiedExpenseFormSheet({
   recurringExpenses = [],
   defaultAmount,
   preventClose,
+  initialData,
 }: UnifiedExpenseFormSheetProps) {
   const [expenseType, setExpenseType] = useState<ExpenseType>("monthly");
   const [description, setDescription] = useState("");
@@ -65,16 +80,29 @@ export function UnifiedExpenseFormSheet({
 
   useEffect(() => {
     if (open) {
-      if (currentContext.type === "group" && currentContext.groupId) {
-        setSelectedDestination(currentContext.groupId);
+      if (initialData) {
+        setExpenseType(initialData.expenseType);
+        setDescription(initialData.description);
+        setAmount(initialData.amount.toString());
+        setPaymentMethod(initialData.paymentMethod);
+        setCategory(initialData.categoryId || "");
+        setCardId(initialData.cardId || "");
+        setExpenseDate(initialData.expenseDate || normalizeToLocalDate(new Date()));
+        setDayOfMonth(initialData.dayOfMonth?.toString() || "1");
+        setInstallments(initialData.installments?.toString() || "1");
+        setSelectedDestination(initialData.sharedGroupId || "personal");
       } else {
-        setSelectedDestination("personal");
-      }
-      if (defaultAmount !== undefined && defaultAmount > 0) {
-        setAmount(defaultAmount.toString());
+        if (currentContext.type === "group" && currentContext.groupId) {
+          setSelectedDestination(currentContext.groupId);
+        } else {
+          setSelectedDestination("personal");
+        }
+        if (defaultAmount !== undefined && defaultAmount > 0) {
+          setAmount(defaultAmount.toString());
+        }
       }
     }
-  }, [open, currentContext, defaultAmount]);
+  }, [open, currentContext, defaultAmount, initialData]);
 
   useEffect(() => {
     if (open) {
