@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Plus, X, Receipt, Target, Calculator, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -17,6 +17,18 @@ export function FloatingActionButton({
   onIncomeClick,
 }: FloatingActionButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [visible, setVisible] = useState(true);
+  const lastScrollY = useRef(0);
+
+  useEffect(() => {
+    const onScroll = () => {
+      const currentY = window.scrollY;
+      setVisible(currentY < lastScrollY.current || currentY < 100);
+      lastScrollY.current = currentY;
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   const handleOptionClick = (callback: () => void) => {
     setIsOpen(false);
@@ -33,8 +45,11 @@ export function FloatingActionButton({
         />
       )}
 
-      {/* Container with pointer-events-none to prevent blocking touches */}
-      <div className="fixed bottom-[calc(env(safe-area-inset-bottom,0px)+6rem)] right-6 z-40 flex flex-col items-end gap-2 pointer-events-none">
+      {/* Container */}
+      <div className={cn(
+        "fixed bottom-[calc(env(safe-area-inset-bottom,0px)+6rem)] right-6 z-40 flex flex-col items-end gap-2 pointer-events-none transition-all duration-300",
+        !visible && !isOpen && "translate-y-24 opacity-0"
+      )}>
         {/* Menu Options */}
         {isOpen && (
           <div className="flex flex-col gap-2 pointer-events-auto">
@@ -81,7 +96,7 @@ export function FloatingActionButton({
           className={cn(
             "h-14 w-14 min-h-[44px] min-w-[44px] rounded-full shadow-xl transition-all duration-300 pointer-events-auto touch-manipulation",
             isOpen
-              ? "bg-destructive hover:bg-destructive/90 rotate-45"
+              ? "bg-muted-foreground hover:bg-muted-foreground/90"
               : "bg-primary hover:bg-primary/90"
           )}
         >
