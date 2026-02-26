@@ -1,60 +1,89 @@
 
 
-## Plano: Ajuste do FAB e truncamento de método
+## Plano: Metas premium e menos agressivas
 
-Apenas UI/posicionamento — sem alterar lógica, dados ou rotas.
+Apenas UI/estilo/layout — sem alterar lógica, cálculos ou dados.
 
 ---
 
-### 1. FAB — reposicionar para não sobrepor conteúdo
+### 1. Alertas → banners slim (1–2 linhas)
 
-**Arquivo: `src/components/floating-action-button.tsx`**
+**Arquivo: `src/components/budget-progress.tsx`**
 
-- Linha 37: trocar `bottom-20` por `bottom-24` (96px, mais afastado da borda inferior, respeitando safe-area)
-- Adicionar `pb-safe` via `safe-area-inset-bottom` se disponível (Capacitor): `bottom-[calc(env(safe-area-inset-bottom,0px)+6rem)]`
+Substituir os blocos `<Alert>` grandes (linhas 316-343, 416-443, 538-554) por banners inline slim:
 
-**Arquivo: `src/pages/Index.tsx`**
+```text
+Antes:
+┌──────────────────────────────────────────┐
+│ ⚠️  Alerta! Você está quase estourando   │
+│     a meta.                              │
+│     Restam apenas R$ 50,00 para não      │
+│     estourar.                            │
+└──────────────────────────────────────────┘
 
-- Linha 1486: trocar `pb-36` por `pb-44` (176px), garantindo que o último item fique 100% visível com o FAB em `bottom-24` + margem
-
-### 2. Método de pagamento — formato curto e consistente
-
-Criar helper para abreviar nome do cartão e formatar como `Crédito • BB` em vez de `Crédito - Banco do Brasil`.
-
-**Arquivo: `src/components/expense-list.tsx`**
-
-- Linha 109: substituir `const methodLabel = cardName ? \`${config.label} - ${cardName}\` : config.label;` por:
-```ts
-const shortCardName = cardName 
-  ? cardName.split(' ').map(w => w[0]?.toUpperCase()).join('').slice(0, 3)
-  : null;
-const methodLabel = shortCardName 
-  ? `${config.label} • ${shortCardName}` 
-  : config.label;
+Depois:
+│ ⚠️ Quase no limite · restam R$ 50   [Ajustar] │
 ```
-Isso transforma "Banco do Brasil" → "BDB" (3 chars max), "Nubank" → "N", "Inter" → "I". Formato final: `Crédito • BDB`, `PIX`.
 
-Alternativa mais legível (preferida): usar as 2-3 primeiras letras do nome ao invés de iniciais:
-```ts
-const shortCardName = cardName ? cardName.slice(0, 6) : null;
-const methodLabel = shortCardName 
-  ? `${config.label} • ${shortCardName}` 
-  : config.label;
+- Remover `<Alert>` + `<AlertDescription>` com blocos multi-linha
+- Substituir por `<div className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs">` com:
+  - Ícone (h-3.5 w-3.5) + texto curto inline (1 linha) + botão "Ajustar" (chama `onEdit(goal)`)
+  - Fundo: sem fundo saturado, apenas `border-l-2` com cor semântica
+- Para despesas: `border-l-2 border-destructive/50 bg-muted/50` + texto `text-xs text-muted-foreground`
+- Para entradas: `border-l-2 border-green-500/50 bg-muted/50`
+- Para saldo: `border-l-2 border-blue-500/50 bg-muted/50`
+
+### 2. Cards de meta → fundo neutro, cor apenas em acentos
+
+**Arquivo: `src/components/budget-progress.tsx`**
+
+**Expense goals (renderExpenseGoal, linha 265-267):**
+- Remover `${config.bgColor}` do Card className
+- Usar sempre `bg-card` como fundo, independente do alert level
+- Manter `border-l-2 ${config.borderColor}` como acento lateral (substituindo borda completa colorida)
+- Resultado: `className="transition-all shadow-sm bg-card border-border/40 border-l-2 ${config.borderColor}"`
+
+**Income goals (renderIncomeGoal, linhas 362-367):**
+- Remover `bg-green-500/10`, `bg-green-400/5` — usar `bg-card` sempre
+- Acento lateral: `border-l-2 border-green-500/50`
+
+**Balance goals (renderBalanceGoal, linhas 491-495):**
+- Remover `bg-blue-500/10`, `bg-blue-400/5` — usar `bg-card` sempre  
+- Acento lateral: `border-l-2 border-blue-500/50`
+
+### 3. Padronizar layout das 3 categorias de meta
+
+Todas as metas (despesa, entrada, saldo) seguirão o mesmo layout compacto:
+
+```text
+┌─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─┐
+│ 🍔 Alimentação                          ⋮    │
+│ Meta: R$ 500    Gasto: R$ 420    84.0%        │
+│ ████████████████████░░░░                      │
+│ ⚠️ Restam R$ 80                    [Ajustar]  │
+└─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─┘
 ```
-"Banco do Brasil" → `Crédito • Banco `, "Nubank" → `Crédito • Nubank`. Melhor: truncar em 5 chars:
-```ts
-const shortCardName = cardName 
-  ? (cardName.length > 5 ? cardName.slice(0, 5) + '…' : cardName) 
-  : null;
-const methodLabel = shortCardName 
-  ? `${config.label} • ${shortCardName}` 
-  : config.label;
-```
-Resultado: `Crédito • Banco…`, `Crédito • Nuban…`, `Crédito • Inter`.
 
-**Arquivo: `src/components/recurring-expense-list.tsx`**
+- CardHeader: `pb-1` (era `pb-2`) — mais compacto
+- CardContent: `space-y-2` (era `space-y-3`)
+- Linha de valores: `flex justify-between text-xs` (era `text-sm`)
+- Progress bar: `h-2` (era `h-4` default) — barra mais fina e elegante
+- Linha inferior: banner slim inline (item 1)
 
-- Linha 76: mesma alteração no `methodLabel`.
+### 4. Espaçamento entre seções
+
+**Arquivo: `src/components/budget-progress.tsx`**
+
+- Linha 561: trocar `space-y-4` por `space-y-3` (12px entre cards)
+- CardHeader padding: `p-4 pb-1` (compactar)
+- CardContent padding: `px-4 pb-3 pt-0`
+
+### 5. Form "Definir Nova Meta" — neutralizar
+
+**Arquivo: `src/components/budget-goals-form.tsx`**
+
+- Linha 60: trocar `bg-gradient-card border-border/50 shadow-card backdrop-blur-sm` por `bg-card border border-border/40 shadow-sm`
+- Linha 62: trocar `text-primary` por `text-foreground`
 
 ---
 
@@ -62,10 +91,8 @@ Resultado: `Crédito • Banco…`, `Crédito • Nuban…`, `Crédito • Inter
 
 | Arquivo | Mudança |
 |---|---|
-| `floating-action-button.tsx` | `bottom-20` → `bottom-24` com safe-area |
-| `Index.tsx` | `pb-36` → `pb-44` |
-| `expense-list.tsx` | methodLabel: `Crédito - Banco do Brasil` → `Crédito • Banco…` (5 chars + …) |
-| `recurring-expense-list.tsx` | Mesmo ajuste de methodLabel |
+| `budget-progress.tsx` | Cards neutros (bg-card + border-l-2), alertas slim 1 linha, progress h-2, espaçamento compacto |
+| `budget-goals-form.tsx` | Card neutro, título sem cor primária |
 
-4 arquivos, ~8 linhas alteradas. Sem alteração de lógica.
+2 arquivos. Sem alteração de lógica.
 
