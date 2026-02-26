@@ -1,73 +1,84 @@
 
 
-## Plano: Unificar BalanceSummary + compactar ExpenseSummary
+## Plano: Listas de transações escaneáveis (estilo app financeiro)
 
-Apenas alterações de layout/estilo — sem alterar lógica, cálculos ou dados.
+Apenas UI/estilo/layout — sem alterar lógica, dados, filtros ou rotas.
 
 ---
 
-### 1. BalanceSummary → Card único "Resumo do Mês"
+### 1. ExpenseList — rows compactas
 
-**Arquivo: `src/components/balance-summary.tsx`**
+**Arquivo: `src/components/expense-list.tsx`**
 
-Substituir os 3 mini-cards separados por 1 card único com 3 colunas internas:
-
-```text
-┌─────────────────────────────────────────────┐
-│  Resumo do Mês                              │
-│  ┌──────────┬──────────┬──────────┐         │
-│  │ ▲ Entradas│ ▼ Saídas │ 💰 Saldo │         │
-│  │ R$ 5.000 │ R$ 3.200 │ R$ 1.800 │         │
-│  └──────────┴──────────┴──────────┘         │
-└─────────────────────────────────────────────┘
-```
-
-- Wrapper: `<div className="rounded-lg border border-border/50 bg-card shadow-sm p-4">`
-- Título: `<h3 className="text-xs font-medium text-muted-foreground mb-3">Resumo do Mês</h3>`
-- Dentro: `grid grid-cols-3 gap-3` com divs simples (sem borda/fundo individual)
-- Cada coluna: ícone + label (text-xs) + valor (text-sm font-bold) com cores semânticas mantidas (verde entradas, vermelho saídas, azul saldo)
-- Remover os `bg-green-500/10`, `bg-red-500/10`, `bg-blue-500/10` dos itens individuais — a cor fica só no texto/ícone
-- Separadores verticais opcionais via `divide-x divide-border/30` no grid
-
-### 2. ExpenseSummary → Seção compacta de rows
-
-**Arquivo: `src/components/expense-summary.tsx`**
-
-Substituir os 4 Cards grandes (PIX, Débito, Crédito, Total) por uma lista compacta de rows dentro de 1 card:
+Reestruturar cada item de multi-linha vertical para row horizontal única:
 
 ```text
-┌─────────────────────────────────────────────┐
-│  Gastos por Método              Total: R$X  │
-│  ─────────────────────────────────────────── │
-│  📱 PIX          R$ 500,00      3 transações│
-│  💳 Débito       R$ 0,00        0 transações│  ← opacidade reduzida
-│  💳 Crédito      R$ 1.200,00    5 transações│
-│     ● Nubank: R$ 800  ● Inter: R$ 400      │
-│  ─────────────────────────────────────────── │
-│  🎯 Metas do Mês  [progresso...]            │
-└─────────────────────────────────────────────┘
+┌──────────────────────────────────────────────┐
+│ 🍔  Almoço restaurante      -R$ 45,00       │
+│     Alimentação • 15/02  💳 Crédito   ⋮     │
+└──────────────────────────────────────────────┘
 ```
 
-Detalhes:
-- 1 card wrapper: `rounded-lg border border-border/50 bg-card shadow-sm p-4`
-- Header: "Gastos por Método" + Total alinhado à direita
-- Cada método de pagamento vira uma row clicável: `flex items-center justify-between py-2 cursor-pointer`
-  - Esquerda: ícone colorido (h-4 w-4) + nome (text-sm)
-  - Direita: valor (text-sm font-semibold) + contagem (text-xs text-muted-foreground)
-  - Quando `activePaymentMethod` coincide: `bg-muted/50 rounded-md -mx-2 px-2` (highlight suave)
-  - Separadores entre rows: `border-b border-border/30 last:border-0`
-- **Valor R$ 0**: row fica com `opacity-50` e sem detalhes de cartão expandidos
-- Detalhes por cartão (crédito/débito): exibidos inline abaixo da row correspondente, com indent (`pl-8`), dots coloridos + nome + valor em `text-xs`
-- Seção "Metas do Mês" no rodapé do card: mantida como está (progress bars), separada por `border-t border-border/50 mt-3 pt-3`
-- Cores dos ícones/valores mantidas: emerald para PIX, blue para débito, amber para crédito, muted para total
-- Remover os `<Card>`, `<CardHeader>`, `<CardContent>` individuais — tudo dentro de 1 card
+Mudanças específicas:
+- **Remover "Criado em"** (linhas 155-163): excluir bloco inteiro
+- **Remover Badge grande colorido** (linhas 166-187): substituir por indicador sutil inline na segunda linha — ícone do método (Smartphone/CreditCard h-3 w-3) + texto curto ("PIX", "Crédito - Nubank") em `text-xs text-muted-foreground`, sem fundo saturado
+- **Layout da row**: manter `flex` mas achatar para 2 linhas máximo:
+  - Linha 1: `[emoji categoria] [descrição] [parcelas se houver]` ... `[valor em vermelho alinhado à direita]`
+  - Linha 2 (subtexto): `[nome categoria] • [data] • [ícone método + texto curto]` ... `[botões ⋮ e calculadora]`
+- **Valor**: mover para a mesma linha da descrição, alinhado à direita com `ml-auto`
+- **Remover ícone circular colorido duplicado** (linhas 132-136): o emoji da categoria já está presente, não precisa de 2 ícones. Remover o `<div className="p-2 rounded-full">` com ícone de método de pagamento
+- **Espaçamento**: trocar `space-y-3` por `divide-y divide-border/30` entre items e remover `rounded-lg border` de cada item individual — usar padding `py-3 px-1` por item
+- **Grupo badge**: manter inline mas sem fundo saturado — texto `text-xs text-indigo-500` com ícone Users
+- **Padding do card**: `p-0` no CardContent, padding nos items via `py-3 px-4`
 
-### 3. Index.tsx — ajuste de espaçamento
+### 2. IncomeList — rows compactas
+
+**Arquivo: `src/components/income-list.tsx`**
+
+Mesmo padrão do ExpenseList:
+
+- **Remover "Criado em"** (linhas 114-119)
+- **Remover ícone circular duplicado** (linhas 97-100): o `<div className="p-2 rounded-full bg-green-500">` é redundante com o emoji na linha 104
+- **Layout row**: 
+  - Linha 1: `[emoji] [descrição]` ... `[+R$ valor em verde]`
+  - Linha 2: `[categoria] • [data]` ... `[⋮]`
+- **Card wrapper**: trocar `bg-gradient-card border-border/50 shadow-card backdrop-blur-sm` por `bg-card border border-border/40 shadow-sm`
+- **Items**: trocar `space-y-3` por `divide-y divide-border/30`, itens com `py-3 px-4` sem borda/rounded individual
+
+### 3. RecurringExpenseList — rows compactas
+
+**Arquivo: `src/components/recurring-expense-list.tsx`**
+
+- **Card wrapper** (linha 75): trocar `bg-gradient-card border-border/50 shadow-card backdrop-blur-sm` por `bg-card border border-border/40 shadow-sm`
+- **CardTitle** (linha 77): trocar `text-primary` por `text-base font-semibold text-foreground`
+- **Layout da row**: achatar para 2 linhas como ExpenseList
+  - Linha 1: `[emoji] [descrição]` ... `[valor em vermelho]`
+  - Linha 2: `[categoria] • Dia [n] • [método sutil]` ... `[⋮]`
+- **Remover Badge colorido** (linhas 116-131): substituir por texto `text-xs text-muted-foreground` com ícone inline
+- **Valor** (linha 137): trocar `text-primary` por `text-red-500 dark:text-red-400` (despesa = vermelho)
+- **Items inativos**: manter `opacity-60`
+- **Espaçamento**: `divide-y divide-border/30` em vez de `space-y-3`
+
+### 4. RecurringIncomeList — rows compactas
+
+**Arquivo: `src/components/recurring-income-list.tsx`**
+
+- **Card wrapper** (linhas 70, 82-84): trocar `bg-gradient-card` por `bg-card border border-border/40 shadow-sm`
+- **Remover ícone Wallet** circular (linhas 91-93): redundante com emoji
+- **Layout row**: mesmo padrão
+  - Linha 1: `[emoji] [descrição]` ... `[+valor em verde]`
+  - Linha 2: `[categoria] • Dia [n]` ... `[⋮]`
+- **Espaçamento**: `divide-y divide-border/30`
+
+### 5. FAB não cobre conteúdo
 
 **Arquivo: `src/pages/Index.tsx`**
 
-- `mb-4` entre BalanceSummary e ExpenseSummary → `mb-3` (12px, mais coeso)
-- Demais espaçamentos mantidos
+- Linha 1486 já tem `pb-36` no container principal — suficiente para o FAB posicionado em `bottom-20` (80px) + altura do botão (56px) = ~136px. `pb-36` = 144px. Adequado, sem alteração necessária.
+
+### 6. Seletor de mês — sem duplicação
+
+- Verificado: existe apenas 1 `MonthNavigator` (linha 1503) no topo. Não há duplicação. Sem alteração.
 
 ---
 
@@ -75,9 +86,10 @@ Detalhes:
 
 | Arquivo | Mudança |
 |---|---|
-| `src/components/balance-summary.tsx` | 3 mini-cards → 1 card com 3 colunas internas |
-| `src/components/expense-summary.tsx` | 4 cards grandes → 1 card com rows compactas |
-| `src/pages/Index.tsx` | Ajuste de `mb-4` → `mb-3` entre seções |
+| `expense-list.tsx` | Row compacta 2 linhas, remover "Criado em", badge sutil inline, divide-y |
+| `income-list.tsx` | Row compacta, remover "Criado em", remover ícone duplicado, bg-card |
+| `recurring-expense-list.tsx` | Row compacta, badge sutil, valor em vermelho, bg-card, divide-y |
+| `recurring-income-list.tsx` | Row compacta, remover Wallet icon, bg-card, divide-y |
 
-Nenhuma alteração de lógica, cálculos, API ou rotas.
+Nenhuma alteração de lógica, dados, filtros ou rotas. FAB e MonthNavigator já estão corretos.
 
