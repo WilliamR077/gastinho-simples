@@ -1507,8 +1507,8 @@ export default function Index() {
         </div>
 
         {/* Balance Summary - Entradas vs Saídas */}
-        <div className="mb-4">
-          <BalanceSummary 
+        <div className="mb-3">
+          <BalanceSummary
             totalIncome={monthlyTotals.totalIncome}
             totalExpense={monthlyTotals.totalExpense}
           />
