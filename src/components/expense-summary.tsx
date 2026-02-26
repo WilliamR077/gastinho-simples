@@ -1,9 +1,6 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { CreditCard, Smartphone, TrendingUp, Target, Check, AlertTriangle, AlertCircle } from "lucide-react"
 import { Expense, PaymentMethod, categoryLabels } from "@/types/expense"
 import { RecurringExpense } from "@/types/recurring-expense"
-import { calculateBillingPeriod } from "@/utils/billing-period"
-import { Card as CardType } from "@/types/card"
 import { BudgetGoal } from "@/types/budget-goal"
 import { Progress } from "@/components/ui/progress"
 import { useMemo } from "react"
@@ -222,158 +219,141 @@ export function ExpenseSummary({
     return <Check className="h-3 w-3 text-success" />;
   };
 
+  const getTransactionCount = (method: PaymentMethod) => {
+    return expenses.filter(e => e.payment_method === method).length + 
+      activeRecurringExpenses.filter(e => e.payment_method === method).length;
+  };
+
+  const paymentMethods: { key: PaymentMethod; label: string; icon: React.ReactNode; colorClass: string; cardTotals: Record<string, { total: number; color: string }> }[] = [
+    { 
+      key: 'pix', 
+      label: 'PIX', 
+      icon: <Smartphone className="h-4 w-4 text-emerald-500" />, 
+      colorClass: 'text-emerald-600 dark:text-emerald-400',
+      cardTotals: {}
+    },
+    { 
+      key: 'debit', 
+      label: 'Débito', 
+      icon: <CreditCard className="h-4 w-4 text-blue-500" />, 
+      colorClass: 'text-blue-600 dark:text-blue-400',
+      cardTotals: debitCardTotals
+    },
+    { 
+      key: 'credit', 
+      label: 'Crédito', 
+      icon: <CreditCard className="h-4 w-4 text-amber-500" />, 
+      colorClass: 'text-amber-600 dark:text-amber-400',
+      cardTotals: creditCardTotals
+    },
+  ];
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-      <Card 
-        className={`bg-card border border-border/50 border-l-2 border-l-emerald-500 shadow-sm cursor-pointer hover:shadow-md transition-all ${
-          activePaymentMethod === 'pix' ? 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-background' : ''
-        }`}
-        onClick={() => onPaymentMethodClick?.('pix')}
-      >
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-xs font-medium text-muted-foreground">PIX</CardTitle>
-          <Smartphone className="h-4 w-4 text-emerald-500" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-xl sm:text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-            {formatCurrency(totals.pix)}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {expenses.filter(e => e.payment_method === 'pix').length + 
-             activeRecurringExpenses.filter(e => e.payment_method === 'pix').length} transações
-          </p>
-        </CardContent>
-      </Card>
+    <div className="rounded-lg border border-border/50 bg-card shadow-sm p-4">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-xs font-medium text-muted-foreground">Gastos por Método</h3>
+        <span className="text-sm font-bold text-foreground">{formatCurrency(totals.total)}</span>
+      </div>
 
-      <Card 
-        className={`bg-card border border-border/50 border-l-2 border-l-blue-500 shadow-sm cursor-pointer hover:shadow-md transition-all ${
-          activePaymentMethod === 'debit' ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-background' : ''
-        }`}
-        onClick={() => onPaymentMethodClick?.('debit')}
-      >
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-xs font-medium text-muted-foreground">Débito</CardTitle>
-          <CreditCard className="h-4 w-4 text-blue-500" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-xl sm:text-2xl font-bold text-blue-600 dark:text-blue-400">
-            {formatCurrency(totals.debit)}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {expenses.filter(e => e.payment_method === 'debit').length + 
-             activeRecurringExpenses.filter(e => e.payment_method === 'debit').length} transações
-          </p>
-          {Object.keys(debitCardTotals).length > 0 && (
-            <div className="mt-2 space-y-1 pt-2 border-t border-border/50">
-              {Object.entries(debitCardTotals).map(([cardName, data]) => (
-                <div key={cardName} className="flex items-center gap-2 text-xs">
-                  <div 
-                    style={{ backgroundColor: data.color }} 
-                    className="w-2 h-2 rounded-full"
-                  />
-                  <span className="text-muted-foreground">
-                    {cardName}: {formatCurrency(data.total)}
+      {/* Payment method rows */}
+      <div className="space-y-0">
+        {paymentMethods.map(({ key, label, icon, colorClass, cardTotals }) => {
+          const value = totals[key];
+          const count = getTransactionCount(key);
+          const isZero = value === 0;
+          const isActive = activePaymentMethod === key;
+          const hasCardDetails = Object.keys(cardTotals).length > 0 && !isZero;
+
+          return (
+            <div key={key}>
+              <div
+                onClick={() => onPaymentMethodClick?.(key)}
+                className={`flex items-center justify-between py-2.5 cursor-pointer border-b border-border/30 last:border-0 transition-colors ${
+                  isActive ? 'bg-muted/50 rounded-md -mx-2 px-2' : ''
+                } ${isZero ? 'opacity-50' : ''}`}
+              >
+                <div className="flex items-center gap-2">
+                  {icon}
+                  <span className="text-sm font-medium text-foreground">{label}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className={`text-sm font-semibold ${colorClass}`}>
+                    {formatCurrency(value)}
+                  </span>
+                  <span className="text-xs text-muted-foreground min-w-[60px] text-right">
+                    {count} transaç{count !== 1 ? 'ões' : 'ão'}
                   </span>
                 </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card 
-        className={`bg-card border border-border/50 border-l-2 border-l-amber-500 shadow-sm cursor-pointer hover:shadow-md transition-all ${
-          activePaymentMethod === 'credit' ? 'ring-2 ring-amber-500 ring-offset-2 ring-offset-background' : ''
-        }`}
-        onClick={() => onPaymentMethodClick?.('credit')}
-      >
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-xs font-medium text-muted-foreground">Crédito</CardTitle>
-          <CreditCard className="h-4 w-4 text-amber-500" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-xl sm:text-2xl font-bold text-amber-600 dark:text-amber-400">
-            {formatCurrency(totals.credit)}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {expenses.filter(e => e.payment_method === 'credit').length + 
-             activeRecurringExpenses.filter(e => e.payment_method === 'credit').length} transações
-          </p>
-          {Object.keys(creditCardTotals).length > 0 && (
-            <div className="mt-2 space-y-1 pt-2 border-t border-border/50">
-              {Object.entries(creditCardTotals).map(([cardName, data]) => (
-                <div key={cardName} className="flex items-center gap-2 text-xs">
-                  <div 
-                    style={{ backgroundColor: data.color }} 
-                    className="w-2 h-2 rounded-full"
-                  />
-                  <span className="text-muted-foreground">
-                    {cardName}: {formatCurrency(data.total)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="bg-card border border-border/50 border-l-2 border-l-muted-foreground/50 shadow-sm">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-xs font-medium text-muted-foreground">Total</CardTitle>
-          <TrendingUp className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-xl sm:text-2xl font-bold text-foreground">
-            {formatCurrency(totals.total)}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {expenses.length} despesa{expenses.length !== 1 ? 's' : ''}
-          </p>
-          {activeRecurringExpenses.length > 0 && (
-            <p className="text-xs text-muted-foreground">
-              {activeRecurringExpenses.length} despesa{activeRecurringExpenses.length !== 1 ? 's' : ''} fixa{activeRecurringExpenses.length !== 1 ? 's' : ''}
-            </p>
-          )}
-
-          {budgetProgress.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-border/50 space-y-2">
-              <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
-                <Target className="h-3 w-3" />
-                <span>Metas do Mês</span>
               </div>
-              {budgetProgress.slice(0, 3).map(({ goal, percentage, remaining }) => {
-                const progressValue = Math.min(percentage, 100);
-                return (
-                  <div key={goal.id} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-1">
-                        {getStatusIcon(percentage)}
-                        <span className="text-muted-foreground">
-                          {goal.type === "category" && goal.category
-                            ? categoryLabels[goal.category]
-                            : "Limite Mensal"}
-                        </span>
-                      </div>
-                      <span className={`font-medium ${percentage >= 100 ? 'text-destructive' : percentage >= 85 ? 'text-orange-500' : 'text-muted-foreground'}`}>
-                        {percentage.toFixed(0)}%
-                      </span>
+
+              {/* Card details */}
+              {hasCardDetails && (
+                <div className="pl-8 pb-2 flex flex-wrap gap-x-4 gap-y-1">
+                  {Object.entries(cardTotals).map(([cardName, data]) => (
+                    <div key={cardName} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <div 
+                        style={{ backgroundColor: data.color }} 
+                        className="w-2 h-2 rounded-full flex-shrink-0"
+                      />
+                      <span>{cardName}: {formatCurrency(data.total)}</span>
                     </div>
-                    <Progress 
-                      value={progressValue} 
-                      className={`h-1 ${
-                        percentage >= 100 ? '[&>div]:bg-destructive' : 
-                        percentage >= 85 ? '[&>div]:bg-orange-500' : 
-                        percentage >= 70 ? '[&>div]:bg-yellow-500' : 
-                        '[&>div]:bg-success'
-                      }`}
-                    />
-                  </div>
-                );
-              })}
+                  ))}
+                </div>
+              )}
             </div>
+          );
+        })}
+      </div>
+
+      {/* Total transactions summary */}
+      <div className="flex items-center justify-between pt-2 mt-1 border-t border-border/50">
+        <span className="text-xs text-muted-foreground">
+          {expenses.length} despesa{expenses.length !== 1 ? 's' : ''}
+          {activeRecurringExpenses.length > 0 && (
+            <> + {activeRecurringExpenses.length} fixa{activeRecurringExpenses.length !== 1 ? 's' : ''}</>
           )}
-        </CardContent>
-      </Card>
+        </span>
+      </div>
+
+      {/* Budget goals */}
+      {budgetProgress.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-border/50 space-y-2">
+          <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+            <Target className="h-3 w-3" />
+            <span>Metas do Mês</span>
+          </div>
+          {budgetProgress.slice(0, 3).map(({ goal, percentage }) => {
+            const progressValue = Math.min(percentage, 100);
+            return (
+              <div key={goal.id} className="space-y-1">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-1">
+                    {getStatusIcon(percentage)}
+                    <span className="text-muted-foreground">
+                      {goal.type === "category" && goal.category
+                        ? categoryLabels[goal.category]
+                        : "Limite Mensal"}
+                    </span>
+                  </div>
+                  <span className={`font-medium ${percentage >= 100 ? 'text-destructive' : percentage >= 85 ? 'text-orange-500' : 'text-muted-foreground'}`}>
+                    {percentage.toFixed(0)}%
+                  </span>
+                </div>
+                <Progress 
+                  value={progressValue} 
+                  className={`h-1 ${
+                    percentage >= 100 ? '[&>div]:bg-destructive' : 
+                    percentage >= 85 ? '[&>div]:bg-orange-500' : 
+                    percentage >= 70 ? '[&>div]:bg-yellow-500' : 
+                    '[&>div]:bg-success'
+                  }`}
+                />
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   )
 }
