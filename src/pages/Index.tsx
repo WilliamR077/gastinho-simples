@@ -66,7 +66,7 @@ export default function Index() {
     const now = new Date();
     return {
       startDate: startOfMonth(now),
-      endDate: endOfMonth(now),
+      endDate: endOfMonth(now)
     };
   });
   const [creditCardConfig, setCreditCardConfig] = useState<CreditCardConfig | null>(null);
@@ -103,7 +103,7 @@ export default function Index() {
   const [expenseDefaultAmount, setExpenseDefaultAmount] = useState<number | undefined>();
   const [expenseInitialData, setExpenseInitialData] = useState<import("@/components/unified-expense-form-sheet").ExpenseInitialData | undefined>();
   const [incomeInitialData, setIncomeInitialData] = useState<import("@/components/unified-income-form-sheet").IncomeInitialData | undefined>();
-  
+
 
   const handleSendToCalculator = (value: number) => {
     setCalculatorInitialValue(value);
@@ -132,9 +132,9 @@ export default function Index() {
   // Load group members when context changes to a group
   useEffect(() => {
     if (currentContext.type === 'group' && currentContext.groupId) {
-      getGroupMembers(currentContext.groupId).then(members => {
+      getGroupMembers(currentContext.groupId).then((members) => {
         setGroupMembers(members);
-      }).catch(err => {
+      }).catch((err) => {
         console.error("Error loading group members:", err);
         setGroupMembers([]);
       });
@@ -146,10 +146,10 @@ export default function Index() {
   // Initialize notifications when recurring expenses are loaded
   useEffect(() => {
     if (recurringExpenses.length > 0 && notificationSettings) {
-      NotificationService.requestPermissions().then(granted => {
+      NotificationService.requestPermissions().then((granted) => {
         if (granted) {
           NotificationService.rescheduleAllNotifications(
-            recurringExpenses.filter(e => e.is_active),
+            recurringExpenses.filter((e) => e.is_active),
             notificationSettings
           );
         }
@@ -166,11 +166,11 @@ export default function Index() {
 
   const loadNotificationSettings = async () => {
     try {
-      const { data, error } = await supabase
-        .from("notification_settings")
-        .select("*")
-        .eq("user_id", user?.id)
-        .maybeSingle();
+      const { data, error } = await supabase.
+      from("notification_settings").
+      select("*").
+      eq("user_id", user?.id).
+      maybeSingle();
 
       if (error) throw error;
 
@@ -182,7 +182,7 @@ export default function Index() {
           is_enabled: true,
           notify_3_days_before: true,
           notify_1_day_before: true,
-          notify_on_day: true,
+          notify_on_day: true
         });
       }
     } catch (error) {
@@ -198,7 +198,7 @@ export default function Index() {
 
       toast({
         title: "📱 Notificação recebida",
-        description: "Verifique suas despesas fixas",
+        description: "Verifique suas despesas fixas"
       });
     });
 
@@ -220,7 +220,7 @@ export default function Index() {
           loadRecurringExpenses().then(() => {
             if (notificationSettings) {
               NotificationService.syncNotifications(
-                recurringExpenses.filter(e => e.is_active),
+                recurringExpenses.filter((e) => e.is_active),
                 notificationSettings
               );
             }
@@ -253,11 +253,11 @@ export default function Index() {
 
   const loadCards = async () => {
     try {
-      const { data, error } = await supabase
-        .from("cards")
-        .select("*")
-        .eq("user_id", user?.id)
-        .eq("is_active", true);
+      const { data, error } = await supabase.
+      from("cards").
+      select("*").
+      eq("user_id", user?.id).
+      eq("is_active", true);
 
       if (error) throw error;
       setCards(data || []);
@@ -268,14 +268,14 @@ export default function Index() {
 
   const loadExpenses = async () => {
     try {
-      let query = supabase
-        .from("expenses")
-        .select(`
+      let query = supabase.
+      from("expenses").
+      select(`
           *,
           card:cards(id, name, color, card_type),
           shared_group:shared_groups(id, name, color)
-        `)
-        .order("created_at", { ascending: false });
+        `).
+      order("created_at", { ascending: false });
 
       // Filtrar por contexto
       if (currentContext.type === 'personal') {
@@ -293,7 +293,7 @@ export default function Index() {
       toast({
         title: "Erro ao carregar gastos",
         description: "Não foi possível carregar os gastos.",
-        variant: "destructive",
+        variant: "destructive"
       });
     } finally {
       setLoading(false);
@@ -302,14 +302,14 @@ export default function Index() {
 
   const loadRecurringExpenses = async () => {
     try {
-      let query = supabase
-        .from("recurring_expenses")
-        .select(`
+      let query = supabase.
+      from("recurring_expenses").
+      select(`
           *,
           card:cards(id, name, color, card_type),
           shared_group:shared_groups(id, name, color)
-        `)
-        .order("day_of_month", { ascending: true });
+        `).
+      order("day_of_month", { ascending: true });
 
       // Filtrar por contexto
       if (currentContext.type === 'personal') {
@@ -327,18 +327,18 @@ export default function Index() {
       toast({
         title: "Erro ao carregar despesas fixas",
         description: "Não foi possível carregar as despesas fixas.",
-        variant: "destructive",
+        variant: "destructive"
       });
     }
   };
 
   const loadCreditCardConfig = async () => {
     try {
-      const { data, error } = await supabase
-        .from("credit_card_configs")
-        .select("opening_day, closing_day")
-        .eq("user_id", user?.id)
-        .maybeSingle();
+      const { data, error } = await supabase.
+      from("credit_card_configs").
+      select("opening_day, closing_day").
+      eq("user_id", user?.id).
+      maybeSingle();
 
       if (error) throw error;
 
@@ -352,10 +352,10 @@ export default function Index() {
 
   const loadBudgetGoals = async () => {
     try {
-      let query = supabase
-        .from("budget_goals")
-        .select("*")
-        .order("created_at", { ascending: false });
+      let query = supabase.
+      from("budget_goals").
+      select("*").
+      order("created_at", { ascending: false });
 
       // Filtrar por contexto
       if (currentContext.type === 'personal') {
@@ -373,17 +373,17 @@ export default function Index() {
       toast({
         title: "Erro ao carregar metas",
         description: "Não foi possível carregar as metas de gastos.",
-        variant: "destructive",
+        variant: "destructive"
       });
     }
   };
 
   const loadIncomes = async () => {
     try {
-      let query = supabase
-        .from("incomes")
-        .select("*")
-        .order("income_date", { ascending: false });
+      let query = supabase.
+      from("incomes").
+      select("*").
+      order("income_date", { ascending: false });
 
       // Filtrar por contexto
       if (currentContext.type === 'personal') {
@@ -403,10 +403,10 @@ export default function Index() {
 
   const loadRecurringIncomes = async () => {
     try {
-      let query = supabase
-        .from("recurring_incomes")
-        .select("*")
-        .order("day_of_month", { ascending: true });
+      let query = supabase.
+      from("recurring_incomes").
+      select("*").
+      order("day_of_month", { ascending: true });
 
       // Filtrar por contexto
       if (currentContext.type === 'personal') {
@@ -428,17 +428,17 @@ export default function Index() {
     try {
       const { error } = await supabase.from("incomes").delete().eq("id", id);
       if (error) throw error;
-      setIncomes(prev => prev.filter(i => i.id !== id));
+      setIncomes((prev) => prev.filter((i) => i.id !== id));
       toast({
         title: "Entrada removida",
-        description: "A entrada foi excluída com sucesso.",
+        description: "A entrada foi excluída com sucesso."
       });
     } catch (error) {
       console.error("Error deleting income:", error);
       toast({
         title: "Erro ao remover entrada",
         description: "Não foi possível remover a entrada.",
-        variant: "destructive",
+        variant: "destructive"
       });
     }
   };
@@ -447,37 +447,37 @@ export default function Index() {
     try {
       const { error } = await supabase.from("recurring_incomes").delete().eq("id", id);
       if (error) throw error;
-      setRecurringIncomes(prev => prev.filter(i => i.id !== id));
+      setRecurringIncomes((prev) => prev.filter((i) => i.id !== id));
       toast({
         title: "Entrada fixa removida",
-        description: "A entrada fixa foi excluída com sucesso.",
+        description: "A entrada fixa foi excluída com sucesso."
       });
     } catch (error) {
       console.error("Error deleting recurring income:", error);
       toast({
         title: "Erro ao remover entrada fixa",
         description: "Não foi possível remover a entrada fixa.",
-        variant: "destructive",
+        variant: "destructive"
       });
     }
   };
 
   const toggleRecurringIncomeActive = async (id: string, isActive: boolean) => {
     try {
-      const { error } = await supabase
-        .from("recurring_incomes")
-        .update({ is_active: isActive })
-        .eq("id", id);
+      const { error } = await supabase.
+      from("recurring_incomes").
+      update({ is_active: isActive }).
+      eq("id", id);
 
       if (error) throw error;
 
-      setRecurringIncomes(prev =>
-        prev.map(i => (i.id === id ? { ...i, is_active: isActive } : i))
+      setRecurringIncomes((prev) =>
+      prev.map((i) => i.id === id ? { ...i, is_active: isActive } : i)
       );
 
       toast({
         title: isActive ? "Entrada ativada" : "Entrada desativada",
-        description: `A entrada fixa foi ${isActive ? "ativada" : "desativada"}.`,
+        description: `A entrada fixa foi ${isActive ? "ativada" : "desativada"}.`
       });
     } catch (error) {
       console.error("Error toggling recurring income:", error);
@@ -500,7 +500,7 @@ export default function Index() {
       cardId: expense.card_id || undefined,
       expenseType: "monthly",
       installments: 1,
-      sharedGroupId: expense.shared_group_id,
+      sharedGroupId: expense.shared_group_id
     });
     setExpenseSheetOpen(true);
   };
@@ -512,7 +512,7 @@ export default function Index() {
       amount: income.amount,
       categoryId: catId || income.category,
       incomeDate: parseLocalDate(income.income_date),
-      incomeType: "monthly",
+      incomeType: "monthly"
     });
     setIncomeSheetOpen(true);
   };
@@ -531,106 +531,106 @@ export default function Index() {
         return `${year}-${month}-${day}`;
       };
 
-      const { error } = await supabase
-        .from("incomes")
-        .update({
-          description: data.description,
-          amount: data.amount,
-          category: data.category,
-          income_date: formatDateLocal(data.incomeDate),
-          income_category_id: data.incomeCategoryId || null,
-          category_name: data.categoryName || null,
-          category_icon: data.categoryIcon || null,
-        } as any)
-        .eq("id", id);
+      const { error } = await supabase.
+      from("incomes").
+      update({
+        description: data.description,
+        amount: data.amount,
+        category: data.category,
+        income_date: formatDateLocal(data.incomeDate),
+        income_category_id: data.incomeCategoryId || null,
+        category_name: data.categoryName || null,
+        category_icon: data.categoryIcon || null
+      } as any).
+      eq("id", id);
 
       if (error) throw error;
 
-      setIncomes(prev =>
-        prev.map(i =>
-          i.id === id
-            ? {
-                ...i,
-                description: data.description,
-                amount: data.amount,
-                category: data.category,
-                income_date: formatDateLocal(data.incomeDate),
-                income_category_id: data.incomeCategoryId || null,
-                category_name: data.categoryName || null,
-                category_icon: data.categoryIcon || null,
-              }
-            : i
-        )
+      setIncomes((prev) =>
+      prev.map((i) =>
+      i.id === id ?
+      {
+        ...i,
+        description: data.description,
+        amount: data.amount,
+        category: data.category,
+        income_date: formatDateLocal(data.incomeDate),
+        income_category_id: data.incomeCategoryId || null,
+        category_name: data.categoryName || null,
+        category_icon: data.categoryIcon || null
+      } :
+      i
+      )
       );
 
       toast({
         title: "Entrada atualizada",
-        description: "A entrada foi atualizada com sucesso.",
+        description: "A entrada foi atualizada com sucesso."
       });
     } catch (error) {
       console.error("Error updating income:", error);
       toast({
         title: "Erro ao atualizar entrada",
         description: "Não foi possível atualizar a entrada.",
-        variant: "destructive",
+        variant: "destructive"
       });
     }
   };
 
   const updateRecurringIncome = async (id: string, data: RecurringIncomeFormData) => {
     try {
-      const { error } = await supabase
-        .from("recurring_incomes")
-        .update({
-          description: data.description,
-          amount: data.amount,
-          category: data.category,
-          day_of_month: data.dayOfMonth,
-          income_category_id: data.incomeCategoryId || null,
-          category_name: data.categoryName || null,
-          category_icon: data.categoryIcon || null,
-        } as any)
-        .eq("id", id);
+      const { error } = await supabase.
+      from("recurring_incomes").
+      update({
+        description: data.description,
+        amount: data.amount,
+        category: data.category,
+        day_of_month: data.dayOfMonth,
+        income_category_id: data.incomeCategoryId || null,
+        category_name: data.categoryName || null,
+        category_icon: data.categoryIcon || null
+      } as any).
+      eq("id", id);
 
       if (error) throw error;
 
-      setRecurringIncomes(prev =>
-        prev.map(i =>
-          i.id === id
-            ? {
-                ...i,
-                description: data.description,
-                amount: data.amount,
-                category: data.category,
-                day_of_month: data.dayOfMonth,
-                income_category_id: data.incomeCategoryId || null,
-                category_name: data.categoryName || null,
-                category_icon: data.categoryIcon || null,
-              }
-            : i
-        )
+      setRecurringIncomes((prev) =>
+      prev.map((i) =>
+      i.id === id ?
+      {
+        ...i,
+        description: data.description,
+        amount: data.amount,
+        category: data.category,
+        day_of_month: data.dayOfMonth,
+        income_category_id: data.incomeCategoryId || null,
+        category_name: data.categoryName || null,
+        category_icon: data.categoryIcon || null
+      } :
+      i
+      )
       );
 
       toast({
         title: "Entrada fixa atualizada",
-        description: "A entrada fixa foi atualizada com sucesso.",
+        description: "A entrada fixa foi atualizada com sucesso."
       });
     } catch (error) {
       console.error("Error updating recurring income:", error);
       toast({
         title: "Erro ao atualizar entrada fixa",
         description: "Não foi possível atualizar a entrada fixa.",
-        variant: "destructive",
+        variant: "destructive"
       });
     }
   };
 
   const handleMonthChange = (startDate: Date, endDate: Date) => {
     setCurrentMonth(startDate);
-    setFilters(prev => ({
+    setFilters((prev) => ({
       ...prev,
       startDate,
-      endDate,
+      endDate
     }));
   };
 
@@ -639,7 +639,7 @@ export default function Index() {
 
     // Validar se categoryId é UUID válido
     const isUUID = (value: string) =>
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
     try {
       const { description, amount, paymentMethod, expenseDate, installments = 1, categoryId, cardId, sharedGroupId } = data;
@@ -660,17 +660,17 @@ export default function Index() {
       const categoryEnumValue = categoryId && !categoryIsUUID ? categoryId as ExpenseCategory : undefined;
 
       // Buscar dados desnormalizados para exibição em grupos
-      const selectedCategory = categoryIsUUID ? categories.find(c => c.id === categoryId) : null;
-      const selectedCard = cardId ? cards.find(c => c.id === cardId) : null;
+      const selectedCategory = categoryIsUUID ? categories.find((c) => c.id === categoryId) : null;
+      const selectedCard = cardId ? cards.find((c) => c.id === cardId) : null;
       const categoryName = selectedCategory?.name || (categoryEnumValue ? categoryLabels[categoryEnumValue] : 'Outros');
       const categoryIcon = selectedCategory?.icon || '📦';
       const cardName = selectedCard?.name || null;
 
       if (installments === 1) {
         // Single expense
-      const { data: insertedData, error } = await supabase
-        .from("expenses")
-        .insert({
+        const { data: insertedData, error } = await supabase.
+        from("expenses").
+        insert({
           description,
           amount,
           payment_method: paymentMethod,
@@ -685,17 +685,17 @@ export default function Index() {
           // Campos desnormalizados para visualização em grupos
           category_name: categoryName,
           category_icon: categoryIcon,
-          card_name: cardName,
-        })
-        .select(`
+          card_name: cardName
+        }).
+        select(`
           *,
           card:cards(id, name, color, card_type),
           shared_group:shared_groups(id, name, color)
-        `)
-        .single();
+        `).
+        single();
 
         if (error) throw error;
-        setExpenses(prev => [insertedData, ...prev]);
+        setExpenses((prev) => [insertedData, ...prev]);
       } else {
         // Multiple installments
         const installmentGroupId = crypto.randomUUID();
@@ -722,38 +722,38 @@ export default function Index() {
             // Campos desnormalizados para visualização em grupos
             category_name: categoryName,
             category_icon: categoryIcon,
-            card_name: cardName,
+            card_name: cardName
           });
         }
 
-      const { data: insertedData, error } = await supabase
-        .from("expenses")
-        .insert(expensesToInsert)
-        .select(`
+        const { data: insertedData, error } = await supabase.
+        from("expenses").
+        insert(expensesToInsert).
+        select(`
           *,
           card:cards(id, name, color, card_type),
           shared_group:shared_groups(id, name, color)
         `);
 
         if (error) throw error;
-        setExpenses(prev => [...(insertedData || []), ...prev]);
+        setExpenses((prev) => [...(insertedData || []), ...prev]);
       }
 
       // Determinar label do contexto baseado no grupo selecionado no formulário
-      const selectedGroup = groupId ? groups.find(g => g.id === groupId) : null;
+      const selectedGroup = groupId ? groups.find((g) => g.id === groupId) : null;
       const contextLabel = selectedGroup ? ` (${selectedGroup.name})` : '';
       toast({
         title: installments === 1 ? "Gasto adicionado!" : "Gasto parcelado adicionado!",
-        description: installments === 1
-          ? `${description} - R$ ${amount.toFixed(2)}${contextLabel}`
-          : `${description} - ${installments}x de R$ ${(amount / installments).toFixed(2)}${contextLabel}`,
+        description: installments === 1 ?
+        `${description} - R$ ${amount.toFixed(2)}${contextLabel}` :
+        `${description} - ${installments}x de R$ ${(amount / installments).toFixed(2)}${contextLabel}`
       });
 
       // Notificar membros do grupo (fire-and-forget)
       const groupId_ = data.sharedGroupId || (currentContext.type === 'group' ? currentContext.groupId : null);
       if (groupId_) {
-        const selectedGroup_ = groups.find(g => g.id === groupId_);
-        const catName = categories.find(c => c.id === data.categoryId)?.name;
+        const selectedGroup_ = groups.find((g) => g.id === groupId_);
+        const catName = categories.find((c) => c.id === data.categoryId)?.name;
         supabase.functions.invoke("notify-group-expense", {
           body: {
             group_id: groupId_,
@@ -761,10 +761,10 @@ export default function Index() {
             description: data.description,
             amount: data.amount,
             category_name: catName || categoryName,
-            group_name: selectedGroup_?.name || currentContext.groupName || "Grupo",
+            group_name: selectedGroup_?.name || currentContext.groupName || "Grupo"
           },
-          headers: { "x-internal-secret": import.meta.env.VITE_INTERNAL_API_SECRET || "" },
-        }).catch(err => console.warn("⚠️ Falha ao notificar grupo:", err));
+          headers: { "x-internal-secret": import.meta.env.VITE_INTERNAL_API_SECRET || "" }
+        }).catch((err) => console.warn("⚠️ Falha ao notificar grupo:", err));
       }
 
       // Incrementar contador de despesas para controlar exibição de anúncios
@@ -774,33 +774,33 @@ export default function Index() {
       toast({
         title: "Erro ao adicionar gasto",
         description: "Não foi possível adicionar o gasto.",
-        variant: "destructive",
+        variant: "destructive"
       });
     }
   };
 
   const deleteExpense = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from("expenses")
-        .delete()
-        .eq("id", id);
+      const { error } = await supabase.
+      from("expenses").
+      delete().
+      eq("id", id);
 
       if (error) throw error;
 
-      setExpenses(prev => prev.filter(expense => expense.id !== id));
+      setExpenses((prev) => prev.filter((expense) => expense.id !== id));
 
       toast({
         title: "Gasto removido",
         description: "O gasto foi excluído com sucesso.",
-        variant: "destructive",
+        variant: "destructive"
       });
     } catch (error) {
       console.error("Error deleting expense:", error);
       toast({
         title: "Erro ao remover gasto",
         description: "Não foi possível remover o gasto.",
-        variant: "destructive",
+        variant: "destructive"
       });
     }
   };
@@ -812,16 +812,16 @@ export default function Index() {
     const groupId = data.sharedGroupId || null;
 
     // Buscar dados desnormalizados para exibição em grupos
-    const selectedCategory = data.categoryId ? categories.find(c => c.id === data.categoryId) : null;
-    const selectedCard = data.cardId ? cards.find(c => c.id === data.cardId) : null;
+    const selectedCategory = data.categoryId ? categories.find((c) => c.id === data.categoryId) : null;
+    const selectedCard = data.cardId ? cards.find((c) => c.id === data.cardId) : null;
     const categoryName = selectedCategory?.name || 'Outros';
     const categoryIcon = selectedCategory?.icon || '📦';
     const cardName = selectedCard?.name || null;
 
     try {
-    const { data: insertedData, error } = await supabase
-      .from("recurring_expenses")
-      .insert({
+      const { data: insertedData, error } = await supabase.
+      from("recurring_expenses").
+      insert({
         description: data.description,
         amount: data.amount,
         payment_method: data.paymentMethod,
@@ -833,34 +833,34 @@ export default function Index() {
         // Campos desnormalizados para visualização em grupos
         category_name: categoryName,
         category_icon: categoryIcon,
-        card_name: cardName,
-      })
-      .select(`
+        card_name: cardName
+      }).
+      select(`
         *,
         card:cards(id, name, color, card_type),
         shared_group:shared_groups(id, name, color)
-      `)
-      .single();
+      `).
+      single();
 
       if (error) throw error;
-      setRecurringExpenses(prev => [...prev, insertedData].sort((a, b) => a.day_of_month - b.day_of_month));
+      setRecurringExpenses((prev) => [...prev, insertedData].sort((a, b) => a.day_of_month - b.day_of_month));
 
       // Agendar notificações para a nova despesa
       await NotificationService.scheduleNotificationsForExpense(insertedData, notificationSettings);
 
       // Determinar label do contexto baseado no grupo selecionado no formulário
-      const selectedGroup = groupId ? groups.find(g => g.id === groupId) : null;
+      const selectedGroup = groupId ? groups.find((g) => g.id === groupId) : null;
       const contextLabel = selectedGroup ? ` (${selectedGroup.name})` : '';
       toast({
         title: "Despesa fixa adicionada!",
-        description: `${data.description} - R$ ${data.amount.toFixed(2)} (Dia ${data.dayOfMonth})${contextLabel}`,
+        description: `${data.description} - R$ ${data.amount.toFixed(2)} (Dia ${data.dayOfMonth})${contextLabel}`
       });
     } catch (error) {
       console.error("Error adding recurring expense:", error);
       toast({
         title: "Erro ao adicionar despesa fixa",
         description: "Não foi possível adicionar a despesa fixa.",
-        variant: "destructive",
+        variant: "destructive"
       });
     }
   };
@@ -870,26 +870,26 @@ export default function Index() {
       // Cancelar notificações antes de deletar
       await NotificationService.cancelNotificationsForExpense(id);
 
-      const { error } = await supabase
-        .from("recurring_expenses")
-        .delete()
-        .eq("id", id);
+      const { error } = await supabase.
+      from("recurring_expenses").
+      delete().
+      eq("id", id);
 
       if (error) throw error;
 
-      setRecurringExpenses(prev => prev.filter(expense => expense.id !== id));
+      setRecurringExpenses((prev) => prev.filter((expense) => expense.id !== id));
 
       toast({
         title: "Despesa fixa removida",
         description: "A despesa fixa foi excluída com sucesso.",
-        variant: "destructive",
+        variant: "destructive"
       });
     } catch (error) {
       console.error("Error deleting recurring expense:", error);
       toast({
         title: "Erro ao remover despesa fixa",
         description: "Não foi possível remover a despesa fixa.",
-        variant: "destructive",
+        variant: "destructive"
       });
     }
   };
@@ -897,25 +897,25 @@ export default function Index() {
   const toggleRecurringExpenseActive = async (id: string, isActive: boolean) => {
     try {
       // Se desativando, definir end_date; se ativando, limpar end_date
-      const updateData = isActive 
-        ? { is_active: isActive, end_date: null }
-        : { is_active: isActive, end_date: new Date().toISOString().split('T')[0] };
-      
-      const { error } = await supabase
-        .from("recurring_expenses")
-        .update(updateData)
-        .eq("id", id);
+      const updateData = isActive ?
+      { is_active: isActive, end_date: null } :
+      { is_active: isActive, end_date: new Date().toISOString().split('T')[0] };
+
+      const { error } = await supabase.
+      from("recurring_expenses").
+      update(updateData).
+      eq("id", id);
 
       if (error) throw error;
 
-      const updatedExpense = recurringExpenses.find(e => e.id === id);
+      const updatedExpense = recurringExpenses.find((e) => e.id === id);
 
-      setRecurringExpenses(prev =>
-        prev.map(expense =>
-          expense.id === id 
-            ? { ...expense, is_active: isActive, end_date: isActive ? null : new Date().toISOString().split('T')[0] } 
-            : expense
-        )
+      setRecurringExpenses((prev) =>
+      prev.map((expense) =>
+      expense.id === id ?
+      { ...expense, is_active: isActive, end_date: isActive ? null : new Date().toISOString().split('T')[0] } :
+      expense
+      )
       );
 
       // Gerenciar notificações baseado no status
@@ -934,51 +934,51 @@ export default function Index() {
 
       toast({
         title: isActive ? "Despesa fixa ativada" : "Despesa fixa desativada",
-        description: isActive
-          ? "A despesa fixa foi ativada e será considerada nos cálculos."
-          : "A despesa fixa foi desativada e não será mais considerada.",
+        description: isActive ?
+        "A despesa fixa foi ativada e será considerada nos cálculos." :
+        "A despesa fixa foi desativada e não será mais considerada."
       });
     } catch (error) {
       console.error("Error toggling recurring expense:", error);
       toast({
         title: "Erro ao atualizar despesa fixa",
         description: "Não foi possível atualizar a despesa fixa.",
-        variant: "destructive",
+        variant: "destructive"
       });
     }
   };
 
-  const addBudgetGoal = async (data: { type: string; category?: string; limitAmount: number; sharedGroupId?: string }) => {
+  const addBudgetGoal = async (data: {type: string;category?: string;limitAmount: number;sharedGroupId?: string;}) => {
     if (!user) return;
 
     // Usar sharedGroupId do formulário ou do contexto atual
     const groupId = data.sharedGroupId || (currentContext.type === 'group' ? currentContext.groupId : null);
 
     try {
-      const { data: insertedData, error } = await supabase
-        .from("budget_goals")
-        .insert([{
-          user_id: user.id,
-          type: data.type as any,
-          category: data.category as any || null,
-          limit_amount: data.limitAmount,
-          ...(groupId && { shared_group_id: groupId }),
-        }])
-        .select()
-        .single();
+      const { data: insertedData, error } = await supabase.
+      from("budget_goals").
+      insert([{
+        user_id: user.id,
+        type: data.type as any,
+        category: data.category as any || null,
+        limit_amount: data.limitAmount,
+        ...(groupId && { shared_group_id: groupId })
+      }]).
+      select().
+      single();
 
       if (error) throw error;
 
-      setBudgetGoals(prev => [insertedData, ...prev]);
+      setBudgetGoals((prev) => [insertedData, ...prev]);
 
-      const contextLabel = currentContext.type === 'group' && currentContext.groupName 
-        ? ` (${currentContext.groupName})` 
-        : '';
+      const contextLabel = currentContext.type === 'group' && currentContext.groupName ?
+      ` (${currentContext.groupName})` :
+      '';
       const isIncome = data.type.startsWith('income_');
       const goalLabel = isIncome ? 'meta de entradas' : 'meta de gastos';
       toast({
         title: "Meta adicionada!",
-        description: `Sua ${goalLabel} foi criada com sucesso${contextLabel}.`,
+        description: `Sua ${goalLabel} foi criada com sucesso${contextLabel}.`
       });
     } catch (error) {
       console.error("Error adding budget goal:", error);
@@ -987,33 +987,33 @@ export default function Index() {
       toast({
         title: "Erro ao adicionar meta",
         description: `Não foi possível adicionar a ${goalLabel}.`,
-        variant: "destructive",
+        variant: "destructive"
       });
     }
   };
 
   const deleteBudgetGoal = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from("budget_goals")
-        .delete()
-        .eq("id", id);
+      const { error } = await supabase.
+      from("budget_goals").
+      delete().
+      eq("id", id);
 
       if (error) throw error;
 
-      setBudgetGoals(prev => prev.filter(goal => goal.id !== id));
+      setBudgetGoals((prev) => prev.filter((goal) => goal.id !== id));
 
       toast({
         title: "Meta removida",
         description: "A meta de gastos foi excluída com sucesso.",
-        variant: "destructive",
+        variant: "destructive"
       });
     } catch (error) {
       console.error("Error deleting budget goal:", error);
       toast({
         title: "Erro ao remover meta",
         description: "Não foi possível remover a meta de gastos.",
-        variant: "destructive",
+        variant: "destructive"
       });
     }
   };
@@ -1033,28 +1033,28 @@ export default function Index() {
         return `${year}-${month}-${day}`;
       };
 
-      const { data: updatedData, error } = await supabase
-        .from("expenses")
-        .update({
-          description: data.description,
-          amount: data.amount,
-          payment_method: data.paymentMethod,
-          expense_date: formatDateLocal(data.expenseDate),
-          ...(data.categoryId && { category_id: data.categoryId }),
-          ...(data.cardId && { card_id: data.cardId }),
-        })
-        .eq("id", id)
-        .select(`
+      const { data: updatedData, error } = await supabase.
+      from("expenses").
+      update({
+        description: data.description,
+        amount: data.amount,
+        payment_method: data.paymentMethod,
+        expense_date: formatDateLocal(data.expenseDate),
+        ...(data.categoryId && { category_id: data.categoryId }),
+        ...(data.cardId && { card_id: data.cardId })
+      }).
+      eq("id", id).
+      select(`
           *,
           card:cards(id, name, color, card_type)
-        `)
-        .single();
+        `).
+      single();
 
       if (error) throw error;
 
       if (updatedData) {
-        setExpenses(prev => prev.map(e =>
-          e.id === id ? updatedData : e
+        setExpenses((prev) => prev.map((e) =>
+        e.id === id ? updatedData : e
         ));
       }
 
@@ -1063,14 +1063,14 @@ export default function Index() {
 
       toast({
         title: "Despesa atualizada!",
-        description: "As alterações foram salvas com sucesso.",
+        description: "As alterações foram salvas com sucesso."
       });
     } catch (error) {
       console.error("Error updating expense:", error);
       toast({
         title: "Erro ao atualizar despesa",
         description: "Não foi possível atualizar a despesa.",
-        variant: "destructive",
+        variant: "destructive"
       });
     }
   };
@@ -1082,28 +1082,28 @@ export default function Index() {
 
   const updateRecurringExpense = async (id: string, data: RecurringExpenseFormData) => {
     try {
-      const { data: updatedData, error } = await supabase
-        .from("recurring_expenses")
-        .update({
-          description: data.description,
-          amount: data.amount,
-          payment_method: data.paymentMethod,
-          day_of_month: data.dayOfMonth,
-          ...(data.categoryId && { category_id: data.categoryId }),
-          ...(data.cardId && { card_id: data.cardId }),
-        })
-        .eq("id", id)
-        .select(`
+      const { data: updatedData, error } = await supabase.
+      from("recurring_expenses").
+      update({
+        description: data.description,
+        amount: data.amount,
+        payment_method: data.paymentMethod,
+        day_of_month: data.dayOfMonth,
+        ...(data.categoryId && { category_id: data.categoryId }),
+        ...(data.cardId && { card_id: data.cardId })
+      }).
+      eq("id", id).
+      select(`
           *,
           card:cards(id, name, color, card_type)
-        `)
-        .single();
+        `).
+      single();
 
       if (error) throw error;
 
       if (updatedData) {
-        setRecurringExpenses(prev =>
-          prev.map(e => e.id === id ? updatedData : e).sort((a, b) => a.day_of_month - b.day_of_month)
+        setRecurringExpenses((prev) =>
+        prev.map((e) => e.id === id ? updatedData : e).sort((a, b) => a.day_of_month - b.day_of_month)
         );
       }
 
@@ -1118,14 +1118,14 @@ export default function Index() {
 
       toast({
         title: "Despesa fixa atualizada!",
-        description: "As alterações foram salvas com sucesso.",
+        description: "As alterações foram salvas com sucesso."
       });
     } catch (error) {
       console.error("Error updating recurring expense:", error);
       toast({
         title: "Erro ao atualizar despesa fixa",
         description: "Não foi possível atualizar a despesa fixa.",
-        variant: "destructive",
+        variant: "destructive"
       });
     }
   };
@@ -1135,25 +1135,25 @@ export default function Index() {
     setBudgetGoalDialogOpen(true);
   };
 
-  const updateBudgetGoal = async (id: string, data: { type: string; category?: string; limitAmount: number }) => {
+  const updateBudgetGoal = async (id: string, data: {type: string;category?: string;limitAmount: number;}) => {
     try {
-      const { error } = await supabase
-        .from("budget_goals")
-        .update({
-          type: data.type as any,
-          category: (data.category as any) || null,
-          limit_amount: data.limitAmount,
-        })
-        .eq("id", id);
+      const { error } = await supabase.
+      from("budget_goals").
+      update({
+        type: data.type as any,
+        category: data.category as any || null,
+        limit_amount: data.limitAmount
+      }).
+      eq("id", id);
 
       if (error) throw error;
 
-      setBudgetGoals(prev => prev.map(g => {
+      setBudgetGoals((prev) => prev.map((g) => {
         if (g.id === id) {
           return {
             ...g,
             type: data.type as any,
-            category: (data.category as any) || null,
+            category: data.category as any || null,
             limit_amount: data.limitAmount
           };
         }
@@ -1165,14 +1165,14 @@ export default function Index() {
 
       toast({
         title: "Meta atualizada!",
-        description: "As alterações foram salvas com sucesso.",
+        description: "As alterações foram salvas com sucesso."
       });
     } catch (error) {
       console.error("Error updating budget goal:", error);
       toast({
         title: "Erro ao atualizar meta",
         description: "Não foi possível atualizar a meta.",
-        variant: "destructive",
+        variant: "destructive"
       });
     }
   };
@@ -1180,11 +1180,11 @@ export default function Index() {
   // Criar mapa de configs de cartões
   const cardsConfigMap = useMemo(() => {
     const map = new Map<string, CreditCardConfig>();
-    cards.forEach(card => {
+    cards.forEach((card) => {
       if (card.opening_day !== null && card.closing_day !== null) {
         map.set(card.id, {
           opening_day: card.opening_day,
-          closing_day: card.closing_day,
+          closing_day: card.closing_day
         });
       }
     });
@@ -1199,7 +1199,7 @@ export default function Index() {
 
   // Filtrar despesas baseado nos filtros aplicados
   const filteredExpenses = useMemo(() => {
-    return expenses.filter(expense => {
+    return expenses.filter((expense) => {
       // Filtro de data início
       if (filters.startDate) {
         const expenseDate = parseLocalDate(expense.expense_date);
@@ -1260,19 +1260,19 @@ export default function Index() {
   };
 
   const handlePaymentMethodFilter = (method: PaymentMethod) => {
-    setFilters(prev => {
+    setFilters((prev) => {
       const isActive = prev.paymentMethod === method;
       if (isActive) {
         const { paymentMethod, ...rest } = prev;
         toast({
           title: "Filtro removido",
-          description: "Exibindo todas as formas de pagamento",
+          description: "Exibindo todas as formas de pagamento"
         });
         return rest;
       } else {
         toast({
           title: "Filtro aplicado",
-          description: `Exibindo apenas ${method === 'pix' ? 'PIX' : method === 'debit' ? 'Débito' : 'Crédito'}`,
+          description: `Exibindo apenas ${method === 'pix' ? 'PIX' : method === 'debit' ? 'Débito' : 'Crédito'}`
         });
         return { ...prev, paymentMethod: method };
       }
@@ -1280,17 +1280,17 @@ export default function Index() {
   };
 
   const handleCategoryFilter = (categoryId: string) => {
-    setActiveCategoryFilter(prev => {
+    setActiveCategoryFilter((prev) => {
       if (prev === categoryId) {
         toast({
           title: "Filtro removido",
-          description: "Exibindo todas as categorias",
+          description: "Exibindo todas as categorias"
         });
         return null;
       } else {
         toast({
           title: "Filtro aplicado",
-          description: "Filtrando por categoria selecionada",
+          description: "Filtrando por categoria selecionada"
         });
         return categoryId;
       }
@@ -1299,7 +1299,7 @@ export default function Index() {
 
   // Filtrar despesas recorrentes baseado nos filtros aplicados
   const filteredRecurringExpenses = useMemo(() => {
-    return recurringExpenses.filter(expense => {
+    return recurringExpenses.filter((expense) => {
       // Filtro de descrição
       if (filters.description) {
         if (!expense.description.toLowerCase().includes(filters.description.toLowerCase())) {
@@ -1334,41 +1334,41 @@ export default function Index() {
   // Despesas filtradas por categoria
   const displayedExpenses = useMemo(() => {
     if (!activeCategoryFilter) return filteredExpenses;
-    return filteredExpenses.filter(e => 
-      e.category_id === activeCategoryFilter || e.category === activeCategoryFilter
+    return filteredExpenses.filter((e) =>
+    e.category_id === activeCategoryFilter || e.category === activeCategoryFilter
     );
   }, [filteredExpenses, activeCategoryFilter]);
 
   // Despesas recorrentes filtradas por categoria
   const displayedRecurringExpenses = useMemo(() => {
     if (!activeCategoryFilter) return filteredRecurringExpenses;
-    return filteredRecurringExpenses.filter(e => 
-      e.category_id === activeCategoryFilter || e.category === activeCategoryFilter
+    return filteredRecurringExpenses.filter((e) =>
+    e.category_id === activeCategoryFilter || e.category === activeCategoryFilter
     );
   }, [filteredRecurringExpenses, activeCategoryFilter]);
 
   // Verificar se há filtros ativos
   const hasActiveFilters = useMemo(() => {
     return !!(
-      filters.description ||
-      filters.minAmount !== undefined ||
-      filters.maxAmount !== undefined ||
-      filters.paymentMethod ||
-      filters.cardId ||
-      activeCategoryFilter ||
-      activeIncomeCategoryFilter
-    );
+    filters.description ||
+    filters.minAmount !== undefined ||
+    filters.maxAmount !== undefined ||
+    filters.paymentMethod ||
+    filters.cardId ||
+    activeCategoryFilter ||
+    activeIncomeCategoryFilter);
+
   }, [filters, activeCategoryFilter, activeIncomeCategoryFilter]);
 
   // Função para limpar todos os filtros
   const clearAllFilters = () => {
-    setFilters(prev => ({
+    setFilters((prev) => ({
       ...prev,
       description: undefined,
       minAmount: undefined,
       maxAmount: undefined,
       paymentMethod: undefined,
-      cardId: undefined,
+      cardId: undefined
     }));
     setActiveCategoryFilter(null);
     setActiveIncomeCategoryFilter(null);
@@ -1376,17 +1376,17 @@ export default function Index() {
 
   // Handler para filtro de categoria de entrada
   const handleIncomeCategoryFilter = (category: string) => {
-    setActiveIncomeCategoryFilter(prev => {
+    setActiveIncomeCategoryFilter((prev) => {
       if (prev === category) {
         toast({
           title: "Filtro removido",
-          description: "Exibindo todas as categorias de entrada",
+          description: "Exibindo todas as categorias de entrada"
         });
         return null;
       } else {
         toast({
           title: "Filtro aplicado",
-          description: "Filtrando por categoria de entrada selecionada",
+          description: "Filtrando por categoria de entrada selecionada"
         });
         return category;
       }
@@ -1395,12 +1395,12 @@ export default function Index() {
 
   // Entradas filtradas por categoria e filtros globais
   const displayedIncomes = useMemo(() => {
-    const dateFiltered = incomes.filter(i => {
+    const dateFiltered = incomes.filter((i) => {
       const date = parseLocalDate(i.income_date);
-      return date >= (filters.startDate || startOfMonth(new Date())) && 
-             date <= (filters.endDate || endOfMonth(new Date()));
+      return date >= (filters.startDate || startOfMonth(new Date())) &&
+      date <= (filters.endDate || endOfMonth(new Date()));
     });
-    return dateFiltered.filter(i => {
+    return dateFiltered.filter((i) => {
       // Filtro de categoria
       if (activeIncomeCategoryFilter && (i as any).income_category_id !== activeIncomeCategoryFilter && i.category !== activeIncomeCategoryFilter) return false;
       // Filtro de descrição
@@ -1415,7 +1415,7 @@ export default function Index() {
 
   // Entradas recorrentes filtradas por categoria e filtros globais
   const displayedRecurringIncomes = useMemo(() => {
-    return recurringIncomes.filter(i => {
+    return recurringIncomes.filter((i) => {
       if (activeIncomeCategoryFilter && (i as any).income_category_id !== activeIncomeCategoryFilter && i.category !== activeIncomeCategoryFilter) return false;
       if (filters.description && !i.description.toLowerCase().includes(filters.description.toLowerCase())) return false;
       if (filters.minAmount !== undefined && i.amount < filters.minAmount) return false;
@@ -1433,39 +1433,39 @@ export default function Index() {
       const expenseDate = parseLocalDate(expense.expense_date);
       return (
         expenseDate.getMonth() === selectedMonthNum &&
-        expenseDate.getFullYear() === selectedYearNum
-      );
+        expenseDate.getFullYear() === selectedYearNum);
+
     });
 
     const activeRecurring = recurringExpenses.filter((re) => re.is_active);
 
-    return budgetGoals
-      .filter((goal) => goal.type === "monthly_total" || goal.type === "category")
-      .map((goal) => {
-        let totalSpent = 0;
+    return budgetGoals.
+    filter((goal) => goal.type === "monthly_total" || goal.type === "category").
+    map((goal) => {
+      let totalSpent = 0;
 
-        if (goal.type === "monthly_total") {
-          totalSpent = monthlyExpensesForGoals.reduce((sum, exp) => sum + Number(exp.amount), 0);
-          totalSpent += activeRecurring.reduce((sum, re) => sum + Number(re.amount), 0);
-        } else if (goal.type === "category" && goal.category) {
-          // Match por enum OU por category_id que corresponda ao nome da categoria
-          const goalCategoryLabel = categoryLabels[goal.category as keyof typeof categoryLabels];
-          
-          totalSpent = monthlyExpensesForGoals
-            .filter((exp) => exp.category === goal.category)
-            .reduce((sum, exp) => sum + Number(exp.amount), 0);
-          totalSpent += activeRecurring
-            .filter((re) => re.category === goal.category)
-            .reduce((sum, re) => sum + Number(re.amount), 0);
-        }
+      if (goal.type === "monthly_total") {
+        totalSpent = monthlyExpensesForGoals.reduce((sum, exp) => sum + Number(exp.amount), 0);
+        totalSpent += activeRecurring.reduce((sum, re) => sum + Number(re.amount), 0);
+      } else if (goal.type === "category" && goal.category) {
+        // Match por enum OU por category_id que corresponda ao nome da categoria
+        const goalCategoryLabel = categoryLabels[goal.category as keyof typeof categoryLabels];
 
-        const limit = Number(goal.limit_amount);
-        const percentage = (totalSpent / limit) * 100;
-        const remaining = limit - totalSpent;
+        totalSpent = monthlyExpensesForGoals.
+        filter((exp) => exp.category === goal.category).
+        reduce((sum, exp) => sum + Number(exp.amount), 0);
+        totalSpent += activeRecurring.
+        filter((re) => re.category === goal.category).
+        reduce((sum, re) => sum + Number(re.amount), 0);
+      }
 
-        return { goal, totalSpent, limit, percentage, remaining };
-      })
-      .filter((item) => item.percentage >= 80);
+      const limit = Number(goal.limit_amount);
+      const percentage = totalSpent / limit * 100;
+      const remaining = limit - totalSpent;
+
+      return { goal, totalSpent, limit, percentage, remaining };
+    }).
+    filter((item) => item.percentage >= 80);
   }, [budgetGoals, expenses, recurringExpenses, currentMonth]);
 
   // Calcular totais de entradas e saídas do mês
@@ -1474,28 +1474,28 @@ export default function Index() {
     const monthEnd = filters.endDate || endOfMonth(new Date());
 
     // Despesas do período
-    const periodExpenses = expenses.filter(e => {
+    const periodExpenses = expenses.filter((e) => {
       const date = parseLocalDate(e.expense_date);
       return date >= monthStart && date <= monthEnd;
     });
     const totalExpenses = periodExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
-    const totalRecurringExpenses = recurringExpenses
-      .filter(e => e.is_active)
-      .reduce((sum, e) => sum + Number(e.amount), 0);
+    const totalRecurringExpenses = recurringExpenses.
+    filter((e) => e.is_active).
+    reduce((sum, e) => sum + Number(e.amount), 0);
 
     // Receitas do período
-    const periodIncomes = incomes.filter(i => {
+    const periodIncomes = incomes.filter((i) => {
       const date = parseLocalDate(i.income_date);
       return date >= monthStart && date <= monthEnd;
     });
     const totalIncomes = periodIncomes.reduce((sum, i) => sum + Number(i.amount), 0);
-    const totalRecurringIncomes = recurringIncomes
-      .filter(i => i.is_active)
-      .reduce((sum, i) => sum + Number(i.amount), 0);
+    const totalRecurringIncomes = recurringIncomes.
+    filter((i) => i.is_active).
+    reduce((sum, i) => sum + Number(i.amount), 0);
 
     return {
       totalIncome: totalIncomes + totalRecurringIncomes,
-      totalExpense: totalExpenses + totalRecurringExpenses,
+      totalExpense: totalExpenses + totalRecurringExpenses
     };
   }, [expenses, recurringExpenses, incomes, recurringIncomes, filters.startDate, filters.endDate]);
 
@@ -1503,8 +1503,8 @@ export default function Index() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
-      </div>
-    );
+      </div>);
+
   }
 
   if (!user) {
@@ -1519,8 +1519,8 @@ export default function Index() {
       {/* App Header */}
       <AppHeader
         recurringExpenses={recurringExpenses}
-        onSignOut={handleSignOut}
-      />
+        onSignOut={handleSignOut} />
+
 
       <div className="container mx-auto px-4 py-4 max-w-6xl" data-tour="welcome">
 
@@ -1531,26 +1531,26 @@ export default function Index() {
         <div data-tour="month-navigator">
           <MonthNavigator
             currentDate={currentMonth}
-            onMonthChange={handleMonthChange}
-          />
+            onMonthChange={handleMonthChange} />
+
         </div>
 
         {/* Balance Summary - Entradas vs Saídas */}
         <div className="mb-3">
           <BalanceSummary
             totalIncome={monthlyTotals.totalIncome}
-            totalExpense={monthlyTotals.totalExpense}
-          />
+            totalExpense={monthlyTotals.totalExpense} />
+
         </div>
 
         {/* Group Member Summary - only in group context */}
-        {currentContext.type === 'group' && (
-          <GroupMemberSummary
-            expenses={filteredExpenses}
-            recurringExpenses={filteredRecurringExpenses}
-            groupMembers={groupMembers}
-          />
-        )}
+        {currentContext.type === 'group' &&
+        <GroupMemberSummary
+          expenses={filteredExpenses}
+          recurringExpenses={filteredRecurringExpenses}
+          groupMembers={groupMembers} />
+
+        }
 
         {/* Summary Cards */}
         <div className="mb-4" data-tour="expense-summary">
@@ -1563,15 +1563,15 @@ export default function Index() {
             creditCardConfig={creditCardConfig || undefined}
             onPaymentMethodClick={handlePaymentMethodFilter}
             activePaymentMethod={filters.paymentMethod}
-            budgetGoals={budgetGoals.filter(g => g.type === "monthly_total" || g.type === "category")}
-          />
+            budgetGoals={budgetGoals.filter((g) => g.type === "monthly_total" || g.type === "category")} className="bg-[#101013]" />
+
         </div>
 
         {/* Budget Alert Banner */}
         <BudgetAlertBanner
           goalsAtRisk={goalsAtRisk}
-          onNavigateToGoals={() => setActiveTab("goals")}
-        />
+          onNavigateToGoals={() => setActiveTab("goals")} />
+
 
         {/* Income Goal Celebration Banner */}
         <IncomeGoalBanner
@@ -1579,8 +1579,8 @@ export default function Index() {
           incomes={incomes}
           recurringIncomes={recurringIncomes}
           selectedMonth={currentMonth}
-          onNavigateToGoals={() => setActiveTab("goals")}
-        />
+          onNavigateToGoals={() => setActiveTab("goals")} />
+
 
         {/* Balance Goal Celebration Banner */}
         <BalanceGoalBanner
@@ -1590,8 +1590,8 @@ export default function Index() {
           expenses={expenses}
           recurringExpenses={recurringExpenses}
           selectedMonth={currentMonth}
-          onNavigateToGoals={() => setActiveTab("goals")}
-        />
+          onNavigateToGoals={() => setActiveTab("goals")} />
+
 
         {/* Compact Filter Bar */}
         <div className="mb-4">
@@ -1604,8 +1604,8 @@ export default function Index() {
             cardsConfigMap={cardsConfigMap}
             activeTab={activeTab as "expenses" | "incomes" | "goals"}
             monthStartDate={startOfMonth(currentMonth)}
-            monthEndDate={endOfMonth(currentMonth)}
-          />
+            monthEndDate={endOfMonth(currentMonth)} />
+
         </div>
 
         {/* Main Content */}
@@ -1615,11 +1615,11 @@ export default function Index() {
             <TabsTrigger value="incomes" className="data-[state=active]:text-green-600 dark:data-[state=active]:text-green-400">Entradas</TabsTrigger>
             <TabsTrigger value="goals" className="relative data-[state=active]:text-amber-600 dark:data-[state=active]:text-amber-400">
               Metas
-              {goalsAtRisk.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+              {goalsAtRisk.length > 0 &&
+              <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
                   {goalsAtRisk.length}
                 </span>
-              )}
+              }
             </TabsTrigger>
           </TabsList>
 
@@ -1634,8 +1634,8 @@ export default function Index() {
                 endDate={filters.endDate}
                 creditCardConfig={creditCardConfig || undefined}
                 onCategoryClick={handleCategoryFilter}
-                activeCategory={activeCategoryFilter || undefined}
-              />
+                activeCategory={activeCategoryFilter || undefined} />
+
             </div>
 
             {/* Sub-tab chips: Do Mês / Fixas */}
@@ -1648,22 +1648,22 @@ export default function Index() {
                   onClick={() => setExpenseSubTab("monthly")}
                   className={cn(
                     "px-3 py-1 rounded-full text-xs font-medium transition-colors border",
-                    expenseSubTab === "monthly"
-                      ? "bg-red-500 text-white border-red-500"
-                      : "bg-transparent text-muted-foreground border-border hover:border-foreground/30"
-                  )}
-                >
+                    expenseSubTab === "monthly" ?
+                    "bg-red-500 text-white border-red-500" :
+                    "bg-transparent text-muted-foreground border-border hover:border-foreground/30"
+                  )}>
+
                   Do Mês
                 </button>
                 <button
                   onClick={() => setExpenseSubTab("recurring")}
                   className={cn(
                     "px-3 py-1 rounded-full text-xs font-medium transition-colors border",
-                    expenseSubTab === "recurring"
-                      ? "bg-red-500 text-white border-red-500"
-                      : "bg-transparent text-muted-foreground border-border hover:border-foreground/30"
-                  )}
-                >
+                    expenseSubTab === "recurring" ?
+                    "bg-red-500 text-white border-red-500" :
+                    "bg-transparent text-muted-foreground border-border hover:border-foreground/30"
+                  )}>
+
                   Fixas
                 </button>
               </div>
@@ -1671,33 +1671,33 @@ export default function Index() {
 
             {/* Content based on sub-tab */}
             <div className="space-y-4">
-              {hasActiveFilters && (
-                <div className="flex justify-end">
+              {hasActiveFilters &&
+              <div className="flex justify-end">
                   <Button variant="ghost" size="sm" onClick={clearAllFilters} className="text-xs text-muted-foreground hover:text-foreground">
                     <FilterX className="h-3 w-3 mr-1" />
                     Limpar filtros
                   </Button>
                 </div>
-              )}
-              {expenseSubTab === "monthly" ? (
-                <ExpenseList
-                  expenses={displayedExpenses}
-                  onDeleteExpense={deleteExpense}
-                  onEditExpense={handleEditExpense}
-                  onDuplicateExpense={handleDuplicateExpense}
-                  onSendToCalculator={handleSendToCalculator}
-                  groupMembers={groupMembers}
-                  isGroupContext={currentContext.type === 'group'}
-                />
-              ) : (
-                <RecurringExpenseList
-                  expenses={displayedRecurringExpenses}
-                  onDeleteExpense={deleteRecurringExpense}
-                  onToggleActive={toggleRecurringExpenseActive}
-                  onEditRecurringExpense={handleEditRecurringExpense}
-                  onSendToCalculator={handleSendToCalculator}
-                />
-              )}
+              }
+              {expenseSubTab === "monthly" ?
+              <ExpenseList
+                expenses={displayedExpenses}
+                onDeleteExpense={deleteExpense}
+                onEditExpense={handleEditExpense}
+                onDuplicateExpense={handleDuplicateExpense}
+                onSendToCalculator={handleSendToCalculator}
+                groupMembers={groupMembers}
+                isGroupContext={currentContext.type === 'group'} /> :
+
+
+              <RecurringExpenseList
+                expenses={displayedRecurringExpenses}
+                onDeleteExpense={deleteRecurringExpense}
+                onToggleActive={toggleRecurringExpenseActive}
+                onEditRecurringExpense={handleEditRecurringExpense}
+                onSendToCalculator={handleSendToCalculator} />
+
+              }
             </div>
           </TabsContent>
 
@@ -1710,8 +1710,8 @@ export default function Index() {
                 startDate={filters.startDate}
                 endDate={filters.endDate}
                 onCategoryClick={handleIncomeCategoryFilter}
-                activeCategory={activeIncomeCategoryFilter || undefined}
-              />
+                activeCategory={activeIncomeCategoryFilter || undefined} />
+
             </div>
 
             {/* Sub-tab chips: Do Mês / Fixas */}
@@ -1724,22 +1724,22 @@ export default function Index() {
                   onClick={() => setIncomeSubTab("monthly")}
                   className={cn(
                     "px-3 py-1 rounded-full text-xs font-medium transition-colors border",
-                    incomeSubTab === "monthly"
-                      ? "bg-green-500 text-white border-green-500"
-                      : "bg-transparent text-muted-foreground border-border hover:border-foreground/30"
-                  )}
-                >
+                    incomeSubTab === "monthly" ?
+                    "bg-green-500 text-white border-green-500" :
+                    "bg-transparent text-muted-foreground border-border hover:border-foreground/30"
+                  )}>
+
                   Do Mês
                 </button>
                 <button
                   onClick={() => setIncomeSubTab("recurring")}
                   className={cn(
                     "px-3 py-1 rounded-full text-xs font-medium transition-colors border",
-                    incomeSubTab === "recurring"
-                      ? "bg-green-500 text-white border-green-500"
-                      : "bg-transparent text-muted-foreground border-border hover:border-foreground/30"
-                  )}
-                >
+                    incomeSubTab === "recurring" ?
+                    "bg-green-500 text-white border-green-500" :
+                    "bg-transparent text-muted-foreground border-border hover:border-foreground/30"
+                  )}>
+
                   Fixas
                 </button>
               </div>
@@ -1747,102 +1747,102 @@ export default function Index() {
 
             {/* Content based on sub-tab */}
             <div className="space-y-4">
-              {activeIncomeCategoryFilter && (
-                <div className="flex justify-end">
+              {activeIncomeCategoryFilter &&
+              <div className="flex justify-end">
                   <Button variant="ghost" size="sm" onClick={() => setActiveIncomeCategoryFilter(null)} className="text-xs text-muted-foreground hover:text-foreground">
                     <FilterX className="h-3 w-3 mr-1" />
                     Limpar filtro de categoria
                   </Button>
                 </div>
-              )}
-              {incomeSubTab === "monthly" ? (
-                <IncomeList
-                  incomes={displayedIncomes}
-                  onDelete={deleteIncome}
-                  onEdit={handleEditIncome}
-                  onDuplicate={handleDuplicateIncome}
-                />
-              ) : (
-                <RecurringIncomeList
-                  incomes={displayedRecurringIncomes}
-                  onDelete={deleteRecurringIncome}
-                  onToggleActive={toggleRecurringIncomeActive}
-                  onEdit={handleEditRecurringIncome}
-                />
-              )}
+              }
+              {incomeSubTab === "monthly" ?
+              <IncomeList
+                incomes={displayedIncomes}
+                onDelete={deleteIncome}
+                onEdit={handleEditIncome}
+                onDuplicate={handleDuplicateIncome} /> :
+
+
+              <RecurringIncomeList
+                incomes={displayedRecurringIncomes}
+                onDelete={deleteRecurringIncome}
+                onToggleActive={toggleRecurringIncomeActive}
+                onEdit={handleEditRecurringIncome} />
+
+              }
             </div>
           </TabsContent>
 
           <TabsContent value="goals">
             <div className="space-y-6">
               {/* Limites de Despesas */}
-              {budgetGoals.some(g => g.type === "monthly_total" || g.type === "category") && (
-                <div>
+              {budgetGoals.some((g) => g.type === "monthly_total" || g.type === "category") &&
+              <div>
                   <h3 className="text-sm font-semibold text-destructive mb-3">Limites de Despesas</h3>
                   <BudgetProgress
-                    goals={budgetGoals.filter(g => g.type === "monthly_total" || g.type === "category")}
-                    expenses={expenses}
-                    recurringExpenses={recurringExpenses}
-                    incomes={incomes}
-                    recurringIncomes={recurringIncomes}
-                    selectedMonth={currentMonth}
-                    onDelete={deleteBudgetGoal}
-                    onEdit={handleEditBudgetGoal}
-                    descriptionFilter={filters.description}
-                    minAmountFilter={filters.minAmount}
-                    maxAmountFilter={filters.maxAmount}
-                  />
+                  goals={budgetGoals.filter((g) => g.type === "monthly_total" || g.type === "category")}
+                  expenses={expenses}
+                  recurringExpenses={recurringExpenses}
+                  incomes={incomes}
+                  recurringIncomes={recurringIncomes}
+                  selectedMonth={currentMonth}
+                  onDelete={deleteBudgetGoal}
+                  onEdit={handleEditBudgetGoal}
+                  descriptionFilter={filters.description}
+                  minAmountFilter={filters.minAmount}
+                  maxAmountFilter={filters.maxAmount} />
+
                 </div>
-              )}
+              }
 
               {/* Metas de Entradas */}
-              {budgetGoals.some(g => g.type === "income_monthly_total" || g.type === "income_category") && (
-                <div>
-                  {budgetGoals.some(g => g.type === "monthly_total" || g.type === "category") && <Separator className="mb-4" />}
+              {budgetGoals.some((g) => g.type === "income_monthly_total" || g.type === "income_category") &&
+              <div>
+                  {budgetGoals.some((g) => g.type === "monthly_total" || g.type === "category") && <Separator className="mb-4" />}
                   <h3 className="text-sm font-semibold text-green-600 dark:text-green-400 mb-3">Metas de Entradas</h3>
                   <BudgetProgress
-                    goals={budgetGoals.filter(g => g.type === "income_monthly_total" || g.type === "income_category")}
-                    expenses={expenses}
-                    recurringExpenses={recurringExpenses}
-                    incomes={incomes}
-                    recurringIncomes={recurringIncomes}
-                    selectedMonth={currentMonth}
-                    onDelete={deleteBudgetGoal}
-                    onEdit={handleEditBudgetGoal}
-                    descriptionFilter={filters.description}
-                    minAmountFilter={filters.minAmount}
-                    maxAmountFilter={filters.maxAmount}
-                  />
+                  goals={budgetGoals.filter((g) => g.type === "income_monthly_total" || g.type === "income_category")}
+                  expenses={expenses}
+                  recurringExpenses={recurringExpenses}
+                  incomes={incomes}
+                  recurringIncomes={recurringIncomes}
+                  selectedMonth={currentMonth}
+                  onDelete={deleteBudgetGoal}
+                  onEdit={handleEditBudgetGoal}
+                  descriptionFilter={filters.description}
+                  minAmountFilter={filters.minAmount}
+                  maxAmountFilter={filters.maxAmount} />
+
                 </div>
-              )}
+              }
 
               {/* Metas de Saldo */}
-              {budgetGoals.some(g => g.type === "balance_target") && (
-                <div>
-                  {budgetGoals.some(g => g.type !== "balance_target") && <Separator className="mb-4" />}
+              {budgetGoals.some((g) => g.type === "balance_target") &&
+              <div>
+                  {budgetGoals.some((g) => g.type !== "balance_target") && <Separator className="mb-4" />}
                   <h3 className="text-sm font-semibold text-blue-600 dark:text-blue-400 mb-3">Metas de Saldo</h3>
                   <BudgetProgress
-                    goals={budgetGoals.filter(g => g.type === "balance_target")}
-                    expenses={expenses}
-                    recurringExpenses={recurringExpenses}
-                    incomes={incomes}
-                    recurringIncomes={recurringIncomes}
-                    selectedMonth={currentMonth}
-                    onDelete={deleteBudgetGoal}
-                    onEdit={handleEditBudgetGoal}
-                    descriptionFilter={filters.description}
-                    minAmountFilter={filters.minAmount}
-                    maxAmountFilter={filters.maxAmount}
-                  />
+                  goals={budgetGoals.filter((g) => g.type === "balance_target")}
+                  expenses={expenses}
+                  recurringExpenses={recurringExpenses}
+                  incomes={incomes}
+                  recurringIncomes={recurringIncomes}
+                  selectedMonth={currentMonth}
+                  onDelete={deleteBudgetGoal}
+                  onEdit={handleEditBudgetGoal}
+                  descriptionFilter={filters.description}
+                  minAmountFilter={filters.minAmount}
+                  maxAmountFilter={filters.maxAmount} />
+
                 </div>
-              )}
+              }
 
               {/* Empty state */}
-              {budgetGoals.length === 0 && (
-                <div className="text-center py-8 text-muted-foreground text-sm">
+              {budgetGoals.length === 0 &&
+              <div className="text-center py-8 text-muted-foreground text-sm">
                   Nenhuma meta cadastrada. Use o botão + para criar uma.
                 </div>
-              )}
+              }
             </div>
           </TabsContent>
         </Tabs>
@@ -1852,8 +1852,8 @@ export default function Index() {
           onExpenseClick={() => setExpenseSheetOpen(true)}
           onGoalClick={() => setBudgetGoalSheetOpen(true)}
           onCalculatorClick={() => setCalculatorOpen(true)}
-          onIncomeClick={() => setIncomeSheetOpen(true)}
-        />
+          onIncomeClick={() => setIncomeSheetOpen(true)} />
+
 
         {/* Calculadora */}
         <CalculatorDrawer
@@ -1863,8 +1863,8 @@ export default function Index() {
             if (!open) setCalculatorInitialValue(undefined);
           }}
           initialValue={calculatorInitialValue}
-          onCreateExpense={handleCreateExpenseFromCalculator}
-        />
+          onCreateExpense={handleCreateExpenseFromCalculator} />
+
 
         {/* Sheet de Despesa Unificado */}
         <UnifiedExpenseFormSheet
@@ -1882,15 +1882,15 @@ export default function Index() {
           expenses={expenses}
           recurringExpenses={recurringExpenses}
           defaultAmount={expenseDefaultAmount}
-          initialData={expenseInitialData}
-        />
+          initialData={expenseInitialData} />
+
 
         <BudgetGoalFormSheet
           open={budgetGoalSheetOpen}
           onOpenChange={setBudgetGoalSheetOpen}
           onSubmit={addBudgetGoal}
-          currentGoalsCount={budgetGoals.length}
-        />
+          currentGoalsCount={budgetGoals.length} />
+
 
         {/* Sheet de Entrada Unificado */}
         <UnifiedIncomeFormSheet
@@ -1903,46 +1903,46 @@ export default function Index() {
             loadIncomes();
             loadRecurringIncomes();
           }}
-          initialData={incomeInitialData}
-        />
+          initialData={incomeInitialData} />
+
 
         {/* Modais de Edição */}
         <ExpenseEditDialog
           expense={editingExpense}
           open={expenseDialogOpen}
           onOpenChange={setExpenseDialogOpen}
-          onSave={updateExpense}
-        />
+          onSave={updateExpense} />
+
 
         <RecurringExpenseEditDialog
           expense={editingRecurringExpense}
           open={recurringExpenseDialogOpen}
           onOpenChange={setRecurringExpenseDialogOpen}
-          onSave={updateRecurringExpense}
-        />
+          onSave={updateRecurringExpense} />
+
 
         <BudgetGoalEditDialog
           goal={editingBudgetGoal}
           open={budgetGoalDialogOpen}
           onOpenChange={setBudgetGoalDialogOpen}
-          onSave={updateBudgetGoal}
-        />
+          onSave={updateBudgetGoal} />
+
 
         <IncomeEditDialog
           income={editingIncome}
           open={incomeDialogOpen}
           onOpenChange={setIncomeDialogOpen}
-          onSave={updateIncome}
-        />
+          onSave={updateIncome} />
+
 
         <RecurringIncomeEditDialog
           income={editingRecurringIncome}
           open={recurringIncomeDialogOpen}
           onOpenChange={setRecurringIncomeDialogOpen}
-          onSave={updateRecurringIncome}
-        />
+          onSave={updateRecurringIncome} />
+
       </div>
       <Footer />
-    </div>
-  );
+    </div>);
+
 }
