@@ -34,7 +34,7 @@ export function FloatingActionButton({
       )}
 
       {/* Container with pointer-events-none to prevent blocking touches */}
-      <div className="fixed bottom-20 right-6 z-40 flex flex-col items-end gap-2 pointer-events-none">
+      <div className="fixed bottom-[calc(env(safe-area-inset-bottom,0px)+6rem)] right-6 z-40 flex flex-col items-end gap-2 pointer-events-none">
         {/* Menu Options */}
         {isOpen && (
           <div className="flex flex-col gap-2 pointer-events-auto">
