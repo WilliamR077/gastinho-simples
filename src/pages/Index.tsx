@@ -488,6 +488,16 @@ export default function Index() {
     setIncomeDialogOpen(true);
   };
 
+  const handleDuplicateExpense = (expense: Expense) => {
+    // Open the expense form sheet pre-filled (unified sheet handles duplication)
+    setExpenseDefaultAmount(expense.amount);
+    setExpenseSheetOpen(true);
+  };
+
+  const handleDuplicateIncome = (income: Income) => {
+    setIncomeSheetOpen(true);
+  };
+
   const handleEditRecurringIncome = (income: RecurringIncomeType) => {
     setEditingRecurringIncome(income);
     setRecurringIncomeDialogOpen(true);
@@ -1655,6 +1665,7 @@ export default function Index() {
                   expenses={displayedExpenses}
                   onDeleteExpense={deleteExpense}
                   onEditExpense={handleEditExpense}
+                  onDuplicateExpense={handleDuplicateExpense}
                   onSendToCalculator={handleSendToCalculator}
                   groupMembers={groupMembers}
                   isGroupContext={currentContext.type === 'group'}
@@ -1730,6 +1741,7 @@ export default function Index() {
                   incomes={displayedIncomes}
                   onDelete={deleteIncome}
                   onEdit={handleEditIncome}
+                  onDuplicate={handleDuplicateIncome}
                 />
               ) : (
                 <RecurringIncomeList
