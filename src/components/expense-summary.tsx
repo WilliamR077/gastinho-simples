@@ -319,7 +319,7 @@ export function ExpenseSummary({
       {/* Budget goals */}
       {budgetProgress.length > 0 &&
       <div className="mt-3 pt-3 border-t border-border/50 space-y-2">
-          <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+          <div className="gap-1 text-xs font-medium text-muted-foreground flex items-center justify-center">
             <Target className="h-3 w-3" />
             <span className="text-left mx-0 px-0 ml-0">Metas do Mês</span>
           </div>
