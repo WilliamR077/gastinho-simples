@@ -12,58 +12,58 @@ import {
   ArrowRight,
   Check,
   Sparkles,
-  AlertTriangle,
-} from "lucide-react";
+  AlertTriangle } from
+"lucide-react";
 import { SUBSCRIPTION_FEATURES } from "@/types/subscription";
 
 const features = [
-  {
-    icon: Wallet,
-    title: "Controle de Despesas",
-    description: "Registre e categorize todos os seus gastos de forma rápida e intuitiva.",
-  },
-  {
-    icon: TrendingUp,
-    title: "Entradas & Receitas",
-    description: "Acompanhe suas fontes de renda e entradas recorrentes com facilidade.",
-  },
-  {
-    icon: BarChart3,
-    title: "Relatórios Detalhados",
-    description: "Visualize gráficos e relatórios completos para entender seus hábitos financeiros.",
-  },
-  {
-    icon: Target,
-    title: "Metas de Gastos",
-    description: "Defina limites por categoria e receba alertas quando estiver perto do limite.",
-  },
-  {
-    icon: CreditCard,
-    title: "Gerenciamento de Cartões",
-    description: "Controle seus cartões de crédito e débito com fechamento e abertura personalizados.",
-  },
-  {
-    icon: Users,
-    title: "Grupos Compartilhados",
-    description: "Divida despesas com familiares ou amigos em grupos compartilhados.",
-  },
-];
+{
+  icon: Wallet,
+  title: "Controle de Despesas",
+  description: "Registre e categorize todos os seus gastos de forma rápida e intuitiva."
+},
+{
+  icon: TrendingUp,
+  title: "Entradas & Receitas",
+  description: "Acompanhe suas fontes de renda e entradas recorrentes com facilidade."
+},
+{
+  icon: BarChart3,
+  title: "Relatórios Detalhados",
+  description: "Visualize gráficos e relatórios completos para entender seus hábitos financeiros."
+},
+{
+  icon: Target,
+  title: "Metas de Gastos",
+  description: "Defina limites por categoria e receba alertas quando estiver perto do limite."
+},
+{
+  icon: CreditCard,
+  title: "Gerenciamento de Cartões",
+  description: "Controle seus cartões de crédito e débito com fechamento e abertura personalizados."
+},
+{
+  icon: Users,
+  title: "Grupos Compartilhados",
+  description: "Divida despesas com familiares ou amigos em grupos compartilhados."
+}];
+
 
 const PLAN_TIERS = ["free", "no_ads", "premium"] as const;
 
 const planMeta = {
   free: { description: "Para quem está começando", highlight: false },
   no_ads: { description: "Experiência limpa", highlight: false },
-  premium: { description: "Para controle financeiro completo", highlight: true },
+  premium: { description: "Para controle financeiro completo", highlight: true }
 } as const;
 
 const renderPlanFeatures = (planTier: keyof typeof SUBSCRIPTION_FEATURES) => {
   const f = SUBSCRIPTION_FEATURES[planTier];
-  const items: { label: string; warn?: boolean }[] = [
-    { label: f.cards === Infinity ? "Cartões ilimitados" : `Até ${f.cards} cartões` },
-    { label: f.goals === Infinity ? "Metas ilimitadas" : `Até ${f.goals} meta` },
-    { label: f.reports ? "Relatórios: todos os períodos" : "Relatórios: mês atual" },
-  ];
+  const items: {label: string;warn?: boolean;}[] = [
+  { label: f.cards === Infinity ? "Cartões ilimitados" : `Até ${f.cards} cartões` },
+  { label: f.goals === Infinity ? "Metas ilimitadas" : `Até ${f.goals} meta` },
+  { label: f.reports ? "Relatórios: todos os períodos" : "Relatórios: mês atual" }];
+
   if (f.exportPdf) items.push({ label: "Exportar PDF/Excel" });
   items.push({ label: f.groups > 0 ? `Criar até ${f.groups} grupos` : "Participar de grupos" });
   items.push({ label: f.ads ? "Com anúncios" : "Sem anúncios", warn: f.ads });
@@ -82,9 +82,9 @@ export default function Landing() {
             <img
               src="/lovable-uploads/06a1acc2-f553-41f0-8d87-32d25b4e425e.png"
               alt="Gastinho Simples"
-              className="h-8 w-8 rounded-lg"
-            />
-            <span className="text-base font-semibold text-foreground">Gastinho Simples</span>
+              className="h-8 w-8 rounded-lg" />
+
+            
           </button>
           <nav className="flex items-center gap-1">
             <Button variant="ghost" size="sm" onClick={() => navigate("/about")}>
@@ -107,8 +107,8 @@ export default function Landing() {
           <img
             src="/lovable-uploads/06a1acc2-f553-41f0-8d87-32d25b4e425e.png"
             alt="Gastinho Simples"
-            className="mx-auto h-20 w-20 rounded-2xl shadow-lg"
-          />
+            className="mx-auto h-20 w-20 rounded-2xl shadow-lg" />
+
           <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
             Gastinho Simples
           </h1>
@@ -139,8 +139,8 @@ export default function Landing() {
           </div>
 
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {features.map((feature) => (
-              <Card key={feature.title} className="border-border/50 transition-shadow hover:shadow-md">
+            {features.map((feature) =>
+            <Card key={feature.title} className="border-border/50 transition-shadow hover:shadow-md">
                 <CardContent className="flex flex-col items-start gap-3 p-6">
                   <div className="rounded-lg bg-primary/10 p-2.5">
                     <feature.icon className="h-5 w-5 text-primary" />
@@ -149,7 +149,7 @@ export default function Landing() {
                   <p className="text-sm text-muted-foreground">{feature.description}</p>
                 </CardContent>
               </Card>
-            ))}
+            )}
           </div>
         </div>
       </section>
@@ -174,18 +174,18 @@ export default function Landing() {
                 <Card
                   key={tierKey}
                   className={`relative transition-shadow hover:shadow-md ${
-                    meta.highlight
-                      ? "border-primary shadow-md ring-1 ring-primary/20"
-                      : "border-border/50"
-                  }`}
-                >
-                  {meta.highlight && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                  meta.highlight ?
+                  "border-primary shadow-md ring-1 ring-primary/20" :
+                  "border-border/50"}`
+                  }>
+
+                  {meta.highlight &&
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                       <span className="inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground">
                         <Sparkles className="h-3 w-3" /> Mais popular
                       </span>
                     </div>
-                  )}
+                  }
                   <CardContent className="flex flex-col gap-4 p-6 pt-8">
                     <div>
                       <h3 className="text-lg font-semibold text-foreground">{plan.name}</h3>
@@ -193,34 +193,34 @@ export default function Landing() {
                     </div>
                     <div className="flex items-baseline gap-1">
                       <span className="text-3xl font-bold text-foreground">{plan.price.split("/")[0]}</span>
-                      {plan.price.includes("/") && (
-                        <span className="text-sm text-muted-foreground">/{plan.price.split("/")[1]}</span>
-                      )}
+                      {plan.price.includes("/") &&
+                      <span className="text-sm text-muted-foreground">/{plan.price.split("/")[1]}</span>
+                      }
                     </div>
                     <ul className="space-y-2">
-                      {items.map((item) => (
-                        <li key={item.label} className="flex items-start gap-2 text-sm">
-                          {item.warn ? (
-                            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-                          ) : (
-                            <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                          )}
+                      {items.map((item) =>
+                      <li key={item.label} className="flex items-start gap-2 text-sm">
+                          {item.warn ?
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" /> :
+
+                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                        }
                           <span className={item.warn ? "text-amber-500" : "text-muted-foreground"}>
                             {item.label}
                           </span>
                         </li>
-                      ))}
+                      )}
                     </ul>
                     <Button
                       variant={meta.highlight ? "default" : "outline"}
                       className="mt-auto w-full"
-                      onClick={() => navigate("/auth")}
-                    >
+                      onClick={() => navigate("/auth")}>
+
                       Começar
                     </Button>
                   </CardContent>
-                </Card>
-              );
+                </Card>);
+
             })}
           </div>
         </div>
@@ -242,6 +242,6 @@ export default function Landing() {
       </section>
 
       <Footer isAuthenticated={false} />
-    </div>
-  );
+    </div>);
+
 }
