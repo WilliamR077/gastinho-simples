@@ -264,9 +264,10 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
     return (
       <Card 
         key={goal.id} 
-        className={`transition-all shadow-sm ${config.borderColor} ${alertLevel !== 'safe' ? config.bgColor : 'bg-card'}`}
+        className="transition-all shadow-sm bg-card border-border/40 border-l-2"
+        style={{ borderLeftColor: alertLevel === 'safe' ? 'hsl(var(--success))' : alertLevel === 'warning' ? '#eab308' : alertLevel === 'caution' ? '#f97316' : 'hsl(var(--destructive))' }}
       >
-        <CardHeader className="pb-2">
+        <CardHeader className="p-4 pb-1">
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <CardTitle className="text-base flex items-center gap-2">
@@ -286,9 +287,9 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
             {renderGoalMenu(goal)}
           </div>
         </CardHeader>
-        <CardContent className="space-y-3 pt-0">
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
+        <CardContent className="px-4 pb-3 pt-0 space-y-2">
+          <div className="space-y-1.5">
+            <div className="flex justify-between text-xs">
               <span>Gasto: {formatCurrency(totalValue)}</span>
               <span className={isOver ? "text-destructive font-medium" : "text-muted-foreground"}>
                 {percentage.toFixed(1)}%
@@ -296,17 +297,17 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
             </div>
             <Progress 
               value={progressValue} 
-              className={`[&>div]:${config.progressColor}`}
+              className={`h-2 [&>div]:${config.progressColor}`}
             />
-            <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center justify-between text-xs">
               {isOver ? (
                 <div className="flex items-center gap-1 text-destructive font-medium">
-                  <TrendingUp className="h-4 w-4" />
+                  <TrendingUp className="h-3.5 w-3.5" />
                   <span>Excedeu em {formatCurrency(Math.abs(remaining))}</span>
                 </div>
               ) : (
                 <div className="flex items-center gap-1 text-muted-foreground">
-                  <TrendingDown className="h-4 w-4" />
+                  <TrendingDown className="h-3.5 w-3.5" />
                   <span>Restam {formatCurrency(remaining)}</span>
                 </div>
               )}
@@ -314,32 +315,18 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
           </div>
 
           {alertLevel !== 'safe' && (
-            <Alert className={`${config.borderColor} ${config.bgColor}`}>
-              <AlertIcon className={`h-4 w-4 ${config.color}`} />
-              <AlertDescription className={config.color}>
-                <strong>{config.message}</strong>
-                {alertLevel === 'critical' && (
-                  <span className="block mt-1 text-sm">
-                    Você excedeu o orçamento em {formatCurrency(Math.abs(remaining))}.
-                  </span>
-                )}
-                {alertLevel === 'danger' && (
-                  <span className="block mt-1 text-sm">
-                    Restam apenas {formatCurrency(remaining)} para não estourar.
-                  </span>
-                )}
-                {alertLevel === 'caution' && (
-                  <span className="block mt-1 text-sm">
-                    Você ainda tem {formatCurrency(remaining)} disponíveis.
-                  </span>
-                )}
-                {alertLevel === 'warning' && (
-                  <span className="block mt-1 text-sm">
-                    Tente economizar! Restam {formatCurrency(remaining)}.
-                  </span>
-                )}
-              </AlertDescription>
-            </Alert>
+            <div className="flex items-center gap-2 rounded-md px-3 py-1.5 border-l-2 border-destructive/50 bg-muted/50">
+              <AlertIcon className="h-3.5 w-3.5 text-destructive/70 shrink-0" />
+              <span className="text-xs text-muted-foreground flex-1 truncate">
+                {alertLevel === 'critical' ? `Estourou em ${formatCurrency(Math.abs(remaining))}` :
+                 alertLevel === 'danger' ? `Restam ${formatCurrency(remaining)}` :
+                 alertLevel === 'caution' ? `${formatCurrency(remaining)} disponíveis` :
+                 `Economize · restam ${formatCurrency(remaining)}`}
+              </span>
+              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs shrink-0" onClick={() => onEdit(goal)}>
+                Ajustar
+              </Button>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -359,14 +346,9 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
     return (
       <Card 
         key={goal.id} 
-        className={`transition-all shadow-sm ${
-          incomeLevel === 'exceeded' ? 'border-green-500 bg-green-500/10' :
-          incomeLevel === 'reached' ? 'border-green-500 bg-green-500/10' :
-          incomeLevel === 'almost' ? 'border-green-400/50 bg-green-400/5' :
-          'bg-card'
-        }`}
+        className="transition-all shadow-sm bg-card border-border/40 border-l-2 border-l-green-500/50"
       >
-        <CardHeader className="pb-2">
+        <CardHeader className="p-4 pb-1">
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <CardTitle className="text-base flex items-center gap-2">
@@ -386,9 +368,9 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
             {renderGoalMenu(goal)}
           </div>
         </CardHeader>
-        <CardContent className="space-y-3 pt-0">
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
+        <CardContent className="px-4 pb-3 pt-0 space-y-2">
+          <div className="space-y-1.5">
+            <div className="flex justify-between text-xs">
               <span>Ganho: {formatCurrency(totalValue)}</span>
               <span className={percentage >= 100 ? "text-green-600 dark:text-green-400 font-medium" : "text-muted-foreground"}>
                 {percentage.toFixed(1)}%
@@ -396,51 +378,42 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
             </div>
             <Progress 
               value={progressValue} 
-              className="[&>div]:bg-green-500"
+              className="h-2 [&>div]:bg-green-500"
             />
-            <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center justify-between text-xs">
               {isOver ? (
                 <div className="flex items-center gap-1 text-green-600 dark:text-green-400 font-medium">
-                  <TrendingUp className="h-4 w-4" />
+                  <TrendingUp className="h-3.5 w-3.5" />
                   <span>Superou em {formatCurrency(Math.abs(remaining))}</span>
                 </div>
               ) : (
                 <div className="flex items-center gap-1 text-muted-foreground">
-                  <TrendingDown className="h-4 w-4" />
+                  <TrendingDown className="h-3.5 w-3.5" />
                   <span>Faltam {formatCurrency(remaining)}</span>
                 </div>
               )}
             </div>
           </div>
 
-          {incomeLevel === 'exceeded' && (
-            <Alert className="border-green-500 bg-green-500/10">
-              <Star className="h-4 w-4 text-green-600 dark:text-green-400" />
-              <AlertDescription className="text-green-600 dark:text-green-400">
-                <strong>Incrível! Você superou sua meta em {formatCurrency(Math.abs(remaining))}! 🎉</strong>
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {incomeLevel === 'reached' && (
-            <Alert className="border-green-500 bg-green-500/10">
-              <PartyPopper className="h-4 w-4 text-green-600 dark:text-green-400" />
-              <AlertDescription className="text-green-600 dark:text-green-400">
-                <strong>Parabéns! Você bateu sua meta de {formatCurrency(limit)}! 🎉</strong>
-              </AlertDescription>
-            </Alert>
+          {(incomeLevel === 'exceeded' || incomeLevel === 'reached') && (
+            <div className="flex items-center gap-2 rounded-md px-3 py-1.5 border-l-2 border-green-500/50 bg-muted/50">
+              <Star className="h-3.5 w-3.5 text-green-600 dark:text-green-400 shrink-0" />
+              <span className="text-xs text-muted-foreground flex-1">
+                {incomeLevel === 'exceeded' ? `Superou em ${formatCurrency(Math.abs(remaining))} 🎉` : `Meta batida! 🎉`}
+              </span>
+            </div>
           )}
 
           {incomeLevel === 'almost' && (
-            <Alert className="border-green-400/50 bg-green-400/5">
-              <TrendingUp className="h-4 w-4 text-green-600 dark:text-green-400" />
-              <AlertDescription className="text-green-600 dark:text-green-400">
-                <strong>Quase lá! Você já atingiu {percentage.toFixed(0)}% da sua meta! 💪</strong>
-                <span className="block mt-1 text-sm">
-                  Faltam apenas {formatCurrency(remaining)} para bater a meta.
-                </span>
-              </AlertDescription>
-            </Alert>
+            <div className="flex items-center gap-2 rounded-md px-3 py-1.5 border-l-2 border-green-500/50 bg-muted/50">
+              <TrendingUp className="h-3.5 w-3.5 text-green-600 dark:text-green-400 shrink-0" />
+              <span className="text-xs text-muted-foreground flex-1">
+                Quase lá · faltam {formatCurrency(remaining)} 💪
+              </span>
+              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs shrink-0" onClick={() => onEdit(goal)}>
+                Ajustar
+              </Button>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -488,13 +461,9 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
     return (
       <Card
         key={goal.id}
-        className={`transition-all shadow-sm ${
-          isOver ? 'border-blue-500 bg-blue-500/10' :
-          percentage >= 80 ? 'border-blue-400/50 bg-blue-400/5' :
-          'bg-card'
-        }`}
+        className="transition-all shadow-sm bg-card border-border/40 border-l-2 border-l-blue-500/50"
       >
-        <CardHeader className="pb-2">
+        <CardHeader className="p-4 pb-1">
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <CardTitle className="text-base flex items-center gap-2">
@@ -508,9 +477,9 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
             {renderGoalMenu(goal)}
           </div>
         </CardHeader>
-        <CardContent className="space-y-3 pt-0">
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
+        <CardContent className="px-4 pb-3 pt-0 space-y-2">
+          <div className="space-y-1.5">
+            <div className="flex justify-between text-xs">
               <span>Saldo atual: {formatCurrency(totalValue)}</span>
               <span className={isOver ? "text-blue-600 dark:text-blue-400 font-medium" : "text-muted-foreground"}>
                 {percentage.toFixed(1)}%
@@ -518,39 +487,42 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
             </div>
             <Progress
               value={progressValue}
-              className="[&>div]:bg-blue-500"
+              className="h-2 [&>div]:bg-blue-500"
             />
-            <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center justify-between text-xs">
               {isOver ? (
                 <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400 font-medium">
-                  <TrendingUp className="h-4 w-4" />
-                  <span>Meta atingida! Saldo excede em {formatCurrency(Math.abs(remaining))}</span>
+                  <TrendingUp className="h-3.5 w-3.5" />
+                  <span>Excede em {formatCurrency(Math.abs(remaining))}</span>
                 </div>
               ) : (
                 <div className="flex items-center gap-1 text-muted-foreground">
-                  <TrendingDown className="h-4 w-4" />
-                  <span>Faltam {formatCurrency(remaining)} para a meta</span>
+                  <TrendingDown className="h-3.5 w-3.5" />
+                  <span>Faltam {formatCurrency(remaining)}</span>
                 </div>
               )}
             </div>
           </div>
 
           {isOver && (
-            <Alert className="border-blue-500 bg-blue-500/10">
-              <Star className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-              <AlertDescription className="text-blue-600 dark:text-blue-400">
-                <strong>Parabéns! Seu saldo está acima da meta! 🎯</strong>
-              </AlertDescription>
-            </Alert>
+            <div className="flex items-center gap-2 rounded-md px-3 py-1.5 border-l-2 border-blue-500/50 bg-muted/50">
+              <Star className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+              <span className="text-xs text-muted-foreground flex-1">
+                Meta atingida! Saldo acima 🎯
+              </span>
+            </div>
           )}
 
           {!isOver && percentage >= 80 && (
-            <Alert className="border-blue-400/50 bg-blue-400/5">
-              <TrendingUp className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-              <AlertDescription className="text-blue-600 dark:text-blue-400">
-                <strong>Quase lá! Você está a {formatCurrency(remaining)} da meta! 💪</strong>
-              </AlertDescription>
-            </Alert>
+            <div className="flex items-center gap-2 rounded-md px-3 py-1.5 border-l-2 border-blue-500/50 bg-muted/50">
+              <TrendingUp className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+              <span className="text-xs text-muted-foreground flex-1">
+                Quase lá · faltam {formatCurrency(remaining)} 💪
+              </span>
+              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs shrink-0" onClick={() => onEdit(goal)}>
+                Ajustar
+              </Button>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -558,7 +530,7 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {expenseGoals.map((goal) => renderExpenseGoal(goal))}
       {incomeGoals.map((goal) => renderIncomeGoal(goal))}
       {balanceGoals.map((goal) => renderBalanceGoal(goal))}

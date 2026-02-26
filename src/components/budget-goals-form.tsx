@@ -57,9 +57,9 @@ export function BudgetGoalsForm({ onSubmit, currentGoalsCount }: BudgetGoalsForm
   };
 
   return (
-    <Card className="bg-gradient-card border-border/50 shadow-card backdrop-blur-sm">
+    <Card className="bg-card border border-border/40 shadow-sm">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-primary">
+        <CardTitle className="flex items-center gap-2 text-foreground">
           <Target className="h-5 w-5" />
           Definir Nova Meta
         </CardTitle>
