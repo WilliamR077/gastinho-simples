@@ -6,13 +6,7 @@ import { ptBR } from "date-fns/locale";
 import { useValuesVisibility } from "@/hooks/use-values-visibility";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { TransactionDetailSheet } from "@/components/transaction-detail-sheet";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,13 +22,15 @@ interface IncomeListProps {
   incomes: Income[];
   onDelete: (id: string) => void;
   onEdit?: (income: Income) => void;
+  onDuplicate?: (income: Income) => void;
 }
 
-export function IncomeList({ incomes, onDelete, onEdit }: IncomeListProps) {
+export function IncomeList({ incomes, onDelete, onEdit, onDuplicate }: IncomeListProps) {
   const { isHidden } = useValuesVisibility();
   const { categories: incomeCats } = useIncomeCategories();
   const [visibleCount, setVisibleCount] = useState(10);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [selectedIncome, setSelectedIncome] = useState<Income | null>(null);
 
   const getIncomeCatInfo = (income: Income) => {
     const catId = (income as any).income_category_id;
@@ -85,7 +81,8 @@ export function IncomeList({ incomes, onDelete, onEdit }: IncomeListProps) {
               return (
                 <div
                   key={income.id}
-                  className="py-3 px-4 hover:bg-muted/30 transition-colors"
+                  className="py-3 px-4 hover:bg-muted/30 transition-colors cursor-pointer active:bg-muted/50"
+                  onClick={() => setSelectedIncome(income)}
                 >
                   {/* Line 1: emoji + description ... +value */}
                   <div className="flex items-center gap-2">
@@ -96,40 +93,13 @@ export function IncomeList({ incomes, onDelete, onEdit }: IncomeListProps) {
                     </p>
                   </div>
 
-                  {/* Line 2: category • date ... actions */}
-                  <div className="flex items-center justify-between mt-1 ml-7">
+                  {/* Line 2: category • date */}
+                  <div className="flex items-center mt-1 ml-7">
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                       <span>{catInfo.name}</span>
                       <span>•</span>
                       <span>{format(parseLocalDate(income.income_date), "dd/MM", { locale: ptBR })}</span>
                     </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 min-h-[36px] min-w-[36px] shrink-0 touch-manipulation"
-                          aria-label="Mais opções"
-                        >
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" side="top" className="bg-background z-50">
-                        {onEdit && (
-                          <DropdownMenuItem onClick={() => onEdit(income)}>
-                            <Pencil className="mr-2 h-4 w-4" />
-                            Editar
-                          </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem
-                          className="text-destructive"
-                          onClick={() => setDeleteId(income.id)}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Excluir
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
                   </div>
                 </div>
               );
@@ -151,6 +121,16 @@ export function IncomeList({ incomes, onDelete, onEdit }: IncomeListProps) {
         </CardContent>
       </Card>
 
+      <TransactionDetailSheet
+        income={selectedIncome}
+        open={!!selectedIncome}
+        onOpenChange={(open) => { if (!open) setSelectedIncome(null); }}
+        onEdit={() => { if (selectedIncome && onEdit) onEdit(selectedIncome); }}
+        onDuplicate={() => { if (selectedIncome && onDuplicate) onDuplicate(selectedIncome); }}
+        onDelete={() => { if (selectedIncome) setDeleteId(selectedIncome.id); }}
+        formatCurrency={formatCurrency}
+      />
+
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -164,6 +144,7 @@ export function IncomeList({ incomes, onDelete, onEdit }: IncomeListProps) {
                 if (deleteId) {
                   onDelete(deleteId);
                   setDeleteId(null);
+                  setSelectedIncome(null);
                 }
               }}
             >
