@@ -1,40 +1,73 @@
 
 
-## Plano: Ajustar semântica de cores e estados ativos das tabs
+## Plano: Unificar BalanceSummary + compactar ExpenseSummary
 
-Apenas mudanças de classes CSS — sem alterar layout, lógica ou dados.
+Apenas alterações de layout/estilo — sem alterar lógica, cálculos ou dados.
 
 ---
 
-### 1. Saldo → Azul/Ciano (não verde)
+### 1. BalanceSummary → Card único "Resumo do Mês"
 
-**`src/components/balance-summary.tsx`** (linhas 46-53)
-- Trocar `bg-primary/10 border-primary/20` → `bg-blue-500/10 border-blue-500/20`
-- Trocar `text-primary` → `text-blue-600 dark:text-blue-400`
-- Aplicar em ambos os estados (positivo e negativo). Saldo positivo = azul, saldo negativo = laranja (manter)
+**Arquivo: `src/components/balance-summary.tsx`**
 
-### 2. Chips de Despesas → Vermelho (não verde/primary)
+Substituir os 3 mini-cards separados por 1 card único com 3 colunas internas:
 
-**`src/pages/Index.tsx`** (linhas 1620-1638)
-- Chips "Do Mês" e "Fixas" dentro da tab Despesas: trocar `bg-primary text-primary-foreground border-primary` → `bg-red-500 text-white border-red-500`
+```text
+┌─────────────────────────────────────────────┐
+│  Resumo do Mês                              │
+│  ┌──────────┬──────────┬──────────┐         │
+│  │ ▲ Entradas│ ▼ Saídas │ 💰 Saldo │         │
+│  │ R$ 5.000 │ R$ 3.200 │ R$ 1.800 │         │
+│  └──────────┴──────────┴──────────┘         │
+└─────────────────────────────────────────────┘
+```
 
-### 3. Chips de Entradas já estão corretos
+- Wrapper: `<div className="rounded-lg border border-border/50 bg-card shadow-sm p-4">`
+- Título: `<h3 className="text-xs font-medium text-muted-foreground mb-3">Resumo do Mês</h3>`
+- Dentro: `grid grid-cols-3 gap-3` com divs simples (sem borda/fundo individual)
+- Cada coluna: ícone + label (text-xs) + valor (text-sm font-bold) com cores semânticas mantidas (verde entradas, vermelho saídas, azul saldo)
+- Remover os `bg-green-500/10`, `bg-red-500/10`, `bg-blue-500/10` dos itens individuais — a cor fica só no texto/ícone
+- Separadores verticais opcionais via `divide-x divide-border/30` no grid
 
-**`src/pages/Index.tsx`** (linhas 1700-1714)
-- Chips da tab Entradas já usam `bg-green-500 text-white border-green-500`. Sem alteração.
+### 2. ExpenseSummary → Seção compacta de rows
 
-### 4. Tabs principais — já estão corretas
+**Arquivo: `src/components/expense-summary.tsx`**
 
-As tabs em linhas 1585-1587 já usam:
-- Despesas: `data-[state=active]:text-red-600`
-- Entradas: `data-[state=active]:text-green-600`
-- Metas: `data-[state=active]:text-amber-600`
+Substituir os 4 Cards grandes (PIX, Débito, Crédito, Total) por uma lista compacta de rows dentro de 1 card:
 
-Sem alteração necessária.
+```text
+┌─────────────────────────────────────────────┐
+│  Gastos por Método              Total: R$X  │
+│  ─────────────────────────────────────────── │
+│  📱 PIX          R$ 500,00      3 transações│
+│  💳 Débito       R$ 0,00        0 transações│  ← opacidade reduzida
+│  💳 Crédito      R$ 1.200,00    5 transações│
+│     ● Nubank: R$ 800  ● Inter: R$ 400      │
+│  ─────────────────────────────────────────── │
+│  🎯 Metas do Mês  [progresso...]            │
+└─────────────────────────────────────────────┘
+```
 
-### 5. Metas de Saldo heading — já azul
+Detalhes:
+- 1 card wrapper: `rounded-lg border border-border/50 bg-card shadow-sm p-4`
+- Header: "Gastos por Método" + Total alinhado à direita
+- Cada método de pagamento vira uma row clicável: `flex items-center justify-between py-2 cursor-pointer`
+  - Esquerda: ícone colorido (h-4 w-4) + nome (text-sm)
+  - Direita: valor (text-sm font-semibold) + contagem (text-xs text-muted-foreground)
+  - Quando `activePaymentMethod` coincide: `bg-muted/50 rounded-md -mx-2 px-2` (highlight suave)
+  - Separadores entre rows: `border-b border-border/30 last:border-0`
+- **Valor R$ 0**: row fica com `opacity-50` e sem detalhes de cartão expandidos
+- Detalhes por cartão (crédito/débito): exibidos inline abaixo da row correspondente, com indent (`pl-8`), dots coloridos + nome + valor em `text-xs`
+- Seção "Metas do Mês" no rodapé do card: mantida como está (progress bars), separada por `border-t border-border/50 mt-3 pt-3`
+- Cores dos ícones/valores mantidas: emerald para PIX, blue para débito, amber para crédito, muted para total
+- Remover os `<Card>`, `<CardHeader>`, `<CardContent>` individuais — tudo dentro de 1 card
 
-Linha 1792 já usa `text-blue-600 dark:text-blue-400`. Sem alteração.
+### 3. Index.tsx — ajuste de espaçamento
+
+**Arquivo: `src/pages/Index.tsx`**
+
+- `mb-4` entre BalanceSummary e ExpenseSummary → `mb-3` (12px, mais coeso)
+- Demais espaçamentos mantidos
 
 ---
 
@@ -42,8 +75,9 @@ Linha 1792 já usa `text-blue-600 dark:text-blue-400`. Sem alteração.
 
 | Arquivo | Mudança |
 |---|---|
-| `balance-summary.tsx` | Saldo positivo: `text-primary` → `text-blue-600 dark:text-blue-400`, fundo `bg-primary/10` → `bg-blue-500/10` |
-| `Index.tsx` | Chips despesas: `bg-primary` → `bg-red-500` (2 ocorrências, linhas 1623 e 1634) |
+| `src/components/balance-summary.tsx` | 3 mini-cards → 1 card com 3 colunas internas |
+| `src/components/expense-summary.tsx` | 4 cards grandes → 1 card com rows compactas |
+| `src/pages/Index.tsx` | Ajuste de `mb-4` → `mb-3` entre seções |
 
-Total: 2 arquivos, ~6 linhas de classes CSS alteradas.
+Nenhuma alteração de lógica, cálculos, API ou rotas.
 
