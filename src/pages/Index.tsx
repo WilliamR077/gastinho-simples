@@ -101,6 +101,8 @@ export default function Index() {
   const [calculatorOpen, setCalculatorOpen] = useState(false);
   const [calculatorInitialValue, setCalculatorInitialValue] = useState<number | undefined>();
   const [expenseDefaultAmount, setExpenseDefaultAmount] = useState<number | undefined>();
+  const [expenseInitialData, setExpenseInitialData] = useState<import("@/components/unified-expense-form-sheet").ExpenseInitialData | undefined>();
+  const [incomeInitialData, setIncomeInitialData] = useState<import("@/components/unified-income-form-sheet").IncomeInitialData | undefined>();
   
 
   const handleSendToCalculator = (value: number) => {
@@ -489,12 +491,29 @@ export default function Index() {
   };
 
   const handleDuplicateExpense = (expense: Expense) => {
-    // Open the expense form sheet pre-filled (unified sheet handles duplication)
-    setExpenseDefaultAmount(expense.amount);
+    setExpenseInitialData({
+      description: expense.description,
+      amount: expense.amount,
+      paymentMethod: expense.payment_method,
+      expenseDate: parseLocalDate(expense.expense_date),
+      categoryId: expense.category_id || expense.category,
+      cardId: expense.card_id || undefined,
+      expenseType: "monthly",
+      installments: 1,
+      sharedGroupId: expense.shared_group_id,
+    });
     setExpenseSheetOpen(true);
   };
 
   const handleDuplicateIncome = (income: Income) => {
+    const catId = (income as any).income_category_id;
+    setIncomeInitialData({
+      description: income.description,
+      amount: income.amount,
+      categoryId: catId || income.category,
+      incomeDate: parseLocalDate(income.income_date),
+      incomeType: "monthly",
+    });
     setIncomeSheetOpen(true);
   };
 
@@ -1852,7 +1871,10 @@ export default function Index() {
           open={expenseSheetOpen}
           onOpenChange={(open) => {
             setExpenseSheetOpen(open);
-            if (!open) setExpenseDefaultAmount(undefined);
+            if (!open) {
+              setExpenseDefaultAmount(undefined);
+              setExpenseInitialData(undefined);
+            }
           }}
           onAddExpense={addExpense}
           onAddRecurringExpense={addRecurringExpense}
@@ -1860,6 +1882,7 @@ export default function Index() {
           expenses={expenses}
           recurringExpenses={recurringExpenses}
           defaultAmount={expenseDefaultAmount}
+          initialData={expenseInitialData}
         />
 
         <BudgetGoalFormSheet
@@ -1872,11 +1895,15 @@ export default function Index() {
         {/* Sheet de Entrada Unificado */}
         <UnifiedIncomeFormSheet
           open={incomeSheetOpen}
-          onOpenChange={setIncomeSheetOpen}
+          onOpenChange={(open) => {
+            setIncomeSheetOpen(open);
+            if (!open) setIncomeInitialData(undefined);
+          }}
           onSuccess={() => {
             loadIncomes();
             loadRecurringIncomes();
           }}
+          initialData={incomeInitialData}
         />
 
         {/* Modais de Edição */}

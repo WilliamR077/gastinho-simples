@@ -25,13 +25,23 @@ import { useIncomeCategories } from "@/hooks/use-income-categories";
 
 type IncomeType = "monthly" | "recurring";
 
+export interface IncomeInitialData {
+  description: string;
+  amount: number;
+  categoryId?: string;
+  incomeDate?: Date;
+  incomeType: "monthly" | "recurring";
+  dayOfMonth?: number;
+}
+
 interface UnifiedIncomeFormSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  initialData?: IncomeInitialData;
 }
 
-export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess }: UnifiedIncomeFormSheetProps) {
+export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialData }: UnifiedIncomeFormSheetProps) {
   const { user } = useAuth();
   const { currentContext } = useSharedGroups();
   const { activeCategories } = useIncomeCategories();
@@ -53,9 +63,18 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess }: Unifie
 
   useEffect(() => {
     if (open) {
-      setIncomeType("monthly");
+      if (initialData) {
+        setIncomeType(initialData.incomeType);
+        setDescription(initialData.description);
+        setAmount(initialData.amount.toString());
+        setCategoryValue(initialData.categoryId || (activeCategories.length > 0 ? activeCategories[0].id : ""));
+        setIncomeDate(initialData.incomeDate || new Date());
+        setDayOfMonth(initialData.dayOfMonth?.toString() || "5");
+      } else {
+        setIncomeType("monthly");
+      }
     }
-  }, [open]);
+  }, [open, initialData]);
 
   const resetForm = () => {
     setIncomeType("monthly");
