@@ -1,6 +1,5 @@
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { CreditCard, Smartphone, Trash2, Receipt, MoreVertical, Pencil, Users, User, Calculator } from "lucide-react"
 import { Expense, categoryLabels, categoryIcons, ExpenseCategory } from "@/types/expense"
@@ -27,7 +26,6 @@ interface ExpenseListProps {
   isGroupContext?: boolean
 }
 
-// Helper para obter nome de exibição do usuário (parte antes do @)
 const getUserDisplayName = (userId: string, members: SharedGroupMember[]): string | null => {
   const member = members.find(m => m.user_id === userId);
   if (!member?.user_email) return null;
@@ -35,14 +33,12 @@ const getUserDisplayName = (userId: string, members: SharedGroupMember[]): strin
 };
 
 const paymentMethodConfig = {
-  pix: { label: "PIX", icon: Smartphone, color: "bg-success text-success-foreground" },
-  debit: { label: "Débito", icon: CreditCard, color: "bg-info text-info-foreground" },
-  credit: { label: "Crédito", icon: CreditCard, color: "bg-warning text-warning-foreground" }
+  pix: { label: "PIX", icon: Smartphone },
+  debit: { label: "Débito", icon: CreditCard },
+  credit: { label: "Crédito", icon: CreditCard }
 }
 
-// Helper para parsear data sem problemas de timezone
 const parseLocalDate = (dateString: string) => {
-  // Extrai apenas a parte da data (YYYY-MM-DD) ignorando hora e timezone
   const datePart = dateString.split('T')[0].split(' ')[0];
   const [year, month, day] = datePart.split('-').map(Number);
   return new Date(year, month - 1, day);
@@ -62,30 +58,20 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onSendTo
   const endIndex = startIndex + itemsPerPage
   const currentExpenses = expenses.slice(startIndex, endIndex)
 
-  // Reset to page 1 when expenses change
   if (currentPage > totalPages && totalPages > 0) {
     setCurrentPage(1)
   }
 
-  // Helper para obter ícone e nome da categoria
   const getCategoryDisplay = (expense: Expense) => {
-    // Primeiro verifica campos desnormalizados (para despesas de grupo)
     if (expense.category_name) {
-      return { 
-        icon: expense.category_icon || '📦', 
-        label: expense.category_name 
-      };
+      return { icon: expense.category_icon || '📦', label: expense.category_name };
     }
-    
-    // Tenta buscar pela category_id (nova forma)
     if (expense.category_id) {
       const userCategory = categories.find(c => c.id === expense.category_id);
       if (userCategory) {
         return { icon: userCategory.icon, label: userCategory.name };
       }
     }
-    
-    // Fallback para categoria antiga (enum)
     const categoryKey = expense.category as ExpenseCategory;
     return {
       icon: categoryIcons[categoryKey] || "📦",
@@ -113,104 +99,68 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onSendTo
       <CardHeader className="pb-3">
         <CardTitle className="text-base font-semibold text-foreground">Suas Despesas</CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="space-y-3">
+      <CardContent className="p-0">
+        <div className="divide-y divide-border/30">
           {currentExpenses.map((expense) => {
             const config = paymentMethodConfig[expense.payment_method]
             const Icon = config.icon
-            const cardColor = expense.card?.color || (expense.payment_method === 'credit' ? '#FFA500' : expense.payment_method === 'debit' ? '#3B82F6' : undefined)
             const categoryDisplay = getCategoryDisplay(expense)
+            const cardName = expense.card?.name || expense.card_name;
+            const methodLabel = cardName ? `${config.label} - ${cardName}` : config.label;
             
             return (
               <div
                 key={expense.id}
-                className="flex flex-col p-3 rounded-lg border border-border/30 bg-card hover:bg-muted/30 transition-all duration-200 hover:shadow-sm"
+                className="py-3 px-4 hover:bg-muted/30 transition-colors"
               >
-                {/* Linha 1 - Cabeçalho com ícone, categoria e nome */}
-                <div className="flex items-center gap-3">
-                  <div 
-                    className="p-2 rounded-full shrink-0" 
-                    style={{ backgroundColor: cardColor || '#6B7280' }}
-                  >
-                    <Icon className="h-4 w-4 text-white" />
-                  </div>
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <span className="text-lg shrink-0">{categoryDisplay.icon}</span>
-                    <p className="font-medium text-foreground truncate">{expense.description}</p>
-                    {expense.total_installments > 1 && (
-                      <span className="text-sm font-medium text-primary whitespace-nowrap">
-                        {expense.installment_number}/{expense.total_installments}x
-                      </span>
+                {/* Line 1: emoji + description + installments ... value */}
+                <div className="flex items-center gap-2">
+                  <span className="text-lg shrink-0">{categoryDisplay.icon}</span>
+                  <p className="font-medium text-foreground truncate flex-1 min-w-0">{expense.description}</p>
+                  {expense.total_installments > 1 && (
+                    <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+                      {expense.installment_number}/{expense.total_installments}x
+                    </span>
+                  )}
+                  <p className="font-bold text-sm text-red-500 dark:text-red-400 whitespace-nowrap ml-2">
+                    -{formatCurrency(expense.amount)}
+                  </p>
+                </div>
+
+                {/* Line 2: category • date • method ... group + actions */}
+                <div className="flex items-center justify-between mt-1 ml-7">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0 flex-1">
+                    <span className="truncate">{categoryDisplay.label}</span>
+                    <span>•</span>
+                    <span className="whitespace-nowrap">{parseLocalDate(expense.expense_date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
+                    <span>•</span>
+                    <Icon className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{methodLabel}</span>
+                    {expense.shared_group && (
+                      <>
+                        <span>•</span>
+                        <Users className="h-3 w-3 shrink-0 text-indigo-500" />
+                        <span className="text-indigo-500 truncate">{expense.shared_group.name}</span>
+                      </>
+                    )}
+                    {isGroupContext && expense.user_id && groupMembers.length > 0 && (
+                      <>
+                        <span>•</span>
+                        <User className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{getUserDisplayName(expense.user_id, groupMembers) || '?'}</span>
+                      </>
                     )}
                   </div>
-                </div>
-                
-                {/* Linha 2 - Categoria e Data */}
-                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1.5 ml-11">
-                  <span>{categoryDisplay.label}</span>
-                  <span>•</span>
-                  <span>{parseLocalDate(expense.expense_date).toLocaleDateString('pt-BR')}</span>
-                </div>
-                
-                {/* Linha 3 - Criado em */}
-                <div className="text-xs text-muted-foreground mt-1 ml-11">
-                  Criado em: {new Date(expense.created_at).toLocaleDateString('pt-BR', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  }).replace(',', ' às')}
-                </div>
-                
-                {/* Linha 4 - Badge */}
-                <div className="mt-1.5 ml-11 flex flex-wrap gap-2">
-                  <Badge 
-                    className="text-xs text-white"
-                    style={{ backgroundColor: cardColor || '#6B7280' }}
-                  >
-                    {config.label}
-                    {expense.card?.name 
-                      ? ` - ${expense.card.name}` 
-                      : expense.card_name 
-                        ? ` - ${expense.card_name}` 
-                        : ''}
-                  </Badge>
-                  {expense.shared_group && (
-                    <Badge 
-                      className="text-xs text-white flex items-center gap-1"
-                      style={{ backgroundColor: expense.shared_group.color || '#6366f1' }}
-                    >
-                      <Users className="h-3 w-3" />
-                      {expense.shared_group.name}
-                    </Badge>
-                  )}
-                </div>
-                
-                {/* Linha 5 - Criador da despesa (apenas em contexto de grupo) */}
-                {isGroupContext && expense.user_id && groupMembers.length > 0 && (
-                  <div className="text-xs text-muted-foreground mt-1 ml-11 flex items-center gap-1">
-                    <User className="h-3 w-3" />
-                    <span>
-                      Adicionado por: {getUserDisplayName(expense.user_id, groupMembers) || 'Desconhecido'}
-                    </span>
-                  </div>
-                )}
-                
-                {/* Linha 5 - Preço e Ações */}
-                <div className="flex items-center justify-between mt-2">
-                  <p className="font-bold text-base text-red-500 dark:text-red-400">
-                    {formatCurrency(expense.amount)}
-                  </p>
-                <div className="flex items-center gap-1">
+                  <div className="flex items-center shrink-0">
                     {onSendToCalculator && (
                       <Button 
                         variant="ghost" 
                         size="icon" 
-                        className="h-10 w-10 min-h-[44px] min-w-[44px] text-muted-foreground hover:text-primary touch-manipulation"
+                        className="h-8 w-8 min-h-[36px] min-w-[36px] text-muted-foreground hover:text-primary touch-manipulation"
                         onClick={() => onSendToCalculator(expense.amount)}
                         aria-label="Enviar para calculadora"
                       >
-                        <Calculator className="h-5 w-5" />
+                        <Calculator className="h-4 w-4" />
                       </Button>
                     )}
                     <DropdownMenu>
@@ -218,10 +168,10 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onSendTo
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className="h-10 w-10 min-h-[44px] min-w-[44px] touch-manipulation"
+                          className="h-8 w-8 min-h-[36px] min-w-[36px] touch-manipulation"
                           aria-label="Mais opções"
                         >
-                          <MoreVertical className="h-5 w-5" />
+                          <MoreVertical className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" side="top" className="bg-background z-50">
@@ -247,7 +197,7 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onSendTo
         </div>
 
         {totalPages > 1 && (
-          <div className="mt-6">
+          <div className="mt-4 mb-4 px-4">
             <Pagination>
               <PaginationContent>
                 <PaginationItem>
@@ -256,39 +206,22 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onSendTo
                     className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
                   />
                 </PaginationItem>
-                
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
-                  // Show first page, last page, current page, and pages around current
-                  const showPage = 
-                    page === 1 || 
-                    page === totalPages || 
-                    Math.abs(page - currentPage) <= 1
-
+                  const showPage = page === 1 || page === totalPages || Math.abs(page - currentPage) <= 1
                   if (!showPage) {
-                    // Show ellipsis
                     if (page === currentPage - 2 || page === currentPage + 2) {
-                      return (
-                        <PaginationItem key={page}>
-                          <PaginationEllipsis />
-                        </PaginationItem>
-                      )
+                      return <PaginationItem key={page}><PaginationEllipsis /></PaginationItem>
                     }
                     return null
                   }
-
                   return (
                     <PaginationItem key={page}>
-                      <PaginationLink
-                        onClick={() => setCurrentPage(page)}
-                        isActive={currentPage === page}
-                        className="cursor-pointer"
-                      >
+                      <PaginationLink onClick={() => setCurrentPage(page)} isActive={currentPage === page} className="cursor-pointer">
                         {page}
                       </PaginationLink>
                     </PaginationItem>
                   )
                 })}
-
                 <PaginationItem>
                   <PaginationNext 
                     onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
