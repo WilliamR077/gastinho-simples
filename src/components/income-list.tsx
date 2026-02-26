@@ -12,7 +12,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreVertical, Pencil, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { MoreVertical, Pencil, Trash2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,7 +33,7 @@ interface IncomeListProps {
 export function IncomeList({ incomes, onDelete, onEdit }: IncomeListProps) {
   const { isHidden } = useValuesVisibility();
   const { categories: incomeCats } = useIncomeCategories();
-  const [currentPage, setCurrentPage] = useState(1);
+  const [visibleCount, setVisibleCount] = useState(10);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const getIncomeCatInfo = (income: Income) => {
@@ -45,11 +45,7 @@ export function IncomeList({ incomes, onDelete, onEdit }: IncomeListProps) {
     }
     return { icon: incomeCategoryIcons[income.category] || "📦", name: incomeCategoryLabels[income.category] || income.category };
   };
-  const itemsPerPage = 10;
-
-  const totalPages = Math.ceil(incomes.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const currentIncomes = incomes.slice(startIndex, startIndex + itemsPerPage);
+  const currentIncomes = incomes.slice(0, visibleCount);
 
   const formatCurrency = (amount: number) => {
     if (isHidden) return "R$ ••••";
@@ -140,26 +136,15 @@ export function IncomeList({ incomes, onDelete, onEdit }: IncomeListProps) {
             })}
           </div>
 
-          {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-4 py-4 px-4">
+          {visibleCount < incomes.length && (
+            <div className="py-4 px-4">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
+                className="w-full touch-manipulation"
+                onClick={() => setVisibleCount(v => Math.min(v + 10, incomes.length))}
               >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                {currentPage} de {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-              >
-                <ChevronRight className="h-4 w-4" />
+                Carregar mais ({incomes.length - visibleCount} restantes)
               </Button>
             </div>
           )}
