@@ -73,7 +73,12 @@ export function RecurringExpenseList({ expenses, onDeleteExpense, onToggleActive
             const Icon = config.icon
             const categoryDisplay = getCategoryDisplay(expense)
             const cardName = expense.card?.name || expense.card_name;
-            const methodLabel = cardName ? `${config.label} - ${cardName}` : config.label;
+            const shortCardName = cardName
+              ? (cardName.length > 5 ? cardName.slice(0, 5) + '…' : cardName)
+              : null;
+            const methodLabel = shortCardName
+              ? `${config.label} • ${shortCardName}`
+              : config.label;
             
             return (
               <div

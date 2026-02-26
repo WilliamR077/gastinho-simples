@@ -1483,7 +1483,7 @@ export default function Index() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-36">
+    <div className="min-h-screen bg-background pb-44">
       {/* Product Tour */}
       <ProductTour />
 
