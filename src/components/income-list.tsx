@@ -1,4 +1,3 @@
-// income-list.tsx (substitua o arquivo atual)
 import { useState } from "react";
 import { Income, incomeCategoryLabels, incomeCategoryIcons } from "@/types/income";
 import { useIncomeCategories } from "@/hooks/use-income-categories";
@@ -54,10 +53,7 @@ export function IncomeList({ incomes, onDelete, onEdit }: IncomeListProps) {
 
   const formatCurrency = (amount: number) => {
     if (isHidden) return "R$ ••••";
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(amount);
+    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(amount);
   };
 
   const parseLocalDate = (dateString: string): Date => {
@@ -67,7 +63,7 @@ export function IncomeList({ incomes, onDelete, onEdit }: IncomeListProps) {
 
   if (incomes.length === 0) {
     return (
-      <Card className="bg-gradient-card border-border/50 shadow-card backdrop-blur-sm">
+      <Card className="bg-card border border-border/40 shadow-sm">
         <CardContent className="flex flex-col items-center justify-center py-12">
           <p className="text-muted-foreground text-center">
             Nenhuma entrada registrada
@@ -81,60 +77,45 @@ export function IncomeList({ incomes, onDelete, onEdit }: IncomeListProps) {
 
   return (
     <>
-      <Card className="bg-gradient-card border-border/50 shadow-card backdrop-blur-sm">
-        <CardHeader>
-          <CardTitle className="text-green-600 dark:text-green-400">Suas Entradas</CardTitle>
+      <Card className="bg-card border border-border/40 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold text-foreground">Suas Entradas</CardTitle>
         </CardHeader>
 
-        <CardContent>
-          <div className="space-y-3">
-            {currentIncomes.map((income) => (
-              <div
-                key={income.id}
-                className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-4 rounded-lg border bg-card/50 hover:bg-card/80 transition-all duration-300 hover:shadow-card"
-              >
-                <div className="flex items-center gap-3 flex-1 w-full sm:w-auto min-w-0">
-                  <div className="p-2 rounded-full shrink-0 bg-green-500">
-                    <span className="sr-only">Ícone</span>
-                    <span className="h-4 w-4 inline-block">{getIncomeCatInfo(income).icon}</span>
+        <CardContent className="p-0">
+          <div className="divide-y divide-border/30">
+            {currentIncomes.map((income) => {
+              const catInfo = getIncomeCatInfo(income);
+              return (
+                <div
+                  key={income.id}
+                  className="py-3 px-4 hover:bg-muted/30 transition-colors"
+                >
+                  {/* Line 1: emoji + description ... +value */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg shrink-0">{catInfo.icon}</span>
+                    <p className="font-medium text-foreground truncate flex-1 min-w-0">{income.description}</p>
+                    <p className="font-bold text-sm text-green-600 dark:text-green-400 whitespace-nowrap ml-2">
+                      +{formatCurrency(income.amount)}
+                    </p>
                   </div>
 
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">{getIncomeCatInfo(income).icon}</span>
-                      <p className="font-medium text-foreground truncate">{income.description}</p>
-                    </div>
-
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                      <span>{getIncomeCatInfo(income).name}</span>
+                  {/* Line 2: category • date ... actions */}
+                  <div className="flex items-center justify-between mt-1 ml-7">
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <span>{catInfo.name}</span>
                       <span>•</span>
-                      <span>{format(parseLocalDate(income.income_date), "dd/MM/yyyy", { locale: ptBR })}</span>
+                      <span>{format(parseLocalDate(income.income_date), "dd/MM", { locale: ptBR })}</span>
                     </div>
-
-                    {/* criado em - se necessário */}
-                    {income.created_at && (
-                      <div className="text-xs text-muted-foreground mt-1">
-                        Criado em: {format(new Date(income.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
-                  <p className="font-bold text-base sm:text-lg text-green-600 dark:text-green-400 whitespace-nowrap">
-                    +{formatCurrency(income.amount)}
-                  </p>
-
-                  <div className="flex items-center gap-1">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-10 w-10 min-h-[44px] min-w-[44px] shrink-0 touch-manipulation"
+                          className="h-8 w-8 min-h-[36px] min-w-[36px] shrink-0 touch-manipulation"
                           aria-label="Mais opções"
                         >
-                          <MoreVertical className="h-5 w-5" />
+                          <MoreVertical className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" side="top" className="bg-background z-50">
@@ -155,13 +136,12 @@ export function IncomeList({ incomes, onDelete, onEdit }: IncomeListProps) {
                     </DropdownMenu>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
-          {/* Paginação */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-4 mt-4">
+            <div className="flex items-center justify-center gap-4 py-4 px-4">
               <Button
                 variant="outline"
                 size="sm"
@@ -186,7 +166,6 @@ export function IncomeList({ incomes, onDelete, onEdit }: IncomeListProps) {
         </CardContent>
       </Card>
 
-      {/* Dialog de confirmação de exclusão */}
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>

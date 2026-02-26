@@ -11,7 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreVertical, Pencil, Trash2, Calendar, Wallet } from "lucide-react";
+import { MoreVertical, Pencil, Trash2, Calendar } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -56,7 +56,7 @@ export function RecurringIncomeList({
 
   if (incomes.length === 0) {
     return (
-      <Card className="bg-gradient-card border-border/50 shadow-card backdrop-blur-sm">
+      <Card className="bg-card border border-border/40 shadow-sm">
         <CardContent className="flex flex-col items-center justify-center py-12">
           <Calendar className="h-12 w-12 text-muted-foreground mb-4" />
           <p className="text-muted-foreground text-center">
@@ -71,50 +71,46 @@ export function RecurringIncomeList({
 
   return (
     <>
-      <Card className="bg-gradient-card border-border/50 shadow-card backdrop-blur-sm">
-        <CardHeader>
-          <CardTitle className="text-green-600 dark:text-green-400">Entradas Fixas</CardTitle>
+      <Card className="bg-card border border-border/40 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold text-foreground">Entradas Fixas</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {incomes.map((income) => (
-              <div
-                key={income.id}
-                className={`flex flex-col sm:flex-row items-start sm:items-center gap-3 p-4 rounded-lg border bg-card/50 hover:bg-card/80 transition-all duration-300 hover:shadow-card ${
-                  !income.is_active ? 'opacity-60' : ''
-                }`}
-              >
-                <div className="flex items-center gap-3 flex-1 w-full sm:w-auto">
-                  <div className="p-2 rounded-full shrink-0 bg-green-500">
-                    <Wallet className="h-4 w-4 text-white" />
+        <CardContent className="p-0">
+          <div className="divide-y divide-border/30">
+            {incomes.map((income) => {
+              const catInfo = getIncomeCatInfo(income);
+              return (
+                <div
+                  key={income.id}
+                  className={`py-3 px-4 hover:bg-muted/30 transition-colors ${
+                    !income.is_active ? 'opacity-60' : ''
+                  }`}
+                >
+                  {/* Line 1: emoji + description ... +value */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg shrink-0">{catInfo.icon}</span>
+                    <p className="font-medium text-foreground truncate flex-1 min-w-0">{income.description}</p>
+                    <p className="font-bold text-sm text-green-600 dark:text-green-400 whitespace-nowrap ml-2">
+                      +{formatCurrency(income.amount)}
+                    </p>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">{getIncomeCatInfo(income).icon}</span>
-                      <p className="font-medium text-foreground truncate">{income.description}</p>
+
+                  {/* Line 2: category • day ... actions */}
+                  <div className="flex items-center justify-between mt-1 ml-7">
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <span>{catInfo.name}</span>
+                      <span>•</span>
+                      <span>Dia {income.day_of_month}</span>
                     </div>
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-xs sm:text-sm text-muted-foreground">
-                      <span>{getIncomeCatInfo(income).name}</span>
-                      <span className="hidden sm:inline">•</span>
-                      <span>Recebimento: Dia {income.day_of_month}</span>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
-                  <p className="font-bold text-base sm:text-lg text-green-600 dark:text-green-400 whitespace-nowrap">
-                    +{formatCurrency(income.amount)}
-                  </p>
-                  <div className="flex items-center gap-1">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className="h-10 w-10 min-h-[44px] min-w-[44px] shrink-0 touch-manipulation"
+                          className="h-8 w-8 min-h-[36px] min-w-[36px] shrink-0 touch-manipulation"
                           aria-label="Mais opções"
                         >
-                          <MoreVertical className="h-5 w-5" />
+                          <MoreVertical className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" side="top" className="bg-background z-50">
@@ -145,13 +141,12 @@ export function RecurringIncomeList({
                     </DropdownMenu>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </CardContent>
       </Card>
 
-      {/* Dialog de confirmação de exclusão */}
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
