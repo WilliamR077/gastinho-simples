@@ -1,104 +1,175 @@
 
 
-## Plano: Reorganizar UI do Dashboard - Remover efeito sanduiche
+## Plano: Design System Mobile-First — Reduzir peso visual
 
-### Problema atual
+### Objetivo
+Aplicar espaçamento consistente, padronizar cards/tipografia/cores e criar banners slim em todos os componentes visuais da Home, sem alterar lógica, API ou rotas.
 
-A tela principal empilha multiplas barras de controle uma sobre a outra:
-1. MonthNavigator
-2. BalanceSummary
-3. ExpenseSummary
-4. Banners de alerta
-5. Filtros (card collapsible com tabs internas Despesas/Entradas)
-6. Tabs principais (Despesas/Entradas/Metas) - full-width
-7. Dentro de Despesas: CategorySummary (accordion) + sub-tabs Do Mes/Fixas
-8. Dentro de Entradas: IncomeCategorySummary (accordion) + sub-tabs Do Mes/Fixas
-9. Dentro de Metas: sub-tabs Despesas/Entradas/Saldo
-10. FAB (+) e botao Calculadora como 2 botoes flutuantes separados
+---
 
-Resultado: "sanduiche" de controles onde o conteudo real (listas) fica enterrado.
+### 1. Escala de espaçamento e variáveis globais
 
-### Arquivos que serao criados
+**Arquivo: `src/index.css`**
+- Adicionar classes utilitárias ou usar os valores Tailwind existentes (1=4px, 2=8px, 3=12px, 4=16px, 6=24px, 8=32px) de forma consistente nos componentes abaixo.
 
-**`src/components/compact-filter-bar.tsx`** - Nova barra de filtros compacta que substitui `ExpenseFilters`. No estado padrao mostra uma unica linha:
-```text
-[📅 Fev 2026]  [2 filtros ativos]  [Editar ▼]  [✕ Limpar]
-```
-Ao clicar em "Editar", expande e mostra o formulario completo de filtros (descrição, valores, pagamento, cartão, fatura, datas personalizadas). Os campos exibidos adaptam-se automaticamente a tab ativa: na tab Despesas mostra campos de pagamento/cartão/fatura; na tab Entradas mostra apenas descrição e valores; na tab Metas mostra apenas descrição e valores. Remove-se o toggle interno Despesas/Entradas.
+**Arquivo: `src/pages/Index.tsx`**
+- Container: trocar `py-6` por `py-4` (16px)
+- Entre seções (BalanceSummary, ExpenseSummary, Filtros, Tabs): usar `mb-6` (24px) consistente
+- Entre itens dentro de cards/listas: `gap-3` (12px) ou `gap-4` (16px)
+- Padding interno de cards: `p-4` (16px) consistente
 
-**`src/components/category-insight-card.tsx`** - Novo componente que transforma o CategorySummary de accordion em card de insight. Mostra as top 3 categorias com barras de progresso inline, total, e um botao "Ver detalhes" que expande para mostrar todas. Visual de card de conteudo, nao de settings/accordion.
+---
 
-**`src/components/income-category-insight-card.tsx`** - Mesmo conceito para entradas. Mostra top 3 categorias de entrada com barras verdes e "Ver detalhes".
+### 2. Padronização de Cards — sombra sutil, fundo neutro
 
-### Arquivos que serao modificados
+**Arquivo: `src/components/expense-summary.tsx`**
+- Remover `bg-gradient-success`, `bg-gradient-primary`, `bg-gradient-card` dos 4 cards de resumo (PIX, Débito, Crédito, Total)
+- Substituir por fundo neutro: `bg-card border border-border/50` para todos
+- Cor como acento: manter ícone e texto do valor coloridos (verde para PIX, azul para débito, âmbar para crédito, primary para total), mas fundo do card sempre neutro
+- Sombra: trocar `shadow-elegant` por `shadow-sm` (sutil)
+- `hover:shadow-glow` → `hover:shadow-md`
+- Adicionar borda-esquerda colorida (`border-l-2 border-l-green-500` para PIX, etc.) como acento visual
+- Texto interno: trocar `text-success-foreground` por `text-foreground` com valores coloridos apenas no número principal
+- Valor principal: `text-xl font-bold` (reduzir de `text-2xl` para caber melhor em mobile)
 
-**`src/pages/Index.tsx`** - Refatoracao principal:
+**Arquivo: `src/components/balance-summary.tsx`**
+- Manter `bg-green-500/10`, `bg-red-500/10` pois são fundos tênues (acento, não saturados)
+- Reduzir padding de `p-3` para `p-3` (manter) mas garantir `gap-2` entre os 3 mini-cards
 
-1. **Filtros**: Substituir `<ExpenseFilters>` por `<CompactFilterBar>`, passando `activeTab` para adaptacao automatica dos campos.
+**Arquivo: `src/components/ui/card.tsx`**
+- Não alterar o componente base (já está com `shadow-sm`)
 
-2. **Sub-tabs Do Mes/Fixas → Chips**: Dentro da tab Despesas e Entradas, trocar a `TabsList grid-cols-2` (Do Mes / Fixas) por chips pequenos inline no header da lista:
-```text
-Suas Despesas          [Do Mês ●] [Fixas]
-```
-Usar botoes `variant="outline"` pequenos (`size="sm"`) com `rounded-full` para visual de chip. O chip ativo fica com fundo preenchido.
+**Arquivo: `src/components/expense-list.tsx`**
+- Card wrapper: trocar `bg-gradient-card border-border/50 shadow-card backdrop-blur-sm` por `bg-card border border-border/40 shadow-sm`
+- Itens da lista: manter `p-4 rounded-lg border bg-card/50` → trocar para `p-3 rounded-lg border border-border/30 bg-card`
+- Reduzir espaço vertical entre linhas internas: `mt-2` → `mt-1.5`, `mt-3` → `mt-2`
 
-3. **CategorySummary → CategoryInsightCard**: Substituir o `<CategorySummary>` accordion pelo novo `<CategoryInsightCard>` que mostra top 3 categorias por padrao com opcao "Ver todas".
+**Arquivo: `src/components/category-insight-card.tsx`**
+- Já está com estilo leve (`rounded-lg border border-border/50 bg-card/50`). Manter, apenas garantir `p-4` e `shadow-sm`.
 
-4. **IncomeCategorySummary → IncomeCategoryInsightCard**: Mesmo para entradas.
+**Arquivo: `src/components/income-category-insight-card.tsx`**
+- Mesmo tratamento que `category-insight-card.tsx`
 
-5. **Metas - remover sub-tabs**: Na tab Metas, remover a `<Tabs>` interna com Despesas/Entradas/Saldo. Em vez disso, renderizar 3 secoes na mesma tela:
-   - Secao "Limites de Despesas" com `<BudgetProgress>` filtrado para expense goals
-   - Secao "Metas de Entradas" com `<BudgetProgress>` filtrado para income goals
-   - Secao "Metas de Saldo" com `<BudgetProgress>` filtrado para balance goals
-   Cada secao com um titulo e divisor visual. Secoes vazias sao omitidas.
+**Arquivo: `src/components/budget-progress.tsx`**
+- Cada goal card: reduzir padding do `CardHeader` e `CardContent`
+- `CardHeader`: adicionar `pb-2` (reduzir de default `pb-4`)
+- `CardTitle`: trocar `text-lg` por `text-base` (16px)
+- Nos cards de alerta internos (dentro de cada goal), reduzir padding
 
-6. **FAB unificado**: Mover `onCalculatorClick` para dentro do `FloatingActionButton`, removendo o botao de calculadora separado. O FAB fica com 4 opcoes: Meta, Entrada, Despesa, Calculadora.
+---
 
-7. **Espacamentos**: Reduzir `mb-8` do ExpenseSummary para `mb-4`. Remover `mb-4` extras entre controles. Usar `gap-3` consistente.
+### 3. Padronização tipográfica
 
-**`src/components/floating-action-button.tsx`** - Incorporar botao de calculadora como 4a opcao dentro do menu do FAB (icone Calculator, cor neutra/secondary). Remover o botao fixo separado de calculadora que ficava sempre visivel.
+Aplicar em todos os componentes tocados:
 
-**`src/components/expense-filters.tsx`** - Manter arquivo existente mas a interface publica (props e tipos exportados como `ExpenseFilters`, `FilterTab`) continua disponivel para o novo componente reutilizar. O componente visual antigo deixa de ser usado no Index.
+| Elemento | Atual | Novo |
+|---|---|---|
+| Títulos de seção (CardTitle) | `text-lg`/`text-2xl` | `text-base` (16px) |
+| Valores principais (totais) | `text-2xl font-bold` | `text-xl font-bold` (mobile), `text-2xl` (desktop via `sm:text-2xl`) |
+| Textos secundários (labels, datas) | `text-sm`/`text-xs` | `text-xs` (12-13px) consistente |
+| Subtítulos | diversos | `text-sm font-medium` (14px) |
 
-### Detalhes tecnicos
+**Arquivos afetados:**
+- `expense-summary.tsx`: valores `text-2xl` → `text-xl sm:text-2xl`
+- `balance-summary.tsx`: valores `text-sm font-bold` → manter (já está pequeno)
+- `expense-list.tsx`: título "Suas Despesas" `text-primary` → `text-base font-semibold text-foreground`
+- `budget-progress.tsx`: `CardTitle text-lg` → `text-base`
+- `month-navigator.tsx`: `text-lg font-semibold` → `text-base font-semibold sm:text-lg`
 
-- `CompactFilterBar` recebe `activeTab: "expenses" | "incomes" | "goals"` e mostra campos condicionalmente
-- Contagem de filtros ativos calculada a partir de `filters.description`, `filters.minAmount`, `filters.maxAmount`, `filters.paymentMethod`, `filters.cardId`, `filters.billingPeriod`
-- Os chips Do Mes/Fixas usam o estado `expenseSubTab`/`incomeSubTab` existente, apenas mudando o visual de tabs para botoes pill
-- Na aba Metas sem sub-tabs, os 3 blocos de `BudgetProgress` ficam empilhados verticalmente com headers `<h3>` simples e `<Separator>` entre eles
-- O FAB unificado mantem a mesma logica de backdrop e animacao, adicionando Calculator como 4o item com cor `bg-secondary`
+---
 
-### Resumo visual
+### 4. Semântica de cor — garantir que despesas ≠ verde
 
-```text
-ANTES (sanduiche):
-[MonthNavigator]
-[BalanceSummary]
-[ExpenseSummary]
-[Banners]
-[====== Filtros (card pesado) ======]
-[== Despesas | Entradas | Metas ==]  ← tabs full-width
-  [=== Gastos por Categoria ===]     ← accordion
-  [== Do Mes | Fixas ==]             ← segunda barra tabs
-  [Lista...]
+**Arquivo: `src/components/expense-summary.tsx`**
+- Card de PIX: atualmente usa `bg-gradient-success` (verde) — trocar fundo para neutro, manter apenas texto/ícone em verde para acento. Alternativamente, usar azul-claro ou cinza para PIX (já que PIX é método de pagamento, não entrada)
+- Decisão: PIX card → borda-esquerda `border-l-emerald-500` com fundo neutro. O verde no contexto de PIX é aceitável pois refere-se ao método (marca PIX), não à semântica entrada/saída
+- Card Total: trocar `text-primary` (verde) por cor neutra — usar `text-foreground` para o valor total de despesas, pois despesas não devem ser verdes
+- Card Total ícone: `text-primary` → `text-muted-foreground`
 
-DEPOIS (limpo):
-[MonthNavigator]
-[BalanceSummary]
-[ExpenseSummary]
-[Banners]
-[📅 Fev 2026 | 0 filtros | Editar ▼]  ← barra compacta
-[== Despesas | Entradas | Metas ==]
-  [Card insight: Top categorias]        ← card leve
-  Suas Despesas  [Do Mes●] [Fixas]      ← chips inline
-  [Lista...]
-```
+**Arquivo: `src/components/budget-progress.tsx`**
+- Nas metas de despesa, a barra de progresso "safe" usa `bg-success` (verde). Manter, pois nesse contexto verde = "está OK/dentro do limite" (semântica de status, não de entrada/saída)
 
-### Ordem de implementacao
+**Arquivo: `src/components/category-insight-card.tsx`**
+- Título e valores usam `text-primary` (verde). Trocar para `text-red-500 dark:text-red-400` pois trata-se de gastos por categoria (despesa = vermelho/laranja)
+- Barra de progresso: trocar `bg-gradient-primary` por `bg-red-500`
 
-1. `compact-filter-bar.tsx` (novo)
-2. `category-insight-card.tsx` (novo)
-3. `income-category-insight-card.tsx` (novo)
-4. `floating-action-button.tsx` (modificar - unificar calculadora)
-5. `src/pages/Index.tsx` (modificar - integrar tudo)
+**Arquivo: `src/components/income-category-insight-card.tsx`**
+- Já usa verde (`text-green-600`, `bg-green-500`). Correto, manter.
+
+---
+
+### 5. Banners slim para alertas
+
+**Arquivos: `budget-alert-banner.tsx`, `income-goal-banner.tsx`, `balance-goal-banner.tsx`**
+
+Transformar os 3 banners em estilo "slim" — 1-2 linhas com CTA inline:
+
+- Reduzir de layout multi-linha para uma única div flexível
+- Estrutura: `[Ícone] [Texto resumido 1 linha] [CTA botão pequeno] [X fechar]`
+- Exemplo para `budget-alert-banner`: `🚨 2 metas estouradas — R$ 150 acima do limite [Ver metas →] [✕]`
+- Remover o bloco detalhado com lista de metas individuais (o `slice(0, 2).map(...)`)
+- Manter onClick no banner inteiro como fallback
+- Padding: `px-4 py-2` (slim)
+- Remover `mb-4` do Alert, colocar espaçamento no container pai (Index.tsx)
+- Altura máxima: ~48px (2 linhas no mobile)
+
+Mudanças específicas por banner:
+
+**`budget-alert-banner.tsx`:**
+- Linha única: `"🚨 {n} meta(s) estourada(s)!"` ou `"⚠️ {n} meta(s) precisando atenção"` + botão "Ver →"
+- Remover blocos internos `.slice(0,2).map()`
+- Remover o `<TrendingUp>` com texto "Clique para ver detalhes"
+
+**`income-goal-banner.tsx`:**
+- Linha única: `"🎉 Meta de entrada batida!"` ou `"💪 Quase lá!"` + botão "Ver →"
+- Mesmo padrão de simplificação
+
+**`balance-goal-banner.tsx`:**
+- Linha única: `"🌟 Meta de saldo atingida!"` ou `"💪 Quase lá!"` + botão "Ver →"
+- Mesmo padrão
+
+---
+
+### 6. Ajustes no MonthNavigator
+
+**Arquivo: `src/components/month-navigator.tsx`**
+- Reduzir `py-4` para `py-2` para ficar mais compacto
+- Reduzir tamanho do ícone chevron de `h-6 w-6` para `h-5 w-5`
+- Botão de navegação: `h-10 w-10` → `h-9 w-9`
+
+---
+
+### 7. Ajustes no CompactFilterBar
+
+**Arquivo: `src/components/compact-filter-bar.tsx`**
+- Já está razoavelmente compacto. Garantir `shadow-sm` em vez de nenhuma sombra
+- Padding do botão compacto: `px-4 py-2.5` → `px-3 py-2`
+
+---
+
+### 8. Tabs principais — mais leves
+
+**Arquivo: `src/pages/Index.tsx`**
+- `TabsList`: adicionar `bg-muted/50` (mais translúcido) em vez do default opaco
+- `mb-4` após TabsList → `mb-3`
+
+---
+
+### Resumo de arquivos modificados
+
+| Arquivo | Tipo de mudança |
+|---|---|
+| `src/pages/Index.tsx` | Espaçamentos, tabs translúcidas |
+| `src/components/expense-summary.tsx` | Cards neutros, borda-acento, tipografia, cores |
+| `src/components/balance-summary.tsx` | Ajustes menores de espaçamento |
+| `src/components/month-navigator.tsx` | Mais compacto |
+| `src/components/budget-alert-banner.tsx` | Banner slim 1-2 linhas |
+| `src/components/income-goal-banner.tsx` | Banner slim 1-2 linhas |
+| `src/components/balance-goal-banner.tsx` | Banner slim 1-2 linhas |
+| `src/components/category-insight-card.tsx` | Cor vermelha para despesas, shadow-sm |
+| `src/components/expense-list.tsx` | Card/item mais leve, espaçamento |
+| `src/components/compact-filter-bar.tsx` | Padding reduzido |
+| `src/components/budget-progress.tsx` | Padding/tipografia reduzidos |
+
+Nenhum arquivo de lógica, API, banco ou rotas será tocado.
 
