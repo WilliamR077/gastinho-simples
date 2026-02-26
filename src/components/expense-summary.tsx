@@ -250,71 +250,77 @@ export function ExpenseSummary({
 
   return (
     <div className="rounded-lg border border-border/50 bg-card shadow-sm p-4">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-xs font-medium text-muted-foreground">Gastos por Método</h3>
-        <span className="text-sm font-bold text-foreground">{formatCurrency(totals.total)}</span>
-      </div>
+    {/* Header */}
+    <div className="flex items-center justify-between mb-3">
+      <h3 className="text-xs font-medium text-muted-foreground">Gastos por Método</h3>
+      <span className="text-sm font-bold text-foreground">{formatCurrency(totals.total)}</span>
+    </div>
 
-      {/* Payment method rows */}
-      <div className="space-y-0">
-        {paymentMethods.map(({ key, label, icon, colorClass, cardTotals }) => {
-          const value = totals[key];
-          const count = getTransactionCount(key);
-          const isZero = value === 0;
-          const isActive = activePaymentMethod === key;
-          const hasCardDetails = Object.keys(cardTotals).length > 0 && !isZero;
+    {/* Payment method rows */}
+    <div className="space-y-0">
+      {paymentMethods.map(({ key, label, icon, colorClass, cardTotals }) => {
+        const value = totals[key];
+        const count = getTransactionCount(key);
+        const isZero = value === 0;
+        const isActive = activePaymentMethod === key;
+        const hasCardDetails = Object.keys(cardTotals).length > 0 && !isZero;
 
-          return (
-            <div key={key}>
-              <div
-                onClick={() => onPaymentMethodClick?.(key)}
-                className={`flex items-center justify-between py-2.5 cursor-pointer border-b border-border/30 last:border-0 transition-colors ${
-                isActive ? 'bg-muted/50 rounded-md -mx-2 px-2' : ''} ${
-                isZero ? 'opacity-50' : ''}`}>
-
-                <div className="flex items-center gap-2">
-                  {icon}
-                  <span className="text-sm font-medium text-foreground">{label}</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className={`text-sm font-semibold ${colorClass}`}>
-                    {formatCurrency(value)}
-                  </span>
-                  <span className="text-xs text-muted-foreground min-w-[60px] text-right">
-                    {count} transaç{count !== 1 ? 'ões' : 'ão'}
-                  </span>
-                </div>
+        return (
+          <div key={key}>
+            <div
+              onClick={() => onPaymentMethodClick?.(key)}
+              className={`flex items-center justify-between py-2.5 cursor-pointer transition-colors ${
+                isActive ? 'bg-muted/50 rounded-md -mx-2 px-2' : ''
+              } ${isZero ? 'opacity-50' : ''}`}
+            >
+              <div className="flex items-center gap-2">
+                {icon}
+                <span className="text-sm font-medium text-foreground">{label}</span>
               </div>
+              <div className="flex items-center gap-3">
+                <span className={`text-sm font-semibold ${colorClass}`}>
+                  {formatCurrency(value)}
+                </span>
+                <span className="text-xs text-muted-foreground min-w-[60px] text-right">
+                  {count} transaç{count !== 1 ? 'ões' : 'ão'}
+                </span>
+              </div>
+            </div>
 
-              {/* Card details */}
-              {hasCardDetails &&
+            {/* Card details */}
+            {hasCardDetails && (
               <div className="pl-8 pb-2 flex flex-wrap gap-x-4 gap-y-1 px-0">
-                  {Object.entries(cardTotals).map(([cardName, data]) =>
-                <div key={cardName} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <div
-                    style={{ backgroundColor: data.color }}
-                    className="w-2 h-2 rounded-full flex-shrink-0" />
+                {Object.entries(cardTotals).map(([cardName, data]) => (
+                  <div
+                    key={cardName}
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                  >
+                    <div
+                      style={{ backgroundColor: data.color }}
+                      className="w-2 h-2 rounded-full flex-shrink-0"
+                    />
+                    <span>{cardName}: {formatCurrency(data.total)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
 
-                      <span>{cardName}: {formatCurrency(data.total)}</span>
-                    </div>
-                )}
-                </div>
-              }
-            </div>);
-
-        })}
-      </div>
-
-      {/* Total transactions summary */}
-      <div className="pt-2 border-t border-border/50 flex-col flex items-end justify-between my-0 mb-0 mt-0 py-0">
-        <span className="text-xs text-muted-foreground mb-[10px]">
-          {expenses.length} despesa{expenses.length !== 1 ? 's' : ''}
-          {activeRecurringExpenses.length > 0 &&
-          <> + {activeRecurringExpenses.length} fixa{activeRecurringExpenses.length !== 1 ? 's' : ''}</>
-          }
-        </span>
-      </div>
+    {/* Total transactions summary */}
+    <div className="pt-2 border-t border-border/50 flex-col flex items-end justify-between my-0 mb-0 mt-0 py-0">
+      <span className="text-xs text-muted-foreground mb-[10px]">
+        {expenses.length} despesa{expenses.length !== 1 ? 's' : ''}
+        {activeRecurringExpenses.length > 0 && (
+          <>
+            {' '}
+            + {activeRecurringExpenses.length} fixa{activeRecurringExpenses.length !== 1 ? 's' : ''}
+          </>
+        )}
+      </span>
+    </div>
 
       {/* Budget goals */}
       {budgetProgress.length > 0 &&
