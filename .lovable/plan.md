@@ -1,100 +1,74 @@
 
 
-## Plano: Remover padrões web e otimizar para mobile
+## Plano: FAB nativo e sem sobreposição
 
-Apenas UI/estilo/layout — sem alterar backend, dados ou rotas.
-
----
-
-### 1. Substituir paginação por "Carregar mais"
-
-**Arquivo: `src/components/expense-list.tsx`**
-
-- Remover imports de Pagination (linhas 8-16): `PaginationContent`, `PaginationEllipsis`, `PaginationItem`, `PaginationLink`, `PaginationNext`, `PaginationPrevious`
-- Trocar `currentPage` state por `visibleCount` state, iniciando em 10
-- Em vez de `currentExpenses = expenses.slice(startIndex, endIndex)`, usar `currentExpenses = expenses.slice(0, visibleCount)`
-- Substituir bloco de paginação (linhas 204-239) por botão "Carregar mais":
-```tsx
-{visibleCount < expenses.length && (
-  <div className="py-4 px-4">
-    <Button
-      variant="outline"
-      size="sm"
-      className="w-full touch-manipulation"
-      onClick={() => setVisibleCount(v => Math.min(v + 10, expenses.length))}
-    >
-      Carregar mais ({expenses.length - visibleCount} restantes)
-    </Button>
-  </div>
-)}
-```
-- Remover lógica `totalPages`, `startIndex`, `endIndex`, `currentPage > totalPages`
-
-**Arquivo: `src/components/income-list.tsx`**
-
-- Mesmo padrão: trocar `currentPage` por `visibleCount` (início 10)
-- Remover imports de `ChevronLeft`, `ChevronRight` (linha 15)
-- Substituir paginação com setas (linhas 143-164) por botão "Carregar mais"
-- Remover `totalPages`, `startIndex`
+Apenas UI/estilo — sem alterar lógica, dados ou rotas.
 
 ---
 
-### 2. Remover footer longo do mobile (autenticado)
+### 1. Reposicionar FAB e corrigir safe-area
 
-**Arquivo: `src/components/footer.tsx`**
+**Arquivo: `src/components/floating-action-button.tsx`**
 
-Para usuários autenticados, simplificar drasticamente o footer — remover grid de links (Início, Relatórios, Cartões, Conta, Assinatura, Configurações) que já estão no menu drawer. Manter apenas:
+O FAB já está em `bottom-[calc(env(safe-area-inset-bottom,0px)+6rem)]` (96px). Manter essa posição, que já respeita safe-area.
 
-- Versículo bíblico
-- Copyright
-- Link "Política de Privacidade" (único link útil que não está no drawer)
+### 2. Estética consistente ao abrir menu
 
-Trocar o bloco autenticado (linhas 52-82) por:
+**Arquivo: `src/components/floating-action-button.tsx`**
+
+Problema atual: quando aberto, o FAB fica `bg-destructive` (vermelho) com `rotate-45`, criando contraste estranho com os botões coloridos do menu (verde, âmbar, vermelho).
+
+Alteração:
+- Quando aberto, usar `bg-muted-foreground` (cinza neutro) em vez de `bg-destructive`, eliminando o choque visual vermelho-sobre-verde
+- Trocar `rotate-45` por `rotate-0` e usar ícone `X` direto (já é feito, então remover a rotação desnecessária)
+- Resultado: botão de fechar neutro e discreto, sem competir com as opções do menu
+
+Linha 83-84:
 ```tsx
-{isAuthenticated ? (
-  <div className="space-y-2 text-center">
-    <button onClick={() => navigate("/privacy")} className="text-xs text-muted-foreground hover:text-foreground">
-      Política de Privacidade
-    </button>
-  </div>
-) : (
-  // manter bloco visitor como está
-)}
+// De:
+isOpen ? "bg-destructive hover:bg-destructive/90 rotate-45" : "bg-primary hover:bg-primary/90"
+
+// Para:
+isOpen ? "bg-muted-foreground hover:bg-muted-foreground/90" : "bg-primary hover:bg-primary/90"
 ```
 
-Reduzir padding: `pt-10` → `pt-6`, `space-y-8` → `space-y-4`, remover logo duplicada (já está no header).
+### 3. Auto-hide ao rolar (premium feel)
 
----
+**Arquivo: `src/components/floating-action-button.tsx`**
 
-### 3. FAB não sobrepor conteúdo — padding nas páginas com footer
+Adicionar lógica de scroll direction detection:
+- State: `visible` (default true)
+- `useEffect` com scroll listener que compara `scrollY` com valor anterior
+- Rolar para baixo → `visible = false` (esconde FAB com `translate-y-24 opacity-0`)
+- Rolar para cima → `visible = true` (mostra FAB com transição suave)
+- Quando menu está aberto (`isOpen`), sempre visível
 
-O `pb-44` no `Index.tsx` já cobre o FAB. Porém, o `<Footer>` fica APÓS o container `pb-44`, então não há problema. O FAB só existe no Index.tsx. Sem alteração adicional necessária.
-
----
-
-### 4. Texto duplicado "Restam R$" no card Limite Mensal Total
-
-**Arquivo: `src/components/budget-progress.tsx`**
-
-No `renderExpenseGoal`, quando `alertLevel !== 'safe'`, há duplicação:
-- Linha 311: `Restam {formatCurrency(remaining)}` (texto abaixo da barra)
-- Linha 322: `Restam {formatCurrency(remaining)}` (banner slim)
-
-Solução: quando o banner slim está visível (alertLevel !== 'safe'), ocultar a linha 302-314 ("Restam/Excedeu" abaixo da barra de progresso), pois o banner já comunica a mesma informação com CTA.
-
-Substituir linhas 302-314 por:
 ```tsx
-{alertLevel === 'safe' && (
-  <div className="flex items-center justify-between text-xs">
-    <div className="flex items-center gap-1 text-muted-foreground">
-      <TrendingDown className="h-3.5 w-3.5" />
-      <span>Restam {formatCurrency(remaining)}</span>
-    </div>
-  </div>
+const [visible, setVisible] = useState(true);
+const lastScrollY = useRef(0);
+
+useEffect(() => {
+  const onScroll = () => {
+    const currentY = window.scrollY;
+    setVisible(currentY < lastScrollY.current || currentY < 100);
+    lastScrollY.current = currentY;
+  };
+  window.addEventListener('scroll', onScroll, { passive: true });
+  return () => window.removeEventListener('scroll', onScroll);
+}, []);
+```
+
+Aplicar no container principal:
+```tsx
+className={cn(
+  "fixed bottom-[calc(env(safe-area-inset-bottom,0px)+6rem)] right-6 z-40 flex flex-col items-end gap-2 pointer-events-none transition-all duration-300",
+  !visible && !isOpen && "translate-y-24 opacity-0"
 )}
 ```
 
-Assim: quando safe → mostra "Restam" abaixo da barra; quando warning/danger/critical → mostra apenas o banner slim com "Restam/Estourou" + botão Ajustar, sem duplicação.
+### 4. Padding inferior já configurado
+
+O `pb-44` (176px) no container principal do `Index.tsx` já garante espaço suficiente para o FAB em `bottom-24` (96px) + altura do FAB (56px) + margem. Sem alteração necessária.
 
 ---
 
@@ -102,10 +76,7 @@ Assim: quando safe → mostra "Restam" abaixo da barra; quando warning/danger/cr
 
 | Arquivo | Mudança |
 |---|---|
-| `expense-list.tsx` | Paginação → "Carregar mais" com `visibleCount` |
-| `income-list.tsx` | Paginação → "Carregar mais" com `visibleCount` |
-| `footer.tsx` | Remover grid de links para autenticados, manter só privacidade + copyright |
-| `budget-progress.tsx` | Remover texto "Restam" duplicado quando banner slim está visível |
+| `floating-action-button.tsx` | FAB aberto: cor neutra (bg-muted-foreground), remover rotate-45; auto-hide ao rolar para baixo com transição suave |
 
-4 arquivos. Sem alteração de lógica ou dados.
+1 arquivo, ~15 linhas alteradas. Sem alteração de lógica.
 
