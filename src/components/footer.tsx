@@ -9,18 +9,6 @@ export const Footer = ({ isAuthenticated = true }: FooterProps) => {
   const navigate = useNavigate();
   const currentYear = new Date().getFullYear();
 
-  const authenticatedQuickLinks = [
-    { label: "Início", path: "/" },
-    { label: "Relatórios", path: "/reports" },
-    { label: "Cartões", path: "/cards" },
-  ];
-
-  const authenticatedAccountLinks = [
-    { label: "Minha Conta", path: "/account" },
-    { label: "Assinatura", path: "/subscription" },
-    { label: "Configurações", path: "/settings" },
-  ];
-
   const visitorQuickLinks = [
     { label: "Início", path: "/landing" },
     { label: "Sobre", path: "/about" },
@@ -33,83 +21,59 @@ export const Footer = ({ isAuthenticated = true }: FooterProps) => {
   ];
 
   return (
-    <footer className="border-t border-border bg-muted/30 px-6 pt-10 pb-6">
-      <div className="mx-auto max-w-4xl space-y-8">
-        {/* Logo & tagline */}
-        <div className="flex items-center gap-3">
-          <img
-            src="/lovable-uploads/06a1acc2-f553-41f0-8d87-32d25b4e425e.png"
-            alt="Gastinho Simples"
-            className="h-10 w-10 rounded-lg"
-          />
-          <div>
-            <h3 className="text-sm font-semibold text-foreground">Gastinho Simples</h3>
-            <p className="text-xs text-muted-foreground">Controle seus gastos de forma simples</p>
-          </div>
-        </div>
-
-        {/* Links */}
+    <footer className="border-t border-border bg-muted/30 px-6 pt-6 pb-6">
+      <div className="mx-auto max-w-4xl space-y-4">
         {isAuthenticated ? (
-          <div className="grid grid-cols-2 gap-6 sm:grid-cols-3">
-            <div className="space-y-2">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Links Rápidos</h4>
-              {authenticatedQuickLinks.map((link) => (
-                <button
-                  key={link.path}
-                  onClick={() => navigate(link.path)}
-                  className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  {link.label}
-                </button>
-              ))}
-            </div>
-            <div className="space-y-2">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Conta</h4>
-              {authenticatedAccountLinks.map((link) => (
-                <button
-                  key={link.path}
-                  onClick={() => navigate(link.path)}
-                  className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  {link.label}
-                </button>
-              ))}
-            </div>
-            <div className="col-span-2 space-y-2 sm:col-span-1">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Mais</h4>
-              <button onClick={() => navigate("/privacy")} className="block text-sm text-muted-foreground transition-colors hover:text-foreground">Política de Privacidade</button>
-            </div>
+          <div className="space-y-2 text-center">
+            <button onClick={() => navigate("/privacy")} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+              Política de Privacidade
+            </button>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Navegação</h4>
-              {visitorQuickLinks.map((link) => (
-                <button
-                  key={link.path}
-                  onClick={() => navigate(link.path)}
-                  className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  {link.label}
-                </button>
-              ))}
+          <>
+            {/* Logo & tagline */}
+            <div className="flex items-center gap-3">
+              <img
+                src="/lovable-uploads/06a1acc2-f553-41f0-8d87-32d25b4e425e.png"
+                alt="Gastinho Simples"
+                className="h-10 w-10 rounded-lg"
+              />
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Gastinho Simples</h3>
+                <p className="text-xs text-muted-foreground">Controle seus gastos de forma simples</p>
+              </div>
             </div>
-            <div className="space-y-2">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Mais</h4>
-              {visitorMoreLinks.map((link) => (
-                <button
-                  key={link.path}
-                  onClick={() => navigate(link.path)}
-                  className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  {link.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
-        <Separator />
+            <div className="grid grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Navegação</h4>
+                {visitorQuickLinks.map((link) => (
+                  <button
+                    key={link.path}
+                    onClick={() => navigate(link.path)}
+                    className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    {link.label}
+                  </button>
+                ))}
+              </div>
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Mais</h4>
+                {visitorMoreLinks.map((link) => (
+                  <button
+                    key={link.path}
+                    onClick={() => navigate(link.path)}
+                    className="block text-sm text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    {link.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <Separator />
+          </>
+        )}
 
         {/* Bottom */}
         <div className="space-y-1 text-center text-xs text-muted-foreground">

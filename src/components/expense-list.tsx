@@ -5,15 +5,6 @@ import { CreditCard, Smartphone, Trash2, Receipt, MoreVertical, Pencil, Users, U
 import { Expense, categoryLabels, categoryIcons, ExpenseCategory } from "@/types/expense"
 import { SharedGroupMember } from "@/types/shared-group"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination"
 import { useCategories } from "@/hooks/use-categories"
 import { useValuesVisibility } from "@/hooks/use-values-visibility"
 
@@ -45,22 +36,14 @@ const parseLocalDate = (dateString: string) => {
 };
 
 export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onSendToCalculator, groupMembers = [], isGroupContext = false }: ExpenseListProps) {
-  const [currentPage, setCurrentPage] = useState(1)
-  const itemsPerPage = 10
+  const [visibleCount, setVisibleCount] = useState(10)
   const { categories } = useCategories()
   const { isHidden } = useValuesVisibility()
 
   const formatCurrency = (value: number) => 
     isHidden ? "R$ ***,**" : `R$ ${value.toFixed(2).replace('.', ',')}`
 
-  const totalPages = Math.ceil(expenses.length / itemsPerPage)
-  const startIndex = (currentPage - 1) * itemsPerPage
-  const endIndex = startIndex + itemsPerPage
-  const currentExpenses = expenses.slice(startIndex, endIndex)
-
-  if (currentPage > totalPages && totalPages > 0) {
-    setCurrentPage(1)
-  }
+  const currentExpenses = expenses.slice(0, visibleCount)
 
   const getCategoryDisplay = (expense: Expense) => {
     if (expense.category_name) {
@@ -201,40 +184,16 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onSendTo
           })}
         </div>
 
-        {totalPages > 1 && (
-          <div className="mt-4 mb-4 px-4">
-            <Pagination>
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious 
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
-                  />
-                </PaginationItem>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
-                  const showPage = page === 1 || page === totalPages || Math.abs(page - currentPage) <= 1
-                  if (!showPage) {
-                    if (page === currentPage - 2 || page === currentPage + 2) {
-                      return <PaginationItem key={page}><PaginationEllipsis /></PaginationItem>
-                    }
-                    return null
-                  }
-                  return (
-                    <PaginationItem key={page}>
-                      <PaginationLink onClick={() => setCurrentPage(page)} isActive={currentPage === page} className="cursor-pointer">
-                        {page}
-                      </PaginationLink>
-                    </PaginationItem>
-                  )
-                })}
-                <PaginationItem>
-                  <PaginationNext 
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
+        {visibleCount < expenses.length && (
+          <div className="py-4 px-4">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full touch-manipulation"
+              onClick={() => setVisibleCount(v => Math.min(v + 10, expenses.length))}
+            >
+              Carregar mais ({expenses.length - visibleCount} restantes)
+            </Button>
           </div>
         )}
       </CardContent>

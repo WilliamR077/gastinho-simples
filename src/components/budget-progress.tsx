@@ -299,19 +299,14 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
               value={progressValue} 
               className={`h-2 [&>div]:${config.progressColor}`}
             />
-            <div className="flex items-center justify-between text-xs">
-              {isOver ? (
-                <div className="flex items-center gap-1 text-destructive font-medium">
-                  <TrendingUp className="h-3.5 w-3.5" />
-                  <span>Excedeu em {formatCurrency(Math.abs(remaining))}</span>
-                </div>
-              ) : (
+            {alertLevel === 'safe' && (
+              <div className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-1 text-muted-foreground">
                   <TrendingDown className="h-3.5 w-3.5" />
                   <span>Restam {formatCurrency(remaining)}</span>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
           {alertLevel !== 'safe' && (
