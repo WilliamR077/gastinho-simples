@@ -1620,7 +1620,7 @@ export default function Index() {
                   className={cn(
                     "px-3 py-1 rounded-full text-xs font-medium transition-colors border",
                     expenseSubTab === "monthly"
-                      ? "bg-primary text-primary-foreground border-primary"
+                      ? "bg-red-500 text-white border-red-500"
                       : "bg-transparent text-muted-foreground border-border hover:border-foreground/30"
                   )}
                 >
@@ -1631,7 +1631,7 @@ export default function Index() {
                   className={cn(
                     "px-3 py-1 rounded-full text-xs font-medium transition-colors border",
                     expenseSubTab === "recurring"
-                      ? "bg-primary text-primary-foreground border-primary"
+                      ? "bg-red-500 text-white border-red-500"
                       : "bg-transparent text-muted-foreground border-border hover:border-foreground/30"
                   )}
                 >
