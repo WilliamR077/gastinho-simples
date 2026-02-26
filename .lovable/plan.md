@@ -1,74 +1,85 @@
 
 
-## Plano: FAB nativo e sem sobreposição
+## Plano: Bottom sheet de detalhes para transações
 
-Apenas UI/estilo — sem alterar lógica, dados ou rotas.
+Criar um componente de bottom sheet reutilizável que abre ao tocar numa linha de despesa ou entrada, exibindo detalhes completos e ações.
 
 ---
 
-### 1. Reposicionar FAB e corrigir safe-area
+### 1. Novo componente: `src/components/transaction-detail-sheet.tsx`
 
-**Arquivo: `src/components/floating-action-button.tsx`**
+Componente genérico que recebe dados de despesa OU entrada e exibe um Drawer (vaul) com:
 
-O FAB já está em `bottom-[calc(env(safe-area-inset-bottom,0px)+6rem)]` (96px). Manter essa posição, que já respeita safe-area.
+**Conteúdo:**
+- Handle de arraste (já incluso no DrawerContent)
+- Emoji + Título (descrição) + Valor (vermelho para despesa, verde para entrada)
+- Separador
+- Lista de detalhes em formato label/valor:
+  - Categoria (emoji + nome)
+  - Data (formato dd/MM/yyyy)
+  - Método de pagamento / Cartão (só despesas)
+  - Parcelas (só se > 1)
+  - Grupo compartilhado (se houver)
+  - Criado em (formato dd/MM/yyyy HH:mm)
+- Separador
+- 3 botões de ação: Editar, Duplicar, Excluir
 
-### 2. Estética consistente ao abrir menu
-
-**Arquivo: `src/components/floating-action-button.tsx`**
-
-Problema atual: quando aberto, o FAB fica `bg-destructive` (vermelho) com `rotate-45`, criando contraste estranho com os botões coloridos do menu (verde, âmbar, vermelho).
-
-Alteração:
-- Quando aberto, usar `bg-muted-foreground` (cinza neutro) em vez de `bg-destructive`, eliminando o choque visual vermelho-sobre-verde
-- Trocar `rotate-45` por `rotate-0` e usar ícone `X` direto (já é feito, então remover a rotação desnecessária)
-- Resultado: botão de fechar neutro e discreto, sem competir com as opções do menu
-
-Linha 83-84:
+**Props:**
 ```tsx
-// De:
-isOpen ? "bg-destructive hover:bg-destructive/90 rotate-45" : "bg-primary hover:bg-primary/90"
-
-// Para:
-isOpen ? "bg-muted-foreground hover:bg-muted-foreground/90" : "bg-primary hover:bg-primary/90"
+interface TransactionDetailSheetProps {
+  expense?: Expense | null;
+  income?: Income | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onEdit: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  formatCurrency: (value: number) => string;
+}
 ```
 
-### 3. Auto-hide ao rolar (premium feel)
+Usa `Drawer` / `DrawerContent` / `DrawerHeader` / `DrawerFooter` do vaul — fecha ao arrastar para baixo e ao tocar no overlay automaticamente.
 
-**Arquivo: `src/components/floating-action-button.tsx`**
-
-Adicionar lógica de scroll direction detection:
-- State: `visible` (default true)
-- `useEffect` com scroll listener que compara `scrollY` com valor anterior
-- Rolar para baixo → `visible = false` (esconde FAB com `translate-y-24 opacity-0`)
-- Rolar para cima → `visible = true` (mostra FAB com transição suave)
-- Quando menu está aberto (`isOpen`), sempre visível
-
+Layout dos botões de ação no footer:
 ```tsx
-const [visible, setVisible] = useState(true);
-const lastScrollY = useRef(0);
-
-useEffect(() => {
-  const onScroll = () => {
-    const currentY = window.scrollY;
-    setVisible(currentY < lastScrollY.current || currentY < 100);
-    lastScrollY.current = currentY;
-  };
-  window.addEventListener('scroll', onScroll, { passive: true });
-  return () => window.removeEventListener('scroll', onScroll);
-}, []);
+<DrawerFooter className="flex-row gap-2 pb-safe">
+  <Button variant="outline" className="flex-1" onClick={onEdit}>
+    <Pencil /> Editar
+  </Button>
+  <Button variant="outline" className="flex-1" onClick={onDuplicate}>
+    <Copy /> Duplicar
+  </Button>
+  <Button variant="outline" className="flex-1 text-destructive" onClick={onDelete}>
+    <Trash2 /> Excluir
+  </Button>
+</DrawerFooter>
 ```
 
-Aplicar no container principal:
-```tsx
-className={cn(
-  "fixed bottom-[calc(env(safe-area-inset-bottom,0px)+6rem)] right-6 z-40 flex flex-col items-end gap-2 pointer-events-none transition-all duration-300",
-  !visible && !isOpen && "translate-y-24 opacity-0"
-)}
-```
+---
 
-### 4. Padding inferior já configurado
+### 2. Integrar no `expense-list.tsx`
 
-O `pb-44` (176px) no container principal do `Index.tsx` já garante espaço suficiente para o FAB em `bottom-24` (96px) + altura do FAB (56px) + margem. Sem alteração necessária.
+- Adicionar state: `const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null)`
+- Adicionar prop: `onDuplicateExpense?: (expense: Expense) => void`
+- No `<div>` de cada linha, adicionar `onClick={() => setSelectedExpense(expense)}` com `cursor-pointer`
+- Remover o `DropdownMenu` (3 pontos) de cada linha — as ações agora vivem no bottom sheet
+- Manter o botão de calculadora (se existir) como ação rápida na linha
+- Renderizar `<TransactionDetailSheet>` no final do componente
+
+---
+
+### 3. Integrar no `income-list.tsx`
+
+- Mesmo padrão: state `selectedIncome`, onClick na linha, remover DropdownMenu
+- Adicionar prop `onDuplicate?: (income: Income) => void`
+- Renderizar `<TransactionDetailSheet>` com dados de income
+
+---
+
+### 4. Propagar `onDuplicate` no `Index.tsx`
+
+- Adicionar handlers `handleDuplicateExpense` e `handleDuplicateIncome` que abrem o form sheet pré-preenchido com os dados da transação (mesma lógica do edit, mas sem ID — cria nova)
+- Passar as novas props para `<ExpenseList>` e `<IncomeList>`
 
 ---
 
@@ -76,7 +87,10 @@ O `pb-44` (176px) no container principal do `Index.tsx` já garante espaço sufi
 
 | Arquivo | Mudança |
 |---|---|
-| `floating-action-button.tsx` | FAB aberto: cor neutra (bg-muted-foreground), remover rotate-45; auto-hide ao rolar para baixo com transição suave |
+| `transaction-detail-sheet.tsx` | Novo componente — Drawer com detalhes + ações |
+| `expense-list.tsx` | Linha clicável → abre sheet; remove DropdownMenu |
+| `income-list.tsx` | Linha clicável → abre sheet; remove DropdownMenu |
+| `Index.tsx` | Adicionar handlers de duplicação e passar props |
 
-1 arquivo, ~15 linhas alteradas. Sem alteração de lógica.
+4 arquivos. Sem alteração de dados/backend.
 
