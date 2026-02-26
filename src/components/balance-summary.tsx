@@ -43,12 +43,12 @@ export function BalanceSummary({ totalIncome, totalExpense }: BalanceSummaryProp
       </div>
 
       {/* Saldo */}
-      <div className={`${balance >= 0 ? 'bg-primary/10 border-primary/20' : 'bg-orange-500/10 border-orange-500/20'} border rounded-lg p-3`}>
-        <div className={`flex items-center gap-1.5 ${balance >= 0 ? 'text-primary' : 'text-orange-600 dark:text-orange-400'} mb-1`}>
+      <div className={`${balance >= 0 ? 'bg-blue-500/10 border-blue-500/20' : 'bg-orange-500/10 border-orange-500/20'} border rounded-lg p-3`}>
+        <div className={`flex items-center gap-1.5 ${balance >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400'} mb-1`}>
           <Wallet className="h-4 w-4" />
           <span className="text-xs font-medium">Saldo</span>
         </div>
-        <p className={`text-sm font-bold truncate ${balance >= 0 ? 'text-primary' : 'text-orange-600 dark:text-orange-400'}`}>
+        <p className={`text-sm font-bold truncate ${balance >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400'}`}>
           {formatCurrency(balance)}
         </p>
       </div>
