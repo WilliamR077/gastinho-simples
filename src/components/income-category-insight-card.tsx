@@ -71,7 +71,7 @@ export function IncomeCategoryInsightCard({
 
   if (sorted.length === 0) {
     return (
-      <div className="rounded-lg border border-border/50 bg-card/50 backdrop-blur-sm p-4">
+      <div className="rounded-lg border border-border/40 bg-card shadow-sm p-4">
         <div className="flex items-center gap-2 text-sm font-medium text-green-600 dark:text-green-400 mb-2">
           <TrendingUp className="h-4 w-4" />
           Entradas por Categoria
@@ -85,7 +85,7 @@ export function IncomeCategoryInsightCard({
   const hasMore = sorted.length > 3;
 
   return (
-    <div className="rounded-lg border border-border/50 bg-card/50 backdrop-blur-sm p-4">
+    <div className="rounded-lg border border-border/40 bg-card shadow-sm p-4">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2 text-sm font-medium text-green-600 dark:text-green-400">
           <TrendingUp className="h-4 w-4" />

@@ -1493,7 +1493,7 @@ export default function Index() {
         onSignOut={handleSignOut}
       />
 
-      <div className="container mx-auto px-4 py-6 max-w-6xl" data-tour="welcome">
+      <div className="container mx-auto px-4 py-4 max-w-6xl" data-tour="welcome">
 
         {/* Context Selector */}
         <ContextSelector />
@@ -1581,7 +1581,7 @@ export default function Index() {
 
         {/* Main Content */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full" data-tour="tabs">
-          <TabsList className="grid w-full grid-cols-3 mb-4">
+          <TabsList className="grid w-full grid-cols-3 mb-3 bg-muted/50">
             <TabsTrigger value="expenses" className="data-[state=active]:text-red-600 dark:data-[state=active]:text-red-400">Despesas</TabsTrigger>
             <TabsTrigger value="incomes" className="data-[state=active]:text-green-600 dark:data-[state=active]:text-green-400">Entradas</TabsTrigger>
             <TabsTrigger value="goals" className="relative data-[state=active]:text-amber-600 dark:data-[state=active]:text-amber-400">

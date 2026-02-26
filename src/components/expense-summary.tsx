@@ -223,22 +223,22 @@ export function ExpenseSummary({
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
       <Card 
-        className={`bg-gradient-success border-border/50 shadow-elegant cursor-pointer hover:shadow-glow transition-all ${
-          activePaymentMethod === 'pix' ? 'ring-2 ring-success ring-offset-2 ring-offset-background' : ''
+        className={`bg-card border border-border/50 border-l-2 border-l-emerald-500 shadow-sm cursor-pointer hover:shadow-md transition-all ${
+          activePaymentMethod === 'pix' ? 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-background' : ''
         }`}
         onClick={() => onPaymentMethodClick?.('pix')}
       >
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium text-success-foreground">PIX</CardTitle>
-          <Smartphone className="h-4 w-4 text-success-foreground/80" />
+          <CardTitle className="text-xs font-medium text-muted-foreground">PIX</CardTitle>
+          <Smartphone className="h-4 w-4 text-emerald-500" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold text-success-foreground">
+          <div className="text-xl sm:text-2xl font-bold text-emerald-600 dark:text-emerald-400">
             {formatCurrency(totals.pix)}
           </div>
-          <p className="text-xs text-success-foreground/80">
+          <p className="text-xs text-muted-foreground">
             {expenses.filter(e => e.payment_method === 'pix').length + 
              activeRecurringExpenses.filter(e => e.payment_method === 'pix').length} transações
           </p>
@@ -246,32 +246,32 @@ export function ExpenseSummary({
       </Card>
 
       <Card 
-        className={`bg-gradient-primary border-border/50 shadow-elegant cursor-pointer hover:shadow-glow transition-all ${
-          activePaymentMethod === 'debit' ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''
+        className={`bg-card border border-border/50 border-l-2 border-l-blue-500 shadow-sm cursor-pointer hover:shadow-md transition-all ${
+          activePaymentMethod === 'debit' ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-background' : ''
         }`}
         onClick={() => onPaymentMethodClick?.('debit')}
       >
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium text-primary-foreground">Débito</CardTitle>
-          <CreditCard className="h-4 w-4 text-primary-foreground/80" />
+          <CardTitle className="text-xs font-medium text-muted-foreground">Débito</CardTitle>
+          <CreditCard className="h-4 w-4 text-blue-500" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold text-primary-foreground">
+          <div className="text-xl sm:text-2xl font-bold text-blue-600 dark:text-blue-400">
             {formatCurrency(totals.debit)}
           </div>
-          <p className="text-xs text-primary-foreground/80">
+          <p className="text-xs text-muted-foreground">
             {expenses.filter(e => e.payment_method === 'debit').length + 
              activeRecurringExpenses.filter(e => e.payment_method === 'debit').length} transações
           </p>
           {Object.keys(debitCardTotals).length > 0 && (
-            <div className="mt-2 space-y-1 pt-2 border-t border-primary-foreground/20">
+            <div className="mt-2 space-y-1 pt-2 border-t border-border/50">
               {Object.entries(debitCardTotals).map(([cardName, data]) => (
                 <div key={cardName} className="flex items-center gap-2 text-xs">
                   <div 
                     style={{ backgroundColor: data.color }} 
                     className="w-2 h-2 rounded-full"
                   />
-                  <span className="text-primary-foreground/80">
+                  <span className="text-muted-foreground">
                     {cardName}: {formatCurrency(data.total)}
                   </span>
                 </div>
@@ -282,17 +282,17 @@ export function ExpenseSummary({
       </Card>
 
       <Card 
-        className={`bg-gradient-card border-warning/50 shadow-elegant cursor-pointer hover:shadow-glow transition-all ${
-          activePaymentMethod === 'credit' ? 'ring-2 ring-warning ring-offset-2 ring-offset-background' : ''
+        className={`bg-card border border-border/50 border-l-2 border-l-amber-500 shadow-sm cursor-pointer hover:shadow-md transition-all ${
+          activePaymentMethod === 'credit' ? 'ring-2 ring-amber-500 ring-offset-2 ring-offset-background' : ''
         }`}
         onClick={() => onPaymentMethodClick?.('credit')}
       >
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium text-foreground">Crédito</CardTitle>
-          <CreditCard className="h-4 w-4 text-muted-foreground" />
+          <CardTitle className="text-xs font-medium text-muted-foreground">Crédito</CardTitle>
+          <CreditCard className="h-4 w-4 text-amber-500" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold text-warning">
+          <div className="text-xl sm:text-2xl font-bold text-amber-600 dark:text-amber-400">
             {formatCurrency(totals.credit)}
           </div>
           <p className="text-xs text-muted-foreground">
@@ -300,7 +300,7 @@ export function ExpenseSummary({
              activeRecurringExpenses.filter(e => e.payment_method === 'credit').length} transações
           </p>
           {Object.keys(creditCardTotals).length > 0 && (
-            <div className="mt-2 space-y-1 pt-2 border-t border-border">
+            <div className="mt-2 space-y-1 pt-2 border-t border-border/50">
               {Object.entries(creditCardTotals).map(([cardName, data]) => (
                 <div key={cardName} className="flex items-center gap-2 text-xs">
                   <div 
@@ -317,13 +317,13 @@ export function ExpenseSummary({
         </CardContent>
       </Card>
 
-      <Card className="bg-gradient-card border-border/50 shadow-elegant">
+      <Card className="bg-card border border-border/50 border-l-2 border-l-muted-foreground/50 shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium text-foreground">Total</CardTitle>
-          <TrendingUp className="h-4 w-4 text-primary" />
+          <CardTitle className="text-xs font-medium text-muted-foreground">Total</CardTitle>
+          <TrendingUp className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold text-primary">
+          <div className="text-xl sm:text-2xl font-bold text-foreground">
             {formatCurrency(totals.total)}
           </div>
           <p className="text-xs text-muted-foreground">
@@ -336,7 +336,7 @@ export function ExpenseSummary({
           )}
 
           {budgetProgress.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-border space-y-2">
+            <div className="mt-3 pt-3 border-t border-border/50 space-y-2">
               <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
                 <Target className="h-3 w-3" />
                 <span>Metas do Mês</span>

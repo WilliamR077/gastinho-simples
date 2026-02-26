@@ -1,7 +1,6 @@
 import { useState, useMemo } from "react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { PartyPopper, Scale, TrendingUp, X } from "lucide-react";
+import { PartyPopper, Scale, X, ChevronRight } from "lucide-react";
 import { BudgetGoal } from "@/types/budget-goal";
 import { Income, RecurringIncome } from "@/types/income";
 import { Expense } from "@/types/expense";
@@ -32,28 +31,22 @@ export function BalanceGoalBanner({
   const balanceGoalsProgress = useMemo(() => {
     const currentMonth = selectedMonth.getMonth();
     const currentYear = selectedMonth.getFullYear();
-
     const monthlyIncomes = incomes.filter((inc) => {
       const date = parseLocalDate(inc.income_date);
       return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
     });
-
     const monthlyExpenses = expenses.filter((exp) => {
       const date = parseLocalDate(exp.expense_date);
       return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
     });
-
     const activeRecurringIncomes = recurringIncomes.filter((ri) => ri.is_active);
     const activeRecurringExpenses = recurringExpenses.filter((re) => re.is_active);
-
     const totalIncome =
       monthlyIncomes.reduce((sum, inc) => sum + Number(inc.amount), 0) +
       activeRecurringIncomes.reduce((sum, ri) => sum + Number(ri.amount), 0);
-
     const totalExpense =
       monthlyExpenses.reduce((sum, exp) => sum + Number(exp.amount), 0) +
       activeRecurringExpenses.reduce((sum, re) => sum + Number(re.amount), 0);
-
     const balance = totalIncome - totalExpense;
 
     return budgetGoals
@@ -69,67 +62,36 @@ export function BalanceGoalBanner({
 
   if (isDismissed || balanceGoalsProgress.length === 0) return null;
 
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
-
   const achieved = balanceGoalsProgress.filter((g) => g.percentage >= 100);
   const almostThere = balanceGoalsProgress.filter((g) => g.percentage < 100);
 
+  const message = achieved.length > 0
+    ? "🌟 Meta de saldo atingida!"
+    : "💪 Quase lá! Meta de saldo a caminho";
+
+  const IconComp = achieved.length > 0 ? PartyPopper : Scale;
+
   return (
-    <Alert
-      className="mb-4 border-blue-500/50 bg-blue-500/10 cursor-pointer hover:bg-blue-500/15 transition-colors"
+    <div
+      className="mb-3 flex items-center gap-3 rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-2 cursor-pointer hover:bg-blue-500/10 transition-colors"
       onClick={onNavigateToGoals}
     >
-      {achieved.length > 0 ? (
-        <PartyPopper className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-      ) : (
-        <Scale className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-      )}
-      <div className="flex items-start justify-between flex-1">
-        <div className="flex-1">
-          <AlertDescription className="text-blue-700 dark:text-blue-300 font-medium">
-            {achieved.length > 0 && (
-              <div className="mb-1">
-                <strong>🌟 Meta de saldo atingida!</strong>
-                <div className="text-sm font-normal mt-1">
-                  {achieved.slice(0, 2).map(({ goal, balance }) => (
-                    <div key={goal.id}>
-                      Incrível! Seu saldo está positivo em {formatCurrency(balance)}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {almostThere.length > 0 && (
-              <div>
-                <strong>💪 Quase lá! Meta de saldo a caminho</strong>
-                <div className="text-sm font-normal mt-1">
-                  {almostThere.slice(0, 2).map(({ goal, percentage, remaining }) => (
-                    <div key={goal.id}>
-                      Você já está em {percentage.toFixed(0)}% da meta! Faltam {formatCurrency(remaining)}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div className="text-xs mt-2 flex items-center gap-1 text-muted-foreground">
-              <TrendingUp className="h-3 w-3" />
-              Clique para ver detalhes das suas metas
-            </div>
-          </AlertDescription>
-        </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6 shrink-0 ml-2"
-          onClick={(e) => {
-            e.stopPropagation();
-            setIsDismissed(true);
-          }}
-        >
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
-    </Alert>
+      <IconComp className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+      <span className="text-xs font-medium text-blue-700 dark:text-blue-300 flex-1 truncate">{message}</span>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 px-2 text-xs text-blue-700 dark:text-blue-300 hover:text-blue-800 shrink-0"
+        onClick={(e) => { e.stopPropagation(); onNavigateToGoals(); }}
+      >
+        Ver <ChevronRight className="h-3 w-3 ml-0.5" />
+      </Button>
+      <button
+        className="text-muted-foreground hover:text-foreground shrink-0"
+        onClick={(e) => { e.stopPropagation(); setIsDismissed(true); }}
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
   );
 }
