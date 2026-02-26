@@ -95,7 +95,7 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onSendTo
 
   if (expenses.length === 0) {
     return (
-      <Card className="bg-gradient-card border-border/50 shadow-card backdrop-blur-sm">
+      <Card className="bg-card border border-border/40 shadow-sm">
         <CardContent className="flex flex-col items-center justify-center py-12">
           <Receipt className="h-12 w-12 text-muted-foreground mb-4" />
           <p className="text-muted-foreground text-center">
@@ -109,9 +109,9 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onSendTo
   }
 
   return (
-    <Card className="bg-gradient-card border-border/50 shadow-card backdrop-blur-sm">
-      <CardHeader>
-        <CardTitle className="text-primary">Suas Despesas</CardTitle>
+    <Card className="bg-card border border-border/40 shadow-sm">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base font-semibold text-foreground">Suas Despesas</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
@@ -124,7 +124,7 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onSendTo
             return (
               <div
                 key={expense.id}
-                className="flex flex-col p-4 rounded-lg border bg-card/50 hover:bg-card/80 transition-all duration-300 hover:shadow-card"
+                className="flex flex-col p-3 rounded-lg border border-border/30 bg-card hover:bg-muted/30 transition-all duration-200 hover:shadow-sm"
               >
                 {/* Linha 1 - Cabeçalho com ícone, categoria e nome */}
                 <div className="flex items-center gap-3">
@@ -145,8 +145,8 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onSendTo
                   </div>
                 </div>
                 
-                {/* Linha 2 - Categoria e Data da Despesa */}
-                <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2 ml-11">
+                {/* Linha 2 - Categoria e Data */}
+                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1.5 ml-11">
                   <span>{categoryDisplay.label}</span>
                   <span>•</span>
                   <span>{parseLocalDate(expense.expense_date).toLocaleDateString('pt-BR')}</span>
@@ -162,8 +162,8 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onSendTo
                   }).replace(',', ' às')}
                 </div>
                 
-                {/* Linha 4 - Badge da forma de pagamento e grupo */}
-                <div className="mt-2 ml-11 flex flex-wrap gap-2">
+                {/* Linha 4 - Badge */}
+                <div className="mt-1.5 ml-11 flex flex-wrap gap-2">
                   <Badge 
                     className="text-xs text-white"
                     style={{ backgroundColor: cardColor || '#6B7280' }}
@@ -196,9 +196,9 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onSendTo
                   </div>
                 )}
                 
-                {/* Linha 5 - Preço (esquerda), Calculadora e Menu (direita) */}
-                <div className="flex items-center justify-between mt-3">
-                  <p className="font-bold text-lg text-primary">
+                {/* Linha 5 - Preço e Ações */}
+                <div className="flex items-center justify-between mt-2">
+                  <p className="font-bold text-base text-red-500 dark:text-red-400">
                     {formatCurrency(expense.amount)}
                   </p>
                 <div className="flex items-center gap-1">

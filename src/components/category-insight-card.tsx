@@ -89,8 +89,8 @@ export function CategoryInsightCard({
 
   if (sorted.length === 0) {
     return (
-      <div className="rounded-lg border border-border/50 bg-card/50 backdrop-blur-sm p-4">
-        <div className="flex items-center gap-2 text-sm font-medium text-primary mb-2">
+      <div className="rounded-lg border border-border/40 bg-card shadow-sm p-4">
+        <div className="flex items-center gap-2 text-sm font-medium text-red-500 dark:text-red-400 mb-2">
           <TrendingUp className="h-4 w-4" />
           Gastos por Categoria
         </div>
@@ -103,13 +103,13 @@ export function CategoryInsightCard({
   const hasMore = sorted.length > 3;
 
   return (
-    <div className="rounded-lg border border-border/50 bg-card/50 backdrop-blur-sm p-4" data-tour="category-summary">
+    <div className="rounded-lg border border-border/40 bg-card shadow-sm p-4" data-tour="category-summary">
       <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2 text-sm font-medium text-primary">
+        <div className="flex items-center gap-2 text-sm font-medium text-red-500 dark:text-red-400">
           <TrendingUp className="h-4 w-4" />
           Gastos por Categoria
         </div>
-        <span className="text-sm font-bold text-primary">{fmt(totalAmount)}</span>
+        <span className="text-sm font-bold text-red-500 dark:text-red-400">{fmt(totalAmount)}</span>
       </div>
 
       <div className="space-y-2.5">
@@ -125,10 +125,10 @@ export function CategoryInsightCard({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-sm font-medium text-foreground truncate">{data.name}</span>
-                  <span className="text-sm font-semibold text-primary ml-2">{fmt(data.total)}</span>
+                  <span className="text-sm font-semibold text-red-500 dark:text-red-400 ml-2">{fmt(data.total)}</span>
                 </div>
                 <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
-                  <div className="bg-gradient-primary h-full rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+                  <div className="bg-red-500 h-full rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
                 </div>
               </div>
               <span className="text-xs text-muted-foreground w-10 text-right flex-shrink-0">{pct.toFixed(0)}%</span>

@@ -130,11 +130,11 @@ export function CompactFilterBar({
     : "Período";
 
   return (
-    <div className="rounded-lg border border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden" data-tour="expense-filters">
+    <div className="rounded-lg border border-border/40 bg-card shadow-sm overflow-hidden" data-tour="expense-filters">
       {/* Compact bar */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors"
+        className="w-full flex items-center justify-between px-3 py-2 hover:bg-muted/30 transition-colors"
       >
         <div className="flex items-center gap-2 text-sm">
           <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />

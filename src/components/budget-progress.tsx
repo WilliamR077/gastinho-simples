@@ -264,12 +264,12 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
     return (
       <Card 
         key={goal.id} 
-        className={`transition-all ${config.borderColor} ${alertLevel !== 'safe' ? config.bgColor : ''}`}
+        className={`transition-all shadow-sm ${config.borderColor} ${alertLevel !== 'safe' ? config.bgColor : 'bg-card'}`}
       >
-        <CardHeader>
+        <CardHeader className="pb-2">
           <div className="flex items-start justify-between">
             <div className="flex-1">
-              <CardTitle className="text-lg flex items-center gap-2">
+              <CardTitle className="text-base flex items-center gap-2">
                 {goal.type === "category" && goal.category && (
                   <span>{categoryIcons[goal.category]}</span>
                 )}
@@ -279,14 +279,14 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
                   ? categoryLabels[goal.category]
                   : "Categoria"}
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-xs">
                 Meta: {formatCurrency(limit)}
               </CardDescription>
             </div>
             {renderGoalMenu(goal)}
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3 pt-0">
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span>Gasto: {formatCurrency(totalValue)}</span>
@@ -359,17 +359,17 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
     return (
       <Card 
         key={goal.id} 
-        className={`transition-all ${
+        className={`transition-all shadow-sm ${
           incomeLevel === 'exceeded' ? 'border-green-500 bg-green-500/10' :
           incomeLevel === 'reached' ? 'border-green-500 bg-green-500/10' :
           incomeLevel === 'almost' ? 'border-green-400/50 bg-green-400/5' :
-          ''
+          'bg-card'
         }`}
       >
-        <CardHeader>
+        <CardHeader className="pb-2">
           <div className="flex items-start justify-between">
             <div className="flex-1">
-              <CardTitle className="text-lg flex items-center gap-2">
+              <CardTitle className="text-base flex items-center gap-2">
                 {goal.type === "income_category" && goal.category && (
                   <span>{incomeCatIcon}</span>
                 )}
@@ -379,14 +379,14 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
                   ? incomeCatName
                   : "Categoria"}
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-xs">
                 Meta: {formatCurrency(limit)}
               </CardDescription>
             </div>
             {renderGoalMenu(goal)}
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3 pt-0">
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span>Ganho: {formatCurrency(totalValue)}</span>
@@ -488,27 +488,27 @@ export function BudgetProgress({ goals, expenses, recurringExpenses, incomes, re
     return (
       <Card
         key={goal.id}
-        className={`transition-all ${
+        className={`transition-all shadow-sm ${
           isOver ? 'border-blue-500 bg-blue-500/10' :
           percentage >= 80 ? 'border-blue-400/50 bg-blue-400/5' :
-          ''
+          'bg-card'
         }`}
       >
-        <CardHeader>
+        <CardHeader className="pb-2">
           <div className="flex items-start justify-between">
             <div className="flex-1">
-              <CardTitle className="text-lg flex items-center gap-2">
+              <CardTitle className="text-base flex items-center gap-2">
                 <Scale className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                 Meta de Saldo
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-xs">
                 Meta: {formatCurrency(limit)}
               </CardDescription>
             </div>
             {renderGoalMenu(goal)}
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3 pt-0">
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span>Saldo atual: {formatCurrency(totalValue)}</span>
