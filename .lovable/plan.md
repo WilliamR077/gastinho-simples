@@ -1,89 +1,100 @@
 
 
-## Plano: Metas premium e menos agressivas
+## Plano: Remover padrões web e otimizar para mobile
 
-Apenas UI/estilo/layout — sem alterar lógica, cálculos ou dados.
+Apenas UI/estilo/layout — sem alterar backend, dados ou rotas.
 
 ---
 
-### 1. Alertas → banners slim (1–2 linhas)
+### 1. Substituir paginação por "Carregar mais"
 
-**Arquivo: `src/components/budget-progress.tsx`**
+**Arquivo: `src/components/expense-list.tsx`**
 
-Substituir os blocos `<Alert>` grandes (linhas 316-343, 416-443, 538-554) por banners inline slim:
+- Remover imports de Pagination (linhas 8-16): `PaginationContent`, `PaginationEllipsis`, `PaginationItem`, `PaginationLink`, `PaginationNext`, `PaginationPrevious`
+- Trocar `currentPage` state por `visibleCount` state, iniciando em 10
+- Em vez de `currentExpenses = expenses.slice(startIndex, endIndex)`, usar `currentExpenses = expenses.slice(0, visibleCount)`
+- Substituir bloco de paginação (linhas 204-239) por botão "Carregar mais":
+```tsx
+{visibleCount < expenses.length && (
+  <div className="py-4 px-4">
+    <Button
+      variant="outline"
+      size="sm"
+      className="w-full touch-manipulation"
+      onClick={() => setVisibleCount(v => Math.min(v + 10, expenses.length))}
+    >
+      Carregar mais ({expenses.length - visibleCount} restantes)
+    </Button>
+  </div>
+)}
+```
+- Remover lógica `totalPages`, `startIndex`, `endIndex`, `currentPage > totalPages`
 
-```text
-Antes:
-┌──────────────────────────────────────────┐
-│ ⚠️  Alerta! Você está quase estourando   │
-│     a meta.                              │
-│     Restam apenas R$ 50,00 para não      │
-│     estourar.                            │
-└──────────────────────────────────────────┘
+**Arquivo: `src/components/income-list.tsx`**
 
-Depois:
-│ ⚠️ Quase no limite · restam R$ 50   [Ajustar] │
+- Mesmo padrão: trocar `currentPage` por `visibleCount` (início 10)
+- Remover imports de `ChevronLeft`, `ChevronRight` (linha 15)
+- Substituir paginação com setas (linhas 143-164) por botão "Carregar mais"
+- Remover `totalPages`, `startIndex`
+
+---
+
+### 2. Remover footer longo do mobile (autenticado)
+
+**Arquivo: `src/components/footer.tsx`**
+
+Para usuários autenticados, simplificar drasticamente o footer — remover grid de links (Início, Relatórios, Cartões, Conta, Assinatura, Configurações) que já estão no menu drawer. Manter apenas:
+
+- Versículo bíblico
+- Copyright
+- Link "Política de Privacidade" (único link útil que não está no drawer)
+
+Trocar o bloco autenticado (linhas 52-82) por:
+```tsx
+{isAuthenticated ? (
+  <div className="space-y-2 text-center">
+    <button onClick={() => navigate("/privacy")} className="text-xs text-muted-foreground hover:text-foreground">
+      Política de Privacidade
+    </button>
+  </div>
+) : (
+  // manter bloco visitor como está
+)}
 ```
 
-- Remover `<Alert>` + `<AlertDescription>` com blocos multi-linha
-- Substituir por `<div className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs">` com:
-  - Ícone (h-3.5 w-3.5) + texto curto inline (1 linha) + botão "Ajustar" (chama `onEdit(goal)`)
-  - Fundo: sem fundo saturado, apenas `border-l-2` com cor semântica
-- Para despesas: `border-l-2 border-destructive/50 bg-muted/50` + texto `text-xs text-muted-foreground`
-- Para entradas: `border-l-2 border-green-500/50 bg-muted/50`
-- Para saldo: `border-l-2 border-blue-500/50 bg-muted/50`
+Reduzir padding: `pt-10` → `pt-6`, `space-y-8` → `space-y-4`, remover logo duplicada (já está no header).
 
-### 2. Cards de meta → fundo neutro, cor apenas em acentos
+---
+
+### 3. FAB não sobrepor conteúdo — padding nas páginas com footer
+
+O `pb-44` no `Index.tsx` já cobre o FAB. Porém, o `<Footer>` fica APÓS o container `pb-44`, então não há problema. O FAB só existe no Index.tsx. Sem alteração adicional necessária.
+
+---
+
+### 4. Texto duplicado "Restam R$" no card Limite Mensal Total
 
 **Arquivo: `src/components/budget-progress.tsx`**
 
-**Expense goals (renderExpenseGoal, linha 265-267):**
-- Remover `${config.bgColor}` do Card className
-- Usar sempre `bg-card` como fundo, independente do alert level
-- Manter `border-l-2 ${config.borderColor}` como acento lateral (substituindo borda completa colorida)
-- Resultado: `className="transition-all shadow-sm bg-card border-border/40 border-l-2 ${config.borderColor}"`
+No `renderExpenseGoal`, quando `alertLevel !== 'safe'`, há duplicação:
+- Linha 311: `Restam {formatCurrency(remaining)}` (texto abaixo da barra)
+- Linha 322: `Restam {formatCurrency(remaining)}` (banner slim)
 
-**Income goals (renderIncomeGoal, linhas 362-367):**
-- Remover `bg-green-500/10`, `bg-green-400/5` — usar `bg-card` sempre
-- Acento lateral: `border-l-2 border-green-500/50`
+Solução: quando o banner slim está visível (alertLevel !== 'safe'), ocultar a linha 302-314 ("Restam/Excedeu" abaixo da barra de progresso), pois o banner já comunica a mesma informação com CTA.
 
-**Balance goals (renderBalanceGoal, linhas 491-495):**
-- Remover `bg-blue-500/10`, `bg-blue-400/5` — usar `bg-card` sempre  
-- Acento lateral: `border-l-2 border-blue-500/50`
-
-### 3. Padronizar layout das 3 categorias de meta
-
-Todas as metas (despesa, entrada, saldo) seguirão o mesmo layout compacto:
-
-```text
-┌─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─┐
-│ 🍔 Alimentação                          ⋮    │
-│ Meta: R$ 500    Gasto: R$ 420    84.0%        │
-│ ████████████████████░░░░                      │
-│ ⚠️ Restam R$ 80                    [Ajustar]  │
-└─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─┘
+Substituir linhas 302-314 por:
+```tsx
+{alertLevel === 'safe' && (
+  <div className="flex items-center justify-between text-xs">
+    <div className="flex items-center gap-1 text-muted-foreground">
+      <TrendingDown className="h-3.5 w-3.5" />
+      <span>Restam {formatCurrency(remaining)}</span>
+    </div>
+  </div>
+)}
 ```
 
-- CardHeader: `pb-1` (era `pb-2`) — mais compacto
-- CardContent: `space-y-2` (era `space-y-3`)
-- Linha de valores: `flex justify-between text-xs` (era `text-sm`)
-- Progress bar: `h-2` (era `h-4` default) — barra mais fina e elegante
-- Linha inferior: banner slim inline (item 1)
-
-### 4. Espaçamento entre seções
-
-**Arquivo: `src/components/budget-progress.tsx`**
-
-- Linha 561: trocar `space-y-4` por `space-y-3` (12px entre cards)
-- CardHeader padding: `p-4 pb-1` (compactar)
-- CardContent padding: `px-4 pb-3 pt-0`
-
-### 5. Form "Definir Nova Meta" — neutralizar
-
-**Arquivo: `src/components/budget-goals-form.tsx`**
-
-- Linha 60: trocar `bg-gradient-card border-border/50 shadow-card backdrop-blur-sm` por `bg-card border border-border/40 shadow-sm`
-- Linha 62: trocar `text-primary` por `text-foreground`
+Assim: quando safe → mostra "Restam" abaixo da barra; quando warning/danger/critical → mostra apenas o banner slim com "Restam/Estourou" + botão Ajustar, sem duplicação.
 
 ---
 
@@ -91,8 +102,10 @@ Todas as metas (despesa, entrada, saldo) seguirão o mesmo layout compacto:
 
 | Arquivo | Mudança |
 |---|---|
-| `budget-progress.tsx` | Cards neutros (bg-card + border-l-2), alertas slim 1 linha, progress h-2, espaçamento compacto |
-| `budget-goals-form.tsx` | Card neutro, título sem cor primária |
+| `expense-list.tsx` | Paginação → "Carregar mais" com `visibleCount` |
+| `income-list.tsx` | Paginação → "Carregar mais" com `visibleCount` |
+| `footer.tsx` | Remover grid de links para autenticados, manter só privacidade + copyright |
+| `budget-progress.tsx` | Remover texto "Restam" duplicado quando banner slim está visível |
 
-2 arquivos. Sem alteração de lógica.
+4 arquivos. Sem alteração de lógica ou dados.
 
