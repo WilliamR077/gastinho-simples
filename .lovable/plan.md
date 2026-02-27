@@ -1,68 +1,29 @@
 
 
-## Plano: Melhorias 1–4
+## Plano: Melhorias 1–4 ✅ Concluído
 
 ---
 
-### 1. Bug: porcentagem errada nas Metas do Mês
+### 1. ✅ Bug: porcentagem errada nas Metas do Mês
 
-**Arquivo: `src/components/expense-summary.tsx`**
+Corrigido: `budgetProgress` agora usa `expenses` (filtrado pelo mês selecionado) em vez de `monthlyExpenses` (que usava o mês do sistema).
 
-O `budgetProgress` usa `monthlyExpenses` que filtra por `currentMonth`/`currentYear` (data do sistema). Quando o usuário navega para Janeiro mas estamos em Fevereiro, o cálculo fica errado.
+### 2. ✅ Build error + Botão "Ver mais"
 
-**Correção:**
-- Substituir `monthlyExpenses` por `expenses` no cálculo de `budgetProgress` (linhas 196–204) — `expenses` já vem filtrado pelo mês selecionado no navegador
-- Substituir `recurringActive` por `activeRecurringExpenses` (já calculado acima com os mesmos filtros de período)
-- Remover o `useMemo` de `monthlyExpenses` (linhas 177–185) e `recurringActive` (linhas 187–189) — não mais necessários
+- Removido `className="bg-[#101013]"` inválido do `ExpenseSummary` em `Index.tsx`
+- Adicionado prop `onNavigateToGoals` e botão "Ver mais" após as metas
 
----
+### 3. ✅ Bottom sheet para despesas fixas
 
-### 2. Build error + Botão "Ver mais"
+- `recurring-expense-list.tsx`: linhas clicáveis abrem `TransactionDetailSheet`
+- `transaction-detail-sheet.tsx`: suporta `recurringExpense` com "Dia do mês" e switch Ativo/Inativo
 
-**Arquivo: `src/pages/Index.tsx` linha 1566**
-- Remover `className="bg-[#101013]"` do `ExpenseSummary`
-- Adicionar prop `onNavigateToGoals={() => setActiveTab("goals")}`
+### 4. ✅ Bottom sheet para entradas fixas
 
-**Arquivo: `src/components/expense-summary.tsx`**
-- Adicionar prop `onNavigateToGoals?: () => void` na interface
-- Após as metas (`budgetProgress.slice(0, 3).map(...)`), renderizar botão "Ver mais" que chama `onNavigateToGoals`
+- `recurring-income-list.tsx`: mesmo padrão com `TransactionDetailSheet`
 
 ---
 
-### 3. Bottom sheet para despesas fixas
+### Pendente: Melhoria 5
 
-**Arquivo: `src/components/recurring-expense-list.tsx`**
-- Adicionar state `selectedExpense`
-- Tornar linha clicável (`onClick`)
-- Remover `DropdownMenu`
-- Renderizar `TransactionDetailSheet` com ações: Editar, Ativar/Desativar, Excluir
-- Adicionar props `onDuplicate?: (expense: RecurringExpense) => void`
-
-**Arquivo: `src/components/transaction-detail-sheet.tsx`**
-- Estender interface para aceitar `recurringExpense?: RecurringExpense | null` e `recurringIncome?: RecurringIncome | null`
-- Quando recurring: mostrar "Dia X do mês" em vez de data, mostrar status Ativo/Inativo
-- Adicionar prop opcional `onToggleActive?: (id: string, isActive: boolean) => void` para o switch
-- Substituir botão "Duplicar" por switch "Ativo/Inativo" quando for recurring
-
----
-
-### 4. Bottom sheet para entradas fixas
-
-**Arquivo: `src/components/recurring-income-list.tsx`**
-- Mesmo padrão: state `selectedIncome`, linha clicável, remover `DropdownMenu`, remover `AlertDialog` inline
-- Renderizar `TransactionDetailSheet` com ações: Editar, Ativar/Desativar, Excluir
-
----
-
-### Resumo
-
-| Arquivo | Mudança |
-|---|---|
-| `expense-summary.tsx` | Corrigir cálculo de % + adicionar prop/botão "Ver mais" |
-| `Index.tsx` | Remover className inválido + passar `onNavigateToGoals` |
-| `transaction-detail-sheet.tsx` | Suportar recurring expenses/incomes |
-| `recurring-expense-list.tsx` | Linha clicável → bottom sheet; remover DropdownMenu |
-| `recurring-income-list.tsx` | Linha clicável → bottom sheet; remover DropdownMenu e AlertDialog |
-
-5 arquivos.
-
+- Tirar espaço preto abaixo do footer (`pb-44` → `pb-24` em Index.tsx)
