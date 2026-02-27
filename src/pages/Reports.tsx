@@ -12,12 +12,12 @@ import { ContextSelector } from "@/components/context-selector";
 import { useSharedGroups } from "@/hooks/use-shared-groups";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Download, Loader2, Lock, Crown } from "lucide-react";
-import { ThemeToggle } from "@/components/theme-toggle";
+
 import { startOfMonth, endOfMonth } from "date-fns";
 import { exportReportsToPDF } from "@/services/pdf-export-service";
 import { toast } from "sonner";
 import { useSubscription } from "@/hooks/use-subscription";
-import { Footer } from "@/components/footer";
+
 import {
   Dialog,
   DialogContent,
@@ -247,7 +247,7 @@ const Reports = () => {
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Voltar
               </Button>
-              <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+              <h1 className="text-xl sm:text-2xl font-bold text-foreground">
                 Relatórios
               </h1>
             </div>
@@ -266,9 +266,8 @@ const Reports = () => {
                 ) : (
                   <Lock className="w-3 h-3 sm:w-4 sm:h-4" />
                 )}
-                <span className="hidden sm:inline">Exportar PDF</span>
+                Exportar
               </Button>
-              <ThemeToggle />
             </div>
           </div>
         </div>
@@ -339,7 +338,6 @@ const Reports = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <Footer />
     </div>
   );
 };
