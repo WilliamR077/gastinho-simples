@@ -1,29 +1,18 @@
 
 
-## Plano: Melhorias 1–4 ✅ Concluído
+## Plano: Remover espaço preto abaixo do footer
 
----
+**Arquivo: `src/pages/Index.tsx` linha 1515**
 
-### 1. ✅ Bug: porcentagem errada nas Metas do Mês
+Reduzir `pb-44` (176px) para `pb-24` (96px) — mantém espaço suficiente para o FAB flutuante sem criar espaço preto visível abaixo do footer.
 
-Corrigido: `budgetProgress` agora usa `expenses` (filtrado pelo mês selecionado) em vez de `monthlyExpenses` (que usava o mês do sistema).
+```tsx
+// De:
+<div className="min-h-screen bg-background pb-44">
 
-### 2. ✅ Build error + Botão "Ver mais"
+// Para:
+<div className="min-h-screen bg-background pb-24">
+```
 
-- Removido `className="bg-[#101013]"` inválido do `ExpenseSummary` em `Index.tsx`
-- Adicionado prop `onNavigateToGoals` e botão "Ver mais" após as metas
+1 arquivo, 1 linha.
 
-### 3. ✅ Bottom sheet para despesas fixas
-
-- `recurring-expense-list.tsx`: linhas clicáveis abrem `TransactionDetailSheet`
-- `transaction-detail-sheet.tsx`: suporta `recurringExpense` com "Dia do mês" e switch Ativo/Inativo
-
-### 4. ✅ Bottom sheet para entradas fixas
-
-- `recurring-income-list.tsx`: mesmo padrão com `TransactionDetailSheet`
-
----
-
-### Pendente: Melhoria 5
-
-- Tirar espaço preto abaixo do footer (`pb-44` → `pb-24` em Index.tsx)
