@@ -4,7 +4,6 @@ import { RecurringExpense } from "@/types/recurring-expense";
 import { BudgetGoal } from "@/types/budget-goal";
 import { Progress } from "@/components/ui/progress";
 import { useMemo } from "react";
-import { parseLocalDate } from "@/lib/utils";
 import { useValuesVisibility } from "@/hooks/use-values-visibility";
 import { useCategories } from "@/hooks/use-categories";
 
@@ -18,6 +17,7 @@ interface ExpenseSummaryProps {
   onPaymentMethodClick?: (method: PaymentMethod) => void;
   activePaymentMethod?: PaymentMethod;
   budgetGoals?: BudgetGoal[];
+  onNavigateToGoals?: () => void;
 }
 
 export function ExpenseSummary({
@@ -29,7 +29,8 @@ export function ExpenseSummary({
   creditCardConfig,
   onPaymentMethodClick,
   activePaymentMethod,
-  budgetGoals = []
+  budgetGoals = [],
+  onNavigateToGoals
 }: ExpenseSummaryProps) {
   const totals = expenses.reduce(
     (acc, expense) => {
@@ -144,8 +145,6 @@ export function ExpenseSummary({
     debitCardTotals[cardName].total += expense.amount;
   });
 
-  const currentMonth = new Date().getMonth();
-  const currentYear = new Date().getFullYear();
   const { isHidden } = useValuesVisibility();
   const { categories: expenseCategories } = useCategories();
 
@@ -174,32 +173,18 @@ export function ExpenseSummary({
   const formatCurrency = (value: number) =>
   isHidden ? "R$ ***,**" : `R$ ${value.toFixed(2).replace('.', ',')}`;
 
-  const monthlyExpenses = useMemo(() => {
-    return expenses.filter((expense) => {
-      const expenseDate = parseLocalDate(expense.expense_date);
-      return (
-        expenseDate.getMonth() === currentMonth &&
-        expenseDate.getFullYear() === currentYear);
-
-    });
-  }, [expenses, currentMonth, currentYear]);
-
-  const recurringActive = useMemo(() => {
-    return recurringExpenses.filter((re) => re.is_active);
-  }, [recurringExpenses]);
-
   const budgetProgress = useMemo(() => {
     return budgetGoals.map((goal) => {
       let totalSpent = 0;
 
       if (goal.type === "monthly_total") {
-        totalSpent = monthlyExpenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
-        totalSpent += recurringActive.reduce((sum, re) => sum + Number(re.amount), 0);
+        totalSpent = expenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
+        totalSpent += activeRecurringExpenses.reduce((sum, re) => sum + Number(re.amount), 0);
       } else if (goal.type === "category" && goal.category) {
-        totalSpent = monthlyExpenses.
+        totalSpent = expenses.
         filter((exp) => expenseMatchesGoalCategory(exp.category, exp.category_id, goal.category!)).
         reduce((sum, exp) => sum + Number(exp.amount), 0);
-        totalSpent += recurringActive.
+        totalSpent += activeRecurringExpenses.
         filter((re) => expenseMatchesGoalCategory(re.category, re.category_id, goal.category!)).
         reduce((sum, re) => sum + Number(re.amount), 0);
       }
@@ -210,7 +195,7 @@ export function ExpenseSummary({
 
       return { goal, totalSpent, limit, percentage, remaining };
     });
-  }, [budgetGoals, monthlyExpenses, recurringActive]);
+  }, [budgetGoals, expenses, activeRecurringExpenses]);
 
   const getStatusIcon = (percentage: number) => {
     if (percentage >= 100) return <AlertTriangle className="h-3 w-3 text-destructive" />;
@@ -329,7 +314,7 @@ export function ExpenseSummary({
             <Target className="h-3 w-3" />
             <span className="text-left mx-0 px-0 ml-0">Metas do Mês</span>
           </div>
-          {budgetProgress.slice(0, 3).map(({ goal, percentage }) => {
+        {budgetProgress.slice(0, 3).map(({ goal, percentage }) => {
           const progressValue = Math.min(percentage, 100);
           return (
             <div key={goal.id} className="space-y-1">
@@ -358,6 +343,14 @@ export function ExpenseSummary({
               </div>);
 
         })}
+          {onNavigateToGoals && (
+            <button
+              onClick={onNavigateToGoals}
+              className="w-full text-xs text-primary font-medium mt-2 py-1.5 hover:underline"
+            >
+              Ver mais
+            </button>
+          )}
         </div>
       }
     </div>);

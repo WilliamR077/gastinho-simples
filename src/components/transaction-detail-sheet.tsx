@@ -1,12 +1,15 @@
 import { Expense, categoryLabels, categoryIcons, ExpenseCategory } from "@/types/expense";
 import { Income, incomeCategoryLabels, incomeCategoryIcons } from "@/types/income";
+import { RecurringExpense } from "@/types/recurring-expense";
+import { RecurringIncome } from "@/types/income";
 import { useCategories } from "@/hooks/use-categories";
 import { useIncomeCategories } from "@/hooks/use-income-categories";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Pencil, Copy, Trash2, CreditCard, Smartphone, Calendar, Tag, Clock, Users } from "lucide-react";
+import { Pencil, Copy, Trash2, CreditCard, Smartphone, Calendar, Tag, Clock, Users, Power } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import {
   Drawer,
   DrawerContent,
@@ -18,12 +21,15 @@ import {
 interface TransactionDetailSheetProps {
   expense?: Expense | null;
   income?: Income | null;
+  recurringExpense?: RecurringExpense | null;
+  recurringIncome?: RecurringIncome | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onEdit: () => void;
-  onDuplicate: () => void;
+  onDuplicate?: () => void;
   onDelete: () => void;
-  formatCurrency: (value: number) => string;
+  formatCurrency?: (value: number) => string;
+  onToggleActive?: (id: string, isActive: boolean) => void;
 }
 
 const paymentMethodLabels: Record<string, string> = {
@@ -47,24 +53,28 @@ const parseLocalDate = (dateString: string): Date => {
 export function TransactionDetailSheet({
   expense,
   income,
+  recurringExpense,
+  recurringIncome,
   open,
   onOpenChange,
   onEdit,
   onDuplicate,
   onDelete,
+  onToggleActive,
 }: TransactionDetailSheetProps) {
   const { categories } = useCategories();
   const { categories: incomeCats } = useIncomeCategories();
 
-  const isExpense = !!expense;
-  const transaction = expense || income;
+  const isRecurring = !!recurringExpense || !!recurringIncome;
+  const isExpense = !!expense || !!recurringExpense;
+  const transaction = expense || income || recurringExpense || recurringIncome;
   if (!transaction) return null;
 
   // Category info
   let catIcon = "📦";
   let catName = "Outros";
 
-  if (isExpense && expense) {
+  if (expense) {
     if (expense.category_name) {
       catIcon = expense.category_icon || "📦";
       catName = expense.category_name;
@@ -74,6 +84,17 @@ export function TransactionDetailSheet({
     } else {
       catIcon = categoryIcons[expense.category as ExpenseCategory] || "📦";
       catName = categoryLabels[expense.category as ExpenseCategory] || "Outros";
+    }
+  } else if (recurringExpense) {
+    if (recurringExpense.category_name) {
+      catIcon = recurringExpense.category_icon || "📦";
+      catName = recurringExpense.category_name;
+    } else if (recurringExpense.category_id) {
+      const uc = categories.find((c) => c.id === recurringExpense.category_id);
+      if (uc) { catIcon = uc.icon; catName = uc.name; }
+    } else {
+      catIcon = categoryIcons[recurringExpense.category as ExpenseCategory] || "📦";
+      catName = categoryLabels[recurringExpense.category as ExpenseCategory] || "Outros";
     }
   } else if (income) {
     const catId = (income as any).income_category_id;
@@ -86,16 +107,25 @@ export function TransactionDetailSheet({
       catIcon = incomeCategoryIcons[income.category] || "📦";
       catName = incomeCategoryLabels[income.category] || income.category;
     }
+  } else if (recurringIncome) {
+    const catId = (recurringIncome as any).income_category_id;
+    if (catId) {
+      const custom = incomeCats.find((c) => c.id === catId);
+      if (custom) { catIcon = custom.icon; catName = custom.name; }
+      else if ((recurringIncome as any).category_name) { catIcon = (recurringIncome as any).category_icon || "📦"; catName = (recurringIncome as any).category_name; }
+      else { catIcon = incomeCategoryIcons[recurringIncome.category] || "📦"; catName = incomeCategoryLabels[recurringIncome.category] || recurringIncome.category; }
+    } else {
+      catIcon = incomeCategoryIcons[recurringIncome.category] || "📦";
+      catName = incomeCategoryLabels[recurringIncome.category] || recurringIncome.category;
+    }
   }
 
   const amount = transaction.amount;
   const description = transaction.description;
-  const dateStr = isExpense ? (expense as Expense).expense_date : (income as Income).income_date;
   const createdAt = transaction.created_at;
 
   const handleAction = (action: () => void) => {
     onOpenChange(false);
-    // Small delay so drawer closes first
     setTimeout(action, 200);
   };
 
@@ -127,18 +157,29 @@ export function TransactionDetailSheet({
           {/* Categoria */}
           <DetailRow icon={<Tag className="h-4 w-4" />} label="Categoria" value={`${catIcon} ${catName}`} />
 
-          {/* Data */}
-          <DetailRow
-            icon={<Calendar className="h-4 w-4" />}
-            label="Data"
-            value={format(parseLocalDate(dateStr), "dd/MM/yyyy", { locale: ptBR })}
-          />
+          {/* Data ou Dia do mês */}
+          {isRecurring ? (
+            <DetailRow
+              icon={<Calendar className="h-4 w-4" />}
+              label="Dia do mês"
+              value={`Dia ${(recurringExpense || recurringIncome)!.day_of_month}`}
+            />
+          ) : (
+            <DetailRow
+              icon={<Calendar className="h-4 w-4" />}
+              label="Data"
+              value={format(parseLocalDate(
+                expense ? expense.expense_date : (income as Income).income_date
+              ), "dd/MM/yyyy", { locale: ptBR })}
+            />
+          )}
 
           {/* Método de pagamento (só despesas) */}
-          {isExpense && expense && (() => {
-            const MethodIcon = paymentMethodIcons[expense.payment_method] || CreditCard;
-            const methodLabel = paymentMethodLabels[expense.payment_method] || expense.payment_method;
-            const cardName = expense.card?.name || expense.card_name;
+          {isExpense && (expense || recurringExpense) && (() => {
+            const exp = expense || recurringExpense!;
+            const MethodIcon = paymentMethodIcons[exp.payment_method] || CreditCard;
+            const methodLabel = paymentMethodLabels[exp.payment_method] || exp.payment_method;
+            const cardName = exp.card?.name || (exp as any).card_name;
             const fullMethod = cardName ? `${methodLabel} • ${cardName}` : methodLabel;
             return (
               <DetailRow
@@ -150,7 +191,7 @@ export function TransactionDetailSheet({
           })()}
 
           {/* Parcelas */}
-          {isExpense && expense && expense.total_installments && expense.total_installments > 1 && (
+          {expense && expense.total_installments && expense.total_installments > 1 && (
             <DetailRow
               icon={<CreditCard className="h-4 w-4" />}
               label="Parcelas"
@@ -159,12 +200,31 @@ export function TransactionDetailSheet({
           )}
 
           {/* Grupo compartilhado */}
-          {isExpense && expense?.shared_group && (
+          {expense?.shared_group && (
             <DetailRow
               icon={<Users className="h-4 w-4 text-indigo-500" />}
               label="Grupo"
               value={expense.shared_group.name}
             />
+          )}
+
+          {/* Status ativo (recurring) */}
+          {isRecurring && onToggleActive && (
+            <div className="flex items-center gap-3">
+              <span className="text-muted-foreground shrink-0"><Power className="h-4 w-4" /></span>
+              <span className="text-sm text-muted-foreground shrink-0 w-20">Status</span>
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={(recurringExpense || recurringIncome)!.is_active}
+                  onCheckedChange={(checked) =>
+                    onToggleActive((recurringExpense || recurringIncome)!.id, checked)
+                  }
+                />
+                <span className="text-sm font-medium text-foreground">
+                  {(recurringExpense || recurringIncome)!.is_active ? "Ativo" : "Inativo"}
+                </span>
+              </div>
+            </div>
           )}
 
           {/* Criado em */}
@@ -186,14 +246,16 @@ export function TransactionDetailSheet({
             <Pencil className="h-4 w-4" />
             Editar
           </Button>
-          <Button
-            variant="outline"
-            className="flex-1 gap-1.5 touch-manipulation"
-            onClick={() => handleAction(onDuplicate)}
-          >
-            <Copy className="h-4 w-4" />
-            Duplicar
-          </Button>
+          {!isRecurring && onDuplicate && (
+            <Button
+              variant="outline"
+              className="flex-1 gap-1.5 touch-manipulation"
+              onClick={() => handleAction(onDuplicate)}
+            >
+              <Copy className="h-4 w-4" />
+              Duplicar
+            </Button>
+          )}
           <Button
             variant="outline"
             className="flex-1 gap-1.5 text-destructive hover:text-destructive touch-manipulation"

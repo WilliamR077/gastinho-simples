@@ -1563,7 +1563,8 @@ export default function Index() {
             creditCardConfig={creditCardConfig || undefined}
             onPaymentMethodClick={handlePaymentMethodFilter}
             activePaymentMethod={filters.paymentMethod}
-            budgetGoals={budgetGoals.filter((g) => g.type === "monthly_total" || g.type === "category")} className="bg-[#101013]" />
+            budgetGoals={budgetGoals.filter((g) => g.type === "monthly_total" || g.type === "category")}
+            onNavigateToGoals={() => setActiveTab("goals")} />
 
         </div>
 
