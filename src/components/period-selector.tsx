@@ -154,11 +154,11 @@ export function PeriodSelector({ onPeriodChange }: PeriodSelectorProps) {
             {!hasAdvancedReports && <Lock className="h-3 w-3 text-muted-foreground" />}
           </ToggleGroupItem>
           <ToggleGroupItem value="quarter" className="text-xs flex-1 data-[state=on]:bg-background data-[state=on]:shadow-sm rounded-md gap-1">
-            Tri
+            Trimestre
             {!hasAdvancedReports && <Lock className="h-3 w-3 text-muted-foreground" />}
           </ToggleGroupItem>
           <ToggleGroupItem value="custom" className="text-xs flex-1 data-[state=on]:bg-background data-[state=on]:shadow-sm rounded-md gap-1">
-            Custom
+            Personalizado
             {!hasAdvancedReports && <Lock className="h-3 w-3 text-muted-foreground" />}
           </ToggleGroupItem>
         </ToggleGroup>
