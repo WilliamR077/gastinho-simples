@@ -44,9 +44,9 @@ interface ReportsAccordionProps {
 }
 
 const COLORS = {
-  credit: "#ef4444",
-  debit: "#3b82f6", 
-  pix: "#14b8a6",
+  credit: "#f59e0b",  // âmbar
+  debit: "#8b5cf6",   // roxo
+  pix: "#06b6d4",     // ciano
 };
 
 const CATEGORY_COLORS = [
@@ -84,6 +84,7 @@ export function ReportsAccordion({
   const navigate = useNavigate();
   const { categories } = useCategories();
   const [cashFlowMode, setCashFlowMode] = useState<"daily" | "cumulative">("daily");
+  const [evolutionMode, setEvolutionMode] = useState<"daily" | "weekly">("daily");
 
   // Helper para obter info da categoria
   const getCategoryInfo = (categoryId: string | null | undefined, categoryEnum: ExpenseCategory | null | undefined) => {
@@ -392,8 +393,8 @@ export function ReportsAccordion({
   // Top 10 maiores gastos
   const topExpenses = useMemo(() => {
     const all = [
-      ...filteredExpenses.map(e => ({ description: e.description, amount: Number(e.amount), date: e.expense_date, type: 'expense' as const })),
-      ...filteredRecurringExpenses.map(r => ({ description: r.description, amount: Number(r.amount), date: `Dia ${r.day_of_month}`, type: 'recurring' as const })),
+      ...filteredExpenses.map(e => ({ description: e.description, amount: Number(e.amount), date: e.expense_date, type: 'expense' as const, dayOfMonth: undefined as number | undefined })),
+      ...filteredRecurringExpenses.map(r => ({ description: r.description, amount: Number(r.amount), date: '', type: 'recurring' as const, dayOfMonth: r.day_of_month })),
     ];
     return all.sort((a, b) => b.amount - a.amount).slice(0, 10);
   }, [filteredExpenses, filteredRecurringExpenses]);
@@ -403,6 +404,14 @@ export function ReportsAccordion({
     if (delta === null) return null;
     const sign = delta >= 0 ? "↑" : "↓";
     return `${sign} ${Math.abs(delta).toFixed(0)}%`;
+  };
+  const formatDeltaWithAbsolute = (delta: number | null, currentVal: number, previousVal: number) => {
+    if (previousVal < 10) return "sem base";
+    if (delta === null) return null;
+    const sign = delta >= 0 ? "↑" : "↓";
+    const diff = currentVal - previousVal;
+    const diffStr = diff >= 0 ? `+${formatCurrency(diff)}` : `-${formatCurrency(Math.abs(diff))}`;
+    return `${sign} ${Math.abs(delta).toFixed(0)}% (${diffStr})`;
   };
 
   const tooltipStyle = {
@@ -444,9 +453,9 @@ export function ReportsAccordion({
           <div className="space-y-2 text-sm text-muted-foreground">
             <p>
               Você gastou <span className="font-semibold text-red-500">{formatCurrency(totalPeriod)}</span>
-              {expenseDelta !== null && (
-                <span className={expenseDelta >= 0 ? "text-red-500" : "text-green-500"}>
-                  {" "}({formatDelta(expenseDelta)} vs anterior)
+              {previousPeriodDates && (
+                <span className={totalPeriod > previousTotalExpenses ? "text-red-500" : "text-green-500"}>
+                  {" "}({formatDeltaWithAbsolute(expenseDelta, totalPeriod, previousTotalExpenses)})
                 </span>
               )}
             </p>
@@ -511,13 +520,13 @@ export function ReportsAccordion({
           )}
           {previousPeriodDates && (incomeDelta !== null || expenseDelta !== null) && (
             <p className="flex flex-wrap gap-x-3">
-              {incomeDelta !== null && (
+              {previousTotalIncomes >= 10 && incomeDelta !== null && (
                 <span>Entradas <span className={incomeDelta >= 0 ? 'text-green-500' : 'text-red-500'}>{formatDelta(incomeDelta)}</span></span>
               )}
-              {expenseDelta !== null && (
+              {previousTotalExpenses >= 10 && expenseDelta !== null && (
                 <span>Saídas <span className={expenseDelta <= 0 ? 'text-green-500' : 'text-red-500'}>{formatDelta(expenseDelta)}</span></span>
               )}
-              {balanceDelta !== null && (
+              {previousBalance !== 0 && Math.abs(previousBalance) >= 10 && balanceDelta !== null && (
                 <span>Saldo <span className={balanceDelta >= 0 ? 'text-blue-500' : 'text-orange-500'}>{formatDelta(balanceDelta)}</span></span>
               )}
             </p>
@@ -677,7 +686,7 @@ export function ReportsAccordion({
                 {cashFlowData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={280}>
                     <BarChart data={cashFlowData}>
-                      <CartesianGrid strokeDasharray="6 6" stroke="hsl(var(--border))" strokeOpacity={0.5} />
+                      <CartesianGrid strokeDasharray="6 6" stroke="hsl(var(--border))" strokeOpacity={0.3} />
                       <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" style={{ fontSize: '10px' }} interval={periodType === "month" ? 2 : 0} />
                       <YAxis stroke="hsl(var(--muted-foreground))" style={{ fontSize: '10px' }} tickFormatter={(v) => `R$${v >= 1000 ? `${(v/1000).toFixed(0)}k` : v}`} />
                       <Tooltip formatter={(value: number, name: string) => [formatCurrency(value), name === 'entradas' ? 'Entradas' : 'Saídas']} labelFormatter={(l) => periodType === "month" ? `Dia ${l}` : l} {...tooltipStyle} />
@@ -710,20 +719,41 @@ export function ReportsAccordion({
           </AccordionTrigger>
           <AccordionContent className="px-4 pb-4">
             {hasAdvancedReports ? (
-              evolutionData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={280}>
-                  <LineChart data={evolutionData}>
-                    <CartesianGrid strokeDasharray="6 6" stroke="hsl(var(--border))" strokeOpacity={0.5} />
-                    <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" style={{ fontSize: '10px' }} interval={periodType === "month" ? 2 : 0} />
-                    <YAxis stroke="hsl(var(--muted-foreground))" style={{ fontSize: '10px' }} tickFormatter={(v) => `R$${v >= 1000 ? `${(v/1000).toFixed(0)}k` : v}`} />
-                    <Tooltip formatter={(value: number) => [formatCurrency(value), 'Total']} labelFormatter={(l) => periodType === "month" ? `Dia ${l}` : l} {...tooltipStyle} />
-                    <ReferenceLine y={dailyAverage} stroke="#f59e0b" strokeDasharray="5 5" label={{ value: `Média: ${formatCurrency(dailyAverage)}`, position: 'insideTopRight', fill: '#f59e0b', fontSize: 10 }} />
-                    <Line type="monotone" dataKey="total" stroke="#ef4444" strokeWidth={2.5} dot={{ fill: '#ef4444', r: periodType === "month" ? 2 : 4 }} activeDot={{ r: 6 }} name="Gastos" />
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">Nenhum gasto no período</div>
-              )
+              <>
+                {periodType === "month" && (
+                  <div className="flex justify-end mb-3">
+                    <ToggleGroup type="single" value={evolutionMode} onValueChange={(v) => v && setEvolutionMode(v as "daily" | "weekly")} size="sm" className="bg-muted rounded-lg p-0.5">
+                      <ToggleGroupItem value="daily" className="text-xs px-3 data-[state=on]:bg-background rounded-md">Diário</ToggleGroupItem>
+                      <ToggleGroupItem value="weekly" className="text-xs px-3 data-[state=on]:bg-background rounded-md">Semanal</ToggleGroupItem>
+                    </ToggleGroup>
+                  </div>
+                )}
+                {(() => {
+                  const displayData = periodType === "month" && evolutionMode === "weekly"
+                    ? evolutionData.reduce((acc, item, idx) => {
+                        const weekIdx = Math.floor(idx / 7);
+                        if (!acc[weekIdx]) acc[weekIdx] = { label: `Sem ${weekIdx + 1}`, total: 0 };
+                        acc[weekIdx].total = Number((acc[weekIdx].total + item.total).toFixed(2));
+                        return acc;
+                      }, [] as { label: string; total: number }[])
+                    : evolutionData;
+                  const weeklyAvg = evolutionMode === "weekly" ? dailyAverage * 7 : dailyAverage;
+                  return displayData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={280}>
+                      <LineChart data={displayData}>
+                        <CartesianGrid strokeDasharray="6 6" stroke="hsl(var(--border))" strokeOpacity={0.3} />
+                        <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" style={{ fontSize: '10px' }} interval={evolutionMode === "weekly" ? 0 : (periodType === "month" ? 2 : 0)} />
+                        <YAxis stroke="hsl(var(--muted-foreground))" style={{ fontSize: '10px' }} tickFormatter={(v) => `R$${v >= 1000 ? `${(v/1000).toFixed(0)}k` : v}`} />
+                        <Tooltip formatter={(value: number) => [formatCurrency(value), 'Total']} labelFormatter={(l) => evolutionMode === "weekly" ? l : (periodType === "month" ? `Dia ${l}` : l)} {...tooltipStyle} />
+                        <ReferenceLine y={weeklyAvg} stroke="#f59e0b" strokeDasharray="5 5" label={{ value: `Média: ${formatCurrency(weeklyAvg)}`, position: 'insideTopRight', fill: '#f59e0b', fontSize: 10 }} />
+                        <Line type="monotone" dataKey="total" stroke="#ef4444" strokeWidth={2.5} dot={{ fill: '#ef4444', r: evolutionMode === "weekly" ? 4 : (periodType === "month" ? 2 : 4) }} activeDot={{ r: 6 }} name="Gastos" />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">Nenhum gasto no período</div>
+                  );
+                })()}
+              </>
             ) : renderPremiumLock("Acompanhe a evolução dos seus gastos")}
           </AccordionContent>
         </AccordionItem>
@@ -748,7 +778,9 @@ export function ReportsAccordion({
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{e.description}</p>
                       <p className="text-xs text-muted-foreground">
-                        {e.type === 'recurring' ? e.date : format(parseLocalDate(e.date), "dd/MM/yyyy")}
+                        {e.type === 'recurring' 
+                          ? `Fixa • Dia ${e.dayOfMonth}` 
+                          : format(parseLocalDate(e.date), "dd/MM")}
                       </p>
                     </div>
                     <span className="text-sm font-semibold text-red-500 whitespace-nowrap">{formatCurrency(e.amount)}</span>
@@ -787,15 +819,17 @@ export function ReportsAccordion({
                     </div>
                     <div className="text-right">
                       <p className="text-xs text-muted-foreground">Anterior: {formatCurrency(item.previous)}</p>
-                      {item.delta !== null && (
+                      {item.previous >= 10 && item.delta !== null ? (
                         <p className={`text-sm font-semibold ${
                           item.goodUp 
                             ? (item.delta >= 0 ? 'text-green-500' : 'text-red-500')
                             : (item.delta <= 0 ? 'text-green-500' : 'text-red-500')
                         }`}>
-                          {formatDelta(item.delta)}
+                          {formatDeltaWithAbsolute(item.delta, item.current, item.previous)}
                         </p>
-                      )}
+                      ) : item.previous < 10 && item.current > 0 ? (
+                        <p className="text-sm text-muted-foreground italic">sem base</p>
+                      ) : null}
                     </div>
                   </div>
                 ))}
