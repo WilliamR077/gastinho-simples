@@ -1,66 +1,76 @@
 
 
-## Plano: Ajustes finais de UI/UX na tela Relatórios
-
-3 arquivos, ~12 mudanças pontuais.
-
----
-
-### 1. `src/components/period-selector.tsx`
-
-**Labels pt-BR (linhas 149-163):**
-- `Tri` → `Trimestre`
-- `Custom` → `Personalizado`
-- Labels já existentes (`Mês`, `Ano`) mantidos
-
-Não adicionar "Semana" — exigiria novo `PeriodType`, lógica de `startOfWeek`/`endOfWeek`, e propagação em `reports-accordion.tsx`. Complexidade desproporcional ao ganho.
-
----
-
-### 2. `src/components/reports-accordion.tsx`
-
-**2A. Cores de Forma de Pagamento (linha 46-50):**
-Trocar `COLORS` para cores neutras sem semântica bom/ruim:
-```ts
-const COLORS = {
-  credit: "#f59e0b",  // âmbar
-  debit: "#8b5cf6",   // roxo
-  pix: "#06b6d4",     // ciano
-};
-```
-
-**2B. Grid mais suave nos gráficos (linhas 680, 716):**
-- Alterar `strokeOpacity={0.5}` → `strokeOpacity={0.3}` no `CartesianGrid` de Fluxo de Caixa e Evolução dos Gastos
-
-**2C. Evolução dos Gastos — toggle Diário/Semanal (linhas 697-729):**
-- Adicionar state `evolutionMode: "daily" | "weekly"` no componente
-- Adicionar `ToggleGroup` (Diário | Semanal) antes do gráfico (mesmo padrão do cashFlowMode)
-- Em modo semanal: agrupar `evolutionData` por semana (soma de 7 dias), label = "Sem 1", "Sem 2", etc.
-- Só exibir toggle quando `periodType === "month"`
-
-**2D. Maiores Gastos — datas consistentes (linhas 746-756):**
-- Substituir `e.date` direto por lógica: se `e.type === 'recurring'`, mostrar `Fixa • Dia ${dayOfMonth}` como subtítulo
-- Se `e.type === 'expense'`, sempre usar `format(parseLocalDate(e.date), "dd/MM")`
-- Ajustar o tipo de `topExpenses` para incluir `dayOfMonth` quando recurring
-
-**2E. Resumo Inteligente — diferença absoluta + proteção contra % absurdo (linhas 444-463):**
-- Linha 1: após o `formatDelta`, adicionar diferença absoluta: `(+R$ X)` ou `(-R$ X)`
-- Quando `previousTotalExpenses` < 10 (quase zero), substituir delta por texto `"(novo)"` ou `"(sem base)"` em vez de `↑ 5000%`
-- Mesma lógica para `incomeDelta` no resumo de comparação (linhas 512-524 e 790-798)
-
-**2F. `formatDelta` — adicionar valor absoluto (linha 402-406):**
-Criar `formatDeltaWithAbsolute(delta, currentVal, previousVal)` que retorna:
-- Se `previousVal < 10`: `"sem base"`
-- Senão: `"↑ 12% (+R$ 150,00)"` ou `"↓ 8% (-R$ 50,00)"`
-
----
+## Plano: Reescrever PDF Export para espelhar a tela nova de Relatórios
 
 ### Resumo
 
-| Arquivo | Mudanças |
-|---|---|
-| `period-selector.tsx` | Renomear 2 labels |
-| `reports-accordion.tsx` | Cores pagamento, grid suave, toggle semanal, datas consistentes, delta absoluto + proteção % |
+Reescrever `pdf-export-service.ts` (~753 linhas) completamente e atualizar a chamada em `Reports.tsx` para passar todos os dados necessários (incomes, recurringIncomes, periodType, periodLabel, categories).
 
-2 arquivos, sem mudanças em backend/cálculos.
+### Arquivos impactados
+
+| Arquivo | Mudança |
+|---|---|
+| `src/services/pdf-export-service.ts` | Reescrever ~90% — novas seções, remover seções antigas |
+| `src/pages/Reports.tsx` | Atualizar `handleExportPDF` com novos parâmetros |
+
+### 1. `src/pages/Reports.tsx` — Atualizar chamada
+
+Passar parâmetros adicionais para `exportReportsToPDF`:
+- `incomes`, `recurringIncomes` (já no state)
+- `periodType`, `periodLabel` (já no state)
+
+Não fazer state lifting dos toggles (`cashFlowMode`/`evolutionMode`) — o PDF exportará sempre "Por dia" e "Diário" como padrão (o PDF não tem interatividade, e evita complexidade de lifting).
+
+### 2. `src/services/pdf-export-service.ts` — Reescrever
+
+**Nova assinatura:**
+```ts
+exportReportsToPDF(params: {
+  expenses, recurringExpenses, cards,
+  incomes, recurringIncomes,
+  startDate, endDate, periodType, periodLabel,
+  isGroupContext, groupMembers, groupName?
+})
+```
+
+**Manter helpers existentes:** `createPieChartCanvas`, `createLineChartCanvas`, `createBarChartCanvas`, `isNativeApp`, `saveAndShareFile`. Adaptar cores.
+
+**Criar novo helper:** `createDualBarChartCanvas` para fluxo de caixa (barras duplas entradas vs saídas).
+
+**12 seções do PDF na ordem (replicando exatamente o que a UI mostra):**
+
+1. **Cabeçalho** — "Relatórios" + carteira + período formatado + data/hora geração
+2. **Resumo Inteligente** — 3 linhas: total gastos + delta%, maior categoria, dia mais caro (replicar cálculos do accordion)
+3. **Resumo do Período** — Tabela: Entradas/Saídas/Saldo + contagens + economia% + comparação deltas
+4. **Gastos por Categoria** — Tabela com barras visuais via autoTable cell draw hook (Top 5 + Outros, com valor e %)
+5. **Forma de Pagamento** — Tabela com barras, cores neutras (âmbar/roxo/ciano)
+6. **Gastos por Cartão** — Donut canvas (manter `createPieChartCanvas`) + legenda com R$ e %
+7. **Fluxo de Caixa** — `createDualBarChartCanvas` (barras verdes/vermelhas por dia)
+8. **Evolução dos Gastos** — `createLineChartCanvas` com cor vermelha + ReferenceLine tracejada de média
+9. **Maiores Gastos** — Top 10 tabela (ranking, descrição, data dd/MM ou "Fixa • Dia X", valor)
+10. **Comparação vs anterior** — Tabela (Entradas/Saídas/Saldo: atual, anterior, delta com formatDeltaWithAbsolute)
+11. **Taxa de Economia** — Percentual + interpretação textual
+12. **Despesas Fixas** — Total + lista com status Paga/Pendente, dia, método, cartão
+
+**Remover seções antigas:**
+- "Resumo Geral" (tabela simples)
+- "Evolução dos Últimos 6 Meses" (gráfico de linha antigo)
+- "Comparação Mês a Mês" (tabela antiga)
+- Pizzas de categoria e pagamento (substituídas por barras em tabela)
+- "Lista de Despesas do Mês" (tabela completa — substituída por Top 10)
+
+**Rodapé:** "Página X de Y — Gastinho Simples" (manter existente)
+
+**Cores atualizadas:**
+- `COLORS`: credit `#f59e0b` (âmbar), debit `#8b5cf6` (roxo), pix `#06b6d4` (ciano)
+- Evolução: linha vermelha `#ef4444`, média tracejada `#f59e0b`
+- Fluxo: entradas `#22c55e`, saídas `#ef4444`
+
+**Paginação:** `checkPageBreak` existente, ajustar `requiredSpace` por seção para evitar cortar cards.
+
+**Mobile (Capacitor):** Manter lógica `isNativeApp()` → `saveAndShareFile` existente, sem mudanças.
+
+### Cálculos replicados do accordion
+
+Todos os cálculos do accordion serão replicados no PDF service (filtragem por período, período anterior, deltas, topCategory, mostExpensiveDay, categoryData com Top 5+Outros, paymentMethodData, cardData, cashFlowData, evolutionData, topExpenses, savingsRate, formatDeltaWithAbsolute). Isso é necessário porque o service não tem acesso ao estado React.
 
