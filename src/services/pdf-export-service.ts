@@ -1,18 +1,19 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { format } from 'date-fns';
+import { format, eachDayOfInterval, eachMonthOfInterval, startOfMonth, endOfMonth, subMonths, subYears, subQuarters, isSameDay, parseISO, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Expense, PaymentMethod, ExpenseCategory, categoryLabels } from '@/types/expense';
 import { RecurringExpense } from '@/types/recurring-expense';
 import { Card } from '@/types/card';
+import { Income, RecurringIncome } from '@/types/income';
+import { PeriodType } from '@/components/period-selector';
+import { parseLocalDate } from '@/lib/utils';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 
-// Helper para detectar se está no app nativo
 const isNativeApp = () => Capacitor.isNativePlatform();
 
-// Helper para salvar e compartilhar arquivo no app
 const saveAndShareFile = async (base64Data: string, fileName: string) => {
   try {
     const result = await Filesystem.writeFile({
@@ -20,13 +21,11 @@ const saveAndShareFile = async (base64Data: string, fileName: string) => {
       data: base64Data,
       directory: Directory.Cache,
     });
-
     await Share.share({
       title: fileName,
       url: result.uri,
       dialogTitle: "Exportar relatório",
     });
-
     return true;
   } catch (error) {
     console.error("Erro ao salvar/compartilhar arquivo:", error);
@@ -47,9 +46,9 @@ const paymentMethodLabels: Record<PaymentMethod, string> = {
 };
 
 const COLORS = {
-  credit: '#ef4444',
-  debit: '#3b82f6',
-  pix: '#10b981',
+  credit: '#f59e0b',
+  debit: '#8b5cf6',
+  pix: '#06b6d4',
 };
 
 const CATEGORY_COLORS = [
@@ -65,39 +64,31 @@ interface ChartData {
   color: string;
 }
 
-// Função para criar gráfico de pizza usando canvas nativo
+// ============ CANVAS HELPERS ============
+
 function createPieChartCanvas(
   data: ChartData[],
-  title: string,
   width: number = 400,
-  height: number = 300
+  height: number = 280
 ): string {
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d');
-  
   if (!ctx) return '';
 
   const centerX = width / 2;
-  const centerY = height / 2 - 20;
-  const radius = Math.min(width, height) / 3;
+  const centerY = height / 2;
+  const outerRadius = Math.min(width, height) / 2.8;
+  const innerRadius = outerRadius * 0.55;
   const total = data.reduce((sum, d) => sum + d.value, 0);
 
-  // Desenhar título
-  ctx.fillStyle = '#1f2937';
-  ctx.font = 'bold 14px Arial';
-  ctx.textAlign = 'center';
-  ctx.fillText(title, centerX, 20);
-
-  // Desenhar fatias
   let startAngle = -Math.PI / 2;
   data.forEach((item) => {
     const sliceAngle = (item.value / total) * 2 * Math.PI;
-    
     ctx.beginPath();
-    ctx.moveTo(centerX, centerY);
-    ctx.arc(centerX, centerY, radius, startAngle, startAngle + sliceAngle);
+    ctx.arc(centerX, centerY, outerRadius, startAngle, startAngle + sliceAngle);
+    ctx.arc(centerX, centerY, innerRadius, startAngle + sliceAngle, startAngle, true);
     ctx.closePath();
     ctx.fillStyle = item.color;
     ctx.fill();
@@ -105,241 +96,248 @@ function createPieChartCanvas(
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Desenhar percentual no centro da fatia se > 5%
     const percentage = (item.value / total) * 100;
-    if (percentage > 5) {
+    if (percentage > 8) {
       const midAngle = startAngle + sliceAngle / 2;
-      const labelRadius = radius * 0.6;
+      const labelRadius = (outerRadius + innerRadius) / 2;
       const labelX = centerX + Math.cos(midAngle) * labelRadius;
       const labelY = centerY + Math.sin(midAngle) * labelRadius;
-      
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 11px Arial';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(`${percentage.toFixed(0)}%`, labelX, labelY);
     }
-
     startAngle += sliceAngle;
   });
 
-  // Desenhar legenda
-  const legendY = height - 50;
-  const legendItemWidth = width / Math.min(data.length, 3);
-  
-  data.slice(0, 6).forEach((item, index) => {
-    const row = Math.floor(index / 3);
-    const col = index % 3;
-    const x = 20 + col * (width - 40) / 3;
-    const y = legendY + row * 20;
-
-    ctx.fillStyle = item.color;
-    ctx.fillRect(x, y, 12, 12);
-    
-    ctx.fillStyle = '#374151';
-    ctx.font = '10px Arial';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    const label = item.label.length > 15 ? item.label.substring(0, 15) + '...' : item.label;
-    ctx.fillText(label, x + 16, y + 6);
-  });
-
   return canvas.toDataURL('image/png');
 }
 
-// Função para criar gráfico de linha usando canvas nativo
 function createLineChartCanvas(
   labels: string[],
   values: number[],
-  title: string,
   width: number = 500,
-  height: number = 250
+  height: number = 220,
+  lineColor: string = '#ef4444',
+  averageValue?: number
 ): string {
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d');
-  
   if (!ctx) return '';
 
-  const padding = { top: 40, right: 20, bottom: 40, left: 60 };
+  const padding = { top: 20, right: 20, bottom: 35, left: 55 };
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
+  const maxValue = Math.max(...values, averageValue || 0, 1);
+  const stepCount = Math.max(labels.length - 1, 1);
 
-  // Desenhar título
-  ctx.fillStyle = '#1f2937';
-  ctx.font = 'bold 14px Arial';
-  ctx.textAlign = 'center';
-  ctx.fillText(title, width / 2, 20);
-
-  // Calcular escala
-  const maxValue = Math.max(...values, 1);
-  const minValue = 0;
-  const valueRange = maxValue - minValue;
-  const stepCount = labels.length - 1 || 1;
-
-  // Desenhar grid e eixo Y
+  // Grid
   ctx.strokeStyle = '#e5e7eb';
-  ctx.lineWidth = 1;
-  
+  ctx.lineWidth = 0.5;
   for (let i = 0; i <= 4; i++) {
     const y = padding.top + (chartHeight * i) / 4;
     ctx.beginPath();
     ctx.moveTo(padding.left, y);
     ctx.lineTo(width - padding.right, y);
     ctx.stroke();
-
-    const value = maxValue - (valueRange * i) / 4;
-    ctx.fillStyle = '#6b7280';
-    ctx.font = '10px Arial';
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(`R$ ${value.toFixed(0)}`, padding.left - 5, y);
-  }
-
-  // Desenhar labels do eixo X
-  labels.forEach((label, index) => {
-    const x = padding.left + (chartWidth * index) / stepCount;
-    ctx.fillStyle = '#6b7280';
-    ctx.font = '10px Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    ctx.fillText(label, x, height - padding.bottom + 10);
-  });
-
-  // Desenhar área preenchida
-  ctx.beginPath();
-  ctx.moveTo(padding.left, padding.top + chartHeight);
-  
-  values.forEach((value, index) => {
-    const x = padding.left + (chartWidth * index) / stepCount;
-    const y = padding.top + chartHeight - (chartHeight * (value - minValue)) / (valueRange || 1);
-    if (index === 0) {
-      ctx.lineTo(x, y);
-    } else {
-      ctx.lineTo(x, y);
-    }
-  });
-  
-  ctx.lineTo(padding.left + chartWidth, padding.top + chartHeight);
-  ctx.closePath();
-  ctx.fillStyle = 'rgba(59, 130, 246, 0.1)';
-  ctx.fill();
-
-  // Desenhar linha
-  ctx.beginPath();
-  ctx.strokeStyle = '#3b82f6';
-  ctx.lineWidth = 3;
-  
-  values.forEach((value, index) => {
-    const x = padding.left + (chartWidth * index) / stepCount;
-    const y = padding.top + chartHeight - (chartHeight * (value - minValue)) / (valueRange || 1);
-    if (index === 0) {
-      ctx.moveTo(x, y);
-    } else {
-      ctx.lineTo(x, y);
-    }
-  });
-  ctx.stroke();
-
-  // Desenhar pontos
-  values.forEach((value, index) => {
-    const x = padding.left + (chartWidth * index) / stepCount;
-    const y = padding.top + chartHeight - (chartHeight * (value - minValue)) / (valueRange || 1);
-    
-    ctx.beginPath();
-    ctx.arc(x, y, 5, 0, 2 * Math.PI);
-    ctx.fillStyle = '#3b82f6';
-    ctx.fill();
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-  });
-
-  return canvas.toDataURL('image/png');
-}
-
-// Função para criar gráfico de barras usando canvas nativo
-function createBarChartCanvas(
-  labels: string[],
-  values: number[],
-  colors: string[],
-  title: string,
-  width: number = 500,
-  height: number = 250
-): string {
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-  
-  if (!ctx) return '';
-
-  const padding = { top: 40, right: 20, bottom: 60, left: 60 };
-  const chartWidth = width - padding.left - padding.right;
-  const chartHeight = height - padding.top - padding.bottom;
-
-  // Desenhar título
-  ctx.fillStyle = '#1f2937';
-  ctx.font = 'bold 14px Arial';
-  ctx.textAlign = 'center';
-  ctx.fillText(title, width / 2, 20);
-
-  // Calcular escala
-  const maxValue = Math.max(...values, 1);
-  const barWidth = chartWidth / labels.length * 0.7;
-  const barGap = chartWidth / labels.length * 0.3;
-
-  // Desenhar grid e eixo Y
-  ctx.strokeStyle = '#e5e7eb';
-  ctx.lineWidth = 1;
-  
-  for (let i = 0; i <= 4; i++) {
-    const y = padding.top + (chartHeight * i) / 4;
-    ctx.beginPath();
-    ctx.moveTo(padding.left, y);
-    ctx.lineTo(width - padding.right, y);
-    ctx.stroke();
-
     const value = maxValue - (maxValue * i) / 4;
     ctx.fillStyle = '#6b7280';
-    ctx.font = '10px Arial';
+    ctx.font = '9px Arial';
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
     ctx.fillText(`R$ ${value.toFixed(0)}`, padding.left - 5, y);
   }
 
-  // Desenhar barras
-  values.forEach((value, index) => {
-    const x = padding.left + (chartWidth / labels.length) * index + barGap / 2;
-    const barHeight = (chartHeight * value) / maxValue;
-    const y = padding.top + chartHeight - barHeight;
-
-    ctx.fillStyle = colors[index % colors.length];
-    ctx.fillRect(x, y, barWidth, barHeight);
-
-    // Label do eixo X
+  // X labels
+  const showEvery = labels.length > 15 ? 3 : 1;
+  labels.forEach((label, index) => {
+    if (index % showEvery !== 0 && index !== labels.length - 1) return;
+    const x = padding.left + (chartWidth * index) / stepCount;
     ctx.fillStyle = '#6b7280';
     ctx.font = '9px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    const label = labels[index].length > 10 ? labels[index].substring(0, 10) + '...' : labels[index];
-    ctx.fillText(label, x + barWidth / 2, height - padding.bottom + 5);
+    ctx.fillText(label, x, height - padding.bottom + 5);
+  });
+
+  // Average dashed line
+  if (averageValue !== undefined && averageValue > 0) {
+    const avgY = padding.top + chartHeight - (chartHeight * averageValue) / maxValue;
+    ctx.beginPath();
+    ctx.setLineDash([5, 5]);
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 1.5;
+    ctx.moveTo(padding.left, avgY);
+    ctx.lineTo(width - padding.right, avgY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#f59e0b';
+    ctx.font = '9px Arial';
+    ctx.textAlign = 'right';
+    ctx.fillText(`Média: R$ ${averageValue.toFixed(0)}`, width - padding.right, avgY - 5);
+  }
+
+  // Area fill
+  ctx.beginPath();
+  ctx.moveTo(padding.left, padding.top + chartHeight);
+  values.forEach((value, index) => {
+    const x = padding.left + (chartWidth * index) / stepCount;
+    const y = padding.top + chartHeight - (chartHeight * value) / (maxValue || 1);
+    ctx.lineTo(x, y);
+  });
+  ctx.lineTo(padding.left + (chartWidth * (values.length - 1)) / stepCount, padding.top + chartHeight);
+  ctx.closePath();
+  const hex = lineColor;
+  ctx.fillStyle = hex + '1A';
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  ctx.strokeStyle = lineColor;
+  ctx.lineWidth = 2.5;
+  values.forEach((value, index) => {
+    const x = padding.left + (chartWidth * index) / stepCount;
+    const y = padding.top + chartHeight - (chartHeight * value) / (maxValue || 1);
+    if (index === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  // Dots
+  values.forEach((value, index) => {
+    const x = padding.left + (chartWidth * index) / stepCount;
+    const y = padding.top + chartHeight - (chartHeight * value) / (maxValue || 1);
+    ctx.beginPath();
+    ctx.arc(x, y, labels.length > 15 ? 2 : 3.5, 0, 2 * Math.PI);
+    ctx.fillStyle = lineColor;
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1;
+    ctx.stroke();
   });
 
   return canvas.toDataURL('image/png');
 }
 
-export async function exportReportsToPDF(
-  expenses: Expense[],
-  recurringExpenses: RecurringExpense[],
-  cards: Card[],
-  startDate: Date,
-  endDate: Date,
-  isGroupContext: boolean,
-  groupMembers: GroupMember[],
-  groupName?: string
-) {
+function createDualBarChartCanvas(
+  data: { label: string; entradas: number; saidas: number }[],
+  width: number = 500,
+  height: number = 220
+): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '';
+
+  const padding = { top: 25, right: 20, bottom: 35, left: 55 };
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+  const maxValue = Math.max(...data.map(d => Math.max(d.entradas, d.saidas)), 1);
+  const groupWidth = chartWidth / data.length;
+  const barWidth = groupWidth * 0.35;
+
+  // Grid
+  ctx.strokeStyle = '#e5e7eb';
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i <= 4; i++) {
+    const y = padding.top + (chartHeight * i) / 4;
+    ctx.beginPath();
+    ctx.moveTo(padding.left, y);
+    ctx.lineTo(width - padding.right, y);
+    ctx.stroke();
+    const value = maxValue - (maxValue * i) / 4;
+    ctx.fillStyle = '#6b7280';
+    ctx.font = '9px Arial';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`R$ ${value.toFixed(0)}`, padding.left - 5, y);
+  }
+
+  // Bars + X labels
+  const showEvery = data.length > 15 ? 3 : 1;
+  data.forEach((item, index) => {
+    const groupX = padding.left + groupWidth * index;
+    // Green bar (entradas)
+    const h1 = (chartHeight * item.entradas) / maxValue;
+    ctx.fillStyle = '#22c55e';
+    ctx.fillRect(groupX + groupWidth * 0.1, padding.top + chartHeight - h1, barWidth, h1);
+    // Red bar (saidas)
+    const h2 = (chartHeight * item.saidas) / maxValue;
+    ctx.fillStyle = '#ef4444';
+    ctx.fillRect(groupX + groupWidth * 0.1 + barWidth + 1, padding.top + chartHeight - h2, barWidth, h2);
+    // Label
+    if (index % showEvery === 0 || index === data.length - 1) {
+      ctx.fillStyle = '#6b7280';
+      ctx.font = '8px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText(item.label, groupX + groupWidth / 2, height - padding.bottom + 5);
+    }
+  });
+
+  // Legend
+  ctx.fillStyle = '#22c55e';
+  ctx.fillRect(padding.left, 5, 10, 10);
+  ctx.fillStyle = '#374151';
+  ctx.font = '10px Arial';
+  ctx.textAlign = 'left';
+  ctx.fillText('Entradas', padding.left + 14, 13);
+  ctx.fillStyle = '#ef4444';
+  ctx.fillRect(padding.left + 80, 5, 10, 10);
+  ctx.fillStyle = '#374151';
+  ctx.fillText('Saídas', padding.left + 94, 13);
+
+  return canvas.toDataURL('image/png');
+}
+
+// ============ HELPERS ============
+
+const formatCurrency = (v: number) => `R$ ${v.toFixed(2).replace('.', ',')}`;
+
+const formatDeltaWithAbsolute = (delta: number | null, currentVal: number, previousVal: number): string => {
+  if (previousVal < 10) return "sem base";
+  if (delta === null) return "—";
+  const sign = delta >= 0 ? "↑" : "↓";
+  const diff = currentVal - previousVal;
+  const diffStr = diff >= 0 ? `+${formatCurrency(diff)}` : `-${formatCurrency(Math.abs(diff))}`;
+  return `${sign} ${Math.abs(delta).toFixed(0)}% (${diffStr})`;
+};
+
+const getCategoryInfo = (expense: Expense | RecurringExpense) => {
+  if (expense.category_name) return { id: expense.category_id || expense.category, name: expense.category_name, icon: expense.category_icon || '📦' };
+  const label = categoryLabels[expense.category] || expense.category;
+  return { id: expense.category, name: label, icon: '📦' };
+};
+
+// ============ MAIN EXPORT ============
+
+export interface ExportReportParams {
+  expenses: Expense[];
+  recurringExpenses: RecurringExpense[];
+  cards: Card[];
+  incomes: Income[];
+  recurringIncomes: RecurringIncome[];
+  startDate: Date;
+  endDate: Date;
+  periodType: PeriodType;
+  periodLabel: string;
+  isGroupContext: boolean;
+  groupMembers: GroupMember[];
+  groupName?: string;
+}
+
+export async function exportReportsToPDF(params: ExportReportParams) {
+  const {
+    expenses, recurringExpenses, cards,
+    incomes, recurringIncomes,
+    startDate, endDate, periodType, periodLabel,
+    isGroupContext, groupMembers, groupName
+  } = params;
+
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   let yPosition = 20;
@@ -351,403 +349,639 @@ export async function exportReportsToPDF(
     }
   };
 
-  // Filtrar despesas do período
+  // ============ DATA CALCULATIONS (replicating reports-accordion) ============
+
   const filteredExpenses = expenses.filter(e => {
-    const expenseDate = new Date(e.expense_date);
-    return expenseDate >= startDate && expenseDate <= endDate;
+    const d = parseLocalDate(e.expense_date);
+    return d >= startDate && d <= endDate;
   });
 
-  const activeRecurring = recurringExpenses.filter(r => r.is_active);
+  const filteredRecurringExpenses = recurringExpenses.filter(re => {
+    if (!re.is_active && !re.end_date) return false;
+    const sd = re.start_date ? parseISO(re.start_date) : parseLocalDate(re.created_at);
+    const ed = re.end_date ? parseISO(re.end_date) : null;
+    return sd <= endDate && (!ed || ed >= startDate);
+  });
 
-  // ============ CABEÇALHO ============
+  const filteredIncomes = incomes.filter(i => {
+    const d = parseLocalDate(i.income_date);
+    return d >= startDate && d <= endDate;
+  });
+
+  const filteredRecurringIncomes = recurringIncomes.filter(ri => {
+    if (!ri.is_active && !ri.end_date) return false;
+    const sd = ri.start_date ? parseISO(ri.start_date) : parseLocalDate(ri.created_at);
+    const ed = ri.end_date ? parseISO(ri.end_date) : null;
+    return sd <= endDate && (!ed || ed >= startDate);
+  });
+
+  const monthsInPeriod = eachMonthOfInterval({ start: startDate, end: endDate }).length;
+  const rm = periodType === "month" ? 1 : monthsInPeriod;
+
+  const totalPeriod = filteredExpenses.reduce((s, e) => s + Number(e.amount), 0)
+    + filteredRecurringExpenses.reduce((s, e) => s + Number(e.amount), 0) * rm;
+
+  const totalIncomes = filteredIncomes.reduce((s, i) => s + Number(i.amount), 0)
+    + filteredRecurringIncomes.reduce((s, i) => s + Number(i.amount), 0) * rm;
+
+  const balance = totalIncomes - totalPeriod;
+
+  // Previous period
+  let previousPeriodDates: { start: Date; end: Date } | null = null;
+  if (periodType === "month") {
+    const ps = subMonths(startDate, 1);
+    previousPeriodDates = { start: startOfMonth(ps), end: endOfMonth(ps) };
+  } else if (periodType === "year") {
+    const ps = subYears(startDate, 1);
+    previousPeriodDates = { start: new Date(ps.getFullYear(), 0, 1), end: new Date(ps.getFullYear(), 11, 31) };
+  } else if (periodType === "quarter") {
+    const ps = subQuarters(startDate, 1);
+    previousPeriodDates = { start: startOfMonth(ps), end: endOfMonth(subMonths(startDate, 1)) };
+  }
+
+  let previousTotalExpenses = 0;
+  let previousTotalIncomes = 0;
+  if (previousPeriodDates) {
+    previousTotalExpenses = expenses.filter(e => {
+      const d = parseLocalDate(e.expense_date);
+      return d >= previousPeriodDates!.start && d <= previousPeriodDates!.end;
+    }).reduce((s, e) => s + Number(e.amount), 0);
+    previousTotalIncomes = incomes.filter(i => {
+      const d = parseLocalDate(i.income_date);
+      return d >= previousPeriodDates!.start && d <= previousPeriodDates!.end;
+    }).reduce((s, i) => s + Number(i.amount), 0);
+  }
+  const previousBalance = previousTotalIncomes - previousTotalExpenses;
+
+  const expenseDelta = previousTotalExpenses > 0 ? ((totalPeriod - previousTotalExpenses) / previousTotalExpenses) * 100 : null;
+  const incomeDelta = previousTotalIncomes > 0 ? ((totalIncomes - previousTotalIncomes) / previousTotalIncomes) * 100 : null;
+  const balanceDelta = Math.abs(previousBalance) >= 10 ? ((balance - previousBalance) / Math.abs(previousBalance)) * 100 : null;
+  const savingsRate = totalIncomes > 0 ? (balance / totalIncomes) * 100 : 0;
+
+  // Top category
+  const catTotals: Record<string, { name: string; value: number }> = {};
+  filteredExpenses.forEach(e => {
+    const c = getCategoryInfo(e);
+    if (!catTotals[c.id]) catTotals[c.id] = { name: c.name, value: 0 };
+    catTotals[c.id].value += Number(e.amount);
+  });
+  const catSorted = Object.values(catTotals).sort((a, b) => b.value - a.value);
+  const catTotal = catSorted.reduce((s, i) => s + i.value, 0);
+  const topCategory = catSorted.length > 0 ? { name: catSorted[0].name, pct: catTotal > 0 ? ((catSorted[0].value / catTotal) * 100).toFixed(0) : "0" } : null;
+
+  // Most expensive day
+  const dayTotals: Record<string, { date: string; total: number }> = {};
+  filteredExpenses.forEach(e => {
+    if (!dayTotals[e.expense_date]) dayTotals[e.expense_date] = { date: e.expense_date, total: 0 };
+    dayTotals[e.expense_date].total += Number(e.amount);
+  });
+  const daySorted = Object.values(dayTotals).sort((a, b) => b.total - a.total);
+  const mostExpensiveDay = daySorted.length > 0 ? { date: format(parseLocalDate(daySorted[0].date), "dd/MM"), value: daySorted[0].total } : null;
+
+  // Category data (Top 5 + Others)
+  const categoryDataMap: Record<string, { name: string; icon: string; value: number }> = {};
+  filteredExpenses.forEach(e => {
+    const c = getCategoryInfo(e);
+    if (!categoryDataMap[c.id]) categoryDataMap[c.id] = { name: c.name, icon: c.icon, value: 0 };
+    categoryDataMap[c.id].value += Number(e.amount);
+  });
+  filteredRecurringExpenses.forEach(r => {
+    const c = getCategoryInfo(r as any);
+    if (!categoryDataMap[c.id]) categoryDataMap[c.id] = { name: c.name, icon: c.icon, value: 0 };
+    categoryDataMap[c.id].value += Number(r.amount) * rm;
+  });
+  const catDataTotal = Object.values(categoryDataMap).reduce((s, i) => s + i.value, 0);
+  let categoryData = Object.values(categoryDataMap)
+    .filter(i => i.value > 0)
+    .map(i => ({ ...i, percentage: catDataTotal > 0 ? (i.value / catDataTotal) * 100 : 0 }))
+    .sort((a, b) => b.value - a.value);
+  if (categoryData.length > 5) {
+    const top5 = categoryData.slice(0, 5);
+    const othersVal = categoryData.slice(5).reduce((s, i) => s + i.value, 0);
+    categoryData = [...top5, { name: "Outros", icon: "📦", value: othersVal, percentage: catDataTotal > 0 ? (othersVal / catDataTotal) * 100 : 0 }];
+  }
+
+  // Payment method data
+  const pmTotals: Record<PaymentMethod, number> = { credit: 0, debit: 0, pix: 0 };
+  filteredExpenses.forEach(e => { pmTotals[e.payment_method] += Number(e.amount); });
+  filteredRecurringExpenses.forEach(r => { pmTotals[r.payment_method] += Number(r.amount) * rm; });
+  const pmTotal = Object.values(pmTotals).reduce((s, v) => s + v, 0);
+  const paymentMethodData = Object.entries(pmTotals)
+    .filter(([, v]) => v > 0)
+    .map(([method, value]) => ({
+      name: paymentMethodLabels[method as PaymentMethod],
+      method: method as PaymentMethod,
+      value,
+      percentage: pmTotal > 0 ? (value / pmTotal) * 100 : 0,
+    }))
+    .sort((a, b) => b.value - a.value);
+
+  // Card data
+  const cardTotals: Record<string, { name: string; color: string; value: number }> = {};
+  cardTotals['no-card'] = { name: 'Sem cartão', color: '#9ca3af', value: 0 };
+  filteredExpenses.forEach(e => {
+    if (e.card_id) {
+      const card = cards.find(c => c.id === e.card_id);
+      if (card) {
+        if (!cardTotals[card.id]) cardTotals[card.id] = { name: card.name, color: card.color, value: 0 };
+        cardTotals[card.id].value += Number(e.amount);
+      }
+    } else { cardTotals['no-card'].value += Number(e.amount); }
+  });
+  filteredRecurringExpenses.forEach(r => {
+    if (r.card_id) {
+      const card = cards.find(c => c.id === r.card_id);
+      if (card) {
+        if (!cardTotals[card.id]) cardTotals[card.id] = { name: card.name, color: card.color, value: 0 };
+        cardTotals[card.id].value += Number(r.amount) * rm;
+      }
+    } else { cardTotals['no-card'].value += Number(r.amount) * rm; }
+  });
+  const cardDataTotal = Object.values(cardTotals).reduce((s, i) => s + i.value, 0);
+  const cardData = Object.values(cardTotals)
+    .filter(i => i.value > 0)
+    .map(i => ({ ...i, percentage: cardDataTotal > 0 ? ((i.value / cardDataTotal) * 100).toFixed(1) : "0" }))
+    .sort((a, b) => b.value - a.value);
+
+  // Cash flow data (always "daily" mode for PDF)
+  const cashFlowData = periodType === "month"
+    ? eachDayOfInterval({ start: startDate, end: endDate }).map(day => {
+        const dayExp = filteredExpenses.filter(e => isSameDay(parseLocalDate(e.expense_date), day));
+        const dayInc = filteredIncomes.filter(i => isSameDay(parseLocalDate(i.income_date), day));
+        return {
+          label: format(day, "dd"),
+          entradas: Number(dayInc.reduce((s, i) => s + Number(i.amount), 0).toFixed(2)),
+          saidas: Number(dayExp.reduce((s, e) => s + Number(e.amount), 0).toFixed(2)),
+        };
+      })
+    : eachMonthOfInterval({ start: startDate, end: endDate }).map(month => {
+        const ms = startOfMonth(month), me = endOfMonth(month);
+        const mExp = filteredExpenses.filter(e => { const d = parseLocalDate(e.expense_date); return d >= ms && d <= me; });
+        const mInc = filteredIncomes.filter(i => { const d = parseLocalDate(i.income_date); return d >= ms && d <= me; });
+        let totalE = mExp.reduce((s, e) => s + Number(e.amount), 0);
+        let totalI = mInc.reduce((s, i) => s + Number(i.amount), 0);
+        filteredRecurringExpenses.forEach(r => {
+          const sd = r.start_date ? parseISO(r.start_date) : parseLocalDate(r.created_at);
+          const ed = r.end_date ? parseISO(r.end_date) : null;
+          if (sd <= me && (!ed || ed >= ms)) totalE += Number(r.amount);
+        });
+        filteredRecurringIncomes.forEach(r => {
+          const sd = r.start_date ? parseISO(r.start_date) : parseLocalDate(r.created_at);
+          const ed = r.end_date ? parseISO(r.end_date) : null;
+          if (sd <= me && (!ed || ed >= ms)) totalI += Number(r.amount);
+        });
+        return { label: format(month, "MMM/yy", { locale: ptBR }), entradas: Number(totalI.toFixed(2)), saidas: Number(totalE.toFixed(2)) };
+      });
+
+  // Evolution data (always "daily" for PDF)
+  const evolutionData = periodType === "month"
+    ? eachDayOfInterval({ start: startDate, end: endDate }).map(day => {
+        const dayExp = filteredExpenses.filter(e => isSameDay(parseLocalDate(e.expense_date), day));
+        return { label: format(day, "dd"), total: Number(dayExp.reduce((s, e) => s + Number(e.amount), 0).toFixed(2)) };
+      })
+    : eachMonthOfInterval({ start: startDate, end: endDate }).map(month => {
+        const ms = startOfMonth(month), me = endOfMonth(month);
+        const mExp = filteredExpenses.filter(e => { const d = parseLocalDate(e.expense_date); return d >= ms && d <= me; });
+        let total = mExp.reduce((s, e) => s + Number(e.amount), 0);
+        filteredRecurringExpenses.forEach(r => {
+          const sd = r.start_date ? parseISO(r.start_date) : parseLocalDate(r.created_at);
+          const ed = r.end_date ? parseISO(r.end_date) : null;
+          if (sd <= me && (!ed || ed >= ms)) total += Number(r.amount);
+        });
+        return { label: format(month, "MMM/yy", { locale: ptBR }), total: Number(total.toFixed(2)) };
+      });
+
+  const days = differenceInDays(endDate, startDate) + 1;
+  const dailyAverage = days > 0 ? totalPeriod / days : 0;
+
+  // Top 10 expenses
+  const topExpenses = [
+    ...filteredExpenses.map(e => ({ description: e.description, amount: Number(e.amount), date: e.expense_date, type: 'expense' as const, dayOfMonth: undefined as number | undefined })),
+    ...filteredRecurringExpenses.map(r => ({ description: r.description, amount: Number(r.amount), date: '', type: 'recurring' as const, dayOfMonth: r.day_of_month })),
+  ].sort((a, b) => b.amount - a.amount).slice(0, 10);
+
+  // ============ SECTION 1: HEADER ============
   doc.setFontSize(20);
   doc.setFont('helvetica', 'bold');
-  doc.text('Relatório de Gastos', pageWidth / 2, yPosition, { align: 'center' });
-  yPosition += 10;
+  doc.text('Relatórios', pageWidth / 2, yPosition, { align: 'center' });
+  yPosition += 8;
 
-  doc.setFontSize(12);
+  doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
-  const periodText = `${format(startDate, "MMMM 'de' yyyy", { locale: ptBR })}`;
-  doc.text(periodText.charAt(0).toUpperCase() + periodText.slice(1), pageWidth / 2, yPosition, { align: 'center' });
+  const walletName = isGroupContext && groupName ? `Grupo: ${groupName}` : 'Meus Gastos';
+  doc.text(walletName, pageWidth / 2, yPosition, { align: 'center' });
   yPosition += 6;
 
-  if (isGroupContext && groupName) {
-    doc.setFontSize(10);
-    doc.text(`Grupo: ${groupName}`, pageWidth / 2, yPosition, { align: 'center' });
-    yPosition += 6;
-  }
+  doc.setFontSize(10);
+  const periodText = periodLabel || format(startDate, "MMMM 'de' yyyy", { locale: ptBR });
+  doc.text(periodText.charAt(0).toUpperCase() + periodText.slice(1), pageWidth / 2, yPosition, { align: 'center' });
+  yPosition += 6;
 
   doc.setFontSize(8);
   doc.setTextColor(128);
   doc.text(`Gerado em: ${format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`, pageWidth / 2, yPosition, { align: 'center' });
   doc.setTextColor(0);
-  yPosition += 15;
+  yPosition += 12;
 
-  // ============ RESUMO GERAL ============
-  const totalExpenses = filteredExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
-  const totalRecurring = activeRecurring.reduce((sum, e) => sum + Number(e.amount), 0);
-  const grandTotal = totalExpenses + totalRecurring;
+  // ============ SECTION 2: RESUMO INTELIGENTE ============
+  if (totalPeriod > 0) {
+    checkPageBreak(30);
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('✨ Resumo Inteligente', 14, yPosition);
+    yPosition += 7;
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
 
-  doc.setFontSize(14);
+    let line1 = `Você gastou ${formatCurrency(totalPeriod)}`;
+    if (previousPeriodDates) {
+      line1 += ` (${formatDeltaWithAbsolute(expenseDelta, totalPeriod, previousTotalExpenses)})`;
+    }
+    doc.text(line1, 14, yPosition);
+    yPosition += 5;
+
+    if (topCategory) {
+      doc.text(`Maior categoria: ${topCategory.name} (${topCategory.pct}%)`, 14, yPosition);
+      yPosition += 5;
+    }
+    if (mostExpensiveDay) {
+      doc.text(`Dia mais caro: ${mostExpensiveDay.date} (${formatCurrency(mostExpensiveDay.value)})`, 14, yPosition);
+      yPosition += 5;
+    }
+    yPosition += 5;
+  }
+
+  // ============ SECTION 3: RESUMO DO PERÍODO ============
+  checkPageBreak(35);
+  doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
-  doc.text('Resumo Geral', 14, yPosition);
-  yPosition += 8;
+  doc.text('Resumo do Período', 14, yPosition);
+  yPosition += 7;
+
+  const savingsLabel = totalIncomes > 0 ? `${savingsRate.toFixed(0)}% da renda` : '—';
 
   autoTable(doc, {
     startY: yPosition,
-    head: [['Descrição', 'Valor']],
+    head: [['', 'Entradas', 'Saídas', 'Saldo']],
     body: [
-      ['Total de Despesas do Mês', `R$ ${totalExpenses.toFixed(2)}`],
-      ['Total de Despesas Fixas', `R$ ${totalRecurring.toFixed(2)}`],
-      ['Total Geral', `R$ ${grandTotal.toFixed(2)}`],
+      ['Valor', formatCurrency(totalIncomes), formatCurrency(totalPeriod), formatCurrency(balance)],
+      ['Contagem', `${filteredIncomes.length}+${filteredRecurringIncomes.length} fixas`, `${filteredExpenses.length}+${filteredRecurringExpenses.length} fixas`, periodLabel || '—'],
+      ['Economia', savingsLabel, '', ''],
     ],
-    theme: 'striped',
-    headStyles: { fillColor: [34, 197, 94] },
-    columnStyles: {
-      0: { cellWidth: 100 },
-      1: { cellWidth: 60, halign: 'right' }
-    },
+    theme: 'grid',
+    headStyles: { fillColor: [100, 116, 139], fontSize: 9 },
+    styles: { fontSize: 8 },
+    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 30 }, 1: { cellWidth: 45 }, 2: { cellWidth: 45 }, 3: { cellWidth: 45 } },
     margin: { left: 14, right: 14 }
   });
+  yPosition = (doc as any).lastAutoTable.finalY + 10;
 
-  yPosition = (doc as any).lastAutoTable.finalY + 15;
-
-  // ============ GRÁFICO: EVOLUÇÃO DOS ÚLTIMOS 6 MESES ============
-  checkPageBreak(80);
-  
-  const monthlyTotals: { month: string; total: number }[] = [];
-  for (let i = 5; i >= 0; i--) {
-    const monthDate = new Date(startDate);
-    monthDate.setMonth(monthDate.getMonth() - i);
-    const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
-    const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0);
-    
-    const monthExpenses = expenses.filter(e => {
-      const expenseDate = new Date(e.expense_date);
-      return expenseDate >= monthStart && expenseDate <= monthEnd;
-    });
-    
-    let total = monthExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
-    total += activeRecurring.reduce((sum, e) => sum + Number(e.amount), 0);
-    
-    monthlyTotals.push({
-      month: format(monthDate, 'MMM/yy', { locale: ptBR }),
-      total
-    });
-  }
-
-  const lineChartImage = createLineChartCanvas(
-    monthlyTotals.map(m => m.month),
-    monthlyTotals.map(m => m.total),
-    'Evolução dos Gastos - Últimos 6 Meses'
-  );
-
-  if (lineChartImage) {
-    doc.addImage(lineChartImage, 'PNG', 14, yPosition, 180, 70);
-    yPosition += 80;
-  }
-
-  // ============ COMPARAÇÃO MÊS A MÊS ============
-  if (monthlyTotals.length >= 2) {
-    checkPageBreak(40);
-    
-    const currentMonth = monthlyTotals[monthlyTotals.length - 1];
-    const previousMonth = monthlyTotals[monthlyTotals.length - 2];
-    const difference = currentMonth.total - previousMonth.total;
-    const percentChange = previousMonth.total > 0 
-      ? ((difference / previousMonth.total) * 100).toFixed(1)
-      : '0';
-
+  // ============ SECTION 4: GASTOS POR CATEGORIA (barras horizontais via tabela) ============
+  if (categoryData.length > 0) {
+    checkPageBreak(50);
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.text('Comparação Mês a Mês', 14, yPosition);
-    yPosition += 8;
+    doc.text('Gastos por Categoria', 14, yPosition);
+    yPosition += 7;
 
     autoTable(doc, {
       startY: yPosition,
-      head: [['Período', 'Valor', 'Variação']],
-      body: [
-        [previousMonth.month, `R$ ${previousMonth.total.toFixed(2)}`, '-'],
-        [currentMonth.month, `R$ ${currentMonth.total.toFixed(2)}`, 
-          `${difference >= 0 ? '+' : ''}R$ ${difference.toFixed(2)} (${difference >= 0 ? '+' : ''}${percentChange}%)`],
-      ],
+      head: [['Categoria', 'Valor', '%', '']],
+      body: categoryData.map((cat, i) => [
+        `${cat.icon} ${cat.name}`,
+        formatCurrency(cat.value),
+        `${cat.percentage.toFixed(0)}%`,
+        '',
+      ]),
+      theme: 'plain',
+      styles: { fontSize: 8, cellPadding: 3 },
+      headStyles: { fillColor: [245, 245, 245], textColor: [100, 100, 100], fontSize: 8 },
+      columnStyles: {
+        0: { cellWidth: 50 },
+        1: { cellWidth: 40, halign: 'right' },
+        2: { cellWidth: 20, halign: 'right' },
+        3: { cellWidth: 60 },
+      },
+      margin: { left: 14, right: 14 },
+      didDrawCell: (data: any) => {
+        if (data.section === 'body' && data.column.index === 3) {
+          const cat = categoryData[data.row.index];
+          if (cat) {
+            const maxVal = categoryData[0]?.value || 1;
+            const barW = (cat.value / maxVal) * (data.cell.width - 4);
+            const colorIdx = data.row.index % CATEGORY_COLORS.length;
+            doc.setFillColor(CATEGORY_COLORS[colorIdx]);
+            doc.roundedRect(data.cell.x + 2, data.cell.y + data.cell.height / 2 - 3, Math.max(barW, 2), 6, 1, 1, 'F');
+          }
+        }
+      }
+    });
+    yPosition = (doc as any).lastAutoTable.finalY + 10;
+  }
+
+  // ============ SECTION 5: FORMA DE PAGAMENTO (barras) ============
+  if (paymentMethodData.length > 0) {
+    checkPageBreak(40);
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Forma de Pagamento', 14, yPosition);
+    yPosition += 7;
+
+    autoTable(doc, {
+      startY: yPosition,
+      head: [['Método', 'Valor', '%', '']],
+      body: paymentMethodData.map(pm => [
+        pm.name,
+        formatCurrency(pm.value),
+        `${pm.percentage.toFixed(0)}%`,
+        '',
+      ]),
+      theme: 'plain',
+      styles: { fontSize: 8, cellPadding: 3 },
+      headStyles: { fillColor: [245, 245, 245], textColor: [100, 100, 100], fontSize: 8 },
+      columnStyles: {
+        0: { cellWidth: 40 },
+        1: { cellWidth: 45, halign: 'right' },
+        2: { cellWidth: 20, halign: 'right' },
+        3: { cellWidth: 65 },
+      },
+      margin: { left: 14, right: 14 },
+      didDrawCell: (data: any) => {
+        if (data.section === 'body' && data.column.index === 3) {
+          const pm = paymentMethodData[data.row.index];
+          if (pm) {
+            const maxVal = paymentMethodData[0]?.value || 1;
+            const barW = (pm.value / maxVal) * (data.cell.width - 4);
+            const color = COLORS[pm.method];
+            const r = parseInt(color.slice(1, 3), 16);
+            const g = parseInt(color.slice(3, 5), 16);
+            const b = parseInt(color.slice(5, 7), 16);
+            doc.setFillColor(r, g, b);
+            doc.roundedRect(data.cell.x + 2, data.cell.y + data.cell.height / 2 - 3, Math.max(barW, 2), 6, 1, 1, 'F');
+          }
+        }
+      }
+    });
+    yPosition = (doc as any).lastAutoTable.finalY + 10;
+  }
+
+  // ============ SECTION 6: GASTOS POR CARTÃO (donut) ============
+  if (cardData.length > 0) {
+    checkPageBreak(80);
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Gastos por Cartão', 14, yPosition);
+    yPosition += 7;
+
+    const donutChartData: ChartData[] = cardData.map((c, i) => ({
+      label: c.name,
+      value: c.value,
+      color: c.color,
+    }));
+
+    const donutImage = createPieChartCanvas(donutChartData, 300, 220);
+    if (donutImage) {
+      doc.addImage(donutImage, 'PNG', 14, yPosition, 80, 60);
+    }
+
+    // Legend next to donut
+    let legendY = yPosition + 5;
+    cardData.forEach((c, i) => {
+      if (legendY > yPosition + 55) return;
+      const color = c.color;
+      const r = parseInt(color.slice(1, 3), 16);
+      const g = parseInt(color.slice(3, 5), 16);
+      const b = parseInt(color.slice(5, 7), 16);
+      doc.setFillColor(r, g, b);
+      doc.circle(102, legendY + 2, 2, 'F');
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(0);
+      const name = c.name.length > 18 ? c.name.substring(0, 18) + '...' : c.name;
+      doc.text(`${name}: ${formatCurrency(c.value)} (${c.percentage}%)`, 106, legendY + 3);
+      legendY += 7;
+    });
+    yPosition += 68;
+  }
+
+  // ============ SECTION 7: FLUXO DE CAIXA ============
+  if (cashFlowData.length > 0) {
+    checkPageBreak(80);
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Fluxo de Caixa', 14, yPosition);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(128);
+    doc.text('Entradas vs Saídas — Por dia', 60, yPosition);
+    doc.setTextColor(0);
+    yPosition += 5;
+
+    const cfImage = createDualBarChartCanvas(cashFlowData, 500, 200);
+    if (cfImage) {
+      doc.addImage(cfImage, 'PNG', 14, yPosition, 180, 65);
+      yPosition += 70;
+    }
+  }
+
+  // ============ SECTION 8: EVOLUÇÃO DOS GASTOS ============
+  if (evolutionData.length > 0) {
+    checkPageBreak(80);
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Evolução dos Gastos', 14, yPosition);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(128);
+    doc.text(`Diário — Média: ${formatCurrency(dailyAverage)}`, 62, yPosition);
+    doc.setTextColor(0);
+    yPosition += 5;
+
+    const evoImage = createLineChartCanvas(
+      evolutionData.map(d => d.label),
+      evolutionData.map(d => d.total),
+      500, 200,
+      '#ef4444',
+      dailyAverage
+    );
+    if (evoImage) {
+      doc.addImage(evoImage, 'PNG', 14, yPosition, 180, 65);
+      yPosition += 70;
+    }
+  }
+
+  // ============ SECTION 9: MAIORES GASTOS (Top 10) ============
+  if (topExpenses.length > 0) {
+    checkPageBreak(60);
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Maiores Gastos', 14, yPosition);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(128);
+    doc.text('Top 10 do período', 52, yPosition);
+    doc.setTextColor(0);
+    yPosition += 7;
+
+    autoTable(doc, {
+      startY: yPosition,
+      head: [['#', 'Descrição', 'Data', 'Valor']],
+      body: topExpenses.map((e, i) => [
+        `${i + 1}`,
+        e.description.length > 35 ? e.description.substring(0, 35) + '...' : e.description,
+        e.type === 'recurring' ? `Fixa • Dia ${e.dayOfMonth}` : format(parseLocalDate(e.date), "dd/MM"),
+        formatCurrency(e.amount),
+      ]),
       theme: 'striped',
-      headStyles: { fillColor: [59, 130, 246] },
+      headStyles: { fillColor: [234, 179, 8], textColor: [0, 0, 0], fontSize: 8 },
+      styles: { fontSize: 8 },
+      columnStyles: {
+        0: { cellWidth: 12, halign: 'center' },
+        1: { cellWidth: 80 },
+        2: { cellWidth: 35, halign: 'center' },
+        3: { cellWidth: 40, halign: 'right' },
+      },
       margin: { left: 14, right: 14 }
     });
-
-    yPosition = (doc as any).lastAutoTable.finalY + 15;
+    yPosition = (doc as any).lastAutoTable.finalY + 10;
   }
 
-  // ============ GRÁFICOS DE PIZZA ============
-  checkPageBreak(80);
-
-  // Gastos por forma de pagamento
-  const paymentTotals: Record<PaymentMethod, number> = { credit: 0, debit: 0, pix: 0 };
-  filteredExpenses.forEach(e => { paymentTotals[e.payment_method] += Number(e.amount); });
-  activeRecurring.forEach(e => { paymentTotals[e.payment_method] += Number(e.amount); });
-
-  const paymentChartData: ChartData[] = Object.entries(paymentTotals)
-    .filter(([_, value]) => value > 0)
-    .map(([method, value]) => ({
-      label: `${paymentMethodLabels[method as PaymentMethod]} (R$ ${value.toFixed(0)})`,
-      value,
-      color: COLORS[method as PaymentMethod]
-    }));
-
-  if (paymentChartData.length > 0) {
-    const paymentChartImage = createPieChartCanvas(
-      paymentChartData,
-      'Gastos por Forma de Pagamento'
-    );
-
-    if (paymentChartImage) {
-      doc.addImage(paymentChartImage, 'PNG', 14, yPosition, 85, 65);
-    }
-  }
-
-  // Gastos por categoria
-  const categoryTotals: Partial<Record<ExpenseCategory, number>> = {};
-  filteredExpenses.forEach(e => {
-    const cat = e.category || 'outros';
-    categoryTotals[cat] = (categoryTotals[cat] || 0) + Number(e.amount);
-  });
-  activeRecurring.forEach(e => {
-    const cat = e.category || 'outros';
-    categoryTotals[cat] = (categoryTotals[cat] || 0) + Number(e.amount);
-  });
-
-  const categoryChartData: ChartData[] = Object.entries(categoryTotals)
-    .filter(([_, value]) => value > 0)
-    .sort((a, b) => b[1] - a[1])
-    .map(([cat, value], index) => ({
-      label: categoryLabels[cat as ExpenseCategory],
-      value,
-      color: CATEGORY_COLORS[index % CATEGORY_COLORS.length]
-    }));
-
-  if (categoryChartData.length > 0) {
-    const categoryChartImage = createPieChartCanvas(
-      categoryChartData,
-      'Gastos por Categoria'
-    );
-
-    if (categoryChartImage) {
-      doc.addImage(categoryChartImage, 'PNG', 105, yPosition, 85, 65);
-    }
-  }
-
-  yPosition += 75;
-
-  // ============ GRÁFICO: GASTOS POR CARTÃO ============
-  if (cards.length > 0) {
-    checkPageBreak(80);
-
-    const cardTotals: Record<string, { name: string; color: string; value: number }> = {
-      'sem-cartao': { name: 'Sem cartão', color: '#9ca3af', value: 0 }
-    };
-
-    filteredExpenses.forEach(e => {
-      if (e.card_id) {
-        const card = cards.find(c => c.id === e.card_id);
-        if (card) {
-          if (!cardTotals[card.id]) {
-            cardTotals[card.id] = { name: card.name, color: card.color, value: 0 };
-          }
-          cardTotals[card.id].value += Number(e.amount);
-        }
-      } else {
-        cardTotals['sem-cartao'].value += Number(e.amount);
-      }
-    });
-
-    activeRecurring.forEach(e => {
-      if (e.card_id) {
-        const card = cards.find(c => c.id === e.card_id);
-        if (card) {
-          if (!cardTotals[card.id]) {
-            cardTotals[card.id] = { name: card.name, color: card.color, value: 0 };
-          }
-          cardTotals[card.id].value += Number(e.amount);
-        }
-      } else {
-        cardTotals['sem-cartao'].value += Number(e.amount);
-      }
-    });
-
-    const cardChartData: ChartData[] = Object.values(cardTotals)
-      .filter(item => item.value > 0)
-      .sort((a, b) => b.value - a.value)
-      .map(item => ({
-        label: item.name,
-        value: item.value,
-        color: item.color
-      }));
-
-    if (cardChartData.length > 0) {
-      const cardChartImage = createPieChartCanvas(
-        cardChartData,
-        'Gastos por Cartão'
-      );
-
-      if (cardChartImage) {
-        doc.addImage(cardChartImage, 'PNG', 14, yPosition, 85, 65);
-      }
-    }
-
-    // Gráfico por membro (se em grupo)
-    if (isGroupContext && groupMembers.length > 0) {
-      const memberTotals: Record<string, { name: string; value: number }> = {};
-      
-      filteredExpenses.forEach(e => {
-        const member = groupMembers.find(m => m.user_id === e.user_id);
-        const email = member?.user_email || 'Desconhecido';
-        const name = email.split('@')[0];
-        
-        if (!memberTotals[e.user_id]) {
-          memberTotals[e.user_id] = { name, value: 0 };
-        }
-        memberTotals[e.user_id].value += Number(e.amount);
-      });
-
-      const memberChartData: ChartData[] = Object.values(memberTotals)
-        .filter(item => item.value > 0)
-        .sort((a, b) => b.value - a.value)
-        .map((item, index) => ({
-          label: item.name,
-          value: item.value,
-          color: CATEGORY_COLORS[index % CATEGORY_COLORS.length]
-        }));
-
-      if (memberChartData.length > 0) {
-        const memberChartImage = createPieChartCanvas(
-          memberChartData,
-          'Gastos por Membro'
-        );
-
-        if (memberChartImage) {
-          doc.addImage(memberChartImage, 'PNG', 105, yPosition, 85, 65);
-        }
-      }
-    }
-
-    yPosition += 75;
-  }
-
-  // ============ DESPESAS FIXAS ============
-  if (activeRecurring.length > 0) {
-    checkPageBreak(50);
-
-    doc.setFontSize(14);
+  // ============ SECTION 10: COMPARAÇÃO VS ANTERIOR ============
+  if (previousPeriodDates && (previousTotalExpenses > 0 || previousTotalIncomes > 0)) {
+    checkPageBreak(45);
+    doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.text('Despesas Fixas', 14, yPosition);
+    doc.text('Comparação vs Período Anterior', 14, yPosition);
+    yPosition += 7;
+
+    const compData = [
+      { label: 'Entradas', current: totalIncomes, previous: previousTotalIncomes, delta: incomeDelta },
+      { label: 'Saídas', current: totalPeriod, previous: previousTotalExpenses, delta: expenseDelta },
+      { label: 'Saldo', current: balance, previous: previousBalance, delta: balanceDelta },
+    ];
+
+    autoTable(doc, {
+      startY: yPosition,
+      head: [['', 'Atual', 'Anterior', 'Variação']],
+      body: compData.map(item => [
+        item.label,
+        formatCurrency(item.current),
+        formatCurrency(item.previous),
+        formatDeltaWithAbsolute(item.delta, item.current, item.previous),
+      ]),
+      theme: 'grid',
+      headStyles: { fillColor: [59, 130, 246], fontSize: 9 },
+      styles: { fontSize: 8 },
+      columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: 30 },
+        1: { cellWidth: 45, halign: 'right' },
+        2: { cellWidth: 45, halign: 'right' },
+        3: { cellWidth: 50 },
+      },
+      margin: { left: 14, right: 14 }
+    });
+    yPosition = (doc as any).lastAutoTable.finalY + 10;
+  }
+
+  // ============ SECTION 11: TAXA DE ECONOMIA ============
+  if (totalIncomes > 0) {
+    checkPageBreak(25);
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Taxa de Economia', 14, yPosition);
     yPosition += 8;
 
-    const recurringData = activeRecurring
+    doc.setFontSize(22);
+    doc.setFont('helvetica', 'bold');
+    const srColor = savingsRate < 0 ? [239, 68, 68] : savingsRate < 10 ? [249, 115, 22] : savingsRate < 20 ? [59, 130, 246] : [34, 197, 94];
+    doc.setTextColor(srColor[0], srColor[1], srColor[2]);
+    doc.text(`${savingsRate.toFixed(0)}%`, pageWidth / 2, yPosition, { align: 'center' });
+    yPosition += 6;
+
+    doc.setFontSize(9);
+    const interpretation = savingsRate < 0 ? "Você gastou mais do que ganhou" : savingsRate < 10 ? "Tente reservar mais" : savingsRate < 20 ? "Bom ritmo!" : "Excelente! 🎉";
+    doc.text(interpretation, pageWidth / 2, yPosition, { align: 'center' });
+    yPosition += 5;
+
+    doc.setTextColor(128);
+    doc.setFontSize(8);
+    doc.text(`Você economizou ${formatCurrency(Math.max(balance, 0))} de ${formatCurrency(totalIncomes)} em entradas`, pageWidth / 2, yPosition, { align: 'center' });
+    doc.setTextColor(0);
+    yPosition += 10;
+  }
+
+  // ============ SECTION 12: DESPESAS FIXAS ============
+  if (filteredRecurringExpenses.length > 0) {
+    checkPageBreak(50);
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Despesas Fixas', 14, yPosition);
+    yPosition += 7;
+
+    const recurringTotal = filteredRecurringExpenses.reduce((s, e) => s + Number(e.amount), 0) * rm;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Total: ${formatCurrency(recurringTotal)}`, 14, yPosition);
+    yPosition += 6;
+
+    const today = new Date().getDate();
+    const recurringData = filteredRecurringExpenses
       .sort((a, b) => Number(b.amount) - Number(a.amount))
       .map(e => {
         const card = cards.find(c => c.id === e.card_id);
+        const isPaid = e.day_of_month < today;
         return [
           e.description,
-          categoryLabels[e.category],
+          isPaid ? 'Paga' : 'Pendente',
           `Dia ${e.day_of_month}`,
           paymentMethodLabels[e.payment_method],
           card?.name || '-',
-          `R$ ${Number(e.amount).toFixed(2)}`
+          formatCurrency(Number(e.amount)),
         ];
       });
 
     autoTable(doc, {
       startY: yPosition,
-      head: [['Descrição', 'Categoria', 'Dia', 'Pagamento', 'Cartão', 'Valor']],
+      head: [['Descrição', 'Status', 'Dia', 'Método', 'Cartão', 'Valor']],
       body: recurringData,
       theme: 'striped',
-      headStyles: { fillColor: [20, 184, 166] },
+      headStyles: { fillColor: [20, 184, 166], fontSize: 8 },
+      styles: { fontSize: 8 },
       columnStyles: {
         0: { cellWidth: 45 },
-        1: { cellWidth: 30 },
-        2: { cellWidth: 20 },
+        1: { cellWidth: 20 },
+        2: { cellWidth: 18 },
         3: { cellWidth: 25 },
         4: { cellWidth: 30 },
         5: { cellWidth: 30, halign: 'right' }
       },
       margin: { left: 14, right: 14 }
     });
-
     yPosition = (doc as any).lastAutoTable.finalY + 10;
-
-    doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`Total Mensal em Despesas Fixas: R$ ${totalRecurring.toFixed(2)}`, 14, yPosition);
-    yPosition += 15;
   }
 
-  // ============ LISTA DE DESPESAS DO MÊS ============
-  if (filteredExpenses.length > 0) {
-    checkPageBreak(50);
-
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Despesas do Mês', 14, yPosition);
-    yPosition += 8;
-
-    const expenseData = filteredExpenses
-      .sort((a, b) => new Date(b.expense_date).getTime() - new Date(a.expense_date).getTime())
-      .map(e => {
-        const card = cards.find(c => c.id === e.card_id);
-        return [
-          format(new Date(e.expense_date), 'dd/MM'),
-          e.description.length > 25 ? e.description.substring(0, 25) + '...' : e.description,
-          categoryLabels[e.category],
-          paymentMethodLabels[e.payment_method],
-          card?.name || '-',
-          `R$ ${Number(e.amount).toFixed(2)}`
-        ];
-      });
-
-    autoTable(doc, {
-      startY: yPosition,
-      head: [['Data', 'Descrição', 'Categoria', 'Pagamento', 'Cartão', 'Valor']],
-      body: expenseData,
-      theme: 'striped',
-      headStyles: { fillColor: [100, 116, 139] },
-      columnStyles: {
-        0: { cellWidth: 18 },
-        1: { cellWidth: 47 },
-        2: { cellWidth: 30 },
-        3: { cellWidth: 25 },
-        4: { cellWidth: 30 },
-        5: { cellWidth: 30, halign: 'right' }
-      },
-      margin: { left: 14, right: 14 },
-      styles: { fontSize: 8 }
-    });
-  }
-
-  // ============ RODAPÉ ============
+  // ============ FOOTER ============
   const pageCount = doc.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
     doc.setFontSize(8);
     doc.setTextColor(128);
     doc.text(
-      `Página ${i} de ${pageCount} - Gastinho Simples`,
+      `Página ${i} de ${pageCount} — Gastinho Simples`,
       pageWidth / 2,
       290,
       { align: 'center' }
     );
   }
 
-  const fileName = `relatorio-gastos-${format(startDate, 'yyyy-MM')}.pdf`;
+  const fileName = `relatorio-${format(startDate, 'yyyy-MM')}.pdf`;
 
   if (isNativeApp()) {
-    // No app nativo: converter para base64 e compartilhar
     const pdfBase64 = doc.output("datauristring").split(",")[1];
     await saveAndShareFile(pdfBase64, fileName);
   } else {
-    // No navegador: download direto
     doc.save(fileName);
   }
-  
+
   return fileName;
 }
