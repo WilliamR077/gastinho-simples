@@ -214,16 +214,20 @@ const Reports = () => {
     
     try {
       setIsExporting(true);
-      await exportReportsToPDF(
+      await exportReportsToPDF({
         expenses,
         recurringExpenses,
         cards,
+        incomes,
+        recurringIncomes,
         startDate,
         endDate,
+        periodType,
+        periodLabel,
         isGroupContext,
         groupMembers,
-        currentContext.groupName
-      );
+        groupName: currentContext.groupName,
+      });
       toast.success("Relatório exportado com sucesso!");
     } catch (error) {
       console.error("Error exporting PDF:", error);
