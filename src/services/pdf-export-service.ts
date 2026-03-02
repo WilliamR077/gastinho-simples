@@ -1,16 +1,15 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { format, eachDayOfInterval, eachMonthOfInterval, startOfMonth, endOfMonth, subMonths, subYears, subQuarters, isSameDay, parseISO, differenceInDays } from 'date-fns';
+import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Expense, PaymentMethod, ExpenseCategory, categoryLabels } from '@/types/expense';
-import { RecurringExpense } from '@/types/recurring-expense';
+import { PaymentMethod } from '@/types/expense';
 import { Card } from '@/types/card';
-import { Income, RecurringIncome } from '@/types/income';
 import { PeriodType } from '@/components/period-selector';
 import { parseLocalDate } from '@/lib/utils';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
+import { ReportViewModel, CashFlowDataItem } from '@/utils/report-view-model';
 
 const isNativeApp = () => Capacitor.isNativePlatform();
 
@@ -45,7 +44,7 @@ const paymentMethodLabels: Record<PaymentMethod, string> = {
   pix: 'PIX'
 };
 
-const COLORS = {
+const COLORS: Record<string, string> = {
   credit: '#f59e0b',
   debit: '#8b5cf6',
   pix: '#06b6d4',
@@ -134,7 +133,6 @@ function createLineChartCanvas(
   const maxValue = Math.max(...values, averageValue || 0, 1);
   const stepCount = Math.max(labels.length - 1, 1);
 
-  // Grid
   ctx.strokeStyle = '#e5e7eb';
   ctx.lineWidth = 0.5;
   for (let i = 0; i <= 4; i++) {
@@ -151,7 +149,6 @@ function createLineChartCanvas(
     ctx.fillText(`R$ ${value.toFixed(0)}`, padding.left - 5, y);
   }
 
-  // X labels
   const showEvery = labels.length > 15 ? 3 : 1;
   labels.forEach((label, index) => {
     if (index % showEvery !== 0 && index !== labels.length - 1) return;
@@ -163,7 +160,6 @@ function createLineChartCanvas(
     ctx.fillText(label, x, height - padding.bottom + 5);
   });
 
-  // Average dashed line
   if (averageValue !== undefined && averageValue > 0) {
     const avgY = padding.top + chartHeight - (chartHeight * averageValue) / maxValue;
     ctx.beginPath();
@@ -180,7 +176,6 @@ function createLineChartCanvas(
     ctx.fillText(`Média: R$ ${averageValue.toFixed(0)}`, width - padding.right, avgY - 5);
   }
 
-  // Area fill
   ctx.beginPath();
   ctx.moveTo(padding.left, padding.top + chartHeight);
   values.forEach((value, index) => {
@@ -190,11 +185,9 @@ function createLineChartCanvas(
   });
   ctx.lineTo(padding.left + (chartWidth * (values.length - 1)) / stepCount, padding.top + chartHeight);
   ctx.closePath();
-  const hex = lineColor;
-  ctx.fillStyle = hex + '1A';
+  ctx.fillStyle = lineColor + '1A';
   ctx.fill();
 
-  // Line
   ctx.beginPath();
   ctx.strokeStyle = lineColor;
   ctx.lineWidth = 2.5;
@@ -206,7 +199,6 @@ function createLineChartCanvas(
   });
   ctx.stroke();
 
-  // Dots
   values.forEach((value, index) => {
     const x = padding.left + (chartWidth * index) / stepCount;
     const y = padding.top + chartHeight - (chartHeight * value) / (maxValue || 1);
@@ -223,7 +215,7 @@ function createLineChartCanvas(
 }
 
 function createDualBarChartCanvas(
-  data: { label: string; entradas: number; saidas: number }[],
+  data: CashFlowDataItem[],
   width: number = 500,
   height: number = 220
 ): string {
@@ -240,7 +232,6 @@ function createDualBarChartCanvas(
   const groupWidth = chartWidth / data.length;
   const barWidth = groupWidth * 0.35;
 
-  // Grid
   ctx.strokeStyle = '#e5e7eb';
   ctx.lineWidth = 0.5;
   for (let i = 0; i <= 4; i++) {
@@ -257,19 +248,15 @@ function createDualBarChartCanvas(
     ctx.fillText(`R$ ${value.toFixed(0)}`, padding.left - 5, y);
   }
 
-  // Bars + X labels
   const showEvery = data.length > 15 ? 3 : 1;
   data.forEach((item, index) => {
     const groupX = padding.left + groupWidth * index;
-    // Green bar (entradas)
     const h1 = (chartHeight * item.entradas) / maxValue;
     ctx.fillStyle = '#22c55e';
     ctx.fillRect(groupX + groupWidth * 0.1, padding.top + chartHeight - h1, barWidth, h1);
-    // Red bar (saidas)
     const h2 = (chartHeight * item.saidas) / maxValue;
     ctx.fillStyle = '#ef4444';
     ctx.fillRect(groupX + groupWidth * 0.1 + barWidth + 1, padding.top + chartHeight - h2, barWidth, h2);
-    // Label
     if (index % showEvery === 0 || index === data.length - 1) {
       ctx.fillStyle = '#6b7280';
       ctx.font = '8px Arial';
@@ -279,7 +266,6 @@ function createDualBarChartCanvas(
     }
   });
 
-  // Legend
   ctx.fillStyle = '#22c55e';
   ctx.fillRect(padding.left, 5, 10, 10);
   ctx.fillStyle = '#374151';
@@ -307,20 +293,11 @@ const formatDeltaWithAbsolute = (delta: number | null, currentVal: number, previ
   return `${sign} ${Math.abs(delta).toFixed(0)}% (${diffStr})`;
 };
 
-const getCategoryInfo = (expense: Expense | RecurringExpense) => {
-  if (expense.category_name) return { id: expense.category_id || expense.category, name: expense.category_name, icon: expense.category_icon || '📦' };
-  const label = categoryLabels[expense.category] || expense.category;
-  return { id: expense.category, name: label, icon: '📦' };
-};
-
 // ============ MAIN EXPORT ============
 
 export interface ExportReportParams {
-  expenses: Expense[];
-  recurringExpenses: RecurringExpense[];
+  viewModel: ReportViewModel;
   cards: Card[];
-  incomes: Income[];
-  recurringIncomes: RecurringIncome[];
   startDate: Date;
   endDate: Date;
   periodType: PeriodType;
@@ -332,11 +309,24 @@ export interface ExportReportParams {
 
 export async function exportReportsToPDF(params: ExportReportParams) {
   const {
-    expenses, recurringExpenses, cards,
-    incomes, recurringIncomes,
+    viewModel, cards,
     startDate, endDate, periodType, periodLabel,
     isGroupContext, groupMembers, groupName
   } = params;
+
+  // Destructure all data from shared view model — same data the UI renders
+  const {
+    filteredExpenses, filteredRecurringExpenses,
+    filteredIncomes, filteredRecurringIncomes,
+    monthsInPeriod, totalPeriod, totalIncomes, balance,
+    previousPeriodDates, previousTotalExpenses, previousTotalIncomes, previousBalance,
+    expenseDelta, incomeDelta, balanceDelta, savingsRate,
+    topCategory, mostExpensiveDay,
+    categoryData, paymentMethodData, cardData,
+    cashFlowDataRaw, evolutionDataRaw, dailyAverage, topExpenses,
+  } = viewModel;
+
+  const rm = periodType === "month" ? 1 : monthsInPeriod;
 
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -348,217 +338,6 @@ export async function exportReportsToPDF(params: ExportReportParams) {
       yPosition = 20;
     }
   };
-
-  // ============ DATA CALCULATIONS (replicating reports-accordion) ============
-
-  const filteredExpenses = expenses.filter(e => {
-    const d = parseLocalDate(e.expense_date);
-    return d >= startDate && d <= endDate;
-  });
-
-  const filteredRecurringExpenses = recurringExpenses.filter(re => {
-    if (!re.is_active && !re.end_date) return false;
-    const sd = re.start_date ? parseISO(re.start_date) : parseLocalDate(re.created_at);
-    const ed = re.end_date ? parseISO(re.end_date) : null;
-    return sd <= endDate && (!ed || ed >= startDate);
-  });
-
-  const filteredIncomes = incomes.filter(i => {
-    const d = parseLocalDate(i.income_date);
-    return d >= startDate && d <= endDate;
-  });
-
-  const filteredRecurringIncomes = recurringIncomes.filter(ri => {
-    if (!ri.is_active && !ri.end_date) return false;
-    const sd = ri.start_date ? parseISO(ri.start_date) : parseLocalDate(ri.created_at);
-    const ed = ri.end_date ? parseISO(ri.end_date) : null;
-    return sd <= endDate && (!ed || ed >= startDate);
-  });
-
-  const monthsInPeriod = eachMonthOfInterval({ start: startDate, end: endDate }).length;
-  const rm = periodType === "month" ? 1 : monthsInPeriod;
-
-  const totalPeriod = filteredExpenses.reduce((s, e) => s + Number(e.amount), 0)
-    + filteredRecurringExpenses.reduce((s, e) => s + Number(e.amount), 0) * rm;
-
-  const totalIncomes = filteredIncomes.reduce((s, i) => s + Number(i.amount), 0)
-    + filteredRecurringIncomes.reduce((s, i) => s + Number(i.amount), 0) * rm;
-
-  const balance = totalIncomes - totalPeriod;
-
-  // Previous period
-  let previousPeriodDates: { start: Date; end: Date } | null = null;
-  if (periodType === "month") {
-    const ps = subMonths(startDate, 1);
-    previousPeriodDates = { start: startOfMonth(ps), end: endOfMonth(ps) };
-  } else if (periodType === "year") {
-    const ps = subYears(startDate, 1);
-    previousPeriodDates = { start: new Date(ps.getFullYear(), 0, 1), end: new Date(ps.getFullYear(), 11, 31) };
-  } else if (periodType === "quarter") {
-    const ps = subQuarters(startDate, 1);
-    previousPeriodDates = { start: startOfMonth(ps), end: endOfMonth(subMonths(startDate, 1)) };
-  }
-
-  let previousTotalExpenses = 0;
-  let previousTotalIncomes = 0;
-  if (previousPeriodDates) {
-    previousTotalExpenses = expenses.filter(e => {
-      const d = parseLocalDate(e.expense_date);
-      return d >= previousPeriodDates!.start && d <= previousPeriodDates!.end;
-    }).reduce((s, e) => s + Number(e.amount), 0);
-    previousTotalIncomes = incomes.filter(i => {
-      const d = parseLocalDate(i.income_date);
-      return d >= previousPeriodDates!.start && d <= previousPeriodDates!.end;
-    }).reduce((s, i) => s + Number(i.amount), 0);
-  }
-  const previousBalance = previousTotalIncomes - previousTotalExpenses;
-
-  const expenseDelta = previousTotalExpenses > 0 ? ((totalPeriod - previousTotalExpenses) / previousTotalExpenses) * 100 : null;
-  const incomeDelta = previousTotalIncomes > 0 ? ((totalIncomes - previousTotalIncomes) / previousTotalIncomes) * 100 : null;
-  const balanceDelta = Math.abs(previousBalance) >= 10 ? ((balance - previousBalance) / Math.abs(previousBalance)) * 100 : null;
-  const savingsRate = totalIncomes > 0 ? (balance / totalIncomes) * 100 : 0;
-
-  // Top category
-  const catTotals: Record<string, { name: string; value: number }> = {};
-  filteredExpenses.forEach(e => {
-    const c = getCategoryInfo(e);
-    if (!catTotals[c.id]) catTotals[c.id] = { name: c.name, value: 0 };
-    catTotals[c.id].value += Number(e.amount);
-  });
-  const catSorted = Object.values(catTotals).sort((a, b) => b.value - a.value);
-  const catTotal = catSorted.reduce((s, i) => s + i.value, 0);
-  const topCategory = catSorted.length > 0 ? { name: catSorted[0].name, pct: catTotal > 0 ? ((catSorted[0].value / catTotal) * 100).toFixed(0) : "0" } : null;
-
-  // Most expensive day
-  const dayTotals: Record<string, { date: string; total: number }> = {};
-  filteredExpenses.forEach(e => {
-    if (!dayTotals[e.expense_date]) dayTotals[e.expense_date] = { date: e.expense_date, total: 0 };
-    dayTotals[e.expense_date].total += Number(e.amount);
-  });
-  const daySorted = Object.values(dayTotals).sort((a, b) => b.total - a.total);
-  const mostExpensiveDay = daySorted.length > 0 ? { date: format(parseLocalDate(daySorted[0].date), "dd/MM"), value: daySorted[0].total } : null;
-
-  // Category data (Top 5 + Others)
-  const categoryDataMap: Record<string, { name: string; icon: string; value: number }> = {};
-  filteredExpenses.forEach(e => {
-    const c = getCategoryInfo(e);
-    if (!categoryDataMap[c.id]) categoryDataMap[c.id] = { name: c.name, icon: c.icon, value: 0 };
-    categoryDataMap[c.id].value += Number(e.amount);
-  });
-  filteredRecurringExpenses.forEach(r => {
-    const c = getCategoryInfo(r as any);
-    if (!categoryDataMap[c.id]) categoryDataMap[c.id] = { name: c.name, icon: c.icon, value: 0 };
-    categoryDataMap[c.id].value += Number(r.amount) * rm;
-  });
-  const catDataTotal = Object.values(categoryDataMap).reduce((s, i) => s + i.value, 0);
-  let categoryData = Object.values(categoryDataMap)
-    .filter(i => i.value > 0)
-    .map(i => ({ ...i, percentage: catDataTotal > 0 ? (i.value / catDataTotal) * 100 : 0 }))
-    .sort((a, b) => b.value - a.value);
-  if (categoryData.length > 5) {
-    const top5 = categoryData.slice(0, 5);
-    const othersVal = categoryData.slice(5).reduce((s, i) => s + i.value, 0);
-    categoryData = [...top5, { name: "Outros", icon: "📦", value: othersVal, percentage: catDataTotal > 0 ? (othersVal / catDataTotal) * 100 : 0 }];
-  }
-
-  // Payment method data
-  const pmTotals: Record<PaymentMethod, number> = { credit: 0, debit: 0, pix: 0 };
-  filteredExpenses.forEach(e => { pmTotals[e.payment_method] += Number(e.amount); });
-  filteredRecurringExpenses.forEach(r => { pmTotals[r.payment_method] += Number(r.amount) * rm; });
-  const pmTotal = Object.values(pmTotals).reduce((s, v) => s + v, 0);
-  const paymentMethodData = Object.entries(pmTotals)
-    .filter(([, v]) => v > 0)
-    .map(([method, value]) => ({
-      name: paymentMethodLabels[method as PaymentMethod],
-      method: method as PaymentMethod,
-      value,
-      percentage: pmTotal > 0 ? (value / pmTotal) * 100 : 0,
-    }))
-    .sort((a, b) => b.value - a.value);
-
-  // Card data
-  const cardTotals: Record<string, { name: string; color: string; value: number }> = {};
-  cardTotals['no-card'] = { name: 'Sem cartão', color: '#9ca3af', value: 0 };
-  filteredExpenses.forEach(e => {
-    if (e.card_id) {
-      const card = cards.find(c => c.id === e.card_id);
-      if (card) {
-        if (!cardTotals[card.id]) cardTotals[card.id] = { name: card.name, color: card.color, value: 0 };
-        cardTotals[card.id].value += Number(e.amount);
-      }
-    } else { cardTotals['no-card'].value += Number(e.amount); }
-  });
-  filteredRecurringExpenses.forEach(r => {
-    if (r.card_id) {
-      const card = cards.find(c => c.id === r.card_id);
-      if (card) {
-        if (!cardTotals[card.id]) cardTotals[card.id] = { name: card.name, color: card.color, value: 0 };
-        cardTotals[card.id].value += Number(r.amount) * rm;
-      }
-    } else { cardTotals['no-card'].value += Number(r.amount) * rm; }
-  });
-  const cardDataTotal = Object.values(cardTotals).reduce((s, i) => s + i.value, 0);
-  const cardData = Object.values(cardTotals)
-    .filter(i => i.value > 0)
-    .map(i => ({ ...i, percentage: cardDataTotal > 0 ? ((i.value / cardDataTotal) * 100).toFixed(1) : "0" }))
-    .sort((a, b) => b.value - a.value);
-
-  // Cash flow data (always "daily" mode for PDF)
-  const cashFlowData = periodType === "month"
-    ? eachDayOfInterval({ start: startDate, end: endDate }).map(day => {
-        const dayExp = filteredExpenses.filter(e => isSameDay(parseLocalDate(e.expense_date), day));
-        const dayInc = filteredIncomes.filter(i => isSameDay(parseLocalDate(i.income_date), day));
-        return {
-          label: format(day, "dd"),
-          entradas: Number(dayInc.reduce((s, i) => s + Number(i.amount), 0).toFixed(2)),
-          saidas: Number(dayExp.reduce((s, e) => s + Number(e.amount), 0).toFixed(2)),
-        };
-      })
-    : eachMonthOfInterval({ start: startDate, end: endDate }).map(month => {
-        const ms = startOfMonth(month), me = endOfMonth(month);
-        const mExp = filteredExpenses.filter(e => { const d = parseLocalDate(e.expense_date); return d >= ms && d <= me; });
-        const mInc = filteredIncomes.filter(i => { const d = parseLocalDate(i.income_date); return d >= ms && d <= me; });
-        let totalE = mExp.reduce((s, e) => s + Number(e.amount), 0);
-        let totalI = mInc.reduce((s, i) => s + Number(i.amount), 0);
-        filteredRecurringExpenses.forEach(r => {
-          const sd = r.start_date ? parseISO(r.start_date) : parseLocalDate(r.created_at);
-          const ed = r.end_date ? parseISO(r.end_date) : null;
-          if (sd <= me && (!ed || ed >= ms)) totalE += Number(r.amount);
-        });
-        filteredRecurringIncomes.forEach(r => {
-          const sd = r.start_date ? parseISO(r.start_date) : parseLocalDate(r.created_at);
-          const ed = r.end_date ? parseISO(r.end_date) : null;
-          if (sd <= me && (!ed || ed >= ms)) totalI += Number(r.amount);
-        });
-        return { label: format(month, "MMM/yy", { locale: ptBR }), entradas: Number(totalI.toFixed(2)), saidas: Number(totalE.toFixed(2)) };
-      });
-
-  // Evolution data (always "daily" for PDF)
-  const evolutionData = periodType === "month"
-    ? eachDayOfInterval({ start: startDate, end: endDate }).map(day => {
-        const dayExp = filteredExpenses.filter(e => isSameDay(parseLocalDate(e.expense_date), day));
-        return { label: format(day, "dd"), total: Number(dayExp.reduce((s, e) => s + Number(e.amount), 0).toFixed(2)) };
-      })
-    : eachMonthOfInterval({ start: startDate, end: endDate }).map(month => {
-        const ms = startOfMonth(month), me = endOfMonth(month);
-        const mExp = filteredExpenses.filter(e => { const d = parseLocalDate(e.expense_date); return d >= ms && d <= me; });
-        let total = mExp.reduce((s, e) => s + Number(e.amount), 0);
-        filteredRecurringExpenses.forEach(r => {
-          const sd = r.start_date ? parseISO(r.start_date) : parseLocalDate(r.created_at);
-          const ed = r.end_date ? parseISO(r.end_date) : null;
-          if (sd <= me && (!ed || ed >= ms)) total += Number(r.amount);
-        });
-        return { label: format(month, "MMM/yy", { locale: ptBR }), total: Number(total.toFixed(2)) };
-      });
-
-  const days = differenceInDays(endDate, startDate) + 1;
-  const dailyAverage = days > 0 ? totalPeriod / days : 0;
-
-  // Top 10 expenses
-  const topExpenses = [
-    ...filteredExpenses.map(e => ({ description: e.description, amount: Number(e.amount), date: e.expense_date, type: 'expense' as const, dayOfMonth: undefined as number | undefined })),
-    ...filteredRecurringExpenses.map(r => ({ description: r.description, amount: Number(r.amount), date: '', type: 'recurring' as const, dayOfMonth: r.day_of_month })),
-  ].sort((a, b) => b.amount - a.amount).slice(0, 10);
 
   // ============ SECTION 1: HEADER ============
   doc.setFontSize(20);
@@ -636,7 +415,7 @@ export async function exportReportsToPDF(params: ExportReportParams) {
   });
   yPosition = (doc as any).lastAutoTable.finalY + 10;
 
-  // ============ SECTION 4: GASTOS POR CATEGORIA (barras horizontais via tabela) ============
+  // ============ SECTION 4: GASTOS POR CATEGORIA ============
   if (categoryData.length > 0) {
     checkPageBreak(50);
     doc.setFontSize(12);
@@ -647,7 +426,7 @@ export async function exportReportsToPDF(params: ExportReportParams) {
     autoTable(doc, {
       startY: yPosition,
       head: [['Categoria', 'Valor', '%', '']],
-      body: categoryData.map((cat, i) => [
+      body: categoryData.map((cat) => [
         `${cat.icon} ${cat.name}`,
         formatCurrency(cat.value),
         `${cat.percentage.toFixed(0)}%`,
@@ -679,7 +458,7 @@ export async function exportReportsToPDF(params: ExportReportParams) {
     yPosition = (doc as any).lastAutoTable.finalY + 10;
   }
 
-  // ============ SECTION 5: FORMA DE PAGAMENTO (barras) ============
+  // ============ SECTION 5: FORMA DE PAGAMENTO ============
   if (paymentMethodData.length > 0) {
     checkPageBreak(40);
     doc.setFontSize(12);
@@ -725,7 +504,7 @@ export async function exportReportsToPDF(params: ExportReportParams) {
     yPosition = (doc as any).lastAutoTable.finalY + 10;
   }
 
-  // ============ SECTION 6: GASTOS POR CARTÃO (donut) ============
+  // ============ SECTION 6: GASTOS POR CARTÃO ============
   if (cardData.length > 0) {
     checkPageBreak(80);
     doc.setFontSize(12);
@@ -733,7 +512,7 @@ export async function exportReportsToPDF(params: ExportReportParams) {
     doc.text('Gastos por Cartão', 14, yPosition);
     yPosition += 7;
 
-    const donutChartData: ChartData[] = cardData.map((c, i) => ({
+    const donutChartData: ChartData[] = cardData.map((c) => ({
       label: c.name,
       value: c.value,
       color: c.color,
@@ -744,9 +523,8 @@ export async function exportReportsToPDF(params: ExportReportParams) {
       doc.addImage(donutImage, 'PNG', 14, yPosition, 80, 60);
     }
 
-    // Legend next to donut
     let legendY = yPosition + 5;
-    cardData.forEach((c, i) => {
+    cardData.forEach((c) => {
       if (legendY > yPosition + 55) return;
       const color = c.color;
       const r = parseInt(color.slice(1, 3), 16);
@@ -765,7 +543,7 @@ export async function exportReportsToPDF(params: ExportReportParams) {
   }
 
   // ============ SECTION 7: FLUXO DE CAIXA ============
-  if (cashFlowData.length > 0) {
+  if (cashFlowDataRaw.length > 0) {
     checkPageBreak(80);
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
@@ -777,7 +555,7 @@ export async function exportReportsToPDF(params: ExportReportParams) {
     doc.setTextColor(0);
     yPosition += 5;
 
-    const cfImage = createDualBarChartCanvas(cashFlowData, 500, 200);
+    const cfImage = createDualBarChartCanvas(cashFlowDataRaw, 500, 200);
     if (cfImage) {
       doc.addImage(cfImage, 'PNG', 14, yPosition, 180, 65);
       yPosition += 70;
@@ -785,7 +563,7 @@ export async function exportReportsToPDF(params: ExportReportParams) {
   }
 
   // ============ SECTION 8: EVOLUÇÃO DOS GASTOS ============
-  if (evolutionData.length > 0) {
+  if (evolutionDataRaw.length > 0) {
     checkPageBreak(80);
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
@@ -798,8 +576,8 @@ export async function exportReportsToPDF(params: ExportReportParams) {
     yPosition += 5;
 
     const evoImage = createLineChartCanvas(
-      evolutionData.map(d => d.label),
-      evolutionData.map(d => d.total),
+      evolutionDataRaw.map(d => d.label),
+      evolutionDataRaw.map(d => d.total),
       500, 200,
       '#ef4444',
       dailyAverage
@@ -925,7 +703,7 @@ export async function exportReportsToPDF(params: ExportReportParams) {
     yPosition += 6;
 
     const today = new Date().getDate();
-    const recurringData = filteredRecurringExpenses
+    const recurringData = [...filteredRecurringExpenses]
       .sort((a, b) => Number(b.amount) - Number(a.amount))
       .map(e => {
         const card = cards.find(c => c.id === e.card_id);

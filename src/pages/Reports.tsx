@@ -1,6 +1,6 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Expense } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
@@ -12,11 +12,12 @@ import { ContextSelector } from "@/components/context-selector";
 import { useSharedGroups } from "@/hooks/use-shared-groups";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Download, Loader2, Lock, Crown } from "lucide-react";
-
 import { startOfMonth, endOfMonth } from "date-fns";
 import { exportReportsToPDF } from "@/services/pdf-export-service";
 import { toast } from "sonner";
 import { useSubscription } from "@/hooks/use-subscription";
+import { useCategories } from "@/hooks/use-categories";
+import { buildReportViewModel } from "@/utils/report-view-model";
 
 import {
   Dialog,
@@ -38,6 +39,7 @@ const Reports = () => {
   const navigate = useNavigate();
   const { currentContext, getGroupMembers } = useSharedGroups();
   const { canExportPdf } = useSubscription();
+  const { categories } = useCategories();
   
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>([]);
@@ -48,7 +50,6 @@ const Reports = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
   
-  // Estado para período selecionado
   const [startDate, setStartDate] = useState(startOfMonth(new Date()));
   const [endDate, setEndDate] = useState(endOfMonth(new Date()));
   const [periodLabel, setPeriodLabel] = useState("");
@@ -61,7 +62,6 @@ const Reports = () => {
       navigate("/auth");
       return;
     }
-    
     fetchExpenses();
     fetchRecurringExpenses();
     fetchCards();
@@ -69,9 +69,8 @@ const Reports = () => {
     fetchRecurringIncomes();
   }, [user, navigate, currentContext]);
 
-  // Buscar membros do grupo quando em contexto de grupo
   useEffect(() => {
-    const fetchGroupMembers = async () => {
+    const fetchGroupMembersData = async () => {
       if (isGroupContext && currentContext.groupId) {
         const members = await getGroupMembers(currentContext.groupId);
         setGroupMembers(members as GroupMember[]);
@@ -79,8 +78,7 @@ const Reports = () => {
         setGroupMembers([]);
       }
     };
-    
-    fetchGroupMembers();
+    fetchGroupMembersData();
   }, [isGroupContext, currentContext.groupId, getGroupMembers]);
 
   const fetchExpenses = async () => {
@@ -206,6 +204,23 @@ const Reports = () => {
     setPeriodType(type);
   };
 
+  // Compute shared view model
+  const viewModel = useMemo(() => {
+    return buildReportViewModel({
+      expenses,
+      recurringExpenses,
+      incomes,
+      recurringIncomes,
+      cards,
+      categories,
+      startDate,
+      endDate,
+      periodType,
+      isGroupContext,
+      groupMembers,
+    });
+  }, [expenses, recurringExpenses, incomes, recurringIncomes, cards, categories, startDate, endDate, periodType, isGroupContext, groupMembers]);
+
   const handleExportPDF = async () => {
     if (!canExportPdf) {
       setShowUpgradeDialog(true);
@@ -215,11 +230,8 @@ const Reports = () => {
     try {
       setIsExporting(true);
       await exportReportsToPDF({
-        expenses,
-        recurringExpenses,
+        viewModel,
         cards,
-        incomes,
-        recurringIncomes,
         startDate,
         endDate,
         periodType,
@@ -277,10 +289,8 @@ const Reports = () => {
         </div>
       </header>
 
-      {/* Seletor de contexto (Pessoal / Grupo) */}
       <ContextSelector />
 
-      {/* Seletor de período */}
       <div className="container mx-auto px-4">
         <PeriodSelector onPeriodChange={handlePeriodChange} />
       </div>
@@ -298,10 +308,10 @@ const Reports = () => {
           periodLabel={periodLabel}
           isGroupContext={isGroupContext}
           groupMembers={groupMembers}
+          viewModel={viewModel}
         />
       </main>
 
-      {/* Dialog de Upgrade */}
       <Dialog open={showUpgradeDialog} onOpenChange={setShowUpgradeDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -310,9 +320,7 @@ const Reports = () => {
               Exportar para PDF
             </DialogTitle>
             <DialogDescription className="text-left space-y-3 pt-2">
-              <p>
-                A exportação de relatórios em PDF é um recurso Premium.
-              </p>
+              <p>A exportação de relatórios em PDF é um recurso Premium.</p>
               <p className="font-medium">Com o Premium você pode:</p>
               <ul className="list-disc list-inside space-y-1 text-sm">
                 <li>Exportar relatórios para PDF</li>
@@ -323,20 +331,10 @@ const Reports = () => {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setShowUpgradeDialog(false)}
-              className="w-full sm:w-auto"
-            >
+            <Button variant="outline" onClick={() => setShowUpgradeDialog(false)} className="w-full sm:w-auto">
               Cancelar
             </Button>
-            <Button
-              onClick={() => {
-                setShowUpgradeDialog(false);
-                navigate("/subscription");
-              }}
-              className="w-full sm:w-auto"
-            >
+            <Button onClick={() => { setShowUpgradeDialog(false); navigate("/subscription"); }} className="w-full sm:w-auto">
               Ver Planos
             </Button>
           </DialogFooter>
@@ -347,3 +345,4 @@ const Reports = () => {
 };
 
 export default Reports;
+

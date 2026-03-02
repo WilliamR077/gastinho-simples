@@ -1,11 +1,10 @@
 import { useMemo, useState } from "react";
 import { Card as CardType } from "@/types/card";
-import { Expense, PaymentMethod, ExpenseCategory, categoryLabels } from "@/types/expense";
+import { Expense, PaymentMethod, categoryLabels } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
-import { Income, RecurringIncome, incomeCategoryLabels } from "@/types/income";
+import { Income, RecurringIncome } from "@/types/income";
 import { ResponsiveContainer, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, BarChart, Bar, Legend, ReferenceLine, PieChart, Pie, Cell } from "recharts";
-import { format, startOfMonth, endOfMonth, eachMonthOfInterval, eachDayOfInterval, isSameDay, parseISO, subMonths, subYears, subQuarters, differenceInDays } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { format, parseISO } from "date-fns";
 import { TrendingUp, TrendingDown, Crown, Lock, CreditCard, Users, CalendarClock, DollarSign, ArrowUpDown, Sparkles, Target, Trophy, Wallet, BarChart3 } from "lucide-react";
 import { useSubscription } from "@/hooks/use-subscription";
 import { Button } from "@/components/ui/button";
@@ -19,9 +18,9 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
-import { useCategories } from "@/hooks/use-categories";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Progress } from "@/components/ui/progress";
+import { ReportViewModel, applyCumulativeMode, applyWeeklyMode } from "@/utils/report-view-model";
 
 interface GroupMember {
   user_id: string;
@@ -41,12 +40,13 @@ interface ReportsAccordionProps {
   periodLabel: string;
   isGroupContext: boolean;
   groupMembers: GroupMember[];
+  viewModel: ReportViewModel;
 }
 
 const COLORS = {
-  credit: "#f59e0b",  // âmbar
-  debit: "#8b5cf6",   // roxo
-  pix: "#06b6d4",     // ciano
+  credit: "#f59e0b",
+  debit: "#8b5cf6",
+  pix: "#06b6d4",
 };
 
 const CATEGORY_COLORS = [
@@ -68,336 +68,41 @@ const paymentMethodLabels: Record<PaymentMethod, string> = {
 };
 
 export function ReportsAccordion({ 
-  expenses, 
-  recurringExpenses,
   cards,
-  incomes,
-  recurringIncomes,
   startDate,
   endDate,
   periodType,
   periodLabel,
   isGroupContext,
-  groupMembers
+  groupMembers,
+  viewModel,
 }: ReportsAccordionProps) {
   const { hasAdvancedReports } = useSubscription();
   const navigate = useNavigate();
-  const { categories } = useCategories();
   const [cashFlowMode, setCashFlowMode] = useState<"daily" | "cumulative">("daily");
   const [evolutionMode, setEvolutionMode] = useState<"daily" | "weekly">("daily");
 
-  // Helper para obter info da categoria
-  const getCategoryInfo = (categoryId: string | null | undefined, categoryEnum: ExpenseCategory | null | undefined) => {
-    if (categoryId && categories.length > 0) {
-      const found = categories.find(c => c.id === categoryId);
-      if (found) return { id: found.id, name: found.name, icon: found.icon };
-    }
-    if (categoryEnum) {
-      const label = categoryLabels[categoryEnum] || categoryEnum;
-      return { id: categoryEnum, name: label, icon: '📦' };
-    }
-    return { id: 'outros', name: 'Outros', icon: '📦' };
-  };
-  
-  // Filtrar despesas para o período selecionado
-  const filteredExpenses = useMemo(() => {
-    return expenses.filter(e => {
-      const expenseDate = parseLocalDate(e.expense_date);
-      return expenseDate >= startDate && expenseDate <= endDate;
-    });
-  }, [expenses, startDate, endDate]);
+  // All data comes from viewModel now
+  const {
+    filteredExpenses, filteredRecurringExpenses,
+    filteredIncomes, filteredRecurringIncomes,
+    monthsInPeriod, totalPeriod, totalIncomes, balance,
+    previousPeriodDates, previousTotalExpenses, previousTotalIncomes, previousBalance,
+    expenseDelta, incomeDelta, balanceDelta, savingsRate,
+    topCategory, mostExpensiveDay,
+    categoryData, paymentMethodData, cardData, memberData,
+    cashFlowDataRaw, evolutionDataRaw, dailyAverage, topExpenses,
+  } = viewModel;
 
-  // Filtrar despesas recorrentes por start_date e end_date
-  const filteredRecurringExpenses = useMemo(() => {
-    return recurringExpenses.filter(re => {
-      if (!re.is_active && !re.end_date) return false;
-      const startDateRe = re.start_date ? parseISO(re.start_date) : parseLocalDate(re.created_at);
-      const endDateRe = re.end_date ? parseISO(re.end_date) : null;
-      const startedBeforeOrDuring = startDateRe <= endDate;
-      const notEndedBeforePeriod = !endDateRe || endDateRe >= startDate;
-      return startedBeforeOrDuring && notEndedBeforePeriod;
-    });
-  }, [recurringExpenses, startDate, endDate]);
-
-  const monthsInPeriod = useMemo(() => {
-    return eachMonthOfInterval({ start: startDate, end: endDate }).length;
-  }, [startDate, endDate]);
-
-  const filteredIncomes = useMemo(() => {
-    return incomes.filter(i => {
-      const incomeDate = parseLocalDate(i.income_date);
-      return incomeDate >= startDate && incomeDate <= endDate;
-    });
-  }, [incomes, startDate, endDate]);
-
-  const filteredRecurringIncomes = useMemo(() => {
-    return recurringIncomes.filter(ri => {
-      if (!ri.is_active && !ri.end_date) return false;
-      const startDateRi = ri.start_date ? parseISO(ri.start_date) : parseLocalDate(ri.created_at);
-      const endDateRi = ri.end_date ? parseISO(ri.end_date) : null;
-      return startDateRi <= endDate && (!endDateRi || endDateRi >= startDate);
-    });
-  }, [recurringIncomes, startDate, endDate]);
-
-  const totalPeriod = useMemo(() => {
-    const expensesTotal = filteredExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
-    const recurringTotal = filteredRecurringExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
-    const recurringPeriodTotal = periodType === "month" ? recurringTotal : recurringTotal * monthsInPeriod;
-    return expensesTotal + recurringPeriodTotal;
-  }, [filteredExpenses, filteredRecurringExpenses, monthsInPeriod, periodType]);
-
-  const totalIncomes = useMemo(() => {
-    const incomesTotal = filteredIncomes.reduce((sum, i) => sum + Number(i.amount), 0);
-    const recurringTotal = filteredRecurringIncomes.reduce((sum, i) => sum + Number(i.amount), 0);
-    const recurringPeriodTotal = periodType === "month" ? recurringTotal : recurringTotal * monthsInPeriod;
-    return incomesTotal + recurringPeriodTotal;
-  }, [filteredIncomes, filteredRecurringIncomes, monthsInPeriod, periodType]);
-
-  const balance = useMemo(() => totalIncomes - totalPeriod, [totalIncomes, totalPeriod]);
-
-  // === BLOCO 1: Período anterior para comparação ===
-  const previousPeriodDates = useMemo(() => {
-    if (periodType === "month") {
-      const prevStart = subMonths(startDate, 1);
-      return { start: startOfMonth(prevStart), end: endOfMonth(prevStart) };
-    } else if (periodType === "year") {
-      const prevStart = subYears(startDate, 1);
-      return { start: new Date(prevStart.getFullYear(), 0, 1), end: new Date(prevStart.getFullYear(), 11, 31) };
-    } else if (periodType === "quarter") {
-      const prevStart = subQuarters(startDate, 1);
-      return { start: startOfMonth(prevStart), end: endOfMonth(subMonths(startDate, 1)) };
-    }
-    return null;
-  }, [startDate, endDate, periodType]);
-
-  const previousExpenses = useMemo(() => {
-    if (!previousPeriodDates) return [];
-    return expenses.filter(e => {
-      const d = parseLocalDate(e.expense_date);
-      return d >= previousPeriodDates.start && d <= previousPeriodDates.end;
-    });
-  }, [expenses, previousPeriodDates]);
-
-  const previousIncomes = useMemo(() => {
-    if (!previousPeriodDates) return [];
-    return incomes.filter(i => {
-      const d = parseLocalDate(i.income_date);
-      return d >= previousPeriodDates.start && d <= previousPeriodDates.end;
-    });
-  }, [incomes, previousPeriodDates]);
-
-  const previousTotalExpenses = useMemo(() => {
-    return previousExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
-  }, [previousExpenses]);
-
-  const previousTotalIncomes = useMemo(() => {
-    return previousIncomes.reduce((sum, i) => sum + Number(i.amount), 0);
-  }, [previousIncomes]);
-
-  const previousBalance = previousTotalIncomes - previousTotalExpenses;
-
-  // Deltas
-  const expenseDelta = previousTotalExpenses > 0 ? ((totalPeriod - previousTotalExpenses) / previousTotalExpenses) * 100 : null;
-  const incomeDelta = previousTotalIncomes > 0 ? ((totalIncomes - previousTotalIncomes) / previousTotalIncomes) * 100 : null;
-  const balanceDelta = previousBalance !== 0 ? ((balance - previousBalance) / Math.abs(previousBalance)) * 100 : null;
-
-  // Savings rate
-  const savingsRate = totalIncomes > 0 ? (balance / totalIncomes) * 100 : 0;
-
-  // === INSIGHTS ===
-  const topCategory = useMemo(() => {
-    const totals: Record<string, { name: string; value: number }> = {};
-    filteredExpenses.forEach(e => {
-      const catInfo = getCategoryInfo(e.category_id, e.category);
-      if (!totals[catInfo.id]) totals[catInfo.id] = { name: catInfo.name, value: 0 };
-      totals[catInfo.id].value += Number(e.amount);
-    });
-    const sorted = Object.values(totals).sort((a, b) => b.value - a.value);
-    if (sorted.length === 0) return null;
-    const total = sorted.reduce((s, i) => s + i.value, 0);
-    return { name: sorted[0].name, pct: total > 0 ? ((sorted[0].value / total) * 100).toFixed(0) : "0" };
-  }, [filteredExpenses, categories]);
-
-  const mostExpensiveDay = useMemo(() => {
-    const dayTotals: Record<string, { date: string; total: number }> = {};
-    filteredExpenses.forEach(e => {
-      const key = e.expense_date;
-      if (!dayTotals[key]) dayTotals[key] = { date: key, total: 0 };
-      dayTotals[key].total += Number(e.amount);
-    });
-    const sorted = Object.values(dayTotals).sort((a, b) => b.total - a.total);
-    if (sorted.length === 0) return null;
-    return { date: format(parseLocalDate(sorted[0].date), "dd/MM"), value: sorted[0].total };
-  }, [filteredExpenses]);
-
-  // === DADOS DOS GRÁFICOS ===
+  // Derive cash flow with mode
   const cashFlowData = useMemo(() => {
-    const rawData = periodType === "month"
-      ? eachDayOfInterval({ start: startDate, end: endDate }).map(day => {
-          const dayExp = filteredExpenses.filter(e => isSameDay(parseLocalDate(e.expense_date), day));
-          const dayInc = filteredIncomes.filter(i => isSameDay(parseLocalDate(i.income_date), day));
-          return {
-            label: format(day, "dd"),
-            entradas: Number(dayInc.reduce((s, i) => s + Number(i.amount), 0).toFixed(2)),
-            saidas: Number(dayExp.reduce((s, e) => s + Number(e.amount), 0).toFixed(2)),
-          };
-        })
-      : eachMonthOfInterval({ start: startDate, end: endDate }).map(month => {
-          const ms = startOfMonth(month), me = endOfMonth(month);
-          const mExp = filteredExpenses.filter(e => { const d = parseLocalDate(e.expense_date); return d >= ms && d <= me; });
-          const mInc = filteredIncomes.filter(i => { const d = parseLocalDate(i.income_date); return d >= ms && d <= me; });
-          let totalE = mExp.reduce((s, e) => s + Number(e.amount), 0);
-          let totalI = mInc.reduce((s, i) => s + Number(i.amount), 0);
-          filteredRecurringExpenses.forEach(r => {
-            const sd = r.start_date ? parseISO(r.start_date) : parseLocalDate(r.created_at);
-            const ed = r.end_date ? parseISO(r.end_date) : null;
-            if (sd <= me && (!ed || ed >= ms)) totalE += Number(r.amount);
-          });
-          filteredRecurringIncomes.forEach(r => {
-            const sd = r.start_date ? parseISO(r.start_date) : parseLocalDate(r.created_at);
-            const ed = r.end_date ? parseISO(r.end_date) : null;
-            if (sd <= me && (!ed || ed >= ms)) totalI += Number(r.amount);
-          });
-          return { label: format(month, "MMM/yy", { locale: ptBR }), entradas: Number(totalI.toFixed(2)), saidas: Number(totalE.toFixed(2)) };
-        });
+    return cashFlowMode === "cumulative" ? applyCumulativeMode(cashFlowDataRaw) : cashFlowDataRaw;
+  }, [cashFlowDataRaw, cashFlowMode]);
 
-    if (cashFlowMode === "cumulative") {
-      let cumIn = 0, cumOut = 0;
-      return rawData.map(d => {
-        cumIn += d.entradas;
-        cumOut += d.saidas;
-        return { ...d, entradas: Number(cumIn.toFixed(2)), saidas: Number(cumOut.toFixed(2)) };
-      });
-    }
-    return rawData;
-  }, [filteredExpenses, filteredIncomes, filteredRecurringExpenses, filteredRecurringIncomes, startDate, endDate, periodType, cashFlowMode]);
-
-  // Dados de evolução de gastos
+  // Derive evolution with mode
   const evolutionData = useMemo(() => {
-    if (periodType === "month") {
-      return eachDayOfInterval({ start: startDate, end: endDate }).map(day => {
-        const dayExp = filteredExpenses.filter(e => isSameDay(parseLocalDate(e.expense_date), day));
-        return { label: format(day, "dd"), total: Number(dayExp.reduce((s, e) => s + Number(e.amount), 0).toFixed(2)) };
-      });
-    }
-    return eachMonthOfInterval({ start: startDate, end: endDate }).map(month => {
-      const ms = startOfMonth(month), me = endOfMonth(month);
-      const mExp = filteredExpenses.filter(e => { const d = parseLocalDate(e.expense_date); return d >= ms && d <= me; });
-      let total = mExp.reduce((s, e) => s + Number(e.amount), 0);
-      filteredRecurringExpenses.forEach(r => {
-        const sd = r.start_date ? parseISO(r.start_date) : parseLocalDate(r.created_at);
-        const ed = r.end_date ? parseISO(r.end_date) : null;
-        if (sd <= me && (!ed || ed >= ms)) total += Number(r.amount);
-      });
-      return { label: format(month, "MMM/yy", { locale: ptBR }), total: Number(total.toFixed(2)) };
-    });
-  }, [filteredExpenses, filteredRecurringExpenses, startDate, endDate, periodType]);
-
-  const dailyAverage = useMemo(() => {
-    const days = differenceInDays(endDate, startDate) + 1;
-    return days > 0 ? totalPeriod / days : 0;
-  }, [totalPeriod, startDate, endDate]);
-
-  // Dados por categoria
-  const categoryData = useMemo(() => {
-    const totals: Record<string, { name: string; icon: string; value: number }> = {};
-    filteredExpenses.forEach(e => {
-      const c = getCategoryInfo(e.category_id, e.category);
-      if (!totals[c.id]) totals[c.id] = { name: c.name, icon: c.icon, value: 0 };
-      totals[c.id].value += Number(e.amount);
-    });
-    const rm = periodType === "month" ? 1 : monthsInPeriod;
-    filteredRecurringExpenses.forEach(r => {
-      const c = getCategoryInfo(r.category_id, r.category);
-      if (!totals[c.id]) totals[c.id] = { name: c.name, icon: c.icon, value: 0 };
-      totals[c.id].value += Number(r.amount) * rm;
-    });
-    const total = Object.values(totals).reduce((s, i) => s + i.value, 0);
-    const sorted = Object.values(totals).filter(i => i.value > 0).map(i => ({
-      ...i, value: Number(i.value.toFixed(2)),
-      percentage: total > 0 ? ((i.value / total) * 100) : 0,
-    })).sort((a, b) => b.value - a.value);
-    // Top 5 + Others
-    if (sorted.length > 5) {
-      const top5 = sorted.slice(0, 5);
-      const others = sorted.slice(5);
-      const othersTotal = others.reduce((s, i) => s + i.value, 0);
-      const othersPct = total > 0 ? (othersTotal / total) * 100 : 0;
-      return [...top5, { name: "Outros", icon: "📦", value: Number(othersTotal.toFixed(2)), percentage: othersPct }];
-    }
-    return sorted;
-  }, [filteredExpenses, filteredRecurringExpenses, monthsInPeriod, periodType, categories]);
-
-  // Dados por forma de pagamento
-  const paymentMethodData = useMemo(() => {
-    const totals: Record<PaymentMethod, number> = { credit: 0, debit: 0, pix: 0 };
-    filteredExpenses.forEach(e => { totals[e.payment_method] += Number(e.amount); });
-    const rm = periodType === "month" ? 1 : monthsInPeriod;
-    filteredRecurringExpenses.forEach(r => { totals[r.payment_method] += Number(r.amount) * rm; });
-    const total = Object.values(totals).reduce((s, v) => s + v, 0);
-    return Object.entries(totals).filter(([, v]) => v > 0).map(([method, value]) => ({
-      name: paymentMethodLabels[method as PaymentMethod],
-      method: method as PaymentMethod,
-      value: Number(value.toFixed(2)),
-      percentage: total > 0 ? (value / total) * 100 : 0,
-    })).sort((a, b) => b.value - a.value);
-  }, [filteredExpenses, filteredRecurringExpenses, monthsInPeriod, periodType]);
-
-  // Dados por cartão (manter donut)
-  const cardData = useMemo(() => {
-    const totals: Record<string, { name: string; color: string; value: number }> = {};
-    totals['no-card'] = { name: 'Sem cartão', color: '#9ca3af', value: 0 };
-    filteredExpenses.forEach(e => {
-      if (e.card_id) {
-        const card = cards.find(c => c.id === e.card_id);
-        if (card) {
-          if (!totals[card.id]) totals[card.id] = { name: card.name, color: card.color, value: 0 };
-          totals[card.id].value += Number(e.amount);
-        }
-      } else { totals['no-card'].value += Number(e.amount); }
-    });
-    const rm = periodType === "month" ? 1 : monthsInPeriod;
-    filteredRecurringExpenses.forEach(r => {
-      if (r.card_id) {
-        const card = cards.find(c => c.id === r.card_id);
-        if (card) {
-          if (!totals[card.id]) totals[card.id] = { name: card.name, color: card.color, value: 0 };
-          totals[card.id].value += Number(r.amount) * rm;
-        }
-      } else { totals['no-card'].value += Number(r.amount) * rm; }
-    });
-    const total = Object.values(totals).reduce((s, i) => s + i.value, 0);
-    return Object.values(totals).filter(i => i.value > 0).map(i => ({
-      ...i, value: Number(i.value.toFixed(2)),
-      percentage: total > 0 ? ((i.value / total) * 100).toFixed(1) : "0",
-    })).sort((a, b) => b.value - a.value);
-  }, [filteredExpenses, filteredRecurringExpenses, cards, monthsInPeriod, periodType]);
-
-  // Dados por membro
-  const memberData = useMemo(() => {
-    if (!isGroupContext || !groupMembers.length) return [];
-    const totals: Record<string, { name: string; email: string; value: number }> = {};
-    filteredExpenses.forEach(e => {
-      const member = groupMembers.find(m => m.user_id === e.user_id);
-      const email = member?.user_email || 'Desconhecido';
-      if (!totals[e.user_id]) totals[e.user_id] = { name: email.split('@')[0], email, value: 0 };
-      totals[e.user_id].value += Number(e.amount);
-    });
-    const total = Object.values(totals).reduce((s, i) => s + i.value, 0);
-    return Object.values(totals).filter(i => i.value > 0).map(i => ({
-      ...i, value: Number(i.value.toFixed(2)),
-      percentage: total > 0 ? ((i.value / total) * 100).toFixed(1) : "0",
-    })).sort((a, b) => b.value - a.value);
-  }, [filteredExpenses, groupMembers, isGroupContext]);
-
-  // Top 10 maiores gastos
-  const topExpenses = useMemo(() => {
-    const all = [
-      ...filteredExpenses.map(e => ({ description: e.description, amount: Number(e.amount), date: e.expense_date, type: 'expense' as const, dayOfMonth: undefined as number | undefined })),
-      ...filteredRecurringExpenses.map(r => ({ description: r.description, amount: Number(r.amount), date: '', type: 'recurring' as const, dayOfMonth: r.day_of_month })),
-    ];
-    return all.sort((a, b) => b.amount - a.amount).slice(0, 10);
-  }, [filteredExpenses, filteredRecurringExpenses]);
+    return evolutionDataRaw;
+  }, [evolutionDataRaw]);
 
   const formatCurrency = (v: number) => `R$ ${v.toFixed(2).replace(".", ",")}`;
   const formatDelta = (delta: number | null) => {
@@ -476,7 +181,6 @@ export function ReportsAccordion({
       {/* === BLOCO 1B: Resumo do Período (1 card, 3 colunas) === */}
       <div className="p-4 rounded-lg bg-card border border-border">
         <div className="grid grid-cols-3 gap-2 text-center">
-          {/* Entradas */}
           <div className="space-y-1">
             <div className="flex items-center justify-center gap-1">
               <TrendingUp className="h-3 w-3 text-green-500" />
@@ -485,8 +189,6 @@ export function ReportsAccordion({
             <div className="text-lg font-bold text-green-500">{formatCurrency(totalIncomes)}</div>
             <div className="text-[10px] text-muted-foreground">{filteredIncomes.length}+{filteredRecurringIncomes.length} fixas</div>
           </div>
-
-          {/* Separator + Saídas */}
           <div className="space-y-1 border-x border-border">
             <div className="flex items-center justify-center gap-1">
               <TrendingDown className="h-3 w-3 text-red-500" />
@@ -495,8 +197,6 @@ export function ReportsAccordion({
             <div className="text-lg font-bold text-red-500">{formatCurrency(totalPeriod)}</div>
             <div className="text-[10px] text-muted-foreground">{filteredExpenses.length}+{filteredRecurringExpenses.length} fixas</div>
           </div>
-
-          {/* Saldo */}
           <div className="space-y-1">
             <div className="flex items-center justify-center gap-1">
               <DollarSign className="h-3 w-3 text-blue-500" />
@@ -508,8 +208,6 @@ export function ReportsAccordion({
             <div className="text-[10px] text-muted-foreground">{periodLabel || "Período"}</div>
           </div>
         </div>
-
-        {/* Economia + Comparação */}
         <div className="mt-3 pt-3 border-t border-border space-y-1.5 text-xs text-muted-foreground">
           {totalIncomes > 0 && (
             <p>
@@ -535,7 +233,7 @@ export function ReportsAccordion({
       </div>
 
       <Accordion type="multiple" className="space-y-3" defaultValue={["category", "payment-method"]}>
-        {/* === BLOCO 2A: Gastos por Categoria — Barras Horizontais === */}
+        {/* === BLOCO 2A: Gastos por Categoria === */}
         <AccordionItem value="category" className="border rounded-lg bg-card">
           <AccordionTrigger className="px-4 py-3 hover:no-underline">
             <div className="flex items-center gap-3">
@@ -579,7 +277,7 @@ export function ReportsAccordion({
           </AccordionContent>
         </AccordionItem>
 
-        {/* === BLOCO 2B: Gastos por Forma de Pagamento — Barras Horizontais === */}
+        {/* === BLOCO 2B: Forma de Pagamento === */}
         <AccordionItem value="payment-method" className="border rounded-lg bg-card">
           <AccordionTrigger className="px-4 py-3 hover:no-underline">
             <div className="flex items-center gap-3">
@@ -620,7 +318,7 @@ export function ReportsAccordion({
           </AccordionContent>
         </AccordionItem>
 
-        {/* === BLOCO 2C: Gastos por Cartão — Donut melhorado === */}
+        {/* === BLOCO 2C: Gastos por Cartão === */}
         {cards.length > 0 && cardData.length > 0 && (
           <AccordionItem value="cards" className="border rounded-lg bg-card">
             <AccordionTrigger className="px-4 py-3 hover:no-underline">
@@ -703,7 +401,7 @@ export function ReportsAccordion({
           </AccordionContent>
         </AccordionItem>
 
-        {/* === BLOCO 2D: Evolução dos Gastos (cor vermelha + média) === */}
+        {/* === BLOCO 2D: Evolução dos Gastos === */}
         <AccordionItem value="evolution" className="border rounded-lg bg-card">
           <AccordionTrigger className="px-4 py-3 hover:no-underline">
             <div className="flex items-center gap-3">
@@ -730,12 +428,7 @@ export function ReportsAccordion({
                 )}
                 {(() => {
                   const displayData = periodType === "month" && evolutionMode === "weekly"
-                    ? evolutionData.reduce((acc, item, idx) => {
-                        const weekIdx = Math.floor(idx / 7);
-                        if (!acc[weekIdx]) acc[weekIdx] = { label: `Sem ${weekIdx + 1}`, total: 0 };
-                        acc[weekIdx].total = Number((acc[weekIdx].total + item.total).toFixed(2));
-                        return acc;
-                      }, [] as { label: string; total: number }[])
+                    ? applyWeeklyMode(evolutionData)
                     : evolutionData;
                   const weeklyAvg = evolutionMode === "weekly" ? dailyAverage * 7 : dailyAverage;
                   return displayData.length > 0 ? (
