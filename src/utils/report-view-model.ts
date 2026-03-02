@@ -1,0 +1,430 @@
+import { Expense, PaymentMethod, ExpenseCategory, categoryLabels } from "@/types/expense";
+import { RecurringExpense } from "@/types/recurring-expense";
+import { Card } from "@/types/card";
+import { Income, RecurringIncome } from "@/types/income";
+import { UserCategory } from "@/types/user-category";
+import { PeriodType } from "@/components/period-selector";
+import { parseLocalDate } from "@/lib/utils";
+import {
+  format, startOfMonth, endOfMonth, eachMonthOfInterval, eachDayOfInterval,
+  isSameDay, parseISO, subMonths, subYears, subQuarters, differenceInDays
+} from "date-fns";
+import { ptBR } from "date-fns/locale";
+
+const paymentMethodLabels: Record<PaymentMethod, string> = {
+  credit: "Crédito",
+  debit: "Débito",
+  pix: "PIX"
+};
+
+export interface CategoryDataItem {
+  name: string;
+  icon: string;
+  value: number;
+  percentage: number;
+}
+
+export interface PaymentMethodDataItem {
+  name: string;
+  method: PaymentMethod;
+  value: number;
+  percentage: number;
+}
+
+export interface CardDataItem {
+  name: string;
+  color: string;
+  value: number;
+  percentage: string;
+}
+
+export interface MemberDataItem {
+  name: string;
+  email: string;
+  value: number;
+  percentage: string;
+}
+
+export interface CashFlowDataItem {
+  label: string;
+  entradas: number;
+  saidas: number;
+}
+
+export interface EvolutionDataItem {
+  label: string;
+  total: number;
+}
+
+export interface TopExpenseItem {
+  description: string;
+  amount: number;
+  date: string;
+  type: 'expense' | 'recurring';
+  dayOfMonth: number | undefined;
+}
+
+interface GroupMember {
+  user_id: string;
+  user_email: string;
+  role: string;
+}
+
+export interface ReportViewModel {
+  filteredExpenses: Expense[];
+  filteredRecurringExpenses: RecurringExpense[];
+  filteredIncomes: Income[];
+  filteredRecurringIncomes: RecurringIncome[];
+  monthsInPeriod: number;
+  totalPeriod: number;
+  totalIncomes: number;
+  balance: number;
+  previousPeriodDates: { start: Date; end: Date } | null;
+  previousTotalExpenses: number;
+  previousTotalIncomes: number;
+  previousBalance: number;
+  expenseDelta: number | null;
+  incomeDelta: number | null;
+  balanceDelta: number | null;
+  savingsRate: number;
+  topCategory: { name: string; pct: string } | null;
+  mostExpensiveDay: { date: string; value: number } | null;
+  categoryData: CategoryDataItem[];
+  paymentMethodData: PaymentMethodDataItem[];
+  cardData: CardDataItem[];
+  memberData: MemberDataItem[];
+  cashFlowDataRaw: CashFlowDataItem[];
+  evolutionDataRaw: EvolutionDataItem[];
+  dailyAverage: number;
+  topExpenses: TopExpenseItem[];
+}
+
+export interface BuildReportViewModelParams {
+  expenses: Expense[];
+  recurringExpenses: RecurringExpense[];
+  incomes: Income[];
+  recurringIncomes: RecurringIncome[];
+  cards: Card[];
+  categories: UserCategory[];
+  startDate: Date;
+  endDate: Date;
+  periodType: PeriodType;
+  isGroupContext: boolean;
+  groupMembers: GroupMember[];
+}
+
+export function buildReportViewModel(params: BuildReportViewModelParams): ReportViewModel {
+  const {
+    expenses, recurringExpenses, incomes, recurringIncomes,
+    cards, categories, startDate, endDate, periodType,
+    isGroupContext, groupMembers
+  } = params;
+
+  // Helper to resolve category
+  const getCategoryInfo = (categoryId: string | null | undefined, categoryEnum: ExpenseCategory | null | undefined) => {
+    if (categoryId && categories.length > 0) {
+      const found = categories.find(c => c.id === categoryId);
+      if (found) return { id: found.id, name: found.name, icon: found.icon };
+    }
+    if (categoryEnum) {
+      const label = categoryLabels[categoryEnum] || categoryEnum;
+      return { id: categoryEnum, name: label, icon: '📦' };
+    }
+    return { id: 'outros', name: 'Outros', icon: '📦' };
+  };
+
+  // Filter expenses by period
+  const filteredExpenses = expenses.filter(e => {
+    const d = parseLocalDate(e.expense_date);
+    return d >= startDate && d <= endDate;
+  });
+
+  const filteredRecurringExpenses = recurringExpenses.filter(re => {
+    if (!re.is_active && !re.end_date) return false;
+    const sd = re.start_date ? parseISO(re.start_date) : parseLocalDate(re.created_at);
+    const ed = re.end_date ? parseISO(re.end_date) : null;
+    return sd <= endDate && (!ed || ed >= startDate);
+  });
+
+  const filteredIncomes = incomes.filter(i => {
+    const d = parseLocalDate(i.income_date);
+    return d >= startDate && d <= endDate;
+  });
+
+  const filteredRecurringIncomes = recurringIncomes.filter(ri => {
+    if (!ri.is_active && !ri.end_date) return false;
+    const sd = ri.start_date ? parseISO(ri.start_date) : parseLocalDate(ri.created_at);
+    const ed = ri.end_date ? parseISO(ri.end_date) : null;
+    return sd <= endDate && (!ed || ed >= startDate);
+  });
+
+  const monthsInPeriod = eachMonthOfInterval({ start: startDate, end: endDate }).length;
+  const rm = periodType === "month" ? 1 : monthsInPeriod;
+
+  // Totals
+  const totalPeriod = filteredExpenses.reduce((s, e) => s + Number(e.amount), 0)
+    + filteredRecurringExpenses.reduce((s, e) => s + Number(e.amount), 0) * rm;
+
+  const totalIncomes = filteredIncomes.reduce((s, i) => s + Number(i.amount), 0)
+    + filteredRecurringIncomes.reduce((s, i) => s + Number(i.amount), 0) * rm;
+
+  const balance = totalIncomes - totalPeriod;
+
+  // Previous period
+  let previousPeriodDates: { start: Date; end: Date } | null = null;
+  if (periodType === "month") {
+    const ps = subMonths(startDate, 1);
+    previousPeriodDates = { start: startOfMonth(ps), end: endOfMonth(ps) };
+  } else if (periodType === "year") {
+    const ps = subYears(startDate, 1);
+    previousPeriodDates = { start: new Date(ps.getFullYear(), 0, 1), end: new Date(ps.getFullYear(), 11, 31) };
+  } else if (periodType === "quarter") {
+    const ps = subQuarters(startDate, 1);
+    previousPeriodDates = { start: startOfMonth(ps), end: endOfMonth(subMonths(startDate, 1)) };
+  }
+
+  let previousTotalExpenses = 0;
+  let previousTotalIncomes = 0;
+  if (previousPeriodDates) {
+    previousTotalExpenses = expenses.filter(e => {
+      const d = parseLocalDate(e.expense_date);
+      return d >= previousPeriodDates!.start && d <= previousPeriodDates!.end;
+    }).reduce((s, e) => s + Number(e.amount), 0);
+    previousTotalIncomes = incomes.filter(i => {
+      const d = parseLocalDate(i.income_date);
+      return d >= previousPeriodDates!.start && d <= previousPeriodDates!.end;
+    }).reduce((s, i) => s + Number(i.amount), 0);
+  }
+  const previousBalance = previousTotalIncomes - previousTotalExpenses;
+
+  const expenseDelta = previousTotalExpenses > 0 ? ((totalPeriod - previousTotalExpenses) / previousTotalExpenses) * 100 : null;
+  const incomeDelta = previousTotalIncomes > 0 ? ((totalIncomes - previousTotalIncomes) / previousTotalIncomes) * 100 : null;
+  const balanceDelta = previousBalance !== 0 ? ((balance - previousBalance) / Math.abs(previousBalance)) * 100 : null;
+  const savingsRate = totalIncomes > 0 ? (balance / totalIncomes) * 100 : 0;
+
+  // Top category
+  const catTotals: Record<string, { name: string; value: number }> = {};
+  filteredExpenses.forEach(e => {
+    const c = getCategoryInfo(e.category_id, e.category);
+    if (!catTotals[c.id]) catTotals[c.id] = { name: c.name, value: 0 };
+    catTotals[c.id].value += Number(e.amount);
+  });
+  const catSorted = Object.values(catTotals).sort((a, b) => b.value - a.value);
+  const catTotal = catSorted.reduce((s, i) => s + i.value, 0);
+  const topCategory = catSorted.length > 0
+    ? { name: catSorted[0].name, pct: catTotal > 0 ? ((catSorted[0].value / catTotal) * 100).toFixed(0) : "0" }
+    : null;
+
+  // Most expensive day
+  const dayTotals: Record<string, { date: string; total: number }> = {};
+  filteredExpenses.forEach(e => {
+    if (!dayTotals[e.expense_date]) dayTotals[e.expense_date] = { date: e.expense_date, total: 0 };
+    dayTotals[e.expense_date].total += Number(e.amount);
+  });
+  const daySorted = Object.values(dayTotals).sort((a, b) => b.total - a.total);
+  const mostExpensiveDay = daySorted.length > 0
+    ? { date: format(parseLocalDate(daySorted[0].date), "dd/MM"), value: daySorted[0].total }
+    : null;
+
+  // Category data
+  const categoryDataMap: Record<string, { name: string; icon: string; value: number }> = {};
+  filteredExpenses.forEach(e => {
+    const c = getCategoryInfo(e.category_id, e.category);
+    if (!categoryDataMap[c.id]) categoryDataMap[c.id] = { name: c.name, icon: c.icon, value: 0 };
+    categoryDataMap[c.id].value += Number(e.amount);
+  });
+  filteredRecurringExpenses.forEach(r => {
+    const c = getCategoryInfo(r.category_id, r.category);
+    if (!categoryDataMap[c.id]) categoryDataMap[c.id] = { name: c.name, icon: c.icon, value: 0 };
+    categoryDataMap[c.id].value += Number(r.amount) * rm;
+  });
+  const catDataTotal = Object.values(categoryDataMap).reduce((s, i) => s + i.value, 0);
+  let categoryData: CategoryDataItem[] = Object.values(categoryDataMap)
+    .filter(i => i.value > 0)
+    .map(i => ({
+      ...i,
+      value: Number(i.value.toFixed(2)),
+      percentage: catDataTotal > 0 ? (i.value / catDataTotal) * 100 : 0,
+    }))
+    .sort((a, b) => b.value - a.value);
+  if (categoryData.length > 5) {
+    const top5 = categoryData.slice(0, 5);
+    const others = categoryData.slice(5);
+    const othersTotal = others.reduce((s, i) => s + i.value, 0);
+    const othersPct = catDataTotal > 0 ? (othersTotal / catDataTotal) * 100 : 0;
+    categoryData = [...top5, { name: "Outros", icon: "📦", value: Number(othersTotal.toFixed(2)), percentage: othersPct }];
+  }
+
+  // Payment method data
+  const pmTotals: Record<PaymentMethod, number> = { credit: 0, debit: 0, pix: 0 };
+  filteredExpenses.forEach(e => { pmTotals[e.payment_method] += Number(e.amount); });
+  filteredRecurringExpenses.forEach(r => { pmTotals[r.payment_method] += Number(r.amount) * rm; });
+  const pmTotal = Object.values(pmTotals).reduce((s, v) => s + v, 0);
+  const paymentMethodData: PaymentMethodDataItem[] = Object.entries(pmTotals)
+    .filter(([, v]) => v > 0)
+    .map(([method, value]) => ({
+      name: paymentMethodLabels[method as PaymentMethod],
+      method: method as PaymentMethod,
+      value: Number(value.toFixed(2)),
+      percentage: pmTotal > 0 ? (value / pmTotal) * 100 : 0,
+    }))
+    .sort((a, b) => b.value - a.value);
+
+  // Card data
+  const cardTotalsMap: Record<string, { name: string; color: string; value: number }> = {};
+  cardTotalsMap['no-card'] = { name: 'Sem cartão', color: '#9ca3af', value: 0 };
+  filteredExpenses.forEach(e => {
+    if (e.card_id) {
+      const card = cards.find(c => c.id === e.card_id);
+      if (card) {
+        if (!cardTotalsMap[card.id]) cardTotalsMap[card.id] = { name: card.name, color: card.color, value: 0 };
+        cardTotalsMap[card.id].value += Number(e.amount);
+      }
+    } else { cardTotalsMap['no-card'].value += Number(e.amount); }
+  });
+  filteredRecurringExpenses.forEach(r => {
+    if (r.card_id) {
+      const card = cards.find(c => c.id === r.card_id);
+      if (card) {
+        if (!cardTotalsMap[card.id]) cardTotalsMap[card.id] = { name: card.name, color: card.color, value: 0 };
+        cardTotalsMap[card.id].value += Number(r.amount) * rm;
+      }
+    } else { cardTotalsMap['no-card'].value += Number(r.amount) * rm; }
+  });
+  const cardDataTotal = Object.values(cardTotalsMap).reduce((s, i) => s + i.value, 0);
+  const cardData: CardDataItem[] = Object.values(cardTotalsMap)
+    .filter(i => i.value > 0)
+    .map(i => ({
+      ...i,
+      value: Number(i.value.toFixed(2)),
+      percentage: cardDataTotal > 0 ? ((i.value / cardDataTotal) * 100).toFixed(1) : "0",
+    }))
+    .sort((a, b) => b.value - a.value);
+
+  // Member data
+  let memberData: MemberDataItem[] = [];
+  if (isGroupContext && groupMembers.length) {
+    const mTotals: Record<string, { name: string; email: string; value: number }> = {};
+    filteredExpenses.forEach(e => {
+      const member = groupMembers.find(m => m.user_id === e.user_id);
+      const email = member?.user_email || 'Desconhecido';
+      if (!mTotals[e.user_id]) mTotals[e.user_id] = { name: email.split('@')[0], email, value: 0 };
+      mTotals[e.user_id].value += Number(e.amount);
+    });
+    const mTotal = Object.values(mTotals).reduce((s, i) => s + i.value, 0);
+    memberData = Object.values(mTotals)
+      .filter(i => i.value > 0)
+      .map(i => ({
+        ...i,
+        value: Number(i.value.toFixed(2)),
+        percentage: mTotal > 0 ? ((i.value / mTotal) * 100).toFixed(1) : "0",
+      }))
+      .sort((a, b) => b.value - a.value);
+  }
+
+  // Cash flow data (raw = daily/monthly without cumulative)
+  const cashFlowDataRaw: CashFlowDataItem[] = periodType === "month"
+    ? eachDayOfInterval({ start: startDate, end: endDate }).map(day => {
+        const dayExp = filteredExpenses.filter(e => isSameDay(parseLocalDate(e.expense_date), day));
+        const dayInc = filteredIncomes.filter(i => isSameDay(parseLocalDate(i.income_date), day));
+        return {
+          label: format(day, "dd"),
+          entradas: Number(dayInc.reduce((s, i) => s + Number(i.amount), 0).toFixed(2)),
+          saidas: Number(dayExp.reduce((s, e) => s + Number(e.amount), 0).toFixed(2)),
+        };
+      })
+    : eachMonthOfInterval({ start: startDate, end: endDate }).map(month => {
+        const ms = startOfMonth(month), me = endOfMonth(month);
+        const mExp = filteredExpenses.filter(e => { const d = parseLocalDate(e.expense_date); return d >= ms && d <= me; });
+        const mInc = filteredIncomes.filter(i => { const d = parseLocalDate(i.income_date); return d >= ms && d <= me; });
+        let totalE = mExp.reduce((s, e) => s + Number(e.amount), 0);
+        let totalI = mInc.reduce((s, i) => s + Number(i.amount), 0);
+        filteredRecurringExpenses.forEach(r => {
+          const sd = r.start_date ? parseISO(r.start_date) : parseLocalDate(r.created_at);
+          const ed = r.end_date ? parseISO(r.end_date) : null;
+          if (sd <= me && (!ed || ed >= ms)) totalE += Number(r.amount);
+        });
+        filteredRecurringIncomes.forEach(r => {
+          const sd = r.start_date ? parseISO(r.start_date) : parseLocalDate(r.created_at);
+          const ed = r.end_date ? parseISO(r.end_date) : null;
+          if (sd <= me && (!ed || ed >= ms)) totalI += Number(r.amount);
+        });
+        return { label: format(month, "MMM/yy", { locale: ptBR }), entradas: Number(totalI.toFixed(2)), saidas: Number(totalE.toFixed(2)) };
+      });
+
+  // Evolution data (raw = daily)
+  const evolutionDataRaw: EvolutionDataItem[] = periodType === "month"
+    ? eachDayOfInterval({ start: startDate, end: endDate }).map(day => {
+        const dayExp = filteredExpenses.filter(e => isSameDay(parseLocalDate(e.expense_date), day));
+        return { label: format(day, "dd"), total: Number(dayExp.reduce((s, e) => s + Number(e.amount), 0).toFixed(2)) };
+      })
+    : eachMonthOfInterval({ start: startDate, end: endDate }).map(month => {
+        const ms = startOfMonth(month), me = endOfMonth(month);
+        const mExp = filteredExpenses.filter(e => { const d = parseLocalDate(e.expense_date); return d >= ms && d <= me; });
+        let total = mExp.reduce((s, e) => s + Number(e.amount), 0);
+        filteredRecurringExpenses.forEach(r => {
+          const sd = r.start_date ? parseISO(r.start_date) : parseLocalDate(r.created_at);
+          const ed = r.end_date ? parseISO(r.end_date) : null;
+          if (sd <= me && (!ed || ed >= ms)) total += Number(r.amount);
+        });
+        return { label: format(month, "MMM/yy", { locale: ptBR }), total: Number(total.toFixed(2)) };
+      });
+
+  const days = differenceInDays(endDate, startDate) + 1;
+  const dailyAverage = days > 0 ? totalPeriod / days : 0;
+
+  // Top expenses
+  const topExpenses: TopExpenseItem[] = [
+    ...filteredExpenses.map(e => ({ description: e.description, amount: Number(e.amount), date: e.expense_date, type: 'expense' as const, dayOfMonth: undefined as number | undefined })),
+    ...filteredRecurringExpenses.map(r => ({ description: r.description, amount: Number(r.amount), date: '', type: 'recurring' as const, dayOfMonth: r.day_of_month })),
+  ].sort((a, b) => b.amount - a.amount).slice(0, 10);
+
+  return {
+    filteredExpenses,
+    filteredRecurringExpenses,
+    filteredIncomes,
+    filteredRecurringIncomes,
+    monthsInPeriod,
+    totalPeriod,
+    totalIncomes,
+    balance,
+    previousPeriodDates,
+    previousTotalExpenses,
+    previousTotalIncomes,
+    previousBalance,
+    expenseDelta,
+    incomeDelta,
+    balanceDelta,
+    savingsRate,
+    topCategory,
+    mostExpensiveDay,
+    categoryData,
+    paymentMethodData,
+    cardData,
+    memberData,
+    cashFlowDataRaw,
+    evolutionDataRaw,
+    dailyAverage,
+    topExpenses,
+  };
+}
+
+// Helper: apply cumulative mode to cash flow data
+export function applyCumulativeMode(data: CashFlowDataItem[]): CashFlowDataItem[] {
+  let cumIn = 0, cumOut = 0;
+  return data.map(d => {
+    cumIn += d.entradas;
+    cumOut += d.saidas;
+    return { ...d, entradas: Number(cumIn.toFixed(2)), saidas: Number(cumOut.toFixed(2)) };
+  });
+}
+
+// Helper: apply weekly mode to evolution data
+export function applyWeeklyMode(data: EvolutionDataItem[]): EvolutionDataItem[] {
+  return data.reduce((acc, item, idx) => {
+    const weekIdx = Math.floor(idx / 7);
+    if (!acc[weekIdx]) acc[weekIdx] = { label: `Sem ${weekIdx + 1}`, total: 0 };
+    acc[weekIdx].total = Number((acc[weekIdx].total + item.total).toFixed(2));
+    return acc;
+  }, [] as EvolutionDataItem[]);
+}
