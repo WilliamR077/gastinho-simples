@@ -1,52 +1,113 @@
 
 
-## Plano: Corrigir caracteres corrompidos e melhorar gráficos no PDF
+## Plano: Melhorar página "Meus Cartões" + Competência de Fatura
 
-### Causa raiz
+Este é um projeto com 4 frentes: UI dos cartões, modelo de dados, cálculo de competência, e integração nos relatórios.
 
-jsPDF usa fonte `helvetica` que **não suporta** emojis nem caracteres Unicode especiais (✨, 📦, ↑, ↓, 🎉). Esses caracteres aparecem como símbolos corrompidos no PDF gerado.
+---
 
-### Mudanças — apenas `src/services/pdf-export-service.ts`
+### 1. Migração DB — Novos campos na tabela `cards`
 
-**1. Criar helper `stripEmoji(text)`** para remover emojis/caracteres fora do range Latin básico:
-```ts
-const stripEmoji = (text: string) => text.replace(/[\u{1F000}-\u{1FFFF}]|[\u2700-\u27BF]|[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F900}-\u{1F9FF}]|[\u{2600}-\u{26FF}]/gu, '').trim();
+Adicionar 2 colunas à tabela `cards`:
+
+```sql
+ALTER TABLE public.cards ADD COLUMN due_day integer;
+ALTER TABLE public.cards ADD COLUMN days_before_due integer DEFAULT 10;
 ```
 
-**2. Aplicar nos pontos problemáticos:**
+- `due_day` (1-31): dia de vencimento da fatura
+- `days_before_due` (ex: 10): quantos dias antes do vencimento a fatura fecha
+- Manter `closing_day` e `opening_day` existentes para compatibilidade (não remover)
+- **Não adicionar `competencia_fatura` na tabela `expenses`** — será calculado em runtime no frontend (evita migração de dados)
 
-| Linha | Atual | Corrigido |
-|---|---|---|
-| 370 | `'✨ Resumo Inteligente'` | `'Resumo Inteligente'` |
-| 290 | `↑` / `↓` em `formatDeltaWithAbsolute` | `+` / `-` (ex: `+12% (+R$ 150)`) |
-| 430 | `${cat.icon} ${cat.name}` | `cat.name` (sem ícone) |
-| 680 | `"Excelente! 🎉"` | `"Excelente!"` |
+---
 
-**3. `formatDeltaWithAbsolute` — trocar setas por sinais texto:**
+### 2. UI — Página "Meus Cartões" (`Cards.tsx` + `card-manager.tsx`)
+
+**Cards.tsx:**
+- Remover `<Footer />` da página
+- Reduzir `max-w-4xl` para `max-w-2xl` (720px)
+
+**card-manager.tsx — Lista de cartões:**
+- Cada card mostra: Nome, Tipo (badge), Limite formatado, e para crédito: "Próx. fechamento: DD/MM" e "Próx. vencimento: DD/MM" (calculados a partir de `due_day` e `days_before_due`, ou fallback para `closing_day`)
+- Substituir botões ícone (Pencil/Trash2) por `DropdownMenu` com ⋮ (MoreVertical) → "Editar" / "Excluir"
+
+**card-manager.tsx — Formulário:**
+- Campos condicionais: se tipo = "debit", esconder campos de fatura
+- Se tipo = "credit" ou "both": mostrar "Dia de Vencimento" + "Dias antes do vencimento que fecha" (com valor padrão 10)
+- Exibir info calculada: "Fechamento: dia X → Vencimento: dia Y"
+- Manter campo `closing_day` preenchido automaticamente (= `due_day - days_before_due` ajustado) para compatibilidade
+
+**Seletor de cor:**
+- Trocar grid de retângulos `h-10` por círculos pequenos (`w-8 h-8 rounded-full`) com check icon discreto + ring quando selecionado
+
+---
+
+### 3. Lógica — Cálculo de competência (`billing-period.ts`)
+
+Atualizar `CreditCardConfig` para aceitar o novo modelo:
+
 ```ts
-const sign = delta >= 0 ? "+" : "-";
-return `${sign}${Math.abs(delta).toFixed(0)}% (${diffStr})`;
+export interface CreditCardConfig {
+  opening_day: number;
+  closing_day: number;
+  due_day?: number;
+  days_before_due?: number;
+}
 ```
 
-**4. Melhorar gráfico "Evolução dos Gastos" — label "Média" cortada:**
-- Aumentar `padding.top` de 20 para 30 no `createLineChartCanvas`
-- Mover label "Média: R$..." para dentro da área do gráfico com offset seguro (`avgY - 10` com clamp para não sair do canvas)
-- Aumentar resolução: canvas width/height 2x (1000x440) e manter mesmo tamanho em `addImage`
+Adicionar função `getNextBillingDates(card, referenceDate)`:
+- Calcula data de fechamento e vencimento para um dado mês
+- Se `due_day` e `days_before_due` existem, usa: `fechamento = vencimento - days_before_due`
+- Senão, fallback para `closing_day`/`opening_day` existentes
+- Retorna `{ closingDate: Date, dueDate: Date, billingMonth: string }`
 
-**5. Aumentar resolução de todos os canvas helpers** (createPieChartCanvas, createDualBarChartCanvas, createLineChartCanvas):
-- Duplicar width/height do canvas (scale 2x)
-- Usar `ctx.scale(2, 2)` para manter coordenadas
-- Resultado: gráficos mais nítidos no PDF
+Atualizar `calculateBillingPeriod` para usar o novo modelo quando disponível.
 
-### Resumo
+---
 
-| O que | Onde |
+### 4. Expense Form — Chip de fatura
+
+**`expense-form.tsx` e `unified-expense-form-sheet.tsx`:**
+- Quando `paymentMethod === "credit"` e um cartão com config de fatura está selecionado:
+  - Calcular `competencia_fatura` com base na `expenseDate` + config do cartão
+  - Mostrar chip informativo: "Fatura: Mar/2026 (fecha em 20/03)"
+  - Chip não é editável no MVP (override manual pode vir depois)
+
+---
+
+### 5. Relatórios — Filtro por competência
+
+**`report-view-model.ts`:**
+- No filtro de despesas por período, quando `payment_method === "credit"` e existe `card_id` com config de fatura:
+  - Usar `calculateBillingPeriod(expenseDate, cardConfig)` para determinar a competência
+  - Filtrar pela competência em vez da `expense_date`
+- Para `pix`/`debit`: continuar usando `expense_date` normalmente
+
+Isso significa que no relatório de "Março 2026", uma compra no crédito feita em 27/02 (após o fechamento de fev) aparecerá em Março.
+
+---
+
+### Arquivos impactados
+
+| Arquivo | Mudança |
 |---|---|
-| Remover emojis dos títulos | Linhas 370, 680 |
-| Remover ícones das categorias | Linha 430 |
-| Trocar ↑↓ por +/- | Função `formatDeltaWithAbsolute` (linha 290) |
-| Label "Média" não cortada | `createLineChartCanvas` padding |
-| Gráficos 2x resolução | 3 canvas helpers |
+| Migração SQL | `ALTER TABLE cards ADD COLUMN due_day, days_before_due` |
+| `src/pages/Cards.tsx` | Remover Footer, reduzir max-width |
+| `src/components/card-manager.tsx` | UI premium, swatches, dropdown menu, campos condicionais, próx. fechamento/vencimento |
+| `src/types/card.ts` | Adicionar `due_day`, `days_before_due` ao `CardFormData` |
+| `src/utils/billing-period.ts` | Nova função `getNextBillingDates`, atualizar `CreditCardConfig` |
+| `src/components/expense-form.tsx` | Chip de fatura para crédito |
+| `src/components/unified-expense-form-sheet.tsx` | Chip de fatura para crédito |
+| `src/utils/report-view-model.ts` | Filtro por competência para crédito |
 
-1 arquivo modificado, sem mudanças em cálculos/dados/UI.
+---
+
+### Ordem de implementação
+
+1. Migração DB (novos campos)
+2. UI da página de cartões (visual + formulário)
+3. Lógica de billing period atualizada
+4. Chip de fatura no expense form
+5. Filtro por competência nos relatórios
 
