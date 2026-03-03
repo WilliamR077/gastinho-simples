@@ -70,11 +70,13 @@ function createPieChartCanvas(
   width: number = 400,
   height: number = 280
 ): string {
+  const scale = 2;
   const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
+  canvas.width = width * scale;
+  canvas.height = height * scale;
   const ctx = canvas.getContext('2d');
   if (!ctx) return '';
+  ctx.scale(scale, scale);
 
   const centerX = width / 2;
   const centerY = height / 2;
@@ -121,13 +123,15 @@ function createLineChartCanvas(
   lineColor: string = '#ef4444',
   averageValue?: number
 ): string {
+  const scale = 2;
   const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
+  canvas.width = width * scale;
+  canvas.height = height * scale;
   const ctx = canvas.getContext('2d');
   if (!ctx) return '';
+  ctx.scale(scale, scale);
 
-  const padding = { top: 20, right: 20, bottom: 35, left: 55 };
+  const padding = { top: 30, right: 20, bottom: 35, left: 55 };
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
   const maxValue = Math.max(...values, averageValue || 0, 1);
@@ -171,9 +175,10 @@ function createLineChartCanvas(
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.fillStyle = '#f59e0b';
-    ctx.font = '9px Arial';
+    ctx.font = 'bold 10px Arial';
     ctx.textAlign = 'right';
-    ctx.fillText(`Média: R$ ${averageValue.toFixed(0)}`, width - padding.right, avgY - 5);
+    const labelY = Math.max(avgY - 8, padding.top + 5);
+    ctx.fillText(`Media: R$ ${averageValue.toFixed(0)}`, width - padding.right, labelY);
   }
 
   ctx.beginPath();
@@ -219,11 +224,13 @@ function createDualBarChartCanvas(
   width: number = 500,
   height: number = 220
 ): string {
+  const scale = 2;
   const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
+  canvas.width = width * scale;
+  canvas.height = height * scale;
   const ctx = canvas.getContext('2d');
   if (!ctx) return '';
+  ctx.scale(scale, scale);
 
   const padding = { top: 25, right: 20, bottom: 35, left: 55 };
   const chartWidth = width - padding.left - padding.right;
@@ -287,10 +294,10 @@ const formatCurrency = (v: number) => `R$ ${v.toFixed(2).replace('.', ',')}`;
 const formatDeltaWithAbsolute = (delta: number | null, currentVal: number, previousVal: number): string => {
   if (previousVal < 10) return "sem base";
   if (delta === null) return "—";
-  const sign = delta >= 0 ? "↑" : "↓";
+  const sign = delta >= 0 ? "+" : "-";
   const diff = currentVal - previousVal;
   const diffStr = diff >= 0 ? `+${formatCurrency(diff)}` : `-${formatCurrency(Math.abs(diff))}`;
-  return `${sign} ${Math.abs(delta).toFixed(0)}% (${diffStr})`;
+  return `${sign}${Math.abs(delta).toFixed(0)}% (${diffStr})`;
 };
 
 // ============ MAIN EXPORT ============
@@ -367,7 +374,7 @@ export async function exportReportsToPDF(params: ExportReportParams) {
     checkPageBreak(30);
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.text('✨ Resumo Inteligente', 14, yPosition);
+    doc.text('Resumo Inteligente', 14, yPosition);
     yPosition += 7;
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
@@ -427,7 +434,7 @@ export async function exportReportsToPDF(params: ExportReportParams) {
       startY: yPosition,
       head: [['Categoria', 'Valor', '%', '']],
       body: categoryData.map((cat) => [
-        `${cat.icon} ${cat.name}`,
+        cat.name,
         formatCurrency(cat.value),
         `${cat.percentage.toFixed(0)}%`,
         '',
@@ -677,7 +684,7 @@ export async function exportReportsToPDF(params: ExportReportParams) {
     yPosition += 6;
 
     doc.setFontSize(9);
-    const interpretation = savingsRate < 0 ? "Você gastou mais do que ganhou" : savingsRate < 10 ? "Tente reservar mais" : savingsRate < 20 ? "Bom ritmo!" : "Excelente! 🎉";
+    const interpretation = savingsRate < 0 ? "Voce gastou mais do que ganhou" : savingsRate < 10 ? "Tente reservar mais" : savingsRate < 20 ? "Bom ritmo!" : "Excelente!";
     doc.text(interpretation, pageWidth / 2, yPosition, { align: 'center' });
     yPosition += 5;
 
