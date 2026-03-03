@@ -8,9 +8,12 @@ import { Card as CardUI, CardContent, CardDescription, CardHeader, CardTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, CreditCard, Pencil, Trash2, Crown } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Plus, CreditCard, Crown, MoreVertical, Pencil, Trash2, Check, CalendarClock, CalendarCheck } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useNavigate } from "react-router-dom";
+import { getNextBillingDates } from "@/utils/billing-period";
 
 export function CardManager() {
   const [cards, setCards] = useState<Card[]>([]);
@@ -19,14 +22,16 @@ export function CardManager() {
   const [editingCard, setEditingCard] = useState<Card | null>(null);
   const [deleteCardId, setDeleteCardId] = useState<string | null>(null);
   const { toast } = useToast();
-  const { canAddCard, features, tier } = useSubscription();
+  const { canAddCard, features } = useSubscription();
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState<CardFormData>({
     name: "",
     card_type: "credit",
-    opening_day: undefined,
+    due_day: undefined,
+    days_before_due: 10,
     closing_day: undefined,
+    opening_day: undefined,
     card_limit: undefined,
     color: "#FFA500",
   });
@@ -45,47 +50,6 @@ export function CardManager() {
   useEffect(() => {
     loadCards();
   }, []);
-
-  // Corrige automaticamente cartões com dias de abertura incorretos
-  useEffect(() => {
-    const fixIncorrectOpeningDays = async () => {
-      const cardsToFix = cards.filter((card) => {
-        if (card.card_type !== "credit" && card.card_type !== "both") return false;
-        if (!card.closing_day || !card.opening_day) return false;
-
-        // Calcula o opening_day correto
-        const correctOpeningDay = card.closing_day === 31 ? 1 : card.closing_day + 1;
-        
-        // Se o opening_day atual for diferente do correto, precisa corrigir
-        return card.opening_day !== correctOpeningDay;
-      });
-
-      if (cardsToFix.length === 0) return;
-
-      try {
-        for (const card of cardsToFix) {
-          const correctOpeningDay = card.closing_day === 31 ? 1 : card.closing_day! + 1;
-          
-          await supabase
-            .from("cards")
-            .update({ opening_day: correctOpeningDay })
-            .eq("id", card.id);
-        }
-
-        toast({
-          title: "Cartões atualizados",
-          description: `${cardsToFix.length} cartão${cardsToFix.length > 1 ? 'ões foram atualizados' : ' foi atualizado'} com os dias de abertura corretos.`,
-        });
-
-        // Recarrega os cartões para mostrar os valores corrigidos
-        loadCards();
-      } catch (error) {
-        console.error("Erro ao corrigir dias de abertura:", error);
-      }
-    };
-
-    fixIncorrectOpeningDays();
-  }, [cards.length]); // Roda apenas quando o número de cartões muda (primeira carga)
 
   const loadCards = async () => {
     try {
@@ -113,24 +77,24 @@ export function CardManager() {
     }
   };
 
+  const computeClosingDay = (dueDay: number, daysBefore: number): number => {
+    let closing = dueDay - daysBefore;
+    if (closing <= 0) closing += 30;
+    return Math.max(1, Math.min(31, closing));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.name.trim()) {
-      toast({
-        title: "Erro",
-        description: "Por favor, informe o nome do cartão.",
-        variant: "destructive",
-      });
+      toast({ title: "Erro", description: "Informe o nome do cartão.", variant: "destructive" });
       return;
     }
 
-    if ((formData.card_type === "credit" || formData.card_type === "both") && (!formData.closing_day || formData.closing_day < 1 || formData.closing_day > 31)) {
-      toast({
-        title: "Erro",
-        description: "Por favor, informe um dia de fechamento válido (1-31) para cartões de crédito.",
-        variant: "destructive",
-      });
+    const isCreditType = formData.card_type === "credit" || formData.card_type === "both";
+
+    if (isCreditType && (!formData.due_day || formData.due_day < 1 || formData.due_day > 31)) {
+      toast({ title: "Erro", description: "Informe um dia de vencimento válido (1-31).", variant: "destructive" });
       return;
     }
 
@@ -145,9 +109,12 @@ export function CardManager() {
         color: formData.color || "#FFA500",
       };
 
-      if (formData.card_type === "credit" || formData.card_type === "both") {
-        const closingDay = formData.closing_day!;
+      if (isCreditType && formData.due_day) {
+        const daysBefore = formData.days_before_due || 10;
+        const closingDay = computeClosingDay(formData.due_day, daysBefore);
         const openingDay = closingDay === 31 ? 1 : closingDay + 1;
+        cardData.due_day = formData.due_day;
+        cardData.days_before_due = daysBefore;
         cardData.closing_day = closingDay;
         cardData.opening_day = openingDay;
       }
@@ -157,39 +124,20 @@ export function CardManager() {
       }
 
       if (editingCard) {
-        const { error } = await supabase
-          .from("cards")
-          .update(cardData)
-          .eq("id", editingCard.id);
-
+        const { error } = await supabase.from("cards").update(cardData).eq("id", editingCard.id);
         if (error) throw error;
-
-        toast({
-          title: "Sucesso",
-          description: "Cartão atualizado com sucesso!",
-        });
+        toast({ title: "Sucesso", description: "Cartão atualizado com sucesso!" });
       } else {
-        const { error } = await supabase
-          .from("cards")
-          .insert([cardData]);
-
+        const { error } = await supabase.from("cards").insert([cardData]);
         if (error) throw error;
-
-        toast({
-          title: "Sucesso",
-          description: "Cartão adicionado com sucesso!",
-        });
+        toast({ title: "Sucesso", description: "Cartão adicionado com sucesso!" });
       }
 
       resetForm();
       loadCards();
     } catch (error) {
       console.error("Erro ao salvar cartão:", error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível salvar o cartão.",
-        variant: "destructive",
-      });
+      toast({ title: "Erro", description: "Não foi possível salvar o cartão.", variant: "destructive" });
     }
   };
 
@@ -197,7 +145,9 @@ export function CardManager() {
     setEditingCard(card);
     setFormData({
       name: card.name,
-      card_type: card.card_type as "credit" | "debit",
+      card_type: card.card_type as CardType,
+      due_day: (card as any).due_day || undefined,
+      days_before_due: (card as any).days_before_due || 10,
       opening_day: card.opening_day || undefined,
       closing_day: card.closing_day || undefined,
       card_limit: card.card_limit ? Number(card.card_limit) : undefined,
@@ -208,29 +158,15 @@ export function CardManager() {
 
   const handleDelete = async () => {
     if (!deleteCardId) return;
-
     try {
-      const { error } = await supabase
-        .from("cards")
-        .update({ is_active: false })
-        .eq("id", deleteCardId);
-
+      const { error } = await supabase.from("cards").update({ is_active: false }).eq("id", deleteCardId);
       if (error) throw error;
-
-      toast({
-        title: "Sucesso",
-        description: "Cartão removido com sucesso!",
-      });
-
+      toast({ title: "Sucesso", description: "Cartão removido com sucesso!" });
       setDeleteCardId(null);
       loadCards();
     } catch (error) {
       console.error("Erro ao remover cartão:", error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível remover o cartão.",
-        variant: "destructive",
-      });
+      toast({ title: "Erro", description: "Não foi possível remover o cartão.", variant: "destructive" });
     }
   };
 
@@ -238,8 +174,10 @@ export function CardManager() {
     setFormData({
       name: "",
       card_type: "credit",
-      opening_day: undefined,
+      due_day: undefined,
+      days_before_due: 10,
       closing_day: undefined,
+      opening_day: undefined,
       card_limit: undefined,
       color: "#FFA500",
     });
@@ -248,11 +186,10 @@ export function CardManager() {
   };
 
   const handleAddCard = () => {
-    // Verificar se usuário pode adicionar mais cartões
     if (!canAddCard(cards.length)) {
       toast({
-        title: "Limite de cartões atingido 🎴",
-        description: `Você atingiu o limite de ${features.cards} cartão${features.cards > 1 ? 'ões' : ''} do plano Gratuito. Faça upgrade para o Premium e adicione quantos cartões quiser!`,
+        title: "Limite de cartões atingido",
+        description: `Você atingiu o limite de ${features.cards} cartão${features.cards > 1 ? 'ões' : ''} do plano Gratuito. Faça upgrade para o Premium!`,
         variant: "destructive",
       });
       return;
@@ -260,11 +197,44 @@ export function CardManager() {
     setShowForm(!showForm);
   };
 
+  const getCardBillingInfo = (card: Card) => {
+    const isCreditType = card.card_type === "credit" || card.card_type === "both";
+    if (!isCreditType) return null;
+
+    const dueDay = (card as any).due_day;
+    const daysBefore = (card as any).days_before_due;
+
+    if (dueDay && daysBefore) {
+      const billing = getNextBillingDates({
+        opening_day: card.opening_day || 1,
+        closing_day: card.closing_day || 15,
+        due_day: dueDay,
+        days_before_due: daysBefore,
+      }, new Date());
+      return billing;
+    }
+
+    if (card.closing_day) {
+      const billing = getNextBillingDates({
+        opening_day: card.opening_day || 1,
+        closing_day: card.closing_day,
+      }, new Date());
+      return billing;
+    }
+
+    return null;
+  };
+
+  const formatDateShort = (date: Date) => {
+    return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}`;
+  };
+
   if (loading) {
     return <div className="text-center py-4">Carregando...</div>;
   }
 
   const canAddMoreCards = canAddCard(cards.length);
+  const isCreditType = formData.card_type === "credit" || formData.card_type === "both";
 
   return (
     <div className="space-y-4">
@@ -272,12 +242,7 @@ export function CardManager() {
         <h2 className="text-2xl font-semibold">Meus Cartões</h2>
         <div className="flex flex-wrap items-center gap-2">
           {!canAddMoreCards && (
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => navigate("/subscription")}
-              className="gap-2"
-            >
+            <Button variant="outline" size="sm" onClick={() => navigate("/subscription")} className="gap-2">
               <Crown className="h-4 w-4" />
               <span className="hidden sm:inline">Upgrade</span>
             </Button>
@@ -292,15 +257,10 @@ export function CardManager() {
       {!canAddMoreCards && !showForm && (
         <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 text-sm">
           <p className="text-foreground">
-            🚀 <strong>Quer adicionar mais cartões?</strong>
+            <strong>Quer adicionar mais cartões?</strong>
             <br />
             Com o plano Premium você tem <strong>cartões ilimitados</strong> + muito mais!
-            {' '}<span 
-              className="underline cursor-pointer font-semibold text-primary"
-              onClick={() => navigate("/subscription")}
-            >
-              Ver planos
-            </span>
+            {' '}<span className="underline cursor-pointer font-semibold text-primary" onClick={() => navigate("/subscription")}>Ver planos</span>
           </p>
         </div>
       )}
@@ -310,7 +270,7 @@ export function CardManager() {
           <CardHeader>
             <CardTitle>{editingCard ? "Editar Cartão" : "Novo Cartão"}</CardTitle>
             <CardDescription>
-              {editingCard ? "Atualize as informações do seu cartão" : "Adicione um novo cartão de crédito ou débito"}
+              {editingCard ? "Atualize as informações do seu cartão" : "Adicione um novo cartão"}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -319,7 +279,7 @@ export function CardManager() {
                 <Label htmlFor="name">Nome do Cartão</Label>
                 <Input
                   id="name"
-                  placeholder="Ex: Nubank, Inter Débito"
+                  placeholder="Ex: Nubank, Inter"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 />
@@ -327,43 +287,62 @@ export function CardManager() {
 
               <div className="space-y-2">
                 <Label htmlFor="card_type">Tipo</Label>
-                <Select
-                  value={formData.card_type}
-                  onValueChange={(value) => setFormData({ ...formData, card_type: value as CardType })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                <Select value={formData.card_type} onValueChange={(value) => setFormData({ ...formData, card_type: value as CardType })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {Object.entries(cardTypeLabels).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
-                      </SelectItem>
+                      <SelectItem key={value} value={value}>{label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              {(formData.card_type === "credit" || formData.card_type === "both") && (
-                <div className="space-y-2">
-                  <Label htmlFor="closing_day">Dia de Fechamento da Fatura</Label>
-                  <Input
-                    id="closing_day"
-                    type="number"
-                    min="1"
-                    max="31"
-                    placeholder="Ex: 15"
-                    value={formData.closing_day || ""}
-                    onChange={(e) => setFormData({ ...formData, closing_day: parseInt(e.target.value) || undefined })}
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    O dia de abertura será o dia seguinte ao fechamento. A fatura vai do dia de abertura até o dia de fechamento.
-                  </p>
-                </div>
+              {isCreditType && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="due_day">Dia de Vencimento da Fatura</Label>
+                    <Input
+                      id="due_day"
+                      type="number"
+                      min="1"
+                      max="31"
+                      placeholder="Ex: 10"
+                      value={formData.due_day || ""}
+                      onChange={(e) => setFormData({ ...formData, due_day: parseInt(e.target.value) || undefined })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="days_before_due">Dias antes do vencimento que fecha</Label>
+                    <Input
+                      id="days_before_due"
+                      type="number"
+                      min="1"
+                      max="28"
+                      placeholder="Ex: 10"
+                      value={formData.days_before_due || ""}
+                      onChange={(e) => setFormData({ ...formData, days_before_due: parseInt(e.target.value) || 10 })}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Quantos dias antes do vencimento a fatura fecha (geralmente 7 a 12 dias)
+                    </p>
+                  </div>
+
+                  {formData.due_day && formData.days_before_due && (
+                    <div className="bg-primary/10 rounded-lg p-3 space-y-1">
+                      <p className="text-sm font-medium text-primary">
+                        Fechamento: dia {computeClosingDay(formData.due_day, formData.days_before_due)} → Vencimento: dia {formData.due_day}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        A fatura fecha {formData.days_before_due} dias antes do vencimento
+                      </p>
+                    </div>
+                  )}
+                </>
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="card_limit">Limite do Cartão (Opcional)</Label>
+                <Label htmlFor="card_limit">Limite (Opcional)</Label>
                 <Input
                   id="card_limit"
                   type="number"
@@ -377,22 +356,22 @@ export function CardManager() {
 
               <div className="space-y-2">
                 <Label>Cor do Cartão</Label>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="flex flex-wrap gap-2">
                   {availableColors.map((color) => (
                     <button
                       key={color.value}
                       type="button"
                       onClick={() => setFormData({ ...formData, color: color.value })}
-                      className={`h-10 rounded-lg border-2 transition-all ${
+                      className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
                         formData.color === color.value
-                          ? "border-primary ring-2 ring-primary/20 scale-105"
-                          : "border-border hover:border-primary/50"
+                          ? "ring-2 ring-primary ring-offset-2 ring-offset-background scale-110"
+                          : "hover:scale-105"
                       }`}
                       style={{ backgroundColor: color.value }}
                       title={color.name}
                     >
                       {formData.color === color.value && (
-                        <span className="text-white text-xl">✓</span>
+                        <Check className="h-4 w-4 text-white" />
                       )}
                     </button>
                   ))}
@@ -401,58 +380,70 @@ export function CardManager() {
 
               <div className="flex gap-2">
                 <Button type="submit">{editingCard ? "Atualizar" : "Adicionar"}</Button>
-                <Button type="button" variant="outline" onClick={resetForm}>
-                  Cancelar
-                </Button>
+                <Button type="button" variant="outline" onClick={resetForm}>Cancelar</Button>
               </div>
             </form>
           </CardContent>
         </CardUI>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2">
-        {cards.map((card) => (
-          <CardUI key={card.id}>
-            <CardHeader>
-              <div className="flex justify-between items-start">
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-10 h-10 rounded-lg flex items-center justify-center"
-                    style={{ backgroundColor: card.color || "#FFA500" }}
-                  >
-                    <CreditCard className="h-5 w-5 text-white" />
+      <div className="space-y-3">
+        {cards.map((card) => {
+          const billing = getCardBillingInfo(card);
+          return (
+            <CardUI key={card.id} className="overflow-hidden">
+              <div className="flex">
+                <div className="w-2 shrink-0" style={{ backgroundColor: card.color || "#FFA500" }} />
+                <div className="flex-1 p-4">
+                  <div className="flex justify-between items-start">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-base">{card.name}</span>
+                        <Badge variant="secondary" className="text-xs">
+                          {cardTypeLabels[card.card_type as CardType] || card.card_type}
+                        </Badge>
+                      </div>
+                      {card.card_limit && (
+                        <p className="text-sm text-muted-foreground">
+                          Limite: R$ {Number(card.card_limit).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </p>
+                      )}
+                      {billing && (
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <CalendarClock className="h-3.5 w-3.5" />
+                            Fecha: {formatDateShort(billing.closingDate)}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <CalendarCheck className="h-3.5 w-3.5" />
+                            Vence: {formatDateShort(billing.dueDate)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => handleEdit(card)}>
+                          <Pencil className="h-4 w-4 mr-2" />
+                          Editar
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setDeleteCardId(card.id)} className="text-destructive focus:text-destructive">
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Excluir
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
-                  <div>
-                    <CardTitle className="text-lg">{card.name}</CardTitle>
-                    <CardDescription>{cardTypeLabels[card.card_type as "credit" | "debit"]}</CardDescription>
-                  </div>
-                </div>
-                <div className="flex gap-1">
-                  <Button size="icon" variant="ghost" onClick={() => handleEdit(card)}>
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button size="icon" variant="ghost" onClick={() => setDeleteCardId(card.id)}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
                 </div>
               </div>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {(card.card_type === "credit" || card.card_type === "both") && (
-                <div className="text-sm">
-                  <span className="font-medium">Fechamento:</span> Dia {card.closing_day}
-                  <br />
-                  <span className="font-medium">Abertura:</span> Dia {card.opening_day}
-                </div>
-              )}
-              {card.card_limit && (
-                <div className="text-sm">
-                  <span className="font-medium">Limite:</span> R$ {Number(card.card_limit).toFixed(2)}
-                </div>
-              )}
-            </CardContent>
-          </CardUI>
-        ))}
+            </CardUI>
+          );
+        })}
       </div>
 
       {cards.length === 0 && !showForm && (

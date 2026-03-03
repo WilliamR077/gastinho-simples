@@ -2,14 +2,13 @@ import { CardManager } from "@/components/card-manager";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Footer } from "@/components/footer";
 
 export default function Cards() {
   const navigate = useNavigate();
 
   return (
     <div className="min-h-screen bg-background pb-16">
-      <div className="container max-w-4xl mx-auto p-4 space-y-6">
+      <div className="container max-w-2xl mx-auto p-4 space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <Button
@@ -35,7 +34,6 @@ export default function Cards() {
 
         {/* Card Manager */}
         <CardManager />
-        <Footer />
       </div>
     </div>
   );

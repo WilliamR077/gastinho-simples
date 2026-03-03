@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react"
+import { calculateBillingPeriod, formatBillingPeriodLabel, CreditCardConfig } from "@/utils/billing-period"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { Button } from "@/components/ui/button"
@@ -294,6 +295,24 @@ export function ExpenseForm({
               </Select>
             </div>
           )}
+
+          {paymentMethod === "credit" && cardId && (() => {
+            const selectedCard = cards.find(c => c.id === cardId);
+            if (!selectedCard) return null;
+            const cardConfig: CreditCardConfig = {
+              opening_day: selectedCard.opening_day || 1,
+              closing_day: selectedCard.closing_day || 15,
+              due_day: (selectedCard as any).due_day,
+              days_before_due: (selectedCard as any).days_before_due,
+            };
+            const billingMonth = calculateBillingPeriod(expenseDate, cardConfig);
+            const label = formatBillingPeriodLabel(billingMonth);
+            return (
+              <div className="bg-primary/10 border border-primary/20 rounded-lg px-3 py-2 text-sm">
+                <span className="font-medium text-primary">Fatura: {label}</span>
+              </div>
+            );
+          })()}
           
           {paymentMethod === "credit" && (
             <div className="space-y-2">

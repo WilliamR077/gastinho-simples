@@ -22,6 +22,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { CategorySelector } from "@/components/category-selector";
 import { useCategories } from "@/hooks/use-categories";
 import { DescriptionAutocomplete } from "@/components/description-autocomplete";
+import { calculateBillingPeriod, formatBillingPeriodLabel, CreditCardConfig } from "@/utils/billing-period";
 
 type ExpenseType = "monthly" | "recurring";
 
@@ -483,6 +484,25 @@ export function UnifiedExpenseFormSheet({
               </Select>
             </div>
           )}
+
+          {paymentMethod === "credit" && cardId && expenseType === "monthly" && (() => {
+            const selectedCard = cards.find(c => c.id === cardId);
+            if (!selectedCard) return null;
+            const cardConfig: CreditCardConfig = {
+              opening_day: selectedCard.opening_day || 1,
+              closing_day: selectedCard.closing_day || 15,
+              due_day: (selectedCard as any).due_day,
+              days_before_due: (selectedCard as any).days_before_due,
+            };
+            const billingMonth = calculateBillingPeriod(expenseDate, cardConfig);
+            const label = formatBillingPeriodLabel(billingMonth);
+            return (
+              <div className="bg-primary/10 border border-primary/20 rounded-lg px-3 py-2 text-sm">
+                <span className="font-medium text-primary">Fatura: {label}</span>
+              </div>
+            );
+          })()}
+
 
           {/* Parcelas - apenas para despesa do mês no crédito */}
           {expenseType === "monthly" && paymentMethod === "credit" && (
