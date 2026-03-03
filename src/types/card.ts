@@ -11,6 +11,8 @@ export interface CardFormData {
   closing_day?: number;
   card_limit?: number;
   color?: string;
+  due_day?: number;
+  days_before_due?: number;
 }
 
 export const cardTypeLabels: Record<CardType, string> = {

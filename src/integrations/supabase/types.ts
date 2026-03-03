@@ -127,6 +127,8 @@ export type Database = {
           closing_day: number | null
           color: string
           created_at: string
+          days_before_due: number | null
+          due_day: number | null
           id: string
           is_active: boolean
           name: string
@@ -140,6 +142,8 @@ export type Database = {
           closing_day?: number | null
           color?: string
           created_at?: string
+          days_before_due?: number | null
+          due_day?: number | null
           id?: string
           is_active?: boolean
           name: string
@@ -153,6 +157,8 @@ export type Database = {
           closing_day?: number | null
           color?: string
           created_at?: string
+          days_before_due?: number | null
+          due_day?: number | null
           id?: string
           is_active?: boolean
           name?: string

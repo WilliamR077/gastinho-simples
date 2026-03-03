@@ -10,6 +10,7 @@ import {
   isSameDay, parseISO, subMonths, subYears, subQuarters, differenceInDays
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { calculateBillingPeriod, CreditCardConfig } from "@/utils/billing-period";
 
 const paymentMethodLabels: Record<PaymentMethod, string> = {
   credit: "Crédito",
@@ -133,9 +134,36 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
     return { id: 'outros', name: 'Outros', icon: '📦' };
   };
 
-  // Filter expenses by period
+  // Build cards config map for billing period calculation
+  const cardsConfigMap = new Map<string, CreditCardConfig>();
+  cards.forEach(card => {
+    cardsConfigMap.set(card.id, {
+      opening_day: card.opening_day || 1,
+      closing_day: card.closing_day || 15,
+      due_day: (card as any).due_day,
+      days_before_due: (card as any).days_before_due,
+    });
+  });
+
+  const periodStr = format(startDate, "yyyy-MM");
+
+  // Filter expenses by period — credit uses billing period (competência)
   const filteredExpenses = expenses.filter(e => {
     const d = parseLocalDate(e.expense_date);
+    
+    if (e.payment_method === "credit" && e.card_id && cardsConfigMap.has(e.card_id)) {
+      const config = cardsConfigMap.get(e.card_id)!;
+      const billingPeriod = calculateBillingPeriod(d, config);
+      // For monthly view, match billing period to selected month
+      if (periodType === "month") {
+        return billingPeriod === periodStr;
+      }
+      // For other periods, check if billing period falls within range
+      const [bYear, bMonth] = billingPeriod.split("-").map(Number);
+      const billingDate = new Date(bYear, bMonth - 1, 1);
+      return billingDate >= startOfMonth(startDate) && billingDate <= endOfMonth(endDate);
+    }
+    
     return d >= startDate && d <= endDate;
   });
 

@@ -4,51 +4,133 @@ import { parseLocalDate } from "@/lib/utils";
 export interface CreditCardConfig {
   opening_day: number;
   closing_day: number;
+  due_day?: number;
+  days_before_due?: number;
+}
+
+export interface BillingDates {
+  closingDate: Date;
+  dueDate: Date;
+  billingMonth: string;
+}
+
+/**
+ * Calcula as próximas datas de fechamento e vencimento para um cartão.
+ * Se due_day + days_before_due existirem, usa novo modelo.
+ * Senão, fallback para closing_day.
+ */
+export function getNextBillingDates(
+  config: CreditCardConfig,
+  referenceDate: Date
+): BillingDates {
+  const { due_day, days_before_due, closing_day } = config;
+  const now = referenceDate;
+  const year = now.getFullYear();
+  const month = now.getMonth();
+
+  if (due_day && days_before_due) {
+    // Novo modelo: vencimento - dias = fechamento
+    const computeForMonth = (y: number, m: number) => {
+      const dueDate = new Date(y, m, Math.min(due_day, daysInMonth(y, m)));
+      const closingDate = new Date(dueDate);
+      closingDate.setDate(closingDate.getDate() - days_before_due);
+      return { closingDate, dueDate };
+    };
+
+    // Try current month
+    let { closingDate, dueDate } = computeForMonth(year, month);
+    
+    // If closing already passed, advance to next month
+    if (now > closingDate) {
+      const next = month + 1;
+      const ny = next > 11 ? year + 1 : year;
+      const nm = next > 11 ? 0 : next;
+      ({ closingDate, dueDate } = computeForMonth(ny, nm));
+    }
+
+    const billingMonth = format(closingDate, "yyyy-MM");
+    return { closingDate, dueDate, billingMonth };
+  }
+
+  // Fallback: closing_day based
+  const closingDayVal = closing_day || 15;
+  let closingDate = new Date(year, month, Math.min(closingDayVal, daysInMonth(year, month)));
+  
+  if (now > closingDate) {
+    const next = month + 1;
+    const ny = next > 11 ? year + 1 : year;
+    const nm = next > 11 ? 0 : next;
+    closingDate = new Date(ny, nm, Math.min(closingDayVal, daysInMonth(ny, nm)));
+  }
+
+  const dueDate = new Date(closingDate);
+  dueDate.setDate(dueDate.getDate() + 10);
+
+  const billingMonth = format(closingDate, "yyyy-MM");
+  return { closingDate, dueDate, billingMonth };
+}
+
+function daysInMonth(year: number, month: number): number {
+  return new Date(year, month + 1, 0).getDate();
 }
 
 /**
  * Calcula o período de faturamento (mês da fatura) baseado na data do gasto
  * e na configuração do cartão de crédito.
- * 
- * Exemplo com fechamento dia 29 e abertura dia 30:
- * - Fatura de Dezembro: abre 30/Nov, fecha 29/Dez, paga em Jan
- * - Gasto dia 05/Dez → fatura de Dezembro (2024-12)
- * - Gasto dia 30/Dez → fatura de Janeiro (2025-01)
  */
 export function calculateBillingPeriod(
   expenseDate: Date,
   config: CreditCardConfig
 ): string {
-  const { opening_day, closing_day } = config;
-  
+  const { due_day, days_before_due, opening_day, closing_day } = config;
+
+  // Novo modelo: due_day + days_before_due
+  if (due_day && days_before_due) {
+    const year = expenseDate.getFullYear();
+    const month = expenseDate.getMonth();
+
+    const computeClosingForMonth = (y: number, m: number): Date => {
+      const dim = daysInMonth(y, m);
+      const dd = new Date(y, m, Math.min(due_day, dim));
+      dd.setDate(dd.getDate() - days_before_due);
+      return dd;
+    };
+
+    // Check current month closing
+    let closingDate = computeClosingForMonth(year, month);
+    
+    if (expenseDate <= closingDate) {
+      // Belongs to this month's billing
+      return format(closingDate, "yyyy-MM");
+    } else {
+      // After closing → next month's billing
+      const next = month + 1;
+      const ny = next > 11 ? year + 1 : year;
+      const nm = next > 11 ? 0 : next;
+      closingDate = computeClosingForMonth(ny, nm);
+      return format(closingDate, "yyyy-MM");
+    }
+  }
+
+  // Fallback: old model with opening_day / closing_day
   const currentDay = expenseDate.getDate();
   const currentMonth = expenseDate.getMonth();
   const currentYear = expenseDate.getFullYear();
-  
-  // Se opening_day > closing_day, a fatura cruza o mês
-  // Ex: abre dia 30, fecha dia 29 do próximo mês
+
   if (opening_day > closing_day) {
-    // Dias 1 até closing_day: pertencem à fatura do MÊS ATUAL
-    // Dias opening_day até fim do mês: pertencem à fatura do MÊS SEGUINTE
     if (currentDay >= opening_day) {
-      // Após o dia de abertura → fatura do próximo mês
       const nextMonth = addMonths(new Date(currentYear, currentMonth, 1), 1);
       return format(nextMonth, "yyyy-MM");
     } else {
-      // Antes do dia de abertura → fatura do mês atual
       return format(new Date(currentYear, currentMonth, 1), "yyyy-MM");
     }
   } else {
-    // Fatura não cruza o mês (ex: abre dia 1, fecha dia 30)
     if (currentDay >= opening_day && currentDay <= closing_day) {
-      // Dentro do período → fatura do mês atual
       return format(new Date(currentYear, currentMonth, 1), "yyyy-MM");
     } else if (currentDay < opening_day) {
-      // Antes da abertura → fatura do mês anterior
       const previousMonth = addMonths(new Date(currentYear, currentMonth, 1), -1);
       return format(previousMonth, "yyyy-MM");
     } else {
-      // Após o fechamento → fatura do próximo mês
       const nextMonth = addMonths(new Date(currentYear, currentMonth, 1), 1);
       return format(nextMonth, "yyyy-MM");
     }
@@ -57,9 +139,6 @@ export function calculateBillingPeriod(
 
 /**
  * Gera uma lista de períodos de faturamento disponíveis
- * baseado nas despesas existentes.
- * 
- * Versão que usa config de cartões específicos quando disponível.
  */
 export function generateBillingPeriods(
   expenses: Array<{ expense_date: string; payment_method: string; card_id?: string | null }>,
@@ -73,7 +152,6 @@ export function generateBillingPeriods(
     .forEach(expense => {
       const expenseDate = parseLocalDate(expense.expense_date);
       
-      // Tentar usar a config do cartão específico
       let config = fallbackConfig;
       if (expense.card_id && cardsConfig?.has(expense.card_id)) {
         config = cardsConfig.get(expense.card_id)!;
@@ -118,7 +196,6 @@ export function filterExpensesByBillingPeriod<T extends { expense_date: string; 
     
     const expenseDate = parseLocalDate(expense.expense_date);
     
-    // Tentar usar a config do cartão específico
     let config = fallbackConfig;
     if (expense.card_id && cardsConfig?.has(expense.card_id)) {
       config = cardsConfig.get(expense.card_id)!;
