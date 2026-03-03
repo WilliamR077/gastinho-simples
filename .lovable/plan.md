@@ -1,71 +1,52 @@
 
 
-## Plano: PDF 1:1 com a tela — extrair view model compartilhado
+## Plano: Corrigir caracteres corrompidos e melhorar gráficos no PDF
 
-### Problema raiz
+### Causa raiz
 
-O `pdf-export-service.ts` recalcula todos os dados independentemente (linhas 352-530), usando um `getCategoryInfo` diferente do accordion (não tem acesso ao hook `useCategories()`). Isso gera divergências nos valores de categoria, agrupamento "Top 5 + Outros", e potencialmente em outros blocos.
+jsPDF usa fonte `helvetica` que **não suporta** emojis nem caracteres Unicode especiais (✨, 📦, ↑, ↓, 🎉). Esses caracteres aparecem como símbolos corrompidos no PDF gerado.
 
-### Solução
+### Mudanças — apenas `src/services/pdf-export-service.ts`
 
-Extrair toda a lógica de cálculo do accordion para uma função pura `buildReportViewModel()`. Tanto o accordion quanto o PDF consomem o mesmo resultado.
-
-### Arquivos
-
-| Arquivo | Mudança |
-|---|---|
-| `src/utils/report-view-model.ts` | **Novo** — função pura com todos os cálculos |
-| `src/components/reports-accordion.tsx` | Substituir ~200 linhas de `useMemo` por chamada ao view model |
-| `src/pages/Reports.tsx` | Computar view model, passar para accordion e para PDF |
-| `src/services/pdf-export-service.ts` | Remover ~180 linhas de recálculo, receber view model pronto |
-
-### 1. `src/utils/report-view-model.ts` (novo)
-
-Função pura que recebe os dados brutos + categories e retorna o objeto completo:
-
+**1. Criar helper `stripEmoji(text)`** para remover emojis/caracteres fora do range Latin básico:
 ```ts
-export interface ReportViewModel {
-  filteredExpenses, filteredRecurringExpenses, filteredIncomes, filteredRecurringIncomes,
-  totalPeriod, totalIncomes, balance,
-  previousTotalExpenses, previousTotalIncomes, previousBalance,
-  expenseDelta, incomeDelta, balanceDelta, savingsRate,
-  topCategory, mostExpensiveDay,
-  categoryData, paymentMethodData, cardData, memberData,
-  cashFlowData, evolutionData, dailyAverage,
-  topExpenses
-}
-
-export function buildReportViewModel(params: BuildParams): ReportViewModel
+const stripEmoji = (text: string) => text.replace(/[\u{1F000}-\u{1FFFF}]|[\u2700-\u27BF]|[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F900}-\u{1F9FF}]|[\u{2600}-\u{26FF}]/gu, '').trim();
 ```
 
-Move todas as computações dos ~30 `useMemo` do accordion para esta função. A função aceita `categories` (array de `UserCategory`) como parâmetro para resolver nomes/ícones, eliminando a divergência do `getCategoryInfo`.
+**2. Aplicar nos pontos problemáticos:**
 
-Para `cashFlowData` e `evolutionData`, a função retorna os dados **raw** (modo "daily"). Os modos "cumulative" e "weekly" são derivações aplicadas no ponto de consumo (accordion para UI, PDF para export).
+| Linha | Atual | Corrigido |
+|---|---|---|
+| 370 | `'✨ Resumo Inteligente'` | `'Resumo Inteligente'` |
+| 290 | `↑` / `↓` em `formatDeltaWithAbsolute` | `+` / `-` (ex: `+12% (+R$ 150)`) |
+| 430 | `${cat.icon} ${cat.name}` | `cat.name` (sem ícone) |
+| 680 | `"Excelente! 🎉"` | `"Excelente!"` |
 
-### 2. `src/components/reports-accordion.tsx`
+**3. `formatDeltaWithAbsolute` — trocar setas por sinais texto:**
+```ts
+const sign = delta >= 0 ? "+" : "-";
+return `${sign}${Math.abs(delta).toFixed(0)}% (${diffStr})`;
+```
 
-- Importar `buildReportViewModel`
-- Substituir os ~30 `useMemo` por um único `useMemo` que chama `buildReportViewModel({ expenses, recurringExpenses, incomes, recurringIncomes, cards, categories, startDate, endDate, periodType, isGroupContext, groupMembers })`
-- Manter states locais `cashFlowMode` e `evolutionMode` para derivar os dados de gráfico a partir do raw
-- Renderização inalterada
+**4. Melhorar gráfico "Evolução dos Gastos" — label "Média" cortada:**
+- Aumentar `padding.top` de 20 para 30 no `createLineChartCanvas`
+- Mover label "Média: R$..." para dentro da área do gráfico com offset seguro (`avgY - 10` com clamp para não sair do canvas)
+- Aumentar resolução: canvas width/height 2x (1000x440) e manter mesmo tamanho em `addImage`
 
-### 3. `src/pages/Reports.tsx`
+**5. Aumentar resolução de todos os canvas helpers** (createPieChartCanvas, createDualBarChartCanvas, createLineChartCanvas):
+- Duplicar width/height do canvas (scale 2x)
+- Usar `ctx.scale(2, 2)` para manter coordenadas
+- Resultado: gráficos mais nítidos no PDF
 
-- Importar `buildReportViewModel` e `useCategories`
-- Computar o view model com `useMemo`
-- Passar o view model para `ReportsAccordion` via nova prop `viewModel`
-- Passar o view model para `exportReportsToPDF` no `handleExportPDF`
+### Resumo
 
-### 4. `src/services/pdf-export-service.ts`
+| O que | Onde |
+|---|---|
+| Remover emojis dos títulos | Linhas 370, 680 |
+| Remover ícones das categorias | Linha 430 |
+| Trocar ↑↓ por +/- | Função `formatDeltaWithAbsolute` (linha 290) |
+| Label "Média" não cortada | `createLineChartCanvas` padding |
+| Gráficos 2x resolução | 3 canvas helpers |
 
-- Alterar `ExportReportParams` para receber `viewModel: ReportViewModel` em vez de dados brutos
-- Remover linhas 352-530 (toda a seção "DATA CALCULATIONS")
-- Usar diretamente `viewModel.categoryData`, `viewModel.paymentMethodData`, etc.
-- Resultado: PDF renderiza exatamente os mesmos arrays/valores que a UI, sem possibilidade de divergência
-
-### Resultado
-
-- Qualquer mudança na lógica de cálculo (filtros, agrupamentos, "Top 5 + Outros") é feita em um único lugar
-- PDF e UI sempre mostram dados idênticos por construção
-- Redução de ~180 linhas duplicadas no PDF service
+1 arquivo modificado, sem mudanças em cálculos/dados/UI.
 
