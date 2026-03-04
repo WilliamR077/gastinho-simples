@@ -1,90 +1,44 @@
 
 
-## Plano: Melhorar página "Meus Cartões" + Competência de Fatura
+## Plano: Toggle "Calendário | Fatura" na Home + Info de fatura no detalhe
 
-Este é um projeto com 4 frentes: UI dos cartões, modelo de dados, cálculo de competência, e integração nos relatórios.
+### Resumo
 
----
-
-### 1. Migração DB — Novos campos na tabela `cards`
-
-Adicionar 2 colunas à tabela `cards`:
-
-```sql
-ALTER TABLE public.cards ADD COLUMN due_day integer;
-ALTER TABLE public.cards ADD COLUMN days_before_due integer DEFAULT 10;
-```
-
-- `due_day` (1-31): dia de vencimento da fatura
-- `days_before_due` (ex: 10): quantos dias antes do vencimento a fatura fecha
-- Manter `closing_day` e `opening_day` existentes para compatibilidade (não remover)
-- **Não adicionar `competencia_fatura` na tabela `expenses`** — será calculado em runtime no frontend (evita migração de dados)
+Adicionar um toggle "Calendário | Fatura" na Home que muda como despesas de crédito são agrupadas por mês. Em modo "Fatura", compras no crédito feitas após o fechamento aparecem no mês seguinte. Também mostrar info de fatura no detalhe da transação.
 
 ---
 
-### 2. UI — Página "Meus Cartões" (`Cards.tsx` + `card-manager.tsx`)
+### 1. Estado do toggle — `Index.tsx`
 
-**Cards.tsx:**
-- Remover `<Footer />` da página
-- Reduzir `max-w-4xl` para `max-w-2xl` (720px)
+- Adicionar state `viewMode: "calendar" | "billing"` (default: `"calendar"`)
+- Renderizar toggle entre o `MonthNavigator` e o `BalanceSummary`
+- Usar um segmented control compacto (2 botões pill, estilo igual ao "Do Mês / Fixas" já existente)
 
-**card-manager.tsx — Lista de cartões:**
-- Cada card mostra: Nome, Tipo (badge), Limite formatado, e para crédito: "Próx. fechamento: DD/MM" e "Próx. vencimento: DD/MM" (calculados a partir de `due_day` e `days_before_due`, ou fallback para `closing_day`)
-- Substituir botões ícone (Pencil/Trash2) por `DropdownMenu` com ⋮ (MoreVertical) → "Editar" / "Excluir"
+### 2. MonthNavigator — Label condicional
 
-**card-manager.tsx — Formulário:**
-- Campos condicionais: se tipo = "debit", esconder campos de fatura
-- Se tipo = "credit" ou "both": mostrar "Dia de Vencimento" + "Dias antes do vencimento que fecha" (com valor padrão 10)
-- Exibir info calculada: "Fechamento: dia X → Vencimento: dia Y"
-- Manter campo `closing_day` preenchido automaticamente (= `due_day - days_before_due` ajustado) para compatibilidade
+- `month-navigator.tsx`: aceitar prop opcional `suffix?: string`
+- Em modo "Fatura", passar `suffix="• Fatura"` → exibe "Março de 2026 • Fatura"
 
-**Seletor de cor:**
-- Trocar grid de retângulos `h-10` por círculos pequenos (`w-8 h-8 rounded-full`) com check icon discreto + ring quando selecionado
+### 3. Filtro de despesas por competência — `Index.tsx`
 
----
+- No `filteredExpenses` (useMemo linha ~1201), quando `viewMode === "billing"`:
+  - Para despesas com `payment_method === "credit"` e `card_id` presente no `cardsConfigMap`: usar `calculateBillingPeriod(expenseDate, cardConfig)` para determinar o mês da fatura
+  - Comparar o `billingMonth` (yyyy-MM) com o mês selecionado no navigator
+  - Para pix/débito: manter filtro por `expense_date` normalmente
+- Para `monthlyTotals` (linha ~1472): aplicar mesma lógica de agrupamento
 
-### 3. Lógica — Cálculo de competência (`billing-period.ts`)
+### 4. CompactFilterBar — Ocultar billing period dropdown em modo calendário
 
-Atualizar `CreditCardConfig` para aceitar o novo modelo:
+- Passar nova prop `viewMode` ao `CompactFilterBar`
+- Quando `viewMode === "billing"`: esconder o dropdown de "Fatura" (já está agrupado pelo mês do topo — fonte única de verdade)
+- Quando `viewMode === "calendar"`: manter comportamento atual
 
-```ts
-export interface CreditCardConfig {
-  opening_day: number;
-  closing_day: number;
-  due_day?: number;
-  days_before_due?: number;
-}
-```
+### 5. TransactionDetailSheet — Info de fatura
 
-Adicionar função `getNextBillingDates(card, referenceDate)`:
-- Calcula data de fechamento e vencimento para um dado mês
-- Se `due_day` e `days_before_due` existem, usa: `fechamento = vencimento - days_before_due`
-- Senão, fallback para `closing_day`/`opening_day` existentes
-- Retorna `{ closingDate: Date, dueDate: Date, billingMonth: string }`
-
-Atualizar `calculateBillingPeriod` para usar o novo modelo quando disponível.
-
----
-
-### 4. Expense Form — Chip de fatura
-
-**`expense-form.tsx` e `unified-expense-form-sheet.tsx`:**
-- Quando `paymentMethod === "credit"` e um cartão com config de fatura está selecionado:
-  - Calcular `competencia_fatura` com base na `expenseDate` + config do cartão
-  - Mostrar chip informativo: "Fatura: Mar/2026 (fecha em 20/03)"
-  - Chip não é editável no MVP (override manual pode vir depois)
-
----
-
-### 5. Relatórios — Filtro por competência
-
-**`report-view-model.ts`:**
-- No filtro de despesas por período, quando `payment_method === "credit"` e existe `card_id` com config de fatura:
-  - Usar `calculateBillingPeriod(expenseDate, cardConfig)` para determinar a competência
-  - Filtrar pela competência em vez da `expense_date`
-- Para `pix`/`debit`: continuar usando `expense_date` normalmente
-
-Isso significa que no relatório de "Março 2026", uma compra no crédito feita em 27/02 (após o fechamento de fev) aparecerá em Março.
+- Para despesas com `payment_method === "credit"` e card com config:
+  - Importar `calculateBillingPeriod` e `getNextBillingDates`
+  - Calcular e exibir `DetailRow` extra: "Fatura" → "Mar/2026 (fecha 20/03, vence 30/03)"
+  - Requer passar `cards` como prop (ou buscar internamente)
 
 ---
 
@@ -92,22 +46,10 @@ Isso significa que no relatório de "Março 2026", uma compra no crédito feita 
 
 | Arquivo | Mudança |
 |---|---|
-| Migração SQL | `ALTER TABLE cards ADD COLUMN due_day, days_before_due` |
-| `src/pages/Cards.tsx` | Remover Footer, reduzir max-width |
-| `src/components/card-manager.tsx` | UI premium, swatches, dropdown menu, campos condicionais, próx. fechamento/vencimento |
-| `src/types/card.ts` | Adicionar `due_day`, `days_before_due` ao `CardFormData` |
-| `src/utils/billing-period.ts` | Nova função `getNextBillingDates`, atualizar `CreditCardConfig` |
-| `src/components/expense-form.tsx` | Chip de fatura para crédito |
-| `src/components/unified-expense-form-sheet.tsx` | Chip de fatura para crédito |
-| `src/utils/report-view-model.ts` | Filtro por competência para crédito |
+| `src/pages/Index.tsx` | State `viewMode`, toggle UI, lógica de filtro por competência |
+| `src/components/month-navigator.tsx` | Prop `suffix` para label "• Fatura" |
+| `src/components/compact-filter-bar.tsx` | Prop `viewMode`, esconder dropdown billing em modo billing |
+| `src/components/transaction-detail-sheet.tsx` | Info de fatura para despesas de crédito |
 
----
-
-### Ordem de implementação
-
-1. Migração DB (novos campos)
-2. UI da página de cartões (visual + formulário)
-3. Lógica de billing period atualizada
-4. Chip de fatura no expense form
-5. Filtro por competência nos relatórios
+Sem alterações em backend, banco de dados ou cálculos financeiros.
 
