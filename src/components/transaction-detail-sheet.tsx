@@ -1,12 +1,17 @@
+import { useState, useEffect } from "react";
 import { Expense, categoryLabels, categoryIcons, ExpenseCategory } from "@/types/expense";
 import { Income, incomeCategoryLabels, incomeCategoryIcons } from "@/types/income";
 import { RecurringExpense } from "@/types/recurring-expense";
 import { RecurringIncome } from "@/types/income";
 import { useCategories } from "@/hooks/use-categories";
 import { useIncomeCategories } from "@/hooks/use-income-categories";
+import { useAuth } from "@/hooks/use-auth";
+import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Pencil, Copy, Trash2, CreditCard, Smartphone, Calendar, Tag, Clock, Users, Power } from "lucide-react";
+import { Pencil, Copy, Trash2, CreditCard, Smartphone, Calendar, Tag, Clock, Users, Power, Receipt } from "lucide-react";
+import { calculateBillingPeriod, formatBillingPeriodLabel, getNextBillingDates, CreditCardConfig } from "@/utils/billing-period";
+import { Card as CardType } from "@/types/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
@@ -62,8 +67,21 @@ export function TransactionDetailSheet({
   onDelete,
   onToggleActive,
 }: TransactionDetailSheetProps) {
+  const { user } = useAuth();
+  const [cardsData, setCardsData] = useState<CardType[]>([]);
   const { categories } = useCategories();
   const { categories: incomeCats } = useIncomeCategories();
+
+  useEffect(() => {
+    if (user && open) {
+      supabase
+        .from("cards")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .then(({ data }) => setCardsData(data || []));
+    }
+  }, [user, open]);
 
   const isRecurring = !!recurringExpense || !!recurringIncome;
   const isExpense = !!expense || !!recurringExpense;
@@ -198,6 +216,31 @@ export function TransactionDetailSheet({
               value={`${expense.installment_number}/${expense.total_installments}x`}
             />
           )}
+
+          {/* Fatura (billing info for credit expenses) */}
+          {expense && expense.payment_method === "credit" && (() => {
+            const card = expense.card_id ? cardsData.find(c => c.id === expense.card_id) : null;
+            if (!card || (card.due_day == null && card.closing_day == null)) return null;
+            const config: CreditCardConfig = {
+              opening_day: card.opening_day || 1,
+              closing_day: card.closing_day || 15,
+              due_day: card.due_day ?? undefined,
+              days_before_due: card.days_before_due ?? undefined,
+            };
+            const expDate = parseLocalDate(expense.expense_date);
+            const billingMonth = calculateBillingPeriod(expDate, config);
+            const billingLabel = formatBillingPeriodLabel(billingMonth);
+            const dates = getNextBillingDates(config, expDate);
+            const closingStr = format(dates.closingDate, "dd/MM");
+            const dueStr = format(dates.dueDate, "dd/MM");
+            return (
+              <DetailRow
+                icon={<Receipt className="h-4 w-4 text-primary" />}
+                label="Fatura"
+                value={`${billingLabel} (fecha ${closingStr}, vence ${dueStr})`}
+              />
+            );
+          })()}
 
           {/* Grupo compartilhado */}
           {expense?.shared_group && (

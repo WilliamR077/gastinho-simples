@@ -27,6 +27,7 @@ interface CompactFilterBarProps {
   activeTab: "expenses" | "incomes" | "goals";
   monthStartDate?: Date;
   monthEndDate?: Date;
+  viewMode?: "calendar" | "billing";
 }
 
 export function CompactFilterBar({
@@ -39,6 +40,7 @@ export function CompactFilterBar({
   activeTab,
   monthStartDate,
   monthEndDate,
+  viewMode = "calendar",
 }: CompactFilterBarProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [localFilters, setLocalFilters] = useState<ExpenseFilters>({ ...filters });
@@ -121,6 +123,7 @@ export function CompactFilterBar({
 
   const selectedCard = localFilters.cardId ? cards.find(c => c.id === localFilters.cardId) : null;
   const showBillingPeriodFilter =
+    viewMode === "calendar" &&
     activeTab === "expenses" &&
     filteredBillingPeriods.length > 0 &&
     (!localFilters.cardId || selectedCard?.card_type === 'credit' || selectedCard?.card_type === 'both');
