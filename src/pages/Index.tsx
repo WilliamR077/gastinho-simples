@@ -39,20 +39,20 @@ import { RecurringExpenseFormData } from "@/types/recurring-expense";
 import { BudgetGoal } from "@/types/budget-goal";
 import { BudgetProgress } from "@/components/budget-progress";
 import { toast } from "@/hooks/use-toast";
-import { FilterX } from "lucide-react";
+import { FilterX, CalendarDays, Receipt } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AppHeader } from "@/components/app-header";
-import { generateBillingPeriods, filterExpensesByBillingPeriod, CreditCardConfig } from "@/utils/billing-period";
+import { generateBillingPeriods, filterExpensesByBillingPeriod, calculateBillingPeriod, CreditCardConfig } from "@/utils/billing-period";
 import { Card as CardType } from "@/types/card";
 import { Footer } from "@/components/footer";
 import { NotificationService } from "@/services/notification-service";
 import { App as CapacitorApp } from '@capacitor/app';
 import { adMobService } from "@/services/admob-service";
-import { startOfMonth, endOfMonth } from "date-fns";
+import { startOfMonth, endOfMonth, format } from "date-fns";
 import { parseLocalDate, cn } from "@/lib/utils";
 
 export default function Index() {
@@ -78,6 +78,7 @@ export default function Index() {
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string | null>(null);
   const [activeIncomeCategoryFilter, setActiveIncomeCategoryFilter] = useState<string | null>(null);
   // filterTab removed - CompactFilterBar adapts automatically to activeTab
+  const [viewMode, setViewMode] = useState<"calendar" | "billing">("calendar");
 
   // Estado para o mês atual da navegação
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
@@ -1184,7 +1185,9 @@ export default function Index() {
       if (card.opening_day !== null && card.closing_day !== null) {
         map.set(card.id, {
           opening_day: card.opening_day,
-          closing_day: card.closing_day
+          closing_day: card.closing_day,
+          due_day: card.due_day ?? undefined,
+          days_before_due: card.days_before_due ?? undefined,
         });
       }
     });
@@ -1199,48 +1202,50 @@ export default function Index() {
 
   // Filtrar despesas baseado nos filtros aplicados
   const filteredExpenses = useMemo(() => {
+    const selectedMonth = format(currentMonth, "yyyy-MM");
+
     return expenses.filter((expense) => {
-      // Filtro de data início
-      if (filters.startDate) {
+      // In billing mode, credit expenses are filtered by billing period (competência)
+      if (viewMode === "billing" && expense.payment_method === "credit") {
         const expenseDate = parseLocalDate(expense.expense_date);
-        if (expenseDate < filters.startDate) return false;
+        let config: CreditCardConfig | undefined;
+        if (expense.card_id && cardsConfigMap.has(expense.card_id)) {
+          config = cardsConfigMap.get(expense.card_id);
+        } else if (creditCardConfig) {
+          config = creditCardConfig;
+        }
+        if (config) {
+          const billingMonth = calculateBillingPeriod(expenseDate, config);
+          if (billingMonth !== selectedMonth) return false;
+        } else {
+          // No config, fallback to date filter
+          if (filters.startDate && expenseDate < filters.startDate) return false;
+          if (filters.endDate && expenseDate > filters.endDate) return false;
+        }
+      } else {
+        // Calendar mode or non-credit: filter by expense_date
+        if (filters.startDate) {
+          const expenseDate = parseLocalDate(expense.expense_date);
+          if (expenseDate < filters.startDate) return false;
+        }
+        if (filters.endDate) {
+          const expenseDate = parseLocalDate(expense.expense_date);
+          if (expenseDate > filters.endDate) return false;
+        }
       }
 
-      // Filtro de data fim
-      if (filters.endDate) {
-        const expenseDate = parseLocalDate(expense.expense_date);
-        if (expenseDate > filters.endDate) return false;
-      }
-
-      // Filtro de descrição
       if (filters.description) {
         if (!expense.description.toLowerCase().includes(filters.description.toLowerCase())) {
           return false;
         }
       }
+      if (filters.minAmount !== undefined && expense.amount < filters.minAmount) return false;
+      if (filters.maxAmount !== undefined && expense.amount > filters.maxAmount) return false;
+      if (filters.paymentMethod && expense.payment_method !== filters.paymentMethod) return false;
+      if (filters.cardId && expense.card_id !== filters.cardId) return false;
 
-      // Filtro de valor mínimo
-      if (filters.minAmount !== undefined) {
-        if (expense.amount < filters.minAmount) return false;
-      }
-
-      // Filtro de valor máximo
-      if (filters.maxAmount !== undefined) {
-        if (expense.amount > filters.maxAmount) return false;
-      }
-
-      // Filtro de forma de pagamento
-      if (filters.paymentMethod) {
-        if (expense.payment_method !== filters.paymentMethod) return false;
-      }
-
-      // Filtro de cartão
-      if (filters.cardId && expense.card_id !== filters.cardId) {
-        return false;
-      }
-
-      // Filtro de período de faturamento (apenas para crédito)
-      if (filters.billingPeriod && creditCardConfig) {
+      // Billing period filter (only in calendar mode)
+      if (viewMode === "calendar" && filters.billingPeriod && creditCardConfig) {
         const billingExpenses = filterExpensesByBillingPeriod(
           [expense],
           filters.billingPeriod,
@@ -1252,7 +1257,7 @@ export default function Index() {
 
       return true;
     });
-  }, [expenses, filters, creditCardConfig, cardsConfigMap]);
+  }, [expenses, filters, creditCardConfig, cardsConfigMap, viewMode, currentMonth]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -1472,9 +1477,22 @@ export default function Index() {
   const monthlyTotals = useMemo(() => {
     const monthStart = filters.startDate || startOfMonth(new Date());
     const monthEnd = filters.endDate || endOfMonth(new Date());
+    const selectedMonth = format(currentMonth, "yyyy-MM");
 
-    // Despesas do período
+    // Despesas do período (billing-aware)
     const periodExpenses = expenses.filter((e) => {
+      if (viewMode === "billing" && e.payment_method === "credit") {
+        const expDate = parseLocalDate(e.expense_date);
+        let config: CreditCardConfig | undefined;
+        if (e.card_id && cardsConfigMap.has(e.card_id)) {
+          config = cardsConfigMap.get(e.card_id);
+        } else if (creditCardConfig) {
+          config = creditCardConfig;
+        }
+        if (config) {
+          return calculateBillingPeriod(expDate, config) === selectedMonth;
+        }
+      }
       const date = parseLocalDate(e.expense_date);
       return date >= monthStart && date <= monthEnd;
     });
@@ -1497,7 +1515,7 @@ export default function Index() {
       totalIncome: totalIncomes + totalRecurringIncomes,
       totalExpense: totalExpenses + totalRecurringExpenses
     };
-  }, [expenses, recurringExpenses, incomes, recurringIncomes, filters.startDate, filters.endDate]);
+  }, [expenses, recurringExpenses, incomes, recurringIncomes, filters.startDate, filters.endDate, viewMode, currentMonth, cardsConfigMap, creditCardConfig]);
 
   if (authLoading || loading) {
     return (
@@ -1531,8 +1549,36 @@ export default function Index() {
         <div data-tour="month-navigator">
           <MonthNavigator
             currentDate={currentMonth}
-            onMonthChange={handleMonthChange} />
+            onMonthChange={handleMonthChange}
+            suffix={viewMode === "billing" ? "• Fatura" : undefined} />
+        </div>
 
+        {/* Toggle Calendário / Fatura */}
+        <div className="flex items-center justify-center gap-1.5 mb-3">
+          <button
+            onClick={() => setViewMode("calendar")}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors border",
+              viewMode === "calendar"
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-transparent text-muted-foreground border-border hover:border-foreground/30"
+            )}
+          >
+            <CalendarDays className="h-3.5 w-3.5" />
+            Calendário
+          </button>
+          <button
+            onClick={() => setViewMode("billing")}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors border",
+              viewMode === "billing"
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-transparent text-muted-foreground border-border hover:border-foreground/30"
+            )}
+          >
+            <Receipt className="h-3.5 w-3.5" />
+            Fatura
+          </button>
         </div>
 
         {/* Balance Summary - Entradas vs Saídas */}
@@ -1605,7 +1651,8 @@ export default function Index() {
             cardsConfigMap={cardsConfigMap}
             activeTab={activeTab as "expenses" | "incomes" | "goals"}
             monthStartDate={startOfMonth(currentMonth)}
-            monthEndDate={endOfMonth(currentMonth)} />
+            monthEndDate={endOfMonth(currentMonth)}
+            viewMode={viewMode} />
 
         </div>
 

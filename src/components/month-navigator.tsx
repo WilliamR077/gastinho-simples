@@ -6,9 +6,10 @@ import { ptBR } from "date-fns/locale";
 interface MonthNavigatorProps {
   currentDate: Date;
   onMonthChange: (startDate: Date, endDate?: Date) => void;
+  suffix?: string;
 }
 
-export function MonthNavigator({ currentDate, onMonthChange }: MonthNavigatorProps) {
+export function MonthNavigator({ currentDate, onMonthChange, suffix }: MonthNavigatorProps) {
   const handlePreviousMonth = () => {
     const newDate = subMonths(currentDate, 1);
     onMonthChange(startOfMonth(newDate), endOfMonth(newDate));
@@ -34,7 +35,7 @@ export function MonthNavigator({ currentDate, onMonthChange }: MonthNavigatorPro
       </Button>
       
       <span className="text-base font-semibold sm:text-lg min-w-[200px] text-center">
-        {capitalizedMonth}
+        {capitalizedMonth}{suffix ? ` ${suffix}` : ''}
       </span>
       
       <Button
