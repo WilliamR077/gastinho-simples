@@ -39,7 +39,7 @@ import { RecurringExpenseFormData } from "@/types/recurring-expense";
 import { BudgetGoal } from "@/types/budget-goal";
 import { BudgetProgress } from "@/components/budget-progress";
 import { toast } from "@/hooks/use-toast";
-import { FilterX, CalendarDays, Receipt } from "lucide-react";
+import { FilterX, CalendarDays, Receipt, CreditCard } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -79,6 +79,7 @@ export default function Index() {
   const [activeIncomeCategoryFilter, setActiveIncomeCategoryFilter] = useState<string | null>(null);
   // filterTab removed - CompactFilterBar adapts automatically to activeTab
   const [viewMode, setViewMode] = useState<"calendar" | "billing">("calendar");
+  const [billingCardId, setBillingCardId] = useState<string | null>(null);
 
   // Estado para o mês atual da navegação
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
@@ -1194,6 +1195,24 @@ export default function Index() {
     return map;
   }, [cards]);
 
+  // Credit cards for billing mode selector
+  const creditCards = useMemo(() => {
+    return cards.filter(c => c.card_type === "credit" || c.card_type === "both");
+  }, [cards]);
+
+  // Auto-select card when switching to billing mode
+  useEffect(() => {
+    if (viewMode === "billing") {
+      if (creditCards.length === 1) {
+        setBillingCardId(creditCards[0].id);
+      } else if (creditCards.length === 0) {
+        setBillingCardId(null);
+      }
+    } else {
+      setBillingCardId(null);
+    }
+  }, [viewMode, creditCards]);
+
   // Gerar períodos de faturamento disponíveis
   const billingPeriods = useMemo(() => {
     if (!creditCardConfig) return [];
@@ -1205,8 +1224,13 @@ export default function Index() {
     const selectedMonth = format(currentMonth, "yyyy-MM");
 
     return expenses.filter((expense) => {
-      // In billing mode, credit expenses are filtered by billing period (competência)
-      if (viewMode === "billing" && expense.payment_method === "credit") {
+      // In billing mode, ONLY credit expenses are shown
+      if (viewMode === "billing") {
+        if (expense.payment_method !== "credit") return false;
+        
+        // If a specific card is selected, filter by it
+        if (billingCardId && expense.card_id !== billingCardId) return false;
+        
         const expenseDate = parseLocalDate(expense.expense_date);
         let config: CreditCardConfig | undefined;
         if (expense.card_id && cardsConfigMap.has(expense.card_id)) {
@@ -1223,7 +1247,7 @@ export default function Index() {
           if (filters.endDate && expenseDate > filters.endDate) return false;
         }
       } else {
-        // Calendar mode or non-credit: filter by expense_date
+        // Calendar mode: filter by expense_date
         if (filters.startDate) {
           const expenseDate = parseLocalDate(expense.expense_date);
           if (expenseDate < filters.startDate) return false;
@@ -1257,7 +1281,7 @@ export default function Index() {
 
       return true;
     });
-  }, [expenses, filters, creditCardConfig, cardsConfigMap, viewMode, currentMonth]);
+  }, [expenses, filters, creditCardConfig, cardsConfigMap, viewMode, currentMonth, billingCardId]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -1481,7 +1505,9 @@ export default function Index() {
 
     // Despesas do período (billing-aware)
     const periodExpenses = expenses.filter((e) => {
-      if (viewMode === "billing" && e.payment_method === "credit") {
+      if (viewMode === "billing") {
+        if (e.payment_method !== "credit") return false;
+        if (billingCardId && e.card_id !== billingCardId) return false;
         const expDate = parseLocalDate(e.expense_date);
         let config: CreditCardConfig | undefined;
         if (e.card_id && cardsConfigMap.has(e.card_id)) {
@@ -1492,6 +1518,7 @@ export default function Index() {
         if (config) {
           return calculateBillingPeriod(expDate, config) === selectedMonth;
         }
+        return false;
       }
       const date = parseLocalDate(e.expense_date);
       return date >= monthStart && date <= monthEnd;
@@ -1515,7 +1542,7 @@ export default function Index() {
       totalIncome: totalIncomes + totalRecurringIncomes,
       totalExpense: totalExpenses + totalRecurringExpenses
     };
-  }, [expenses, recurringExpenses, incomes, recurringIncomes, filters.startDate, filters.endDate, viewMode, currentMonth, cardsConfigMap, creditCardConfig]);
+  }, [expenses, recurringExpenses, incomes, recurringIncomes, filters.startDate, filters.endDate, viewMode, currentMonth, cardsConfigMap, creditCardConfig, billingCardId]);
 
   if (authLoading || loading) {
     return (
@@ -1581,7 +1608,36 @@ export default function Index() {
           </button>
         </div>
 
-        {/* Balance Summary - Entradas vs Saídas */}
+        {/* Card selector for billing mode */}
+        {viewMode === "billing" && (
+          <div className="mb-3">
+            {creditCards.length === 0 ? (
+              <div className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-muted text-muted-foreground text-xs">
+                <CreditCard className="h-3.5 w-3.5" />
+                Cadastre um cartão de crédito para usar o modo Fatura
+              </div>
+            ) : creditCards.length >= 2 ? (
+              <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                {creditCards.map((card) => (
+                  <button
+                    key={card.id}
+                    onClick={() => setBillingCardId(card.id)}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors border",
+                      billingCardId === card.id
+                        ? "bg-accent text-accent-foreground border-accent"
+                        : "bg-transparent text-muted-foreground border-border hover:border-foreground/30"
+                    )}
+                  >
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: card.color || "#FFA500" }} />
+                    {card.name}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        )}
+
         <div className="mb-3">
           <BalanceSummary
             totalIncome={monthlyTotals.totalIncome}
