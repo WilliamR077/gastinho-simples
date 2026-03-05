@@ -14,10 +14,32 @@ export interface BillingDates {
   billingMonth: string;
 }
 
+function daysInMonth(year: number, month: number): number {
+  return new Date(year, month + 1, 0).getDate();
+}
+
+/**
+ * Para a fatura do mês M (ex: março = month 2), calcula:
+ * - dueDate = mês M+1, dia due_day (clamped)
+ * - closingDate = dueDate - days_before_due (subtração real de dias)
+ */
+export function getClosingDateForBillingMonth(
+  year: number,
+  month: number,
+  dueDay: number,
+  daysBefore: number
+): { closingDate: Date; dueDate: Date } {
+  const nextMonth = month + 1;
+  const ny = nextMonth > 11 ? year + 1 : year;
+  const nm = nextMonth > 11 ? 0 : nextMonth;
+  const dueDate = new Date(ny, nm, Math.min(dueDay, daysInMonth(ny, nm)));
+  const closingDate = new Date(dueDate);
+  closingDate.setDate(closingDate.getDate() - daysBefore);
+  return { closingDate, dueDate };
+}
+
 /**
  * Calcula as próximas datas de fechamento e vencimento para um cartão.
- * Se due_day + days_before_due existirem, usa novo modelo.
- * Senão, fallback para closing_day.
  */
 export function getNextBillingDates(
   config: CreditCardConfig,
@@ -25,37 +47,31 @@ export function getNextBillingDates(
 ): BillingDates {
   const { due_day, days_before_due, closing_day } = config;
   const now = referenceDate;
-  const year = now.getFullYear();
-  const month = now.getMonth();
 
   if (due_day && days_before_due) {
-    // Novo modelo: vencimento - dias = fechamento
-    const computeForMonth = (y: number, m: number) => {
-      const dueDate = new Date(y, m, Math.min(due_day, daysInMonth(y, m)));
-      const closingDate = new Date(dueDate);
-      closingDate.setDate(closingDate.getDate() - days_before_due);
-      return { closingDate, dueDate };
-    };
+    // Tentar fatura do mês atual
+    let year = now.getFullYear();
+    let month = now.getMonth();
 
-    // Try current month
-    let { closingDate, dueDate } = computeForMonth(year, month);
-    
-    // If closing already passed, advance to next month
+    let { closingDate, dueDate } = getClosingDateForBillingMonth(year, month, due_day, days_before_due);
+
+    // Se o fechamento já passou, avançar para próximo mês
     if (now > closingDate) {
-      const next = month + 1;
-      const ny = next > 11 ? year + 1 : year;
-      const nm = next > 11 ? 0 : next;
-      ({ closingDate, dueDate } = computeForMonth(ny, nm));
+      month += 1;
+      if (month > 11) { year += 1; month = 0; }
+      ({ closingDate, dueDate } = getClosingDateForBillingMonth(year, month, due_day, days_before_due));
     }
 
-    const billingMonth = format(closingDate, "yyyy-MM");
+    const billingMonth = format(new Date(year, month, 1), "yyyy-MM");
     return { closingDate, dueDate, billingMonth };
   }
 
   // Fallback: closing_day based
+  const year = now.getFullYear();
+  const month = now.getMonth();
   const closingDayVal = closing_day || 15;
   let closingDate = new Date(year, month, Math.min(closingDayVal, daysInMonth(year, month)));
-  
+
   if (now > closingDate) {
     const next = month + 1;
     const ny = next > 11 ? year + 1 : year;
@@ -70,13 +86,12 @@ export function getNextBillingDates(
   return { closingDate, dueDate, billingMonth };
 }
 
-function daysInMonth(year: number, month: number): number {
-  return new Date(year, month + 1, 0).getDate();
-}
-
 /**
- * Calcula o período de faturamento (mês da fatura) baseado na data do gasto
- * e na configuração do cartão de crédito.
+ * Calcula o mês de fatura (yyyy-MM) para uma despesa de crédito.
+ *
+ * Modelo: fatura M tem vencimento no mês M+1, dia due_day.
+ * Fechamento = vencimento - days_before_due.
+ * Período da fatura M = (fechamento de M-1) + 1 dia  até  fechamento de M (inclusive).
  */
 export function calculateBillingPeriod(
   expenseDate: Date,
@@ -84,31 +99,35 @@ export function calculateBillingPeriod(
 ): string {
   const { due_day, days_before_due, opening_day, closing_day } = config;
 
-  // Novo modelo: due_day + days_before_due
   if (due_day && days_before_due) {
+    // Tentar fatura do mês da despesa
     const year = expenseDate.getFullYear();
     const month = expenseDate.getMonth();
 
-    const computeClosingForMonth = (y: number, m: number): Date => {
-      const dim = daysInMonth(y, m);
-      const dd = new Date(y, m, Math.min(due_day, dim));
-      dd.setDate(dd.getDate() - days_before_due);
-      return dd;
-    };
+    const current = getClosingDateForBillingMonth(year, month, due_day, days_before_due);
 
-    // Check current month closing
-    let closingDate = computeClosingForMonth(year, month);
-    
-    if (expenseDate <= closingDate) {
-      // Belongs to this month's billing
-      return format(closingDate, "yyyy-MM");
+    // Fatura do mês anterior
+    const prevMonth = month - 1;
+    const py = prevMonth < 0 ? year - 1 : year;
+    const pm = prevMonth < 0 ? 11 : prevMonth;
+    const prev = getClosingDateForBillingMonth(py, pm, due_day, days_before_due);
+
+    // Normalizar para comparação apenas por data (sem hora)
+    const expDay = new Date(expenseDate.getFullYear(), expenseDate.getMonth(), expenseDate.getDate());
+    const prevClosingDay = new Date(prev.closingDate.getFullYear(), prev.closingDate.getMonth(), prev.closingDate.getDate());
+    const curClosingDay = new Date(current.closingDate.getFullYear(), current.closingDate.getMonth(), current.closingDate.getDate());
+
+    if (expDay > prevClosingDay && expDay <= curClosingDay) {
+      // Pertence à fatura do mês atual
+      return format(new Date(year, month, 1), "yyyy-MM");
+    } else if (expDay > curClosingDay) {
+      // Pertence à fatura do mês seguinte
+      const nm = month + 1 > 11 ? 0 : month + 1;
+      const ny = month + 1 > 11 ? year + 1 : year;
+      return format(new Date(ny, nm, 1), "yyyy-MM");
     } else {
-      // After closing → next month's billing
-      const next = month + 1;
-      const ny = next > 11 ? year + 1 : year;
-      const nm = next > 11 ? 0 : next;
-      closingDate = computeClosingForMonth(ny, nm);
-      return format(closingDate, "yyyy-MM");
+      // Pertence à fatura do mês anterior
+      return format(new Date(py, pm, 1), "yyyy-MM");
     }
   }
 
@@ -146,21 +165,21 @@ export function generateBillingPeriods(
   cardsConfig?: Map<string, CreditCardConfig>
 ): Array<{ value: string; label: string }> {
   const periods = new Set<string>();
-  
+
   expenses
     .filter(expense => expense.payment_method === "credit")
     .forEach(expense => {
       const expenseDate = parseLocalDate(expense.expense_date);
-      
+
       let config = fallbackConfig;
       if (expense.card_id && cardsConfig?.has(expense.card_id)) {
         config = cardsConfig.get(expense.card_id)!;
       }
-      
+
       const period = calculateBillingPeriod(expenseDate, config);
       periods.add(period);
     });
-  
+
   return Array.from(periods)
     .sort()
     .map(period => ({
@@ -178,7 +197,7 @@ export function formatBillingPeriodLabel(period: string): string {
     "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
     "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
   ];
-  
+
   return `${monthNames[parseInt(month) - 1]} ${year}`;
 }
 
@@ -193,14 +212,14 @@ export function filterExpensesByBillingPeriod<T extends { expense_date: string; 
 ): T[] {
   return expenses.filter(expense => {
     if (expense.payment_method !== "credit") return false;
-    
+
     const expenseDate = parseLocalDate(expense.expense_date);
-    
+
     let config = fallbackConfig;
     if (expense.card_id && cardsConfig?.has(expense.card_id)) {
       config = cardsConfig.get(expense.card_id)!;
     }
-    
+
     const expensePeriod = calculateBillingPeriod(expenseDate, config);
     return expensePeriod === billingPeriod;
   });

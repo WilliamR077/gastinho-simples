@@ -13,7 +13,7 @@ import { Plus, CreditCard, Crown, MoreVertical, Pencil, Trash2, Check, CalendarC
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useNavigate } from "react-router-dom";
-import { getNextBillingDates } from "@/utils/billing-period";
+import { getNextBillingDates, getClosingDateForBillingMonth } from "@/utils/billing-period";
 
 export function CardManager() {
   const [cards, setCards] = useState<Card[]>([]);
@@ -77,11 +77,7 @@ export function CardManager() {
     }
   };
 
-  const computeClosingDay = (dueDay: number, daysBefore: number): number => {
-    let closing = dueDay - daysBefore;
-    if (closing <= 0) closing += 30;
-    return Math.max(1, Math.min(31, closing));
-  };
+  // Removed computeClosingDay — now uses real date arithmetic via getClosingDateForBillingMonth
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,7 +107,9 @@ export function CardManager() {
 
       if (isCreditType && formData.due_day) {
         const daysBefore = formData.days_before_due || 10;
-        const closingDay = computeClosingDay(formData.due_day, daysBefore);
+        const now = new Date();
+        const { closingDate } = getClosingDateForBillingMonth(now.getFullYear(), now.getMonth(), formData.due_day, daysBefore);
+        const closingDay = closingDate.getDate();
         const openingDay = closingDay === 31 ? 1 : closingDay + 1;
         cardData.due_day = formData.due_day;
         cardData.days_before_due = daysBefore;
@@ -328,16 +326,22 @@ export function CardManager() {
                     </p>
                   </div>
 
-                  {formData.due_day && formData.days_before_due && (
-                    <div className="bg-primary/10 rounded-lg p-3 space-y-1">
-                      <p className="text-sm font-medium text-primary">
-                        Fechamento: dia {computeClosingDay(formData.due_day, formData.days_before_due)} → Vencimento: dia {formData.due_day}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        A fatura fecha {formData.days_before_due} dias antes do vencimento
-                      </p>
-                    </div>
-                  )}
+                  {formData.due_day && formData.days_before_due && (() => {
+                    const billing = getNextBillingDates({
+                      opening_day: 1, closing_day: 15,
+                      due_day: formData.due_day, days_before_due: formData.days_before_due,
+                    }, new Date());
+                    return (
+                      <div className="bg-primary/10 rounded-lg p-3 space-y-1">
+                        <p className="text-sm font-medium text-primary">
+                          Vence dia {formData.due_day} • Fecha {formData.days_before_due} dias antes
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Próximo fechamento: {formatDateShort(billing.closingDate)} • Próximo vencimento: {formatDateShort(billing.dueDate)}
+                        </p>
+                      </div>
+                    );
+                  })()}
                 </>
               )}
 
