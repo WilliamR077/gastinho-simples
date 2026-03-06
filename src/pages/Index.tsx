@@ -23,6 +23,7 @@ import { useSharedGroups } from "@/hooks/use-shared-groups";
 import { useCategories } from "@/hooks/use-categories";
 import { ProductTour } from "@/components/product-tour";
 import { BalanceSummary } from "@/components/balance-summary";
+import { UpsellBanner } from "@/components/upsell-banner";
 import { GroupMemberSummary } from "@/components/group-member-summary";
 import { UnifiedIncomeFormSheet } from "@/components/unified-income-form-sheet";
 import { IncomeList } from "@/components/income-list";
