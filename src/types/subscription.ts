@@ -20,16 +20,16 @@ export const SUBSCRIPTION_FEATURES = {
   },
   no_ads: {
     name: "Sem Anúncios",
-    price: "R$ 4,90/mês",
+    price: "R$ 3,90/mês",
     cards: 2,
     goals: 1,
-    groups: 0, // Não pode criar grupos
+    groups: 0,
     reports: false,
     exportPdf: false,
     exportExcel: false,
     ads: false,
-    importSpreadsheet: false,
-    importLimit: 0,
+    importSpreadsheet: true,
+    importLimit: 100,
   },
   premium: {
     name: "Premium",
