@@ -433,45 +433,23 @@ export default function Settings() {
             <CardTitle className="flex items-center gap-2">
               <Upload className="h-5 w-5" />
               Importar Planilha
-              {!canImportSpreadsheet && (
-                <Crown className="h-4 w-4 text-primary ml-auto" />
-              )}
             </CardTitle>
             <CardDescription>
               Importe gastos de uma planilha Excel ou CSV
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {!canImportSpreadsheet && (
-              <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
-                <div className="flex items-start gap-3">
-                  <Crown className="h-5 w-5 text-primary mt-0.5" />
-                  <div className="flex-1">
-                    <h4 className="font-semibold mb-1">📊 Importação Premium</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Migre seus gastos de planilhas existentes para o Gastinho Simples facilmente.
-                      Premium: até 100 itens | Premium Plus: até 500 itens.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
             <Button 
               onClick={() => setImportSheetOpen(true)} 
               variant="outline"
               className="w-full gap-2"
-              disabled={!canImportSpreadsheet}
             >
-              {!canImportSpreadsheet && <Lock className="h-4 w-4" />}
               <FileSpreadsheet className="h-4 w-4" />
               Importar Planilha
-              {!canImportSpreadsheet && <Crown className="h-4 w-4 ml-auto" />}
             </Button>
-            {canImportSpreadsheet && (
-              <p className="text-xs text-muted-foreground text-center">
-                Limite: até {importLimit} gastos por importação
-              </p>
-            )}
+            <p className="text-xs text-muted-foreground text-center">
+              Limite: até {importLimit} gastos por importação
+            </p>
           </CardContent>
         </Card>
 
