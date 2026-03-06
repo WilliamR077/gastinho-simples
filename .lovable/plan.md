@@ -1,67 +1,94 @@
 
 
-## Plano: Ajustes de Assinaturas — planos, limites, gates e upsell
+## Plano: Corrigir aritmética de datas do billing + filtro só crédito + multi-cartões
 
-### Estado atual vs. mudanças necessárias
+### Problema 1: `computeClosingDay` usa aritmética fixa (dia - offset + 30)
 
-A maioria dos gates já existe (cartões, metas, exportar PDF/Excel, períodos de relatório, grupos). As mudanças são:
+Em `card-manager.tsx` linha 80-84 e no preview do formulário (linha 334), o fechamento é calculado como `dueDay - daysBefore + 30` — ignora meses reais. Também em `billing-period.ts`, `calculateBillingPeriod` calcula o fechamento posicionando o due_day no mesmo mês da despesa e subtraindo dias, mas o modelo correto é: o vencimento da fatura M fica no mês M+1, e o fechamento = vencimento - dias_antes.
+
+### Problema 2: Modo Fatura mostra PIX/Débito
+
+Em `Index.tsx` linhas 1225-1234, quando `viewMode === "billing"` mas a despesa NÃO é crédito, o código cai no `else` e filtra por data — deveria retornar `false` diretamente.
+
+### Problema 3: Multi-cartões sem seleção obrigatória
+
+Não há exigência de selecionar um cartão no modo Fatura. Sem isso, faturas de cartões com ciclos diferentes se misturam.
 
 ---
 
-### 1. `src/types/subscription.ts` — Ajustar features
+### Mudanças
 
-- **Preço no_ads**: `R$ 4,90/mês` → `R$ 3,90/mês`
-- **importSpreadsheet**: mudar para `true` em `free` e `no_ads` (importar é liberado para todos)
-- **importLimit**: dar limite generoso para free (ex: 100) e no_ads (ex: 100)
+#### 1. `src/utils/billing-period.ts` — Reescrever `calculateBillingPeriod` (novo modelo)
 
-### 2. `src/components/app-header.tsx` — Badge de plano
+Nova lógica para `due_day + days_before_due`:
 
-- Importar `useSubscription`
-- Ao lado do logo, renderizar:
-  - Premium: `<Badge>⭐ Premium</Badge>`
-  - Sem Anúncios: `<Badge variant="secondary">Sem anúncios</Badge>`
-  - Gratuito: nada
+```ts
+// Para determinar a qual fatura M (yyyy-MM) uma compra pertence:
+// Fatura "M" tem vencimento no mês M+1, dia due_day (clamped)
+// Fechamento = vencimento - days_before_due (subtração real de dias via Date)
+// Período da fatura M = (fechamento da fatura M-1) + 1 dia  até  fechamento da fatura M
+// 
+// Algoritmo: testar fatura do mês da compra e do mês anterior.
+// Se compra <= fechamento do mês → pertence a esse mês
+// Senão → pertence ao mês seguinte
+```
 
-### 3. Gates — Padronizar modais de upgrade
+Criar helper `getBillingClosingDate(billingMonth: string, config)`:
+- Parse `billingMonth` → ano/mês (ex: "2026-03" → março)
+- `dueDate = new Date(ano, mês, clamp(due_day, daysInMonth))` — vencimento no próprio mês da fatura (NÃO mês+1, conforme o pedido do usuário: fatura de março fecha em março e vence em abril)
 
-Criar componente reutilizável `src/components/upgrade-dialog.tsx`:
-- Props: `open`, `onOpenChange`, `title`, `description`, `features?: string[]`
-- CTA primário: "Virar Premium ⭐" → navega para `/subscription`
-- CTA secundário: "Agora não"
+Correção: conforme o critério de aceite do usuário:
+- Fatura de Março/2026, vencimento dia 10 → `dueDate = 10/04/2026` (mês seguinte)
+- `closingDate = dueDate - 12 dias = 29/03/2026`
+- `previousDueDate = 10/03/2026`, `previousClosingDate = 26/02/2026`
+- Período = 27/02 a 29/03
 
-Atualizar os gates existentes para usar copy consistente:
+Então a fórmula é:
+```ts
+function getClosingDateForBillingMonth(year: number, month: number, dueDay: number, daysBefore: number): Date {
+  // Vencimento cai no MÊS SEGUINTE ao mês da fatura
+  const nextMonth = month + 1;
+  const ny = nextMonth > 11 ? year + 1 : year;
+  const nm = nextMonth > 11 ? 0 : nextMonth;
+  const dueDate = new Date(ny, nm, Math.min(dueDay, daysInMonth(ny, nm)));
+  const closingDate = new Date(dueDate);
+  closingDate.setDate(closingDate.getDate() - daysBefore);
+  return closingDate;
+}
+```
 
-| Local | Copy do modal |
-|---|---|
-| `period-selector.tsx` (Ano/Trim/Custom) | "Disponível no Premium" + "Veja relatórios por trimestre, ano e períodos personalizados." |
-| `Reports.tsx` (Exportar PDF) | "Exportar PDF é Premium" + "Gere um PDF espelho dos relatórios." |
-| `Settings.tsx` (Exportar Excel/PDF) | "Exportar dados é Premium" |
-| `card-manager.tsx` (3º cartão) | "Cartões ilimitados no Premium" |
-| `budget-goal-form-sheet.tsx` (2ª meta) | "Metas ilimitadas no Premium" |
-| `create-group-dialog.tsx` (criar grupo) | "Crie até 3 grupos no Premium" |
+`calculateBillingPeriod(expenseDate, config)`:
+- Tentar fatura do mês da despesa: calcular closingDate e previousClosingDate
+- previousClosingDate = closingDate da fatura do mês anterior
+- Se `expenseDate > previousClosingDate && expenseDate <= closingDate` → fatura desse mês
+- Senão se `expenseDate > closingDate` → fatura do mês seguinte
+- Senão → fatura do mês anterior
 
-A maioria já tem modal — apenas padronizar textos e CTA "Virar Premium ⭐".
+Também atualizar `getNextBillingDates` com a mesma lógica corrigida (vencimento no mês seguinte).
 
-### 4. Upsell banner discreto — Novo componente
+#### 2. `src/components/card-manager.tsx`
 
-`src/components/upsell-banner.tsx`:
-- Só renderiza para `free` e `no_ads`
-- Verifica `localStorage` para "última vez mostrado" — só mostra se > 7 dias
-- Verifica se usuário tem ≥ 10 gastos (receber como prop `expenseCount`)
-- Copys alternadas (usar `Date.now() % 2` para alternar)
-- Botão "Ver Premium" + "X" para fechar
-- Inserir no `Index.tsx` abaixo do `BalanceSummary`
+- **Remover `computeClosingDay`** (linhas 80-84) — não mais necessário
+- **Formulário preview** (linha 331-339): trocar texto para:
+  ```
+  "Vence dia {due_day} • Fecha {days_before_due} dias antes"
+  ```
+  E adicionar "Próximo fechamento: DD/MM • Próximo vencimento: DD/MM" usando `getNextBillingDates` com data real.
+- No `handleSubmit` (linhas 112-120): calcular `closing_day` usando a nova `getClosingDateForBillingMonth` para o mês atual, pegar `.getDate()` (compatibilidade).
 
-### 5. Página de Planos — `Subscription.tsx`
+#### 3. `src/pages/Index.tsx` — Modo Fatura só crédito + cartão obrigatório
 
-Atualizar `renderPlanFeatures`:
-- Gratuito: "Relatórios: mês atual (todos os gráficos)", "Importar planilha", "Participar de grupos"
-- Sem Anúncios: "Tudo do Gratuito + sem anúncios"
-- Premium: lista completa conforme spec
+**Filtro (linhas 1207-1235):**
+- Quando `viewMode === "billing"`: se `expense.payment_method !== "credit"` → `return false` (não cair no else)
 
-### 6. `src/pages/Settings.tsx` — Import liberado
+**Totais (linhas 1482-1498):**
+- Mesma correção: no modo billing, só considerar crédito
 
-O gate de import já usa `canImportSpreadsheet` — ao mudar para `true` no `subscription.ts`, já funciona. Apenas verificar se o botão não mostra Lock icon para free.
+**Toggle UI (linhas 1556-1582):**
+- Quando `viewMode === "billing"` e existem 2+ cartões de crédito: mostrar seletor de cartão obrigatório abaixo do toggle
+- Se 1 cartão: auto-selecionar
+- Se 0 cartões de crédito: mostrar mensagem "Cadastre um cartão de crédito"
+- Adicionar state `billingCardId: string | null` — no filtro, usar esse cartão como `filters.cardId` forçado
 
 ---
 
@@ -69,15 +96,7 @@ O gate de import já usa `canImportSpreadsheet` — ao mudar para `true` no `sub
 
 | Arquivo | Mudança |
 |---|---|
-| `src/types/subscription.ts` | Preço no_ads, importSpreadsheet=true para todos |
-| `src/components/app-header.tsx` | Badge de plano |
-| `src/components/upgrade-dialog.tsx` | Novo componente reutilizável de modal upgrade |
-| `src/components/upsell-banner.tsx` | Novo banner discreto de upsell |
-| `src/pages/Index.tsx` | Inserir UpsellBanner |
-| `src/pages/Subscription.tsx` | Atualizar textos dos planos |
-| `src/components/card-manager.tsx` | Padronizar copy do modal de upgrade |
-| `src/components/budget-goal-form-sheet.tsx` | Padronizar copy |
-| `src/components/period-selector.tsx` | Padronizar copy |
-| `src/pages/Reports.tsx` | Padronizar copy |
-| `src/pages/Settings.tsx` | Remover gate de import (já automático), padronizar export copy |
+| `src/utils/billing-period.ts` | Reescrever cálculo: vencimento no mês+1, subtração real de dias |
+| `src/components/card-manager.tsx` | Preview com datas reais, remover `computeClosingDay` |
+| `src/pages/Index.tsx` | Modo Fatura: só crédito, seletor de cartão obrigatório |
 

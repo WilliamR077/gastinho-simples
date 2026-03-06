@@ -78,10 +78,10 @@ export function CreateGroupDialog({ open, onOpenChange }: CreateGroupDialogProps
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Crown className="h-5 w-5 text-yellow-500" />
-              Recurso Premium
+              Crie até 3 grupos no Premium
             </DialogTitle>
             <DialogDescription>
-              Criar grupos compartilhados é um recurso exclusivo para assinantes Premium e Premium Plus.
+              Crie grupos compartilhados para dividir gastos com família ou amigos. Disponível no plano Premium.
             </DialogDescription>
           </DialogHeader>
 
@@ -98,10 +98,10 @@ export function CreateGroupDialog({ open, onOpenChange }: CreateGroupDialogProps
 
           <DialogFooter>
             <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Cancelar
+              Agora não
             </Button>
             <Button onClick={handleUpgrade}>
-              Ver Planos
+              Virar Premium ⭐
             </Button>
           </DialogFooter>
         </DialogContent>

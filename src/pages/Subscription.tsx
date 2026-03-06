@@ -230,8 +230,28 @@ export default function Subscription() {
 
   const renderPlanFeatures = (planTier: keyof typeof SUBSCRIPTION_FEATURES) => {
     const planFeatures = SUBSCRIPTION_FEATURES[planTier];
+
+    if (planTier === "no_ads") {
+      return (
+        <div className="space-y-2 text-sm">
+          <div className="flex items-start gap-2">
+            <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+            <span>Tudo do Gratuito</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+            <span>Sem anúncios</span>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="space-y-2 text-sm">
+        <div className="flex items-start gap-2">
+          <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+          <span>{planFeatures.reports ? "Relatórios: todos os períodos (mês, trimestre, ano, personalizado)" : "Relatórios: mês atual (todos os gráficos)"}</span>
+        </div>
         <div className="flex items-start gap-2">
           <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
           <span>{planFeatures.cards === Infinity ? "Cartões ilimitados" : `Até ${planFeatures.cards} cartões`}</span>
@@ -239,10 +259,6 @@ export default function Subscription() {
         <div className="flex items-start gap-2">
           <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
           <span>{planFeatures.goals === Infinity ? "Metas ilimitadas" : `Até ${planFeatures.goals} meta`}</span>
-        </div>
-        <div className="flex items-start gap-2">
-          <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-          <span>{planFeatures.reports ? "Relatórios: todos os períodos" : "Relatórios: mês atual"}</span>
         </div>
         {planFeatures.exportPdf && (
           <div className="flex items-start gap-2">
@@ -253,6 +269,10 @@ export default function Subscription() {
         <div className="flex items-start gap-2">
           <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
           <span>{planFeatures.groups > 0 ? `Criar até ${planFeatures.groups} grupos` : "Participar de grupos"}</span>
+        </div>
+        <div className="flex items-start gap-2">
+          <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+          <span>Importar planilha</span>
         </div>
         <div className="flex items-start gap-2">
           {planFeatures.ads ? (
@@ -569,9 +589,9 @@ export default function Subscription() {
         </CardHeader>
         <CardContent>
           <div className="text-sm text-muted-foreground space-y-2">
-            <p>✅ <strong>Gratuito:</strong> Perfeito para começar • Relatórios do mês • Participar de grupos</p>
-            <p>⚡ <strong>Sem Anúncios:</strong> Experiência sem interrupções • Relatórios do mês • Participar de grupos</p>
-            <p>👑 <strong>Premium:</strong> Tudo desbloqueado + sem anúncios • Todos os períodos • Criar até 3 grupos • Exportar PDF/Excel</p>
+            <p>✅ <strong>Gratuito:</strong> Perfeito para começar • Relatórios do mês atual (todos os gráficos) • Importar planilha • Participar de grupos</p>
+            <p>⚡ <strong>Sem Anúncios:</strong> Tudo do Gratuito + sem anúncios</p>
+            <p>👑 <strong>Premium:</strong> Tudo desbloqueado + sem anúncios • Todos os períodos • Criar até 3 grupos • Exportar PDF/Excel • Cartões e metas ilimitados</p>
           </div>
         </CardContent>
       </Card>

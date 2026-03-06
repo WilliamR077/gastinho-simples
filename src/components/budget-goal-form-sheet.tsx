@@ -249,9 +249,9 @@ export function BudgetGoalFormSheet({
             {!canAddMore && (
               <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 text-sm">
                 <p className="text-foreground">
-                  🎯 <strong>Apenas {features.goals} meta no plano Gratuito</strong>
+                  🎯 <strong>Metas ilimitadas no Premium</strong>
                   <br />
-                  Upgrade para Premium e crie <strong>quantas metas precisar!</strong>{" "}
+                  Virar Premium e crie <strong>quantas metas precisar!</strong>{" "}
                   <span
                     className="underline cursor-pointer font-semibold text-primary"
                     onClick={() => {
@@ -259,7 +259,7 @@ export function BudgetGoalFormSheet({
                       navigate("/subscription");
                     }}
                   >
-                    Ver planos
+                    Virar Premium ⭐
                   </span>
                 </p>
               </div>
@@ -270,7 +270,7 @@ export function BudgetGoalFormSheet({
               className="w-full bg-gradient-primary"
               disabled={!canAddMore}
             >
-              {canAddMore ? "Adicionar Meta" : "Limite Atingido - Faça Upgrade"}
+              {canAddMore ? "Adicionar Meta" : "Limite Atingido - Virar Premium ⭐"}
             </Button>
           </form>
         )}

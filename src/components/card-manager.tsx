@@ -186,10 +186,11 @@ export function CardManager() {
   const handleAddCard = () => {
     if (!canAddCard(cards.length)) {
       toast({
-        title: "Limite de cartões atingido",
-        description: `Você atingiu o limite de ${features.cards} cartão${features.cards > 1 ? 'ões' : ''} do plano Gratuito. Faça upgrade para o Premium!`,
+        title: "Cartões ilimitados no Premium ⭐",
+        description: `Você atingiu o limite de ${features.cards} cartões do plano atual. Virar Premium para desbloquear!`,
         variant: "destructive",
       });
+      navigate("/subscription");
       return;
     }
     setShowForm(!showForm);
@@ -255,10 +256,10 @@ export function CardManager() {
       {!canAddMoreCards && !showForm && (
         <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 text-sm">
           <p className="text-foreground">
-            <strong>Quer adicionar mais cartões?</strong>
+            <strong>Cartões ilimitados no Premium</strong>
             <br />
-            Com o plano Premium você tem <strong>cartões ilimitados</strong> + muito mais!
-            {' '}<span className="underline cursor-pointer font-semibold text-primary" onClick={() => navigate("/subscription")}>Ver planos</span>
+            Virar Premium e libere <strong>cartões ilimitados</strong> + muito mais!
+            {' '}<span className="underline cursor-pointer font-semibold text-primary" onClick={() => navigate("/subscription")}>Virar Premium ⭐</span>
           </p>
         </div>
       )}

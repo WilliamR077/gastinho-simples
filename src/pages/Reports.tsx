@@ -11,22 +11,14 @@ import { PeriodSelector, PeriodType } from "@/components/period-selector";
 import { ContextSelector } from "@/components/context-selector";
 import { useSharedGroups } from "@/hooks/use-shared-groups";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Download, Loader2, Lock, Crown } from "lucide-react";
+import { ArrowLeft, Download, Loader2, Lock } from "lucide-react";
 import { startOfMonth, endOfMonth } from "date-fns";
 import { exportReportsToPDF } from "@/services/pdf-export-service";
 import { toast } from "sonner";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useCategories } from "@/hooks/use-categories";
 import { buildReportViewModel } from "@/utils/report-view-model";
-
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { UpgradeDialog } from "@/components/upgrade-dialog";
 
 interface GroupMember {
   user_id: string;
@@ -312,34 +304,17 @@ const Reports = () => {
         />
       </main>
 
-      <Dialog open={showUpgradeDialog} onOpenChange={setShowUpgradeDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Crown className="h-5 w-5 text-yellow-500" />
-              Exportar para PDF
-            </DialogTitle>
-            <DialogDescription className="text-left space-y-3 pt-2">
-              <p>A exportação de relatórios em PDF é um recurso Premium.</p>
-              <p className="font-medium">Com o Premium você pode:</p>
-              <ul className="list-disc list-inside space-y-1 text-sm">
-                <li>Exportar relatórios para PDF</li>
-                <li>Ver relatórios de períodos maiores</li>
-                <li>Analisar por ano, trimestre ou período personalizado</li>
-                <li>Ver todo o histórico de gastos</li>
-              </ul>
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={() => setShowUpgradeDialog(false)} className="w-full sm:w-auto">
-              Cancelar
-            </Button>
-            <Button onClick={() => { setShowUpgradeDialog(false); navigate("/subscription"); }} className="w-full sm:w-auto">
-              Ver Planos
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <UpgradeDialog
+        open={showUpgradeDialog}
+        onOpenChange={setShowUpgradeDialog}
+        title="Exportar PDF é Premium"
+        description="Gere um PDF com os mesmos gráficos e informações do relatório."
+        features={[
+          "Exportar relatórios para PDF",
+          "Ver relatórios de períodos maiores",
+          "Analisar por ano, trimestre ou período personalizado",
+        ]}
+      />
     </div>
   );
 };
