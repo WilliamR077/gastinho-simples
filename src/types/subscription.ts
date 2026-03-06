@@ -15,8 +15,8 @@ export const SUBSCRIPTION_FEATURES = {
     exportPdf: false,
     exportExcel: false,
     ads: true,
-    importSpreadsheet: false,
-    importLimit: 0,
+    importSpreadsheet: true,
+    importLimit: 100,
   },
   no_ads: {
     name: "Sem Anúncios",

@@ -2,7 +2,9 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { BarChart3, Eye, EyeOff, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useValuesVisibility } from "@/hooks/use-values-visibility";
+import { useSubscription } from "@/hooks/use-subscription";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AppMenuDrawer } from "./app-menu-drawer";
 import { RecurringExpense } from "@/types/recurring-expense";
@@ -15,6 +17,7 @@ interface AppHeaderProps {
 export function AppHeader({ recurringExpenses, onSignOut }: AppHeaderProps) {
   const navigate = useNavigate();
   const { isHidden, toggleVisibility } = useValuesVisibility();
+  const { tier } = useSubscription();
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
@@ -31,6 +34,11 @@ export function AppHeader({ recurringExpenses, onSignOut }: AppHeaderProps) {
             alt="Gastinho Simples"
             className="h-11 sm:h-12 w-auto"
           />
+          {tier === "premium" || tier === "premium_plus" ? (
+            <Badge className="bg-primary/15 text-primary border-primary/30 text-[10px] px-1.5 py-0">⭐ Premium</Badge>
+          ) : tier === "no_ads" ? (
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Sem anúncios</Badge>
+          ) : null}
         </button>
 
         {/* Right: 3 icon buttons */}
