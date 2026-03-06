@@ -1643,8 +1643,10 @@ export default function Index() {
           <BalanceSummary
             totalIncome={monthlyTotals.totalIncome}
             totalExpense={monthlyTotals.totalExpense} />
-
         </div>
+
+        {/* Upsell Banner */}
+        <UpsellBanner expenseCount={expenses.length} />
 
         {/* Group Member Summary - only in group context */}
         {currentContext.type === 'group' &&
