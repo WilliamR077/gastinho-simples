@@ -77,8 +77,8 @@ export default function Settings() {
   const handleExportToExcel = async () => {
     if (!canExportExcel) {
       toast({
-        title: "Recurso Premium 👑",
-        description: "A exportação para Excel está disponível apenas para assinantes Premium. Faça upgrade para desbloquear!",
+        title: "Exportar dados é Premium ⭐",
+        description: "Exporte seus dados em Excel com o plano Premium. Virar Premium para desbloquear!",
         variant: "destructive",
       });
       navigate("/subscription");
@@ -183,8 +183,8 @@ export default function Settings() {
   const handleExportToPDF = async () => {
     if (!canExportPdf) {
       toast({
-        title: "Recurso Premium 👑",
-        description: "A exportação para PDF está disponível apenas para assinantes Premium. Faça upgrade para desbloquear!",
+        title: "Exportar dados é Premium ⭐",
+        description: "Exporte seus dados em PDF com o plano Premium. Virar Premium para desbloquear!",
         variant: "destructive",
       });
       navigate("/subscription");
@@ -391,10 +391,9 @@ export default function Settings() {
                 <div className="flex items-start gap-3">
                   <Crown className="h-5 w-5 text-primary mt-0.5" />
                   <div className="flex-1">
-                    <h4 className="font-semibold mb-1">📁 Exportações Premium</h4>
+                    <h4 className="font-semibold mb-1">📁 Exportar dados é Premium</h4>
                     <p className="text-sm text-muted-foreground">
                       Salve seus dados para análise externa ou backup seguro em Excel e PDF.
-                      Disponível nos planos Premium e Premium Plus.
                     </p>
                   </div>
                 </div>

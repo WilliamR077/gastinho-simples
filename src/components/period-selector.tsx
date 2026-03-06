@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Calendar, Lock, Crown } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -26,15 +26,7 @@ import {
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useSubscription } from "@/hooks/use-subscription";
-import { useNavigate } from "react-router-dom";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { UpgradeDialog } from "@/components/upgrade-dialog";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 export type PeriodType = "month" | "year" | "quarter" | "custom" | "all";
@@ -53,7 +45,6 @@ export function PeriodSelector({ onPeriodChange }: PeriodSelectorProps) {
   const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
   
   const { hasAdvancedReports } = useSubscription();
-  const navigate = useNavigate();
 
   const isPremiumPeriod = (type: PeriodType) => PREMIUM_PERIODS.includes(type);
 
@@ -235,31 +226,19 @@ export function PeriodSelector({ onPeriodChange }: PeriodSelectorProps) {
         )}
       </div>
 
-      <Dialog open={showUpgradeDialog} onOpenChange={setShowUpgradeDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Crown className="h-5 w-5 text-yellow-500" />
-              Relatórios Avançados
-            </DialogTitle>
-            <DialogDescription className="text-left space-y-3 pt-2">
-              <p>Que ótimo que você quer ver relatórios de períodos maiores!</p>
-              <p className="font-medium">Com o Premium você pode:</p>
-              <ul className="list-disc list-inside space-y-1 text-sm">
-                <li>Ver relatórios do ano inteiro</li>
-                <li>Analisar por trimestre</li>
-                <li>Definir período personalizado</li>
-                <li>Ver todo o histórico</li>
-                <li>Exportar para PDF</li>
-              </ul>
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={() => setShowUpgradeDialog(false)} className="w-full sm:w-auto">Cancelar</Button>
-            <Button onClick={() => { setShowUpgradeDialog(false); navigate("/subscription"); }} className="w-full sm:w-auto">Ver Planos</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <UpgradeDialog
+        open={showUpgradeDialog}
+        onOpenChange={setShowUpgradeDialog}
+        title="Disponível no Premium"
+        description="Veja relatórios por trimestre, ano e períodos personalizados."
+        features={[
+          "Ver relatórios do ano inteiro",
+          "Analisar por trimestre",
+          "Definir período personalizado",
+          "Ver todo o histórico",
+          "Exportar para PDF",
+        ]}
+      />
     </>
   );
 }
