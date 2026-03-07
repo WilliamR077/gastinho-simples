@@ -367,9 +367,48 @@ class BillingService {
   /**
    * Inicia processo de compra
    */
-  async purchase(productId: string, tier: string): Promise<boolean> {
+  /**
+   * Retorna as offers disponíveis para um produto (mensal e/ou anual)
+   */
+  getProductOffers(productId: string): { monthly?: CdvPurchaseOffer; yearly?: CdvPurchaseOffer } {
+    if (!this.store) return {};
+
+    const product = this.store.get(productId) as CdvPurchaseProduct | undefined;
+    if (!product) return {};
+
+    const offers = product.offers || [];
+    let monthly: CdvPurchaseOffer | undefined;
+    let yearly: CdvPurchaseOffer | undefined;
+
+    for (const offer of offers) {
+      const billingPeriod = offer.pricingPhases?.[0]?.billingPeriod || '';
+      if (billingPeriod.includes('P1Y')) {
+        yearly = offer;
+      } else if (billingPeriod.includes('P1M')) {
+        monthly = offer;
+      }
+    }
+
+    // Fallback: if only one offer exists and no period detected, treat as monthly
+    if (!monthly && !yearly && offers.length > 0) {
+      monthly = offers[0];
+    }
+
+    console.log('📦 Offers disponíveis:', { 
+      monthly: monthly?.id, 
+      yearly: yearly?.id,
+      totalOffers: offers.length 
+    });
+
+    return { monthly, yearly };
+  }
+
+  /**
+   * Inicia processo de compra
+   */
+  async purchase(productId: string, tier: string, billingPeriod?: "monthly" | "yearly"): Promise<boolean> {
     try {
-      console.log(`🛒 Iniciando compra: ${productId} (${tier})`);
+      console.log(`🛒 Iniciando compra: ${productId} (${tier}) [${billingPeriod || 'monthly'}]`);
       
       const finalProductId = productId || TIER_TO_PRODUCT_ID[tier];
       
@@ -382,7 +421,7 @@ class BillingService {
         await this.initialize();
         
         if (this.store && window.CdvPurchase) {
-          return await this.purchaseWithStore(finalProductId, tier);
+          return await this.purchaseWithStore(finalProductId, tier, billingPeriod);
         } else {
           // Fallback para simulação (apenas desenvolvimento)
           console.warn('⚠️ Store não disponível - Usando simulação');
@@ -401,14 +440,14 @@ class BillingService {
   /**
    * Realiza compra usando cordova-plugin-purchase
    */
-  private async purchaseWithStore(productId: string, tier: string): Promise<boolean> {
+  private async purchaseWithStore(productId: string, tier: string, billingPeriod?: "monthly" | "yearly"): Promise<boolean> {
     if (!this.store) {
       throw new Error('Store não inicializada');
     }
 
     return new Promise(async (resolve) => {
       try {
-        console.log(`🛒 Iniciando compra via store: ${productId}`);
+        console.log(`🛒 Iniciando compra via store: ${productId} [${billingPeriod || 'default'}]`);
         
         const product = this.store!.get(productId) as CdvPurchaseProduct | undefined;
         
@@ -420,15 +459,26 @@ class BillingService {
 
         console.log('📦 Produto encontrado:', JSON.stringify(product));
 
-        // Obter a oferta do produto (necessário para assinaturas)
+        // Selecionar a oferta correta baseada no billingPeriod
         let offer: CdvPurchaseOffer | undefined;
-        
-        if (typeof product.getOffer === 'function') {
-          offer = product.getOffer();
-          console.log('📦 Oferta via getOffer():', offer?.id);
-        } else if (product.offers && product.offers.length > 0) {
-          offer = product.offers[0];
-          console.log('📦 Oferta via offers[]:', offer?.id);
+
+        if (billingPeriod && product.offers && product.offers.length > 1) {
+          const targetPeriod = billingPeriod === 'yearly' ? 'P1Y' : 'P1M';
+          offer = product.offers.find(o => 
+            o.pricingPhases?.some(p => p.billingPeriod?.includes(targetPeriod))
+          );
+          console.log(`📦 Oferta para ${billingPeriod}:`, offer?.id);
+        }
+
+        // Fallback: usar getOffer() ou primeiro offer
+        if (!offer) {
+          if (typeof product.getOffer === 'function') {
+            offer = product.getOffer();
+            console.log('📦 Oferta via getOffer():', offer?.id);
+          } else if (product.offers && product.offers.length > 0) {
+            offer = product.offers[0];
+            console.log('📦 Oferta via offers[]:', offer?.id);
+          }
         }
 
         if (!offer) {

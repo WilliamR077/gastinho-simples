@@ -8,6 +8,7 @@ import { RecurringExpense } from "@/types/recurring-expense";
 import { useState, useEffect } from "react";
 import { RemindersDrawer } from "./reminders-drawer";
 import { Reminder } from "./reminders-button";
+import { adMobService } from "@/services/admob-service";
 
 const DISMISSED_REMINDERS_KEY = 'gastinho_dismissed_reminders';
 
@@ -24,6 +25,15 @@ export function AppMenuDrawer({ open, onOpenChange, onSignOut, recurringExpenses
   const [remindersOpen, setRemindersOpen] = useState(false);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+
+  // Hide/show ad banner when drawer opens/closes
+  useEffect(() => {
+    if (open) {
+      adMobService.hideBanner();
+    } else {
+      adMobService.showBanner();
+    }
+  }, [open]);
 
   // Load dismissed reminders
   useEffect(() => {

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Fingerprint, Lock, Delete, Eye, EyeOff } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { adMobService } from "@/services/admob-service";
 
 interface AppLockScreenProps {
   onUnlock: () => void;
@@ -18,8 +19,13 @@ export function AppLockScreen({ onUnlock }: AppLockScreenProps) {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Hide ad banner on lock screen
   useEffect(() => {
+    adMobService.hideBanner();
     checkBiometry();
+    return () => {
+      adMobService.showBanner();
+    };
   }, []);
 
   const checkBiometry = async () => {
