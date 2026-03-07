@@ -606,7 +606,7 @@ export default function Subscription() {
                     </button>
                   </div>
                 </div>
-              )
+              )}
 
               <CardContent className="space-y-3">
                 {renderPlanFeatures(plan.tier)}
