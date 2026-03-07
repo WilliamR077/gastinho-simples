@@ -94,7 +94,8 @@ export default function Subscription() {
         return;
       }
 
-      const success = await billingService.purchase(productId, planTier);
+      const billingPeriod = planTier === 'premium' ? premiumBillingPeriod : undefined;
+      const success = await billingService.purchase(productId, planTier, billingPeriod);
       
       if (success) {
         toast({
