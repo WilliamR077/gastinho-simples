@@ -551,14 +551,62 @@ export default function Subscription() {
                 </div>
                 <CardTitle>{planFeatures.name}</CardTitle>
                 <CardDescription>
-                  <span className="text-2xl font-bold text-foreground">
-                    {planFeatures.price.split("/")[0]}
-                  </span>
-                  {planFeatures.price.includes("/") && (
-                    <span className="text-sm">/{planFeatures.price.split("/")[1]}</span>
+                  {plan.tier === "premium" && hasYearlyOffer ? (
+                    premiumBillingPeriod === "yearly" ? (
+                      <div>
+                        <span className="text-2xl font-bold text-foreground">R$ 118,80</span>
+                        <span className="text-sm">/ano</span>
+                        <p className="text-xs text-muted-foreground mt-1">≈ R$ 9,90/mês</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <span className="text-2xl font-bold text-foreground">R$ 14,90</span>
+                        <span className="text-sm">/mês</span>
+                      </div>
+                    )
+                  ) : (
+                    <>
+                      <span className="text-2xl font-bold text-foreground">
+                        {planFeatures.price.split("/")[0]}
+                      </span>
+                      {planFeatures.price.includes("/") && (
+                        <span className="text-sm">/{planFeatures.price.split("/")[1]}</span>
+                      )}
+                    </>
                   )}
                 </CardDescription>
               </CardHeader>
+
+              {/* Billing period toggle for Premium */}
+              {plan.tier === "premium" && hasYearlyOffer && (
+                <div className="px-6 pb-2">
+                  <div className="flex rounded-lg bg-muted p-1 gap-1">
+                    <button
+                      className={`flex-1 text-xs font-medium py-2 px-3 rounded-md transition-colors ${
+                        premiumBillingPeriod === "monthly"
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                      onClick={() => setPremiumBillingPeriod("monthly")}
+                    >
+                      Mensal
+                    </button>
+                    <button
+                      className={`flex-1 text-xs font-medium py-2 px-3 rounded-md transition-colors relative ${
+                        premiumBillingPeriod === "yearly"
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                      onClick={() => setPremiumBillingPeriod("yearly")}
+                    >
+                      Anual
+                      <Badge className="absolute -top-2 -right-1 text-[10px] px-1 py-0 bg-green-500 text-white border-0">
+                        -33%
+                      </Badge>
+                    </button>
+                  </div>
+                </div>
+              )
 
               <CardContent className="space-y-3">
                 {renderPlanFeatures(plan.tier)}
