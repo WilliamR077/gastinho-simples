@@ -1,94 +1,53 @@
 
 
-## Plano: Corrigir aritmética de datas do billing + filtro só crédito + multi-cartões
+## Plano: Corrigir banner ads cobrindo UI + habilitar Premium Anual
 
-### Problema 1: `computeClosingDay` usa aritmética fixa (dia - offset + 30)
+### A) Banner de anúncios cobrindo UI
 
-Em `card-manager.tsx` linha 80-84 e no preview do formulário (linha 334), o fechamento é calculado como `dueDay - daysBefore + 30` — ignora meses reais. Também em `billing-period.ts`, `calculateBillingPeriod` calcula o fechamento posicionando o due_day no mesmo mês da despesa e subtraindo dias, mas o modelo correto é: o vencimento da fatura M fica no mês M+1, e o fechamento = vencimento - dias_antes.
+**Problema**: O banner do AdMob (320x50, fixo no bottom) sobrepõe botões em telas específicas.
 
-### Problema 2: Modo Fatura mostra PIX/Débito
+**Solução**:
 
-Em `Index.tsx` linhas 1225-1234, quando `viewMode === "billing"` mas a despesa NÃO é crédito, o código cai no `else` e filtra por data — deveria retornar `false` diretamente.
+#### 1. Esconder banner em telas sensíveis
 
-### Problema 3: Multi-cartões sem seleção obrigatória
+- **`src/components/app-lock-screen.tsx`**: No `useEffect` de mount, chamar `adMobService.hideBanner()`. No cleanup (unmount/unlock), chamar `adMobService.showBanner()`.
 
-Não há exigência de selecionar um cartão no modo Fatura. Sem isso, faturas de cartões com ciclos diferentes se misturam.
+- **`src/components/app-menu-drawer.tsx`**: Quando `open` mudar para `true`, chamar `adMobService.hideBanner()`. Quando fechar (`false`), chamar `adMobService.showBanner()`.
+
+#### 2. Reservar espaço nas demais telas
+
+- **`src/pages/Index.tsx`**: Já tem `pb-24` para o FAB. Verificar se é suficiente (banner = 50px + margem). Ajustar para `pb-32` se necessário para acomodar banner + FAB.
+
+- **Páginas sem FAB** (Settings, Reports, Account, Cards, Subscription): Adicionar `pb-20` ao container principal para que o conteúdo final não fique atrás do banner. Criar uma constante ou utility class `AD_BANNER_PADDING = "pb-20"` para consistência.
 
 ---
 
-### Mudanças
+### B) Premium Anual no app
 
-#### 1. `src/utils/billing-period.ts` — Reescrever `calculateBillingPeriod` (novo modelo)
+**Problema**: `purchaseWithStore` pega `product.offers[0]` sempre — só mostra o mensal. O produto Premium no Google Play tem 2 base plans (mensal e anual) que aparecem como offers diferentes.
 
-Nova lógica para `due_day + days_before_due`:
+**Solução**:
 
-```ts
-// Para determinar a qual fatura M (yyyy-MM) uma compra pertence:
-// Fatura "M" tem vencimento no mês M+1, dia due_day (clamped)
-// Fechamento = vencimento - days_before_due (subtração real de dias via Date)
-// Período da fatura M = (fechamento da fatura M-1) + 1 dia  até  fechamento da fatura M
-// 
-// Algoritmo: testar fatura do mês da compra e do mês anterior.
-// Se compra <= fechamento do mês → pertence a esse mês
-// Senão → pertence ao mês seguinte
-```
+#### 1. `src/pages/Subscription.tsx` — Toggle Mensal/Anual no card Premium
 
-Criar helper `getBillingClosingDate(billingMonth: string, config)`:
-- Parse `billingMonth` → ano/mês (ex: "2026-03" → março)
-- `dueDate = new Date(ano, mês, clamp(due_day, daysInMonth))` — vencimento no próprio mês da fatura (NÃO mês+1, conforme o pedido do usuário: fatura de março fecha em março e vence em abril)
+- Adicionar state `premiumBillingPeriod: "monthly" | "yearly"` (default: `"monthly"`)
+- No card Premium (tanto na visão gratuita quanto na de upgrade), renderizar toggle pill:
+  - "Mensal — R$ 14,90/mês"
+  - "Anual — R$ 118,80/ano (≈ R$ 9,90/mês)" com badge "Economia 33%"
+- Ao clicar em "Ter Acesso Completo ⭐", passar `premiumBillingPeriod` para `handlePurchase`
+- Atualizar `handlePurchase` para passar o período: `billingService.purchase(productId, planTier, premiumBillingPeriod)`
 
-Correção: conforme o critério de aceite do usuário:
-- Fatura de Março/2026, vencimento dia 10 → `dueDate = 10/04/2026` (mês seguinte)
-- `closingDate = dueDate - 12 dias = 29/03/2026`
-- `previousDueDate = 10/03/2026`, `previousClosingDate = 26/02/2026`
-- Período = 27/02 a 29/03
+#### 2. `src/services/billing-service.ts` — Selecionar offer correta
 
-Então a fórmula é:
-```ts
-function getClosingDateForBillingMonth(year: number, month: number, dueDay: number, daysBefore: number): Date {
-  // Vencimento cai no MÊS SEGUINTE ao mês da fatura
-  const nextMonth = month + 1;
-  const ny = nextMonth > 11 ? year + 1 : year;
-  const nm = nextMonth > 11 ? 0 : nextMonth;
-  const dueDate = new Date(ny, nm, Math.min(dueDay, daysInMonth(ny, nm)));
-  const closingDate = new Date(dueDate);
-  closingDate.setDate(closingDate.getDate() - daysBefore);
-  return closingDate;
-}
-```
+- Atualizar assinatura de `purchase()` para aceitar `billingPeriod?: "monthly" | "yearly"`
+- Em `purchaseWithStore()`: quando `billingPeriod === "yearly"`, iterar `product.offers` e encontrar a offer cujo `pricingPhases[0].billingPeriod` contém `"P1Y"` (ISO 8601 para 1 ano). Se não encontrar, fazer fallback para `offers[0]`.
+- Quando `billingPeriod === "monthly"` (ou undefined), buscar offer com `billingPeriod` contendo `"P1M"`, fallback para `offers[0]`.
+- Se o produto só tiver 1 offer (anual não configurado), esconder o toggle na UI — expor método `getAvailableOffers(productId)` que retorna quais períodos existem.
 
-`calculateBillingPeriod(expenseDate, config)`:
-- Tentar fatura do mês da despesa: calcular closingDate e previousClosingDate
-- previousClosingDate = closingDate da fatura do mês anterior
-- Se `expenseDate > previousClosingDate && expenseDate <= closingDate` → fatura desse mês
-- Senão se `expenseDate > closingDate` → fatura do mês seguinte
-- Senão → fatura do mês anterior
+#### 3. Verificação de offers disponíveis
 
-Também atualizar `getNextBillingDates` com a mesma lógica corrigida (vencimento no mês seguinte).
-
-#### 2. `src/components/card-manager.tsx`
-
-- **Remover `computeClosingDay`** (linhas 80-84) — não mais necessário
-- **Formulário preview** (linha 331-339): trocar texto para:
-  ```
-  "Vence dia {due_day} • Fecha {days_before_due} dias antes"
-  ```
-  E adicionar "Próximo fechamento: DD/MM • Próximo vencimento: DD/MM" usando `getNextBillingDates` com data real.
-- No `handleSubmit` (linhas 112-120): calcular `closing_day` usando a nova `getClosingDateForBillingMonth` para o mês atual, pegar `.getDate()` (compatibilidade).
-
-#### 3. `src/pages/Index.tsx` — Modo Fatura só crédito + cartão obrigatório
-
-**Filtro (linhas 1207-1235):**
-- Quando `viewMode === "billing"`: se `expense.payment_method !== "credit"` → `return false` (não cair no else)
-
-**Totais (linhas 1482-1498):**
-- Mesma correção: no modo billing, só considerar crédito
-
-**Toggle UI (linhas 1556-1582):**
-- Quando `viewMode === "billing"` e existem 2+ cartões de crédito: mostrar seletor de cartão obrigatório abaixo do toggle
-- Se 1 cartão: auto-selecionar
-- Se 0 cartões de crédito: mostrar mensagem "Cadastre um cartão de crédito"
-- Adicionar state `billingCardId: string | null` — no filtro, usar esse cartão como `filters.cardId` forçado
+- Adicionar método `getProductOffers(productId): { monthly?: CdvPurchaseOffer, yearly?: CdvPurchaseOffer }`
+- Na `Subscription.tsx`, chamar esse método após init para saber se deve mostrar o toggle anual. Se `yearly` não existir, esconder a opção.
 
 ---
 
@@ -96,7 +55,13 @@ Também atualizar `getNextBillingDates` com a mesma lógica corrigida (venciment
 
 | Arquivo | Mudança |
 |---|---|
-| `src/utils/billing-period.ts` | Reescrever cálculo: vencimento no mês+1, subtração real de dias |
-| `src/components/card-manager.tsx` | Preview com datas reais, remover `computeClosingDay` |
-| `src/pages/Index.tsx` | Modo Fatura: só crédito, seletor de cartão obrigatório |
+| `src/components/app-lock-screen.tsx` | Hide/show banner on mount/unmount |
+| `src/components/app-menu-drawer.tsx` | Hide/show banner on open/close |
+| `src/pages/Index.tsx` | Ajustar padding-bottom |
+| `src/pages/Settings.tsx` | Adicionar padding-bottom |
+| `src/pages/Reports.tsx` | Adicionar padding-bottom |
+| `src/pages/Account.tsx` | Adicionar padding-bottom |
+| `src/pages/Cards.tsx` | Adicionar padding-bottom |
+| `src/pages/Subscription.tsx` | Toggle mensal/anual no Premium, usar offers |
+| `src/services/billing-service.ts` | Aceitar billingPeriod, selecionar offer correta |
 
