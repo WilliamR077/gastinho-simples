@@ -30,6 +30,8 @@ export default function Subscription() {
   const [restoring, setRestoring] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  const [premiumBillingPeriod, setPremiumBillingPeriod] = useState<"monthly" | "yearly">("monthly");
+  const [hasYearlyOffer, setHasYearlyOffer] = useState(false);
   const isNative = Capacitor.isNativePlatform();
   const navigate = useNavigate();
 
@@ -52,6 +54,17 @@ export default function Subscription() {
 
     fetchSubscriptionDetails();
   }, [tier]);
+
+  // Check if yearly offer is available
+  useEffect(() => {
+    const checkOffers = async () => {
+      if (!isNative) return;
+      await billingService.initialize();
+      const offers = billingService.getProductOffers(TIER_TO_PRODUCT_ID['premium']);
+      setHasYearlyOffer(!!offers.yearly);
+    };
+    checkOffers();
+  }, [isNative]);
 
   if (loading) {
     return (
