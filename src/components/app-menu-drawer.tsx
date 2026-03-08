@@ -102,6 +102,9 @@ export function AppMenuDrawer({ open, onOpenChange, onSignOut, recurringExpenses
     { icon: CreditCard, label: "Cartões", onClick: () => handleNavigate("/cards"), dataTour: "cards-button" },
     { icon: Settings, label: "Configurações", onClick: () => handleNavigate("/settings"), dataTour: "settings-button" },
     { icon: User, label: "Conta", onClick: () => handleNavigate("/account") },
+    ...(user?.email === "gastinhosimples@gmail.com"
+      ? [{ icon: Shield, label: "Admin", onClick: () => handleNavigate("/admin"), dataTour: undefined, badge: undefined }]
+      : []),
     {
       icon: Bell,
       label: "Lembretes",
