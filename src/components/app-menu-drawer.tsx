@@ -26,10 +26,10 @@ export function AppMenuDrawer({ open, onOpenChange, onSignOut, recurringExpenses
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
 
-  // Hide/show ad banner when drawer opens/closes
+  // Remove ad banner when drawer opens, restore when closed
   useEffect(() => {
     if (open) {
-      adMobService.hideBanner();
+      adMobService.removeBanner();
     } else {
       adMobService.showBanner();
     }

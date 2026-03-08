@@ -100,10 +100,6 @@ class AdMobService {
    * Remove completamente o banner
    */
   async removeBanner(): Promise<void> {
-    if (!this.bannerVisible) {
-      return;
-    }
-
     try {
       await AdMob.removeBanner();
       this.bannerVisible = false;

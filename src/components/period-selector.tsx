@@ -131,28 +131,30 @@ export function PeriodSelector({ onPeriodChange }: PeriodSelectorProps) {
     <>
       <div className="flex flex-col gap-3 py-4">
         {/* Segmented control */}
-        <ToggleGroup
-          type="single"
-          value={periodType}
-          onValueChange={handlePeriodTypeChange}
-          className="bg-muted rounded-lg p-1 w-full justify-center"
-        >
-          <ToggleGroupItem value="month" className="text-xs flex-1 data-[state=on]:bg-background data-[state=on]:shadow-sm rounded-md">
-            Mês
-          </ToggleGroupItem>
-          <ToggleGroupItem value="year" className="text-xs flex-1 data-[state=on]:bg-background data-[state=on]:shadow-sm rounded-md gap-1">
-            Ano
-            {!hasAdvancedReports && <Lock className="h-3 w-3 text-muted-foreground" />}
-          </ToggleGroupItem>
-          <ToggleGroupItem value="quarter" className="text-xs flex-1 data-[state=on]:bg-background data-[state=on]:shadow-sm rounded-md gap-1">
-            Trimestre
-            {!hasAdvancedReports && <Lock className="h-3 w-3 text-muted-foreground" />}
-          </ToggleGroupItem>
-          <ToggleGroupItem value="custom" className="text-xs flex-1 data-[state=on]:bg-background data-[state=on]:shadow-sm rounded-md gap-1">
-            Personalizado
-            {!hasAdvancedReports && <Lock className="h-3 w-3 text-muted-foreground" />}
-          </ToggleGroupItem>
-        </ToggleGroup>
+        <div className="overflow-x-auto -mx-1 px-1">
+          <ToggleGroup
+            type="single"
+            value={periodType}
+            onValueChange={handlePeriodTypeChange}
+            className="bg-muted rounded-lg p-1 w-full justify-center min-w-0"
+          >
+            <ToggleGroupItem value="month" className="text-[11px] sm:text-xs flex-1 data-[state=on]:bg-background data-[state=on]:shadow-sm rounded-md px-2 sm:px-3 whitespace-nowrap">
+              Mês
+            </ToggleGroupItem>
+            <ToggleGroupItem value="year" className="text-[11px] sm:text-xs flex-1 data-[state=on]:bg-background data-[state=on]:shadow-sm rounded-md gap-0.5 px-2 sm:px-3 whitespace-nowrap">
+              Ano
+              {!hasAdvancedReports && <Lock className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-muted-foreground" />}
+            </ToggleGroupItem>
+            <ToggleGroupItem value="quarter" className="text-[11px] sm:text-xs flex-1 data-[state=on]:bg-background data-[state=on]:shadow-sm rounded-md gap-0.5 px-2 sm:px-3 whitespace-nowrap">
+              Trim.
+              {!hasAdvancedReports && <Lock className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-muted-foreground" />}
+            </ToggleGroupItem>
+            <ToggleGroupItem value="custom" className="text-[11px] sm:text-xs flex-1 data-[state=on]:bg-background data-[state=on]:shadow-sm rounded-md gap-0.5 px-2 sm:px-3 whitespace-nowrap">
+              Custom
+              {!hasAdvancedReports && <Lock className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-muted-foreground" />}
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
 
         {/* Month navigator */}
         {periodType === "month" && (
