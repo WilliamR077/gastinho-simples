@@ -19,11 +19,16 @@ export function AppLockScreen({ onUnlock }: AppLockScreenProps) {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Hide ad banner on lock screen
+  // Force remove ad banner on lock screen
   useEffect(() => {
-    adMobService.hideBanner();
+    adMobService.removeBanner();
+    // Retry removal in case it was re-shown by another component
+    const retryTimer = setTimeout(() => {
+      adMobService.removeBanner();
+    }, 500);
     checkBiometry();
     return () => {
+      clearTimeout(retryTimer);
       adMobService.showBanner();
     };
   }, []);
