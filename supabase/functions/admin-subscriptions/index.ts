@@ -55,15 +55,33 @@ Deno.serve(async (req) => {
     if (req.method === "GET") {
       const url = new URL(req.url);
       const email = url.searchParams.get("email");
+
+      // If no email, return all active subscribers
       if (!email) {
-        return new Response(JSON.stringify({ error: "Email é obrigatório" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        const { data: activeSubs } = await adminClient
+          .from("subscriptions")
+          .select("*")
+          .eq("is_active", true)
+          .neq("tier", "free");
+
+        const { data: { users } } = await adminClient.auth.admin.listUsers();
+        const userMap = new Map((users || []).map((u) => [u.id, u.email]));
+
+        const subscribers = (activeSubs || []).map((sub) => ({
+          email: userMap.get(sub.user_id) || "desconhecido",
+          tier: sub.tier,
+          platform: sub.platform,
+          started_at: sub.started_at,
+          expires_at: sub.expires_at,
+        }));
+
+        return new Response(JSON.stringify({ subscribers }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
       // Find user by email
-      const { data: { users }, error: userError } = await adminClient.auth.admin.listUsers();
+      const { data: { users } } = await adminClient.auth.admin.listUsers();
       const targetUser = users?.find((u) => u.email === email);
 
       if (!targetUser) {
