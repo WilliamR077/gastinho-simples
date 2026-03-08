@@ -193,11 +193,59 @@ export default function Landing() {
                       <h3 className="text-lg font-semibold text-foreground">{plan.name}</h3>
                       <p className="text-sm text-muted-foreground">{meta.description}</p>
                     </div>
+
+                    {tierKey === "premium" && (
+                      <div className="flex items-center gap-1 rounded-full bg-muted p-1 self-start">
+                        <button
+                          onClick={() => setPremiumBilling("monthly")}
+                          className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                            premiumBilling === "monthly"
+                              ? "bg-primary text-primary-foreground"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          Mensal
+                        </button>
+                        <button
+                          onClick={() => setPremiumBilling("yearly")}
+                          className={`rounded-full px-3 py-1 text-xs font-medium transition-colors flex items-center gap-1 ${
+                            premiumBilling === "yearly"
+                              ? "bg-primary text-primary-foreground"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          Anual
+                          <span className="rounded-full bg-accent text-accent-foreground px-1.5 py-0.5 text-[10px] font-bold">
+                            -33%
+                          </span>
+                        </button>
+                      </div>
+                    )}
+
                     <div className="flex items-baseline gap-1">
-                      <span className="text-3xl font-bold text-foreground">{plan.price.split("/")[0]}</span>
-                      {plan.price.includes("/") &&
-                      <span className="text-sm text-muted-foreground">/{plan.price.split("/")[1]}</span>
-                      }
+                      {tierKey === "premium" ? (
+                        premiumBilling === "monthly" ? (
+                          <>
+                            <span className="text-3xl font-bold text-foreground">R$ 14,90</span>
+                            <span className="text-sm text-muted-foreground">/mês</span>
+                          </>
+                        ) : (
+                          <div className="flex flex-col">
+                            <div className="flex items-baseline gap-1">
+                              <span className="text-3xl font-bold text-foreground">R$ 118,80</span>
+                              <span className="text-sm text-muted-foreground">/ano</span>
+                            </div>
+                            <span className="text-xs text-muted-foreground">≈ R$ 9,90/mês</span>
+                          </div>
+                        )
+                      ) : (
+                        <>
+                          <span className="text-3xl font-bold text-foreground">{plan.price.split("/")[0]}</span>
+                          {plan.price.includes("/") &&
+                            <span className="text-sm text-muted-foreground">/{plan.price.split("/")[1]}</span>
+                          }
+                        </>
+                      )}
                     </div>
                     <ul className="space-y-2">
                       {items.map((item) =>
