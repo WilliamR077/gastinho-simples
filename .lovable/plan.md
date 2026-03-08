@@ -1,102 +1,57 @@
 
 
-## Plano: Corrigir aritmética de datas do billing + filtro só crédito + multi-cartões
-
-### Problema 1: `computeClosingDay` usa aritmética fixa (dia - offset + 30)
-
-Em `card-manager.tsx` linha 80-84 e no preview do formulário (linha 334), o fechamento é calculado como `dueDay - daysBefore + 30` — ignora meses reais. Também em `billing-period.ts`, `calculateBillingPeriod` calcula o fechamento posicionando o due_day no mesmo mês da despesa e subtraindo dias, mas o modelo correto é: o vencimento da fatura M fica no mês M+1, e o fechamento = vencimento - dias_antes.
-
-### Problema 2: Modo Fatura mostra PIX/Débito
-
-Em `Index.tsx` linhas 1225-1234, quando `viewMode === "billing"` mas a despesa NÃO é crédito, o código cai no `else` e filtra por data — deveria retornar `false` diretamente.
-
-### Problema 3: Multi-cartões sem seleção obrigatória
-
-Não há exigência de selecionar um cartão no modo Fatura. Sem isso, faturas de cartões com ciclos diferentes se misturam.
-
----
+## Plano: Melhorias no Painel Admin
 
 ### Mudanças
 
-#### 1. `src/utils/billing-period.ts` — Reescrever `calculateBillingPeriod` (novo modelo)
-
-Nova lógica para `due_day + days_before_due`:
-
-```ts
-// Para determinar a qual fatura M (yyyy-MM) uma compra pertence:
-// Fatura "M" tem vencimento no mês M+1, dia due_day (clamped)
-// Fechamento = vencimento - days_before_due (subtração real de dias via Date)
-// Período da fatura M = (fechamento da fatura M-1) + 1 dia  até  fechamento da fatura M
-// 
-// Algoritmo: testar fatura do mês da compra e do mês anterior.
-// Se compra <= fechamento do mês → pertence a esse mês
-// Senão → pertence ao mês seguinte
-```
-
-Criar helper `getBillingClosingDate(billingMonth: string, config)`:
-- Parse `billingMonth` → ano/mês (ex: "2026-03" → março)
-- `dueDate = new Date(ano, mês, clamp(due_day, daysInMonth))` — vencimento no próprio mês da fatura (NÃO mês+1, conforme o pedido do usuário: fatura de março fecha em março e vence em abril)
-
-Correção: conforme o critério de aceite do usuário:
-- Fatura de Março/2026, vencimento dia 10 → `dueDate = 10/04/2026` (mês seguinte)
-- `closingDate = dueDate - 12 dias = 29/03/2026`
-- `previousDueDate = 10/03/2026`, `previousClosingDate = 26/02/2026`
-- Período = 27/02 a 29/03
-
-Então a fórmula é:
-```ts
-function getClosingDateForBillingMonth(year: number, month: number, dueDay: number, daysBefore: number): Date {
-  // Vencimento cai no MÊS SEGUINTE ao mês da fatura
-  const nextMonth = month + 1;
-  const ny = nextMonth > 11 ? year + 1 : year;
-  const nm = nextMonth > 11 ? 0 : nextMonth;
-  const dueDate = new Date(ny, nm, Math.min(dueDay, daysInMonth(ny, nm)));
-  const closingDate = new Date(dueDate);
-  closingDate.setDate(closingDate.getDate() - daysBefore);
-  return closingDate;
-}
-```
-
-`calculateBillingPeriod(expenseDate, config)`:
-- Tentar fatura do mês da despesa: calcular closingDate e previousClosingDate
-- previousClosingDate = closingDate da fatura do mês anterior
-- Se `expenseDate > previousClosingDate && expenseDate <= closingDate` → fatura desse mês
-- Senão se `expenseDate > closingDate` → fatura do mês seguinte
-- Senão → fatura do mês anterior
-
-Também atualizar `getNextBillingDates` com a mesma lógica corrigida (vencimento no mês seguinte).
-
-#### 2. `src/components/card-manager.tsx`
-
-- **Remover `computeClosingDay`** (linhas 80-84) — não mais necessário
-- **Formulário preview** (linha 331-339): trocar texto para:
-  ```
-  "Vence dia {due_day} • Fecha {days_before_due} dias antes"
-  ```
-  E adicionar "Próximo fechamento: DD/MM • Próximo vencimento: DD/MM" usando `getNextBillingDates` com data real.
-- No `handleSubmit` (linhas 112-120): calcular `closing_day` usando a nova `getClosingDateForBillingMonth` para o mês atual, pegar `.getDate()` (compatibilidade).
-
-#### 3. `src/pages/Index.tsx` — Modo Fatura só crédito + cartão obrigatório
-
-**Filtro (linhas 1207-1235):**
-- Quando `viewMode === "billing"`: se `expense.payment_method !== "credit"` → `return false` (não cair no else)
-
-**Totais (linhas 1482-1498):**
-- Mesma correção: no modo billing, só considerar crédito
-
-**Toggle UI (linhas 1556-1582):**
-- Quando `viewMode === "billing"` e existem 2+ cartões de crédito: mostrar seletor de cartão obrigatório abaixo do toggle
-- Se 1 cartão: auto-selecionar
-- Se 0 cartões de crédito: mostrar mensagem "Cadastre um cartão de crédito"
-- Adicionar state `billingCardId: string | null` — no filtro, usar esse cartão como `filters.cardId` forçado
+| # | Item | Arquivo(s) | Descrição |
+|---|------|-----------|-----------|
+| 1 | Botão voltar | `Admin.tsx` | Adicionar botão/link "← Início" no header que navega para `/` |
+| 2 | Refresh overview após ação | `Admin.tsx` | Extrair `fetchDashboard` como função reutilizável. Passar callback `onSubscriptionChange` para `SubscriptionsTab` que reseta `dashFetched` para forçar reload |
+| 3 | Tabela assinantes sem scroll horizontal | `Admin.tsx` | Remover colunas "Plataforma", "Início" e "Expiração" da tabela de assinantes ativos — mostrar layout de cards empilhados (email + badge) em vez de `<Table>` com 5 colunas |
+| 4 | Click no assinante preenche busca | `Admin.tsx` | Já existe `onClick={() => handleSearch(sub.email)}` — mas precisa fazer scroll até a seção "Gerenciar Assinatura". Adicionar `useRef` no card de gerenciar e `scrollIntoView` após o click |
+| 5 | Pesquisa inteligente de email | `Admin.tsx` + `admin-dashboard` edge function | Adicionar endpoint `?action=list_emails` no `admin-dashboard` que retorna todos emails. No frontend, filtrar emails conforme digitação e mostrar dropdown de sugestões |
+| 6 | Listagem de usuários | `Admin.tsx` + `admin-dashboard` | Adicionar endpoint `?action=list_users` que retorna todos usuários com email, created_at e tier. No `UsersTab`, carregar lista completa com busca/filtro local |
+| 7 | Ações de admin sobre usuário | `Admin.tsx` + nova edge function `admin-users` | Ao clicar em um usuário na lista, mostrar painel com ações: excluir conta (chama `delete-user-account` existente ou `adminClient.auth.admin.deleteUser`), gerenciar assinatura (redireciona para aba), ver detalhes |
+| 8 | Aba Notificações | `Admin.tsx` + nova edge function `admin-notifications` | Nova aba com: listagem de notificações enviadas (query `user_fcm_tokens` + logs), formulário para enviar notificação personalizada (título, corpo, destinatário ou broadcast) usando Firebase Cloud Messaging via service account |
 
 ---
 
-### Arquivos impactados
+### Detalhes Técnicos
 
-| Arquivo | Mudança |
-|---|---|
-| `src/utils/billing-period.ts` | Reescrever cálculo: vencimento no mês+1, subtração real de dias |
-| `src/components/card-manager.tsx` | Preview com datas reais, remover `computeClosingDay` |
-| `src/pages/Index.tsx` | Modo Fatura: só crédito, seletor de cartão obrigatório |
+**Item 1 — Navegação voltar:**
+- Adicionar `import { useNavigate } from "react-router-dom"` e botão `<Button variant="ghost" onClick={() => navigate("/")}><ArrowLeft /> Início</Button>` no header.
+
+**Item 2 — Refresh overview:**
+- Mover fetch do dashboard para função `refreshDashboard()`. Expor via prop ou callback. Após `handleAction` com sucesso em `SubscriptionsTab`, chamar `refreshDashboard()`.
+
+**Item 3 — Cards sem scroll:**
+- Substituir a `<Table>` de assinantes por uma lista de cards compactos: cada card mostra email (truncado) e badge do plano. Clicável. Sem scroll horizontal.
+
+**Item 4 — Auto-scroll:**
+- Já funciona a busca. Adicionar `ref` no card "Gerenciar Assinatura" e chamar `ref.current?.scrollIntoView({ behavior: 'smooth' })` após click.
+
+**Item 5 — Autocomplete de email:**
+- No `admin-dashboard`, adicionar rota `?action=list_emails` que retorna `{ emails: string[] }` com todos emails de usuários.
+- No frontend, carregar emails uma vez no mount. Usar `useState` + filtro local para mostrar dropdown de sugestões conforme digitação. Ao selecionar, preenche o campo e faz a busca.
+
+**Item 6 — Listagem de usuários:**
+- No `admin-dashboard`, adicionar rota `?action=list_users` que retorna array de `{ email, created_at, tier, is_active }`.
+- No `UsersTab`, carregar lista no mount. Mostrar tabela/cards com filtro local por email. Paginação simples (mostrar 50 por vez).
+
+**Item 7 — Ações sobre usuário:**
+- Ao clicar em um usuário na lista, expandir painel com:
+  - **Excluir conta**: chama `adminClient.auth.admin.deleteUser(user_id)` via nova edge function `admin-users` (método DELETE). Confirmação com dialog.
+  - **Gerenciar assinatura**: muda para aba "Assinaturas" e preenche email.
+  - **Ver detalhes**: mostra stats do usuário (já existe a lógica no `admin-dashboard?email=...`).
+
+**Item 8 — Aba Notificações:**
+- Nova edge function `admin-notifications`:
+  - GET: lista notificações enviadas (criar tabela `admin_notifications_log` com campos: id, title, body, target_type, target_email, sent_at, status).
+  - POST: envia notificação via Firebase usando `FIREBASE_SERVICE_ACCOUNT_JSON`. Pode enviar para um usuário específico (busca FCM token) ou broadcast (todos tokens).
+- Nova aba no admin com:
+  - Formulário: título, corpo, destinatário (email ou "todos").
+  - Lista de notificações enviadas com data e status.
+- Criar migration para tabela `admin_notifications_log`.
+- Tabs passam de `grid-cols-4` para `grid-cols-5` para incluir "Notificações".
 
