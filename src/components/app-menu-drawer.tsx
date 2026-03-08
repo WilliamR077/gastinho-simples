@@ -22,6 +22,7 @@ interface AppMenuDrawerProps {
 
 export function AppMenuDrawer({ open, onOpenChange, onSignOut, recurringExpenses }: AppMenuDrawerProps) {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { theme, setTheme } = useTheme();
   const [remindersOpen, setRemindersOpen] = useState(false);
   const [reminders, setReminders] = useState<Reminder[]>([]);
