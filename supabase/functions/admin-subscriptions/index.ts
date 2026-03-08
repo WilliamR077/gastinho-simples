@@ -183,17 +183,24 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Deactivate manual subscription
+      // Reset subscription to free for ANY platform (not just manual)
       const { error } = await adminClient
         .from("subscriptions")
-        .update({ is_active: false, updated_at: new Date().toISOString() })
-        .eq("user_id", targetUser.id)
-        .eq("platform", "manual");
+        .update({
+          tier: "free",
+          is_active: true,
+          purchase_token: null,
+          product_id: null,
+          expires_at: null,
+          platform: "manual",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", targetUser.id);
 
       if (error) throw error;
 
       return new Response(
-        JSON.stringify({ success: true, message: `Plano revogado para ${email}` }),
+        JSON.stringify({ success: true, message: `Plano revogado para ${email} (resetado para gratuito)` }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
