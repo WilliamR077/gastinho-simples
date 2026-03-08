@@ -485,9 +485,6 @@ export default function Admin() {
   const [dashLoading, setDashLoading] = useState(false);
   const [dashFetched, setDashFetched] = useState(false);
 
-  if (authLoading) return null;
-  if (!user || user.email !== ADMIN_EMAIL) return <Navigate to="/" replace />;
-
   // Lazy load dashboard data when overview or audit tab is selected
   useEffect(() => {
     if ((activeTab === "overview" || activeTab === "audit") && !dashFetched) {
@@ -503,6 +500,9 @@ export default function Admin() {
       })();
     }
   }, [activeTab, dashFetched]);
+
+  if (authLoading) return null;
+  if (!user || user.email !== ADMIN_EMAIL) return <Navigate to="/" replace />;
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
