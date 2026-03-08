@@ -72,6 +72,7 @@ const renderPlanFeatures = (planTier: keyof typeof SUBSCRIPTION_FEATURES) => {
 
 export default function Landing() {
   const navigate = useNavigate();
+  const [premiumBilling, setPremiumBilling] = useState<"monthly" | "yearly">("monthly");
 
   return (
     <div className="min-h-screen bg-background">
