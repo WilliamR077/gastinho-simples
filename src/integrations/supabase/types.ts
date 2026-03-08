@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_notifications_log: {
+        Row: {
+          body: string
+          id: string
+          recipients_count: number | null
+          sent_at: string
+          sent_by: string | null
+          status: string
+          target_email: string | null
+          target_type: string
+          title: string
+        }
+        Insert: {
+          body: string
+          id?: string
+          recipients_count?: number | null
+          sent_at?: string
+          sent_by?: string | null
+          status?: string
+          target_email?: string | null
+          target_type?: string
+          title: string
+        }
+        Update: {
+          body?: string
+          id?: string
+          recipients_count?: number | null
+          sent_at?: string
+          sent_by?: string | null
+          status?: string
+          target_email?: string | null
+          target_type?: string
+          title?: string
+        }
+        Relationships: []
+      }
       audit_log: {
         Row: {
           action: string

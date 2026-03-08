@@ -6,6 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
 };
 
 function jsonResponse(data: unknown, status = 200) {
@@ -46,6 +47,67 @@ Deno.serve(async (req) => {
   try {
     const adminClient = await validateAdmin(req);
     const url = new URL(req.url);
+    const action = url.searchParams.get("action");
+
+    // ── Action: list_emails ──
+    if (action === "list_emails") {
+      const { data: { users } } = await adminClient.auth.admin.listUsers({ perPage: 10000 });
+      const emails = (users || []).map((u) => u.email).filter(Boolean).sort();
+      return jsonResponse({ emails });
+    }
+
+    // ── Action: list_users ──
+    if (action === "list_users") {
+      const [usersRes, subsRes] = await Promise.all([
+        adminClient.auth.admin.listUsers({ perPage: 10000 }),
+        adminClient.from("subscriptions").select("user_id, tier, is_active, platform").eq("is_active", true),
+      ]);
+      const allUsers = usersRes.data?.users || [];
+      const subMap = new Map((subsRes.data || []).map((s) => [s.user_id, s]));
+
+      const users = allUsers.map((u) => {
+        const sub = subMap.get(u.id);
+        return {
+          id: u.id,
+          email: u.email || "—",
+          created_at: u.created_at,
+          tier: sub?.tier || "free",
+          platform: sub?.platform || null,
+        };
+      }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+      return jsonResponse({ users });
+    }
+
+    // ── Action: delete_user ──
+    if (action === "delete_user" && req.method === "POST") {
+      const { user_id } = await req.json();
+      if (!user_id) return jsonResponse({ error: "user_id é obrigatório" }, 400);
+
+      // Delete user data first
+      await Promise.all([
+        adminClient.from("expenses").delete().eq("user_id", user_id),
+        adminClient.from("incomes").delete().eq("user_id", user_id),
+        adminClient.from("recurring_expenses").delete().eq("user_id", user_id),
+        adminClient.from("recurring_incomes").delete().eq("user_id", user_id),
+        adminClient.from("budget_goal_alerts").delete().eq("user_id", user_id),
+        adminClient.from("budget_goals").delete().eq("user_id", user_id),
+        adminClient.from("cards").delete().eq("user_id", user_id),
+        adminClient.from("subscriptions").delete().eq("user_id", user_id),
+        adminClient.from("user_categories").delete().eq("user_id", user_id),
+        adminClient.from("user_income_categories").delete().eq("user_id", user_id),
+        adminClient.from("user_fcm_tokens").delete().eq("user_id", user_id),
+        adminClient.from("notification_settings").delete().eq("user_id", user_id),
+        adminClient.from("shared_group_members").delete().eq("user_id", user_id),
+        adminClient.from("credit_card_configs").delete().eq("user_id", user_id),
+        adminClient.from("audit_log").delete().eq("user_id", user_id),
+      ]);
+
+      const { error } = await adminClient.auth.admin.deleteUser(user_id);
+      if (error) throw error;
+
+      return jsonResponse({ success: true, message: "Usuário excluído com sucesso" });
+    }
 
     // User detail mode
     const email = url.searchParams.get("email");
