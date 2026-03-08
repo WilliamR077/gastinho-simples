@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
-import { CreditCard, Settings, User, Bell, LogOut, Moon, Sun } from "lucide-react";
+import { CreditCard, Settings, User, Bell, LogOut, Moon, Sun, Shield } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
