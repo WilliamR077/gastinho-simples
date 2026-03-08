@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
-import { CreditCard, Settings, User, Bell, LogOut, Moon, Sun } from "lucide-react";
+import { CreditCard, Settings, User, Bell, LogOut, Moon, Sun, Shield } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
@@ -21,6 +22,7 @@ interface AppMenuDrawerProps {
 
 export function AppMenuDrawer({ open, onOpenChange, onSignOut, recurringExpenses }: AppMenuDrawerProps) {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { theme, setTheme } = useTheme();
   const [remindersOpen, setRemindersOpen] = useState(false);
   const [reminders, setReminders] = useState<Reminder[]>([]);
@@ -100,6 +102,9 @@ export function AppMenuDrawer({ open, onOpenChange, onSignOut, recurringExpenses
     { icon: CreditCard, label: "Cartões", onClick: () => handleNavigate("/cards"), dataTour: "cards-button" },
     { icon: Settings, label: "Configurações", onClick: () => handleNavigate("/settings"), dataTour: "settings-button" },
     { icon: User, label: "Conta", onClick: () => handleNavigate("/account") },
+    ...(user?.email === "gastinhosimples@gmail.com"
+      ? [{ icon: Shield, label: "Admin", onClick: () => handleNavigate("/admin"), dataTour: undefined, badge: undefined }]
+      : []),
     {
       icon: Bell,
       label: "Lembretes",
