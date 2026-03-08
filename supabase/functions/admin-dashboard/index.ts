@@ -141,11 +141,6 @@ Deno.serve(async (req) => {
       .slice(0, 20)
       .map((u) => ({ email: u.email || "—", created_at: u.created_at }));
 
-    // Top users by expense count (from subscriptions user_ids mapped)
-    // We need to get expense counts per user - use a simple approach
-    const { data: topExpenses } = await adminClient.rpc("", {}).catch(() => ({ data: null }));
-    // Since we can't run arbitrary SQL, get top users from expense table grouped manually
-    // We'll skip top_users for now and use a simpler approach
     const userEmailMap = new Map(allUsers.map((u) => [u.id, u.email || "—"]));
 
     // Audit logs with email
