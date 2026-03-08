@@ -126,6 +126,7 @@ class BillingService {
   private initialized = false;
   private pendingPurchaseResolve: ((value: boolean) => void) | null = null;
   private pendingPurchaseTier: string | null = null;
+  private _lastValidationErrorCode: string | null = null;
 
   constructor() {
     this.isNative = Capacitor.isNativePlatform();
@@ -578,12 +579,15 @@ class BillingService {
       
       if (response.data?.errorCode) {
         console.error('❌ Backend validation error code:', response.data.errorCode);
+        this._lastValidationErrorCode = response.data.errorCode;
         
         // Se o token pertence a outro usuário, não tentar novamente
         if (response.data.errorCode === 'TOKEN_BELONGS_TO_OTHER_USER') {
           console.log('⚠️ Esta assinatura pertence a outra conta - não será aplicada');
           return false;
         }
+      } else {
+        this._lastValidationErrorCode = null;
       }
       
       return response.data?.valid === true;
@@ -805,6 +809,7 @@ class BillingService {
       // Se o token pertence a outro usuário, não tentar novamente
       if (response.data?.errorCode === 'TOKEN_BELONGS_TO_OTHER_USER') {
         console.log('⚠️ Esta assinatura pertence a outra conta - não será aplicada');
+        this._lastValidationErrorCode = 'TOKEN_BELONGS_TO_OTHER_USER';
         return false;
       }
 
@@ -850,6 +855,7 @@ class BillingService {
       // Se o token pertence a outro usuário, não tentar novamente
       if (response.data?.errorCode === 'TOKEN_BELONGS_TO_OTHER_USER') {
         console.log('⚠️ Esta assinatura pertence a outra conta - não será aplicada');
+        this._lastValidationErrorCode = 'TOKEN_BELONGS_TO_OTHER_USER';
         return false;
       }
 

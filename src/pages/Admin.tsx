@@ -293,18 +293,15 @@ function SubscriptionsTab() {
                         <SelectContent>
                           <SelectItem value="premium">Premium ⭐</SelectItem>
                           <SelectItem value="no_ads">Sem Anúncios</SelectItem>
+                          <SelectItem value="free">Gratuito (Revogar)</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
-                    <Button onClick={() => handleAction("grant")} disabled={actionLoading} className="gap-1">
-                      {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCheck className="h-4 w-4" />} Conceder
+                    <Button onClick={() => selectedTier === "free" ? handleAction("revoke") : handleAction("grant")} disabled={actionLoading} variant={selectedTier === "free" ? "destructive" : "default"} className="gap-1">
+                      {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : selectedTier === "free" ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
+                      {selectedTier === "free" ? "Revogar" : "Conceder"}
                     </Button>
                   </div>
-                  {userInfo.subscription?.is_active && userInfo.subscription?.platform === "manual" && (
-                    <Button variant="destructive" onClick={() => handleAction("revoke")} disabled={actionLoading} className="w-full gap-1">
-                      {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserX className="h-4 w-4" />} Revogar
-                    </Button>
-                  )}
                 </div>
               </CardContent>
             </Card>
