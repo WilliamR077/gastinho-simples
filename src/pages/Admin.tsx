@@ -8,14 +8,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
   Shield, Search, UserCheck, UserX, Loader2, Users, TrendingUp, DollarSign,
   UserPlus, Activity, CreditCard, BarChart3, ClipboardList, ArrowLeft, Bell,
-  Trash2, Eye, Send,
+  Trash2, Eye, Send, Filter, ArrowUpDown,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -222,166 +222,7 @@ function OverviewTab({ data, loading }: { data: DashboardData | null; loading: b
   );
 }
 
-// ── Tab 2: Subscriptions ──
-
-interface SubscriberInfo {
-  email: string; tier: string; platform: string | null; started_at: string; expires_at: string | null;
-}
-
-interface UserSubscriptionInfo {
-  user_id: string; email: string;
-  subscription: { tier: string; platform: string | null; is_active: boolean; expires_at: string | null; started_at: string } | null;
-}
-
-function SubscriptionsTab({ onSubscriptionChange, allEmails }: { onSubscriptionChange: () => void; allEmails: string[] }) {
-  const { toast } = useToast();
-  const manageRef = useRef<HTMLDivElement>(null);
-  const [subscribers, setSubscribers] = useState<SubscriberInfo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchEmail, setSearchEmail] = useState("");
-  const [userInfo, setUserInfo] = useState<UserSubscriptionInfo | null>(null);
-  const [selectedTier, setSelectedTier] = useState("premium");
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [actionLoading, setActionLoading] = useState(false);
-
-  const fetchSubscribers = useCallback(async () => {
-    try {
-      const headers = await getAuthHeaders();
-      const res = await fetch(SUBS_API, { headers });
-      const data = await res.json();
-      if (res.ok) setSubscribers(data.subscribers || []);
-    } catch {}
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { fetchSubscribers(); }, [fetchSubscribers]);
-
-  const handleSearch = async (emailOverride?: string) => {
-    const email = emailOverride || searchEmail.trim();
-    if (!email) return;
-    if (emailOverride) setSearchEmail(email);
-    setSearchLoading(true);
-    setUserInfo(null);
-    try {
-      const headers = await getAuthHeaders();
-      const res = await fetch(`${SUBS_API}?email=${encodeURIComponent(email)}`, { headers });
-      const data = await res.json();
-      if (!res.ok) toast({ title: "Erro", description: data.error, variant: "destructive" });
-      else setUserInfo(data);
-    } catch (err: any) {
-      toast({ title: "Erro", description: err.message, variant: "destructive" });
-    } finally {
-      setSearchLoading(false);
-    }
-  };
-
-  const handleSubscriberClick = (email: string) => {
-    handleSearch(email);
-    setTimeout(() => manageRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
-  };
-
-  const handleAction = async (action: "grant" | "revoke") => {
-    if (!userInfo) return;
-    setActionLoading(true);
-    try {
-      const headers = await getAuthHeaders();
-      const res = await fetch(SUBS_API, {
-        method: action === "grant" ? "POST" : "DELETE",
-        headers,
-        body: JSON.stringify(action === "grant" ? { email: userInfo.email, tier: selectedTier } : { email: userInfo.email }),
-      });
-      const data = await res.json();
-      if (!res.ok) toast({ title: "Erro", description: data.error, variant: "destructive" });
-      else {
-        toast({ title: "Sucesso! ✅", description: data.message });
-        handleSearch();
-        fetchSubscribers();
-        onSubscriptionChange();
-      }
-    } catch (err: any) {
-      toast({ title: "Erro", description: err.message, variant: "destructive" });
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      {/* Active Subscribers - Cards layout */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2"><Users className="h-4 w-4" /> Assinantes Ativos ({subscribers.length})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? <LoadingSpinner /> : subscribers.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">Nenhum assinante ativo</p>
-          ) : (
-            <div className="grid gap-2 max-h-80 overflow-y-auto">
-              {subscribers.map((sub) => (
-                <div
-                  key={sub.email}
-                  className="flex items-center justify-between gap-2 p-3 rounded-lg border border-border hover:bg-muted/50 cursor-pointer transition-colors"
-                  onClick={() => handleSubscriberClick(sub.email)}
-                >
-                  <span className="text-sm font-medium text-foreground truncate flex-1 min-w-0">{sub.email}</span>
-                  <TierBadge tier={sub.tier} platform={sub.platform} />
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Search & Manage */}
-      <Card ref={manageRef}>
-        <CardHeader className="pb-3"><CardTitle className="text-base">Gerenciar Assinatura</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <EmailAutocomplete
-            value={searchEmail}
-            onChange={setSearchEmail}
-            onSearch={handleSearch}
-            allEmails={allEmails}
-            loading={searchLoading}
-          />
-          {userInfo && (
-            <Card className="border-muted">
-              <CardContent className="pt-4 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div><p className="text-xs text-muted-foreground">Email</p><p className="font-medium text-sm text-foreground">{userInfo.email}</p></div>
-                  <div><p className="text-xs text-muted-foreground">Plano Atual</p><TierBadge tier={userInfo.subscription?.tier} platform={userInfo.subscription?.platform} /></div>
-                </div>
-                {userInfo.subscription?.expires_at && (
-                  <div><p className="text-xs text-muted-foreground">Expira em</p><p className="text-sm text-foreground">{new Date(userInfo.subscription.expires_at).toLocaleDateString("pt-BR")}</p></div>
-                )}
-                <div className="border-t border-border pt-3 space-y-3">
-                  <div className="flex gap-2 items-end">
-                    <div className="flex-1 space-y-1">
-                      <p className="text-xs text-muted-foreground">Conceder plano</p>
-                      <Select value={selectedTier} onValueChange={setSelectedTier}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="premium">Premium ⭐</SelectItem>
-                          <SelectItem value="no_ads">Sem Anúncios</SelectItem>
-                          <SelectItem value="free">Gratuito (Revogar)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <Button onClick={() => selectedTier === "free" ? handleAction("revoke") : handleAction("grant")} disabled={actionLoading} variant={selectedTier === "free" ? "destructive" : "default"} className="gap-1">
-                      {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : selectedTier === "free" ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
-                      {selectedTier === "free" ? "Revogar" : "Conceder"}
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-// ── Tab 3: Users ──
+// ── Tab 2: Users (unified with subscriptions) ──
 
 interface UserListItem {
   id: string; email: string; created_at: string; tier: string; platform: string | null;
@@ -395,18 +236,27 @@ interface UserDetail {
   recent_incomes: { description: string; amount: number; income_date: string; category_name: string | null }[];
 }
 
-function UsersTab({ allEmails, onSwitchToSubscriptions }: {
+type SortOption = "newest" | "oldest" | "az" | "za";
+type TierFilter = "all" | "premium" | "no_ads" | "free";
+
+function UsersTab({ allEmails, onSubscriptionChange }: {
   allEmails: string[];
-  onSwitchToSubscriptions: (email: string) => void;
+  onSubscriptionChange: () => void;
 }) {
   const { toast } = useToast();
   const [users, setUsers] = useState<UserListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("");
+  const [tierFilter, setTierFilter] = useState<TierFilter>("all");
+  const [sortBy, setSortBy] = useState<SortOption>("newest");
   const [selectedUser, setSelectedUser] = useState<UserListItem | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
   const [detail, setDetail] = useState<UserDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [selectedTier, setSelectedTier] = useState("premium");
+  const [actionLoading, setActionLoading] = useState(false);
+  const [showSubForm, setShowSubForm] = useState(false);
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 50;
 
@@ -422,17 +272,37 @@ function UsersTab({ allEmails, onSwitchToSubscriptions }: {
     })();
   }, []);
 
-  const filtered = filter
-    ? users.filter((u) => u.email.toLowerCase().includes(filter.toLowerCase()))
-    : users;
+  // Filter + sort
+  const processed = (() => {
+    let result = [...users];
+    if (filter) result = result.filter((u) => u.email.toLowerCase().includes(filter.toLowerCase()));
+    if (tierFilter !== "all") {
+      result = result.filter((u) => {
+        const t = u.tier || "free";
+        if (tierFilter === "free") return t === "free";
+        if (tierFilter === "premium") return t === "premium" || t === "premium_plus";
+        if (tierFilter === "no_ads") return t === "no_ads";
+        return true;
+      });
+    }
+    switch (sortBy) {
+      case "newest": result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()); break;
+      case "oldest": result.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()); break;
+      case "az": result.sort((a, b) => a.email.localeCompare(b.email)); break;
+      case "za": result.sort((a, b) => b.email.localeCompare(a.email)); break;
+    }
+    return result;
+  })();
 
-  const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paged = processed.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const totalPages = Math.ceil(processed.length / PAGE_SIZE);
 
   const handleViewDetail = async (user: UserListItem) => {
     setSelectedUser(user);
+    setModalOpen(true);
     setDetailLoading(true);
     setDetail(null);
+    setShowSubForm(false);
     try {
       const headers = await getAuthHeaders();
       const res = await fetch(`${DASH_API}?email=${encodeURIComponent(user.email)}`, { headers });
@@ -461,6 +331,7 @@ function UsersTab({ allEmails, onSwitchToSubscriptions }: {
       else {
         toast({ title: "Sucesso! ✅", description: data.message });
         setUsers((prev) => prev.filter((u) => u.id !== selectedUser.id));
+        setModalOpen(false);
         setSelectedUser(null);
         setDetail(null);
       }
@@ -471,141 +342,242 @@ function UsersTab({ allEmails, onSwitchToSubscriptions }: {
     }
   };
 
+  const handleSubAction = async (action: "grant" | "revoke") => {
+    if (!selectedUser) return;
+    setActionLoading(true);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(SUBS_API, {
+        method: action === "grant" ? "POST" : "DELETE",
+        headers,
+        body: JSON.stringify(action === "grant" ? { email: selectedUser.email, tier: selectedTier } : { email: selectedUser.email }),
+      });
+      const data = await res.json();
+      if (!res.ok) toast({ title: "Erro", description: data.error, variant: "destructive" });
+      else {
+        toast({ title: "Sucesso! ✅", description: data.message });
+        // Update user in list
+        const newTier = action === "grant" ? selectedTier : "free";
+        setUsers((prev) => prev.map((u) => u.id === selectedUser.id ? { ...u, tier: newTier, platform: "manual" } : u));
+        // Refresh detail
+        handleViewDetail(selectedUser);
+        onSubscriptionChange();
+      }
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   if (loading) return <LoadingSpinner />;
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2"><Users className="h-4 w-4" /> Todos os Usuários ({filtered.length})</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Input placeholder="Filtrar por email..." value={filter} onChange={(e) => { setFilter(e.target.value); setPage(0); }} />
-          <div className="space-y-1 max-h-96 overflow-y-auto">
-            {paged.map((u) => (
-              <div
-                key={u.id}
-                className={`flex items-center justify-between gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
-                  selectedUser?.id === u.id ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
-                }`}
-                onClick={() => handleViewDetail(u)}
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground truncate">{u.email}</p>
-                  <p className="text-xs text-muted-foreground">{new Date(u.created_at).toLocaleDateString("pt-BR")}</p>
-                </div>
-                <TierBadge tier={u.tier} platform={u.platform} />
-              </div>
-            ))}
-            {paged.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Nenhum usuário encontrado</p>}
-          </div>
-          {totalPages > 1 && (
-            <div className="flex justify-between items-center pt-2">
-              <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>Anterior</Button>
-              <span className="text-xs text-muted-foreground">{page + 1} de {totalPages}</span>
-              <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)}>Próximo</Button>
+    <div className="space-y-3">
+      {/* Filters bar */}
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="flex-1">
+          <Input
+            placeholder="Filtrar por email..."
+            value={filter}
+            onChange={(e) => { setFilter(e.target.value); setPage(0); }}
+            className="w-full"
+          />
+        </div>
+        <div className="flex gap-2">
+          <Select value={tierFilter} onValueChange={(v) => { setTierFilter(v as TierFilter); setPage(0); }}>
+            <SelectTrigger className="w-[150px]">
+              <Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os planos</SelectItem>
+              <SelectItem value="premium">Premium</SelectItem>
+              <SelectItem value="no_ads">Sem Anúncios</SelectItem>
+              <SelectItem value="free">Gratuito</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={sortBy} onValueChange={(v) => { setSortBy(v as SortOption); setPage(0); }}>
+            <SelectTrigger className="w-[150px]">
+              <ArrowUpDown className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="newest">Mais recentes</SelectItem>
+              <SelectItem value="oldest">Mais antigos</SelectItem>
+              <SelectItem value="az">A → Z</SelectItem>
+              <SelectItem value="za">Z → A</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* Count */}
+      <p className="text-xs text-muted-foreground">{processed.length} usuário(s) encontrado(s)</p>
+
+      {/* User list - full height */}
+      <div className="space-y-1 min-h-[calc(100vh-18rem)] overflow-y-auto">
+        {paged.map((u) => (
+          <div
+            key={u.id}
+            className="flex items-center justify-between gap-2 p-3 rounded-lg border border-border hover:bg-muted/50 cursor-pointer transition-colors"
+            onClick={() => handleViewDetail(u)}
+          >
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-foreground truncate">{u.email}</p>
+              <p className="text-xs text-muted-foreground">{new Date(u.created_at).toLocaleDateString("pt-BR")}</p>
             </div>
-          )}
-        </CardContent>
-      </Card>
+            <TierBadge tier={u.tier} platform={u.platform} />
+          </div>
+        ))}
+        {paged.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">Nenhum usuário encontrado</p>}
+      </div>
 
-      {/* User Detail + Actions */}
-      {selectedUser && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2"><Eye className="h-4 w-4" /> Detalhes: {selectedUser.email}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {detailLoading ? <LoadingSpinner /> : detail ? (
-              <>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <div><p className="text-xs text-muted-foreground">Email</p><p className="text-sm font-medium text-foreground truncate">{detail.email}</p></div>
-                  <div><p className="text-xs text-muted-foreground">Cadastro</p><p className="text-sm text-foreground">{new Date(detail.created_at).toLocaleDateString("pt-BR")}</p></div>
-                  <div><p className="text-xs text-muted-foreground">Plano</p><TierBadge tier={detail.subscription?.tier} platform={detail.subscription?.platform} /></div>
-                  <div><p className="text-xs text-muted-foreground">Status</p><Badge variant={detail.subscription?.is_active ? "default" : "secondary"}>{detail.subscription?.is_active ? "Ativo" : "Inativo"}</Badge></div>
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {[
-                    { label: "Despesas", value: detail.stats.expenses, icon: "📊" },
-                    { label: "Receitas", value: detail.stats.incomes, icon: "💰" },
-                    { label: "Cartões", value: detail.stats.cards, icon: "💳" },
-                    { label: "Grupos", value: detail.stats.groups, icon: "👥" },
-                  ].map((s) => (
-                    <div key={s.label} className="bg-muted/50 rounded-lg p-3 text-center">
-                      <p className="text-lg">{s.icon}</p>
-                      <p className="text-xl font-bold text-foreground">{s.value}</p>
-                      <p className="text-xs text-muted-foreground">{s.label}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm font-medium text-foreground mb-2">Últimas Despesas</p>
-                    {detail.recent_expenses.length === 0 ? <p className="text-xs text-muted-foreground">Nenhuma</p> : (
-                      <div className="space-y-1">
-                        {detail.recent_expenses.map((e, i) => (
-                          <div key={i} className="flex justify-between text-sm py-1 border-b border-border last:border-0">
-                            <span className="text-foreground truncate">{e.description}</span>
-                            <span className="text-destructive font-medium whitespace-nowrap ml-2">-R$ {Number(e.amount).toFixed(2)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-foreground mb-2">Últimas Receitas</p>
-                    {detail.recent_incomes.length === 0 ? <p className="text-xs text-muted-foreground">Nenhuma</p> : (
-                      <div className="space-y-1">
-                        {detail.recent_incomes.map((e, i) => (
-                          <div key={i} className="flex justify-between text-sm py-1 border-b border-border last:border-0">
-                            <span className="text-foreground truncate">{e.description}</span>
-                            <span className="text-green-500 font-medium whitespace-nowrap ml-2">+R$ {Number(e.amount).toFixed(2)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="border-t border-border pt-3 flex flex-wrap gap-2">
-                  <Button variant="outline" size="sm" className="gap-1" onClick={() => onSwitchToSubscriptions(selectedUser.email)}>
-                    <CreditCard className="h-3.5 w-3.5" /> Gerenciar Assinatura
-                  </Button>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="destructive" size="sm" className="gap-1">
-                        <Trash2 className="h-3.5 w-3.5" /> Excluir Conta
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Excluir usuário?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Todos os dados de <strong>{selectedUser.email}</strong> serão permanentemente excluídos. Esta ação não pode ser desfeita.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleDeleteUser} disabled={deleteLoading} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                          {deleteLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Excluir"}
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </div>
-              </>
-            ) : null}
-          </CardContent>
-        </Card>
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex justify-between items-center pt-2">
+          <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>Anterior</Button>
+          <span className="text-xs text-muted-foreground">{page + 1} de {totalPages}</span>
+          <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)}>Próximo</Button>
+        </div>
       )}
+
+      {/* User Detail Modal */}
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Eye className="h-4 w-4" /> Detalhes do Usuário
+            </DialogTitle>
+          </DialogHeader>
+
+          {detailLoading ? <LoadingSpinner /> : detail ? (
+            <div className="space-y-4">
+              {/* Basic info */}
+              <div className="grid grid-cols-2 gap-3">
+                <div><p className="text-xs text-muted-foreground">Email</p><p className="text-sm font-medium text-foreground truncate">{detail.email}</p></div>
+                <div><p className="text-xs text-muted-foreground">Cadastro</p><p className="text-sm text-foreground">{new Date(detail.created_at).toLocaleDateString("pt-BR")}</p></div>
+                <div><p className="text-xs text-muted-foreground">Plano</p><TierBadge tier={detail.subscription?.tier} platform={detail.subscription?.platform} /></div>
+                <div><p className="text-xs text-muted-foreground">Status</p><Badge variant={detail.subscription?.is_active ? "default" : "secondary"}>{detail.subscription?.is_active ? "Ativo" : "Inativo"}</Badge></div>
+              </div>
+
+              {detail.subscription?.expires_at && (
+                <div><p className="text-xs text-muted-foreground">Expira em</p><p className="text-sm text-foreground">{new Date(detail.subscription.expires_at).toLocaleDateString("pt-BR")}</p></div>
+              )}
+
+              {/* Stats */}
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { label: "Despesas", value: detail.stats.expenses, icon: "📊" },
+                  { label: "Receitas", value: detail.stats.incomes, icon: "💰" },
+                  { label: "Cartões", value: detail.stats.cards, icon: "💳" },
+                  { label: "Grupos", value: detail.stats.groups, icon: "👥" },
+                ].map((s) => (
+                  <div key={s.label} className="bg-muted/50 rounded-lg p-2 text-center">
+                    <p className="text-sm">{s.icon}</p>
+                    <p className="text-lg font-bold text-foreground">{s.value}</p>
+                    <p className="text-[10px] text-muted-foreground">{s.label}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Recent transactions */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs font-medium text-foreground mb-1">Últimas Despesas</p>
+                  {detail.recent_expenses.length === 0 ? <p className="text-xs text-muted-foreground">Nenhuma</p> : (
+                    <div className="space-y-0.5">
+                      {detail.recent_expenses.slice(0, 3).map((e, i) => (
+                        <div key={i} className="flex justify-between text-xs py-1 border-b border-border last:border-0">
+                          <span className="text-foreground truncate">{e.description}</span>
+                          <span className="text-destructive font-medium whitespace-nowrap ml-1">-R$ {Number(e.amount).toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-foreground mb-1">Últimas Receitas</p>
+                  {detail.recent_incomes.length === 0 ? <p className="text-xs text-muted-foreground">Nenhuma</p> : (
+                    <div className="space-y-0.5">
+                      {detail.recent_incomes.slice(0, 3).map((e, i) => (
+                        <div key={i} className="flex justify-between text-xs py-1 border-b border-border last:border-0">
+                          <span className="text-foreground truncate">{e.description}</span>
+                          <span className="text-green-500 font-medium whitespace-nowrap ml-1">+R$ {Number(e.amount).toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Subscription management inline */}
+              <div className="border-t border-border pt-3 space-y-3">
+                {!showSubForm ? (
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" size="sm" className="gap-1" onClick={() => setShowSubForm(true)}>
+                      <CreditCard className="h-3.5 w-3.5" /> Gerenciar Assinatura
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="destructive" size="sm" className="gap-1">
+                          <Trash2 className="h-3.5 w-3.5" /> Excluir Conta
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Excluir usuário?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Todos os dados de <strong>{selectedUser?.email}</strong> serão permanentemente excluídos. Esta ação não pode ser desfeita.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction onClick={handleDeleteUser} disabled={deleteLoading} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                            {deleteLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Excluir"}
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                ) : (
+                  <div className="space-y-2 bg-muted/30 rounded-lg p-3">
+                    <p className="text-xs font-medium text-foreground">Gerenciar Assinatura</p>
+                    <div className="flex gap-2 items-end">
+                      <div className="flex-1 space-y-1">
+                        <Select value={selectedTier} onValueChange={setSelectedTier}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="premium">Premium ⭐</SelectItem>
+                            <SelectItem value="no_ads">Sem Anúncios</SelectItem>
+                            <SelectItem value="free">Gratuito (Revogar)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button
+                        onClick={() => selectedTier === "free" ? handleSubAction("revoke") : handleSubAction("grant")}
+                        disabled={actionLoading}
+                        variant={selectedTier === "free" ? "destructive" : "default"}
+                        size="sm"
+                        className="gap-1"
+                      >
+                        {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : selectedTier === "free" ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
+                        {selectedTier === "free" ? "Revogar" : "Conceder"}
+                      </Button>
+                    </div>
+                    <Button variant="ghost" size="sm" className="text-xs" onClick={() => setShowSubForm(false)}>Cancelar</Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-// ── Tab 4: Audit Logs ──
+// ── Tab 3: Audit Logs ──
 
 interface AuditLog {
   id: string; user_id: string; action: string; details: any; created_at: string; email?: string;
@@ -649,7 +621,7 @@ function AuditLogsTab({ logs, loading }: { logs: AuditLog[]; loading: boolean })
   );
 }
 
-// ── Tab 5: Notifications ──
+// ── Tab 4: Notifications ──
 
 interface NotificationLog {
   id: string; title: string; body: string; target_type: string; target_email: string | null;
@@ -718,7 +690,6 @@ function NotificationsTab({ allEmails }: { allEmails: string[] }) {
 
   return (
     <div className="space-y-4">
-      {/* Send Notification */}
       <Card>
         <CardHeader className="pb-3"><CardTitle className="text-base flex items-center gap-2"><Send className="h-4 w-4" /> Enviar Notificação</CardTitle></CardHeader>
         <CardContent className="space-y-3">
@@ -754,7 +725,6 @@ function NotificationsTab({ allEmails }: { allEmails: string[] }) {
         </CardContent>
       </Card>
 
-      {/* Notification Logs */}
       <Card>
         <CardHeader className="pb-3"><CardTitle className="text-base flex items-center gap-2"><Bell className="h-4 w-4" /> Histórico de Notificações</CardTitle></CardHeader>
         <CardContent>
@@ -797,7 +767,6 @@ export default function Admin() {
   const [dashFetched, setDashFetched] = useState(false);
   const [allEmails, setAllEmails] = useState<string[]>([]);
 
-  // Shared: fetch all emails once for autocomplete
   useEffect(() => {
     (async () => {
       try {
@@ -820,7 +789,6 @@ export default function Admin() {
     setDashFetched(true);
   }, []);
 
-  // Lazy load dashboard data
   useEffect(() => {
     if ((activeTab === "overview" || activeTab === "audit") && !dashFetched) {
       refreshDashboard();
@@ -829,13 +797,6 @@ export default function Admin() {
 
   const handleSubscriptionChange = () => {
     setDashFetched(false);
-  };
-
-  // Used by UsersTab to switch to subscriptions tab with email filled
-  const [prefillSubEmail, setPrefillSubEmail] = useState("");
-  const handleSwitchToSubscriptions = (email: string) => {
-    setPrefillSubEmail(email);
-    setActiveTab("subscriptions");
   };
 
   if (authLoading) return null;
@@ -853,9 +814,8 @@ export default function Admin() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="w-full grid grid-cols-5">
+          <TabsList className="w-full grid grid-cols-4">
             <TabsTrigger value="overview" className="gap-1 text-xs sm:text-sm"><BarChart3 className="h-3.5 w-3.5 hidden sm:inline" /> Visão Geral</TabsTrigger>
-            <TabsTrigger value="subscriptions" className="gap-1 text-xs sm:text-sm"><CreditCard className="h-3.5 w-3.5 hidden sm:inline" /> Assinaturas</TabsTrigger>
             <TabsTrigger value="users" className="gap-1 text-xs sm:text-sm"><Users className="h-3.5 w-3.5 hidden sm:inline" /> Usuários</TabsTrigger>
             <TabsTrigger value="notifications" className="gap-1 text-xs sm:text-sm"><Bell className="h-3.5 w-3.5 hidden sm:inline" /> Notificações</TabsTrigger>
             <TabsTrigger value="audit" className="gap-1 text-xs sm:text-sm"><ClipboardList className="h-3.5 w-3.5 hidden sm:inline" /> Logs</TabsTrigger>
@@ -864,11 +824,8 @@ export default function Admin() {
           <TabsContent value="overview">
             <OverviewTab data={dashData} loading={dashLoading} />
           </TabsContent>
-          <TabsContent value="subscriptions">
-            <SubscriptionsTab onSubscriptionChange={handleSubscriptionChange} allEmails={allEmails} key={prefillSubEmail} />
-          </TabsContent>
           <TabsContent value="users">
-            <UsersTab allEmails={allEmails} onSwitchToSubscriptions={handleSwitchToSubscriptions} />
+            <UsersTab allEmails={allEmails} onSubscriptionChange={handleSubscriptionChange} />
           </TabsContent>
           <TabsContent value="notifications">
             <NotificationsTab allEmails={allEmails} />
