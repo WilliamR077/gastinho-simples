@@ -1,102 +1,43 @@
 
 
-## Plano: Corrigir aritmética de datas do billing + filtro só crédito + multi-cartões
+## Plano: Corrigir bug de compartilhamento de assinatura + Adicionar opção "Gratuito" no admin
 
-### Problema 1: `computeClosingDay` usa aritmética fixa (dia - offset + 30)
+### Problema 1: Assinatura "compartilhada" entre contas no mesmo dispositivo
 
-Em `card-manager.tsx` linha 80-84 e no preview do formulário (linha 334), o fechamento é calculado como `dueDay - daysBefore + 30` — ignora meses reais. Também em `billing-period.ts`, `calculateBillingPeriod` calcula o fechamento posicionando o due_day no mesmo mês da despesa e subtraindo dias, mas o modelo correto é: o vencimento da fatura M fica no mês M+1, e o fechamento = vencimento - dias_antes.
+Quando o usuário A assina e faz logout, e o usuário B faz login no mesmo dispositivo, o `checkAndSyncSubscription()` chama `restorePurchases()` que consulta o Google Play. O Google Play retorna a assinatura como `owned` (vinculada à conta Google do dispositivo, não ao usuário do app). Embora o `validatePurchase` backend tenha uma checagem de `TOKEN_BELONGS_TO_OTHER_USER`, há cenários onde o token é diferente (renovação, fallback) ou a chamada `syncSubscriptionFromBackend` bypassa essa verificação.
 
-### Problema 2: Modo Fatura mostra PIX/Débito
+### Problema 2: Admin não pode rebaixar para Gratuito
 
-Em `Index.tsx` linhas 1225-1234, quando `viewMode === "billing"` mas a despesa NÃO é crédito, o código cai no `else` e filtra por data — deveria retornar `false` diretamente.
-
-### Problema 3: Multi-cartões sem seleção obrigatória
-
-Não há exigência de selecionar um cartão no modo Fatura. Sem isso, faturas de cartões com ciclos diferentes se misturam.
+O Select só oferece "Premium" e "Sem Anúncios". Falta a opção de resetar para gratuito.
 
 ---
 
 ### Mudanças
 
-#### 1. `src/utils/billing-period.ts` — Reescrever `calculateBillingPeriod` (novo modelo)
-
-Nova lógica para `due_day + days_before_due`:
-
-```ts
-// Para determinar a qual fatura M (yyyy-MM) uma compra pertence:
-// Fatura "M" tem vencimento no mês M+1, dia due_day (clamped)
-// Fechamento = vencimento - days_before_due (subtração real de dias via Date)
-// Período da fatura M = (fechamento da fatura M-1) + 1 dia  até  fechamento da fatura M
-// 
-// Algoritmo: testar fatura do mês da compra e do mês anterior.
-// Se compra <= fechamento do mês → pertence a esse mês
-// Senão → pertence ao mês seguinte
-```
-
-Criar helper `getBillingClosingDate(billingMonth: string, config)`:
-- Parse `billingMonth` → ano/mês (ex: "2026-03" → março)
-- `dueDate = new Date(ano, mês, clamp(due_day, daysInMonth))` — vencimento no próprio mês da fatura (NÃO mês+1, conforme o pedido do usuário: fatura de março fecha em março e vence em abril)
-
-Correção: conforme o critério de aceite do usuário:
-- Fatura de Março/2026, vencimento dia 10 → `dueDate = 10/04/2026` (mês seguinte)
-- `closingDate = dueDate - 12 dias = 29/03/2026`
-- `previousDueDate = 10/03/2026`, `previousClosingDate = 26/02/2026`
-- Período = 27/02 a 29/03
-
-Então a fórmula é:
-```ts
-function getClosingDateForBillingMonth(year: number, month: number, dueDay: number, daysBefore: number): Date {
-  // Vencimento cai no MÊS SEGUINTE ao mês da fatura
-  const nextMonth = month + 1;
-  const ny = nextMonth > 11 ? year + 1 : year;
-  const nm = nextMonth > 11 ? 0 : nextMonth;
-  const dueDate = new Date(ny, nm, Math.min(dueDay, daysInMonth(ny, nm)));
-  const closingDate = new Date(dueDate);
-  closingDate.setDate(closingDate.getDate() - daysBefore);
-  return closingDate;
-}
-```
-
-`calculateBillingPeriod(expenseDate, config)`:
-- Tentar fatura do mês da despesa: calcular closingDate e previousClosingDate
-- previousClosingDate = closingDate da fatura do mês anterior
-- Se `expenseDate > previousClosingDate && expenseDate <= closingDate` → fatura desse mês
-- Senão se `expenseDate > closingDate` → fatura do mês seguinte
-- Senão → fatura do mês anterior
-
-Também atualizar `getNextBillingDates` com a mesma lógica corrigida (vencimento no mês seguinte).
-
-#### 2. `src/components/card-manager.tsx`
-
-- **Remover `computeClosingDay`** (linhas 80-84) — não mais necessário
-- **Formulário preview** (linha 331-339): trocar texto para:
-  ```
-  "Vence dia {due_day} • Fecha {days_before_due} dias antes"
-  ```
-  E adicionar "Próximo fechamento: DD/MM • Próximo vencimento: DD/MM" usando `getNextBillingDates` com data real.
-- No `handleSubmit` (linhas 112-120): calcular `closing_day` usando a nova `getClosingDateForBillingMonth` para o mês atual, pegar `.getDate()` (compatibilidade).
-
-#### 3. `src/pages/Index.tsx` — Modo Fatura só crédito + cartão obrigatório
-
-**Filtro (linhas 1207-1235):**
-- Quando `viewMode === "billing"`: se `expense.payment_method !== "credit"` → `return false` (não cair no else)
-
-**Totais (linhas 1482-1498):**
-- Mesma correção: no modo billing, só considerar crédito
-
-**Toggle UI (linhas 1556-1582):**
-- Quando `viewMode === "billing"` e existem 2+ cartões de crédito: mostrar seletor de cartão obrigatório abaixo do toggle
-- Se 1 cartão: auto-selecionar
-- Se 0 cartões de crédito: mostrar mensagem "Cadastre um cartão de crédito"
-- Adicionar state `billingCardId: string | null` — no filtro, usar esse cartão como `filters.cardId` forçado
+| Arquivo | Ação |
+|---|---|
+| `src/pages/Admin.tsx` | Adicionar "Gratuito" no Select e ajustar a lógica de "Conceder" para chamar revoke quando tier=free |
+| `supabase/functions/admin-subscriptions/index.ts` | Ajustar DELETE para funcionar com qualquer platform (não apenas "manual") |
+| `supabase/functions/validate-purchase/index.ts` | Reforçar: antes de dar upsert, verificar se já existe QUALQUER subscription ativa com o mesmo token em outro user |
+| `supabase/functions/sync-subscription/index.ts` | Reforçar: rejeitar sync se o user não tiver purchase_token próprio (não criar assinatura do nada) |
+| `src/services/billing-service.ts` | No `restorePurchases`, se o backend rejeitar com TOKEN_BELONGS_TO_OTHER_USER, limpar localStorage e NÃO tentar fallbacks |
 
 ---
 
-### Arquivos impactados
+### Detalhes
 
-| Arquivo | Mudança |
-|---|---|
-| `src/utils/billing-period.ts` | Reescrever cálculo: vencimento no mês+1, subtração real de dias |
-| `src/components/card-manager.tsx` | Preview com datas reais, remover `computeClosingDay` |
-| `src/pages/Index.tsx` | Modo Fatura: só crédito, seletor de cartão obrigatório |
+**Admin — opção Gratuito:**
+- Adicionar `<SelectItem value="free">Gratuito</SelectItem>` no dropdown
+- Quando tier selecionado for "free", o botão "Conceder" chama a mesma lógica de "Revogar" (desativar assinatura e setar tier=free)
+
+**Admin — revogar qualquer assinatura (não só manual):**
+- O DELETE atual filtra `platform = 'manual'`. Mudar para atualizar o tier para free e `is_active = true` (resetar), limpando `purchase_token`, `product_id` e `expires_at`, independente da platform.
+
+**Billing service — parar fallbacks após rejeição:**
+- Quando `validatePurchase` retorna `TOKEN_BELONGS_TO_OTHER_USER`, não tentar `recoverSubscription` nem `syncSubscriptionFromBackend` — retornar imediatamente `{ success: false }`
+- Limpar `localStorage.last_restore_check` para não ficar tentando toda hora
+
+**Backend — reforçar validação:**
+- `validate-purchase`: a checagem de token duplicado já existe (linhas 112-134), manter
+- `sync-subscription`: se o usuário não tiver `purchase_token` no banco, rejeitar imediatamente (não tentar criar assinatura sem prova de compra) — isso já acontece mas vamos tornar explícito
 
