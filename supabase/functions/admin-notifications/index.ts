@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { create, getNumericDate } from "https://deno.land/x/djwt@v3.0.1/mod.ts";
 
 const ADMIN_EMAIL = "gastinhosimples@gmail.com";
 
@@ -37,55 +38,60 @@ async function validateAdmin(req: Request) {
   );
 }
 
-async function getAccessToken(): Promise<string> {
-  const serviceAccountJson = Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON");
-  if (!serviceAccountJson) throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON não configurado");
-  
-  const sa = JSON.parse(serviceAccountJson);
-  
-  // Create JWT for Google OAuth2
-  const header = btoa(JSON.stringify({ alg: "RS256", typ: "JWT" }));
-  const now = Math.floor(Date.now() / 1000);
-  const claimSet = btoa(JSON.stringify({
-    iss: sa.client_email,
-    scope: "https://www.googleapis.com/auth/firebase.messaging",
-    aud: "https://oauth2.googleapis.com/token",
-    iat: now,
-    exp: now + 3600,
-  }));
-  
-  const signInput = `${header}.${claimSet}`;
-  
-  // Import private key
-  const pemContent = sa.private_key.replace(/-----BEGIN PRIVATE KEY-----/g, "").replace(/-----END PRIVATE KEY-----/g, "").replace(/\n/g, "");
-  const binaryKey = Uint8Array.from(atob(pemContent), (c) => c.charCodeAt(0));
-  
-  const key = await crypto.subtle.importKey(
+let cachedAccessToken: string | null = null;
+let tokenExpiresAt = 0;
+
+async function importPrivateKey(pemKey: string): Promise<CryptoKey> {
+  const pemContents = pemKey
+    .replace(/-----BEGIN PRIVATE KEY-----/, '')
+    .replace(/-----END PRIVATE KEY-----/, '')
+    .replace(/\s/g, '');
+  const binaryDer = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
+  return crypto.subtle.importKey(
     "pkcs8",
-    binaryKey,
+    binaryDer,
     { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
     false,
     ["sign"]
   );
-  
-  const signature = await crypto.subtle.sign(
-    "RSASSA-PKCS1-v1_5",
-    key,
-    new TextEncoder().encode(signInput)
+}
+
+async function getAccessToken(): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  if (cachedAccessToken && tokenExpiresAt > now + 300) {
+    return cachedAccessToken;
+  }
+
+  const serviceAccountJson = Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON");
+  if (!serviceAccountJson) throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON não configurado");
+
+  const sa = JSON.parse(serviceAccountJson);
+  const privatePem = sa.private_key.replace(/\\n/g, '\n');
+  const privateKey = await importPrivateKey(privatePem);
+
+  const jwt = await create(
+    { alg: "RS256", typ: "JWT" },
+    {
+      iss: sa.client_email,
+      scope: "https://www.googleapis.com/auth/firebase.messaging",
+      aud: "https://oauth2.googleapis.com/token",
+      iat: getNumericDate(0),
+      exp: getNumericDate(3600),
+    },
+    privateKey
   );
-  
-  const sig = btoa(String.fromCharCode(...new Uint8Array(signature)));
-  const jwt = `${signInput}.${sig}`;
-  
+
   const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
   });
-  
+
   const tokenData = await tokenRes.json();
   if (!tokenData.access_token) throw new Error("Falha ao obter access token do Firebase");
-  return tokenData.access_token;
+  cachedAccessToken = tokenData.access_token;
+  tokenExpiresAt = now + (tokenData.expires_in || 3600);
+  return cachedAccessToken as string;
 }
 
 Deno.serve(async (req) => {
