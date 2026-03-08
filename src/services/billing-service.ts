@@ -753,11 +753,25 @@ class BillingService {
             return { success: true, tier: highestTier };
           }
           
-          // Se validação falhou, tentar recover-subscription
+          // Check if rejection was due to token belonging to another user
+          if (this._lastValidationErrorCode === 'TOKEN_BELONGS_TO_OTHER_USER') {
+            console.log('🚫 Token pertence a outro usuário - parando todas as tentativas');
+            localStorage.removeItem('last_restore_check');
+            return { success: false };
+          }
+          
+          // Se validação falhou por outro motivo, tentar recover-subscription
           console.log('🔄 Tentando recover-subscription Edge Function...');
           const recoverSuccess = await this.recoverSubscription(highestProductId, purchaseToken);
           if (recoverSuccess) {
             return { success: true, tier: highestTier };
+          }
+          
+          // Check again after recover
+          if (this._lastValidationErrorCode === 'TOKEN_BELONGS_TO_OTHER_USER') {
+            console.log('🚫 Token pertence a outro usuário - parando todas as tentativas');
+            localStorage.removeItem('last_restore_check');
+            return { success: false };
           }
         }
         
