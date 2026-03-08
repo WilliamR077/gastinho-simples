@@ -32,6 +32,7 @@ import NotificationDebug from "./pages/NotificationDebug";
 import Landing from "./pages/Landing";
 import About from "./pages/About";
 import Contact from "./pages/Contact";
+import Admin from "./pages/Admin";
 
 const queryClient = new QueryClient();
 
@@ -204,6 +205,7 @@ const AppContent = () => {
           <Route path="/subscription" element={<Subscription />} />
           <Route path="/privacy" element={<PrivacyPolicy />} />
           <Route path="/notification-debug" element={<NotificationDebug />} />
+          <Route path="/admin" element={<Admin />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
