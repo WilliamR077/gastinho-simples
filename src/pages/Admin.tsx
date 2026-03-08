@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Navigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -7,10 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Shield, Search, UserCheck, UserX, Loader2 } from "lucide-react";
+import { Shield, Search, UserCheck, UserX, Loader2, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const ADMIN_EMAIL = "gastinhosimples@gmail.com";
+const API_BASE = `https://jaoldaqvbdllowepzwbr.supabase.co/functions/v1/admin-subscriptions`;
+const API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imphb2xkYXF2YmRsbG93ZXB6d2JyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY4MjQ2MTYsImV4cCI6MjA3MjQwMDYxNn0.-TthPn1c2qiSQjSd7igTien0_czmLbgKWwCpBvSPV84";
 
 interface UserSubscriptionInfo {
   user_id: string;
@@ -22,6 +25,100 @@ interface UserSubscriptionInfo {
     expires_at: string | null;
     started_at: string;
   } | null;
+}
+
+interface SubscriberInfo {
+  email: string;
+  tier: string;
+  platform: string | null;
+  started_at: string;
+  expires_at: string | null;
+}
+
+async function getAuthHeaders() {
+  const { data: { session } } = await supabase.auth.getSession();
+  return {
+    Authorization: `Bearer ${session?.access_token}`,
+    apikey: API_KEY,
+    "Content-Type": "application/json",
+  };
+}
+
+function TierBadge({ tier, platform }: { tier?: string; platform?: string | null }) {
+  if (!tier || tier === "free") return <Badge variant="secondary">Gratuito</Badge>;
+  const label = tier === "premium" ? "Premium ⭐" : tier === "no_ads" ? "Sem Anúncios" : tier;
+  return (
+    <div className="flex items-center gap-2">
+      <Badge className="bg-primary text-primary-foreground">{label}</Badge>
+      {platform === "manual" && <Badge variant="outline">Manual</Badge>}
+    </div>
+  );
+}
+
+function SubscribersSection({ onSelectEmail }: { onSelectEmail: (email: string) => void }) {
+  const [subscribers, setSubscribers] = useState<SubscriberInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const headers = await getAuthHeaders();
+        const res = await fetch(API_BASE, { headers });
+        const data = await res.json();
+        if (res.ok) setSubscribers(data.subscribers || []);
+      } catch {}
+      setLoading(false);
+    })();
+  }, []);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg flex items-center gap-2">
+          <Users className="h-5 w-5" />
+          Assinantes Ativos ({subscribers.length})
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="flex justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : subscribers.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-4">Nenhum assinante ativo</p>
+        ) : (
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Plano</TableHead>
+                  <TableHead>Plataforma</TableHead>
+                  <TableHead>Início</TableHead>
+                  <TableHead>Expiração</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {subscribers.map((sub) => (
+                  <TableRow
+                    key={sub.email}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => onSelectEmail(sub.email)}
+                  >
+                    <TableCell className="font-medium">{sub.email}</TableCell>
+                    <TableCell><TierBadge tier={sub.tier} platform={sub.platform} /></TableCell>
+                    <TableCell className="capitalize">{sub.platform || "—"}</TableCell>
+                    <TableCell>{new Date(sub.started_at).toLocaleDateString("pt-BR")}</TableCell>
+                    <TableCell>{sub.expires_at ? new Date(sub.expires_at).toLocaleDateString("pt-BR") : "—"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function Admin() {
@@ -36,28 +133,17 @@ export default function Admin() {
   if (authLoading) return null;
   if (!user || user.email !== ADMIN_EMAIL) return <Navigate to="/" replace />;
 
-  const handleSearch = async () => {
-    if (!searchEmail.trim()) return;
+  const handleSearch = async (emailOverride?: string) => {
+    const email = emailOverride || searchEmail.trim();
+    if (!email) return;
+    if (emailOverride) setSearchEmail(email);
     setLoading(true);
     setUserInfo(null);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await supabase.functions.invoke("admin-subscriptions", {
-        method: "GET",
-        headers: { Authorization: `Bearer ${session?.access_token}` },
-        body: undefined,
-      });
-
-      // functions.invoke doesn't support GET with query params well, use fetch directly
-      const url = `https://jaoldaqvbdllowepzwbr.supabase.co/functions/v1/admin-subscriptions?email=${encodeURIComponent(searchEmail.trim())}`;
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${session?.access_token}`,
-          apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imphb2xkYXF2YmRsbG93ZXB6d2JyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY4MjQ2MTYsImV4cCI6MjA3MjQwMDYxNn0.-TthPn1c2qiSQjSd7igTien0_czmLbgKWwCpBvSPV84",
-        },
-      });
-      const data = await response.json();
-      if (!response.ok) {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${API_BASE}?email=${encodeURIComponent(email)}`, { headers });
+      const data = await res.json();
+      if (!res.ok) {
         toast({ title: "Erro", description: data.error, variant: "destructive" });
       } else {
         setUserInfo(data);
@@ -73,52 +159,14 @@ export default function Admin() {
     if (!userInfo) return;
     setActionLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch(
-        "https://jaoldaqvbdllowepzwbr.supabase.co/functions/v1/admin-subscriptions",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${session?.access_token}`,
-            apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imphb2xkYXF2YmRsbG93ZXB6d2JyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY4MjQ2MTYsImV4cCI6MjA3MjQwMDYxNn0.-TthPn1c2qiSQjSd7igTien0_czmLbgKWwCpBvSPV84",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ email: userInfo.email, tier: selectedTier }),
-        }
-      );
-      const data = await response.json();
-      if (!response.ok) {
-        toast({ title: "Erro", description: data.error, variant: "destructive" });
-      } else {
-        toast({ title: "Sucesso! ✅", description: data.message });
-        handleSearch(); // Refresh
-      }
-    } catch (err: any) {
-      toast({ title: "Erro", description: err.message, variant: "destructive" });
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleRevoke = async () => {
-    if (!userInfo) return;
-    setActionLoading(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch(
-        "https://jaoldaqvbdllowepzwbr.supabase.co/functions/v1/admin-subscriptions",
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${session?.access_token}`,
-            apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imphb2xkYXF2YmRsbG93ZXB6d2JyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY4MjQ2MTYsImV4cCI6MjA3MjQwMDYxNn0.-TthPn1c2qiSQjSd7igTien0_czmLbgKWwCpBvSPV84",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ email: userInfo.email }),
-        }
-      );
-      const data = await response.json();
-      if (!response.ok) {
+      const headers = await getAuthHeaders();
+      const res = await fetch(API_BASE, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ email: userInfo.email, tier: selectedTier }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
         toast({ title: "Erro", description: data.error, variant: "destructive" });
       } else {
         toast({ title: "Sucesso! ✅", description: data.message });
@@ -131,25 +179,39 @@ export default function Admin() {
     }
   };
 
-  const getTierBadge = (tier: string | undefined, platform: string | null | undefined) => {
-    if (!tier || tier === "free") return <Badge variant="secondary">Gratuito</Badge>;
-    const label = tier === "premium" ? "Premium ⭐" : tier === "no_ads" ? "Sem Anúncios" : tier;
-    const isManual = platform === "manual";
-    return (
-      <div className="flex items-center gap-2">
-        <Badge className="bg-primary text-primary-foreground">{label}</Badge>
-        {isManual && <Badge variant="outline">Manual</Badge>}
-      </div>
-    );
+  const handleRevoke = async () => {
+    if (!userInfo) return;
+    setActionLoading(true);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(API_BASE, {
+        method: "DELETE",
+        headers,
+        body: JSON.stringify({ email: userInfo.email }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: "Erro", description: data.error, variant: "destructive" });
+      } else {
+        toast({ title: "Sucesso! ✅", description: data.message });
+        handleSearch();
+      }
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
-      <div className="max-w-2xl mx-auto space-y-6">
+      <div className="max-w-4xl mx-auto space-y-6">
         <div className="flex items-center gap-3">
           <Shield className="h-8 w-8 text-primary" />
           <h1 className="text-2xl font-bold text-foreground">Painel Admin</h1>
         </div>
+
+        <SubscribersSection onSelectEmail={(email) => handleSearch(email)} />
 
         <Card>
           <CardHeader>
@@ -163,7 +225,7 @@ export default function Admin() {
                 onChange={(e) => setSearchEmail(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               />
-              <Button onClick={handleSearch} disabled={loading}>
+              <Button onClick={() => handleSearch()} disabled={loading}>
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
               </Button>
             </div>
@@ -177,10 +239,7 @@ export default function Admin() {
                   </div>
                   <div className="space-y-2">
                     <p className="text-sm text-muted-foreground">Plano Atual</p>
-                    {getTierBadge(
-                      userInfo.subscription?.tier,
-                      userInfo.subscription?.platform
-                    )}
+                    <TierBadge tier={userInfo.subscription?.tier} platform={userInfo.subscription?.platform} />
                   </div>
                   {userInfo.subscription?.expires_at && (
                     <div className="space-y-2">
@@ -188,12 +247,6 @@ export default function Admin() {
                       <p className="text-foreground">
                         {new Date(userInfo.subscription.expires_at).toLocaleDateString("pt-BR")}
                       </p>
-                    </div>
-                  )}
-                  {userInfo.subscription?.platform && (
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">Plataforma</p>
-                      <p className="text-foreground capitalize">{userInfo.subscription.platform}</p>
                     </div>
                   )}
 
@@ -212,31 +265,17 @@ export default function Admin() {
                         </Select>
                       </div>
                       <Button onClick={handleGrant} disabled={actionLoading} className="gap-2">
-                        {actionLoading ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <UserCheck className="h-4 w-4" />
-                        )}
+                        {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCheck className="h-4 w-4" />}
                         Conceder
                       </Button>
                     </div>
 
-                    {userInfo.subscription?.is_active &&
-                      userInfo.subscription?.platform === "manual" && (
-                        <Button
-                          variant="destructive"
-                          onClick={handleRevoke}
-                          disabled={actionLoading}
-                          className="w-full gap-2"
-                        >
-                          {actionLoading ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <UserX className="h-4 w-4" />
-                          )}
-                          Revogar (Voltar ao Gratuito)
-                        </Button>
-                      )}
+                    {userInfo.subscription?.is_active && userInfo.subscription?.platform === "manual" && (
+                      <Button variant="destructive" onClick={handleRevoke} disabled={actionLoading} className="w-full gap-2">
+                        {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserX className="h-4 w-4" />}
+                        Revogar (Voltar ao Gratuito)
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
