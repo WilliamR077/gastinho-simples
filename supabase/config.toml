@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.admin-subscriptions]
 verify_jwt = false
+
+[functions.admin-dashboard]
+verify_jwt = false
