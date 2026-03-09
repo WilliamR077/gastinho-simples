@@ -654,6 +654,7 @@ function NotificationsTab({ allEmails }: { allEmails: string[] }) {
       return true;
     });
   }, [logs, searchLog, statusFilter, typeFilter]);
+  useEffect(() => { setLogPage(1); }, [searchLog, statusFilter, typeFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredLogs.length / LOGS_PER_PAGE));
   const paginatedLogs = filteredLogs.slice((logPage - 1) * LOGS_PER_PAGE, logPage * LOGS_PER_PAGE);
