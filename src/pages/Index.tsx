@@ -1718,9 +1718,9 @@ export default function Index() {
         {/* Main Content */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full" data-tour="tabs">
           <TabsList className="grid w-full grid-cols-3 mb-3 bg-muted/50">
-            <TabsTrigger value="expenses" className="data-[state=active]:text-red-600 dark:data-[state=active]:text-red-400">Despesas</TabsTrigger>
-            <TabsTrigger value="incomes" className="data-[state=active]:text-green-600 dark:data-[state=active]:text-green-400">Entradas</TabsTrigger>
-            <TabsTrigger value="goals" className="relative data-[state=active]:text-amber-600 dark:data-[state=active]:text-amber-400">
+            <TabsTrigger value="expenses" data-tour="tab-expenses" className="data-[state=active]:text-red-600 dark:data-[state=active]:text-red-400">Despesas</TabsTrigger>
+            <TabsTrigger value="incomes" data-tour="tab-incomes" className="data-[state=active]:text-green-600 dark:data-[state=active]:text-green-400">Entradas</TabsTrigger>
+            <TabsTrigger value="goals" data-tour="tab-goals" className="relative data-[state=active]:text-amber-600 dark:data-[state=active]:text-amber-400">
               Metas
               {goalsAtRisk.length > 0 &&
               <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
