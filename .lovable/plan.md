@@ -1,41 +1,44 @@
 
+
 ## Plano: Melhorias no Tutorial
 
-### Problemas Identificados
-1. **Scroll livre**: Usuário pode rolar tela durante tutorial, causando dessincronia entre spotlight e tooltip
-2. **Passo "Navegue pelos meses"**: Não explica funcionalidade "Fatura" (calendário vs fatura)
-3. **Passo "Organize tudo"**: Explica 3 abas genéricamente, seria melhor explicar cada uma individualmente
-
-### Solução
-
-**1. Travar scroll da página**
-- Adicionar CSS/classe no `body` quando `isOpen=true` no `TourOverlay`
-- Usar `overflow: hidden` para impedir scroll
-- Remover quando tour fechar
-
-**2. Expandir passo do navegador de mês**
-- Adicionar `data-tour="view-mode-toggle"` nos botões Calendário/Fatura
-- Inserir novo step explicando a funcionalidade de fatura após o step atual do month-navigator
-
-**3. Separar explicação das abas**
-- Dividir step atual "Organize tudo" em 3 steps dedicados:
-  - "Despesas" → explicar divisão "Do Mês" vs "Fixas" 
-  - "Entradas" → explicar categorização de receitas e entradas fixas
-  - "Metas" → explicar limites de gastos e acompanhamento
-
-### Mudanças por arquivo
+### Resumo das Mudanças
 
 | Arquivo | Ação |
 |---------|------|
-| `src/components/tour-overlay.tsx` | Adicionar CSS `overflow: hidden` no body quando ativo |
-| `src/pages/Index.tsx` | Adicionar `data-tour="view-mode-toggle"` nos botões calendário/fatura |
-| `src/hooks/use-product-tour.tsx` | Atualizar `tourSteps`: inserir step fatura, dividir step abas em 3 |
+| `src/components/tour-overlay.tsx` | Adicionar `overflow: hidden` no body quando tour ativo |
+| `src/pages/Index.tsx` | Adicionar `data-tour="view-mode-toggle"` no container dos botões Calendário/Fatura |
+| `src/hooks/use-product-tour.tsx` | Atualizar `tourSteps`: inserir step fatura, dividir step abas em 3 dedicados |
 
-### Novos steps (posições aproximadas)
+---
 
-- **Step 3.5**: Modo Fatura (`view-mode-toggle`) → "Alterne entre modo Calendário e Fatura para ver gastos de cartão de crédito por período de cobrança"
-- **Step 7a**: Aba Despesas (`tabs` + `TabsTrigger[value=expenses]`) → "Despesas do mês atual e suas despesas fixas recorrentes"  
-- **Step 7b**: Aba Entradas (`tabs` + `TabsTrigger[value=incomes]`) → "Suas receitas mensais e entradas fixas como salário"
-- **Step 7c**: Aba Metas (`tabs` + `TabsTrigger[value=goals]`) → "Defina limites de gastos e acompanhe seu orçamento"
+### Detalhes Técnicos
 
-Total: ~15 steps (era 12)
+**1. Travar Scroll (tour-overlay.tsx)**
+- Adicionar `useEffect` que aplica `document.body.style.overflow = "hidden"` quando `isVisible=true`
+- Cleanup restaura `overflow = ""` quando tour fechar
+
+**2. Atributo data-tour (Index.tsx)**
+- Linha 1585: adicionar `data-tour="view-mode-toggle"` no `<div>` que envolve os botões Calendário/Fatura
+
+**3. Novos Steps (use-product-tour.tsx)**
+
+Steps atualizados:
+1. Bem-vindo ao Gastinho
+2. Grupos compartilhados
+3. Navegue pelos meses
+4. **NOVO:** Modo Fatura (`[data-tour='view-mode-toggle']`) → "Alterne entre Calendário e Fatura para visualizar gastos de cartão por período de cobrança"
+5. Filtros poderosos
+6. Suas categorias
+7. Resumo por forma de pagamento
+8. **Aba Despesas** (`[data-tour='tabs'] [value='expenses']`) → "Despesas do mês e despesas fixas recorrentes"
+9. **Aba Entradas** (`[data-tour='tabs'] [value='incomes']`) → "Suas receitas mensais e entradas fixas"
+10. **Aba Metas** (`[data-tour='tabs'] [value='goals']`) → "Defina limites de gastos e acompanhe seu orçamento"
+11. Relatórios detalhados
+12. Mostrar/Esconder valores
+13. Menu lateral
+14. Adicione gastos rapidamente
+15. Tudo pronto!
+
+**Total:** 15 steps (era 12)
+
