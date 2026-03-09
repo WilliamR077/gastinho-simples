@@ -4,6 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./use-auth";
 import { Capacitor } from "@capacitor/core";
 
+export type OnboardingSubPhase = "navigate" | "arrived" | "form-open" | "completed";
+
 interface OnboardingStep {
   id: string;
   title: string;
@@ -15,6 +17,12 @@ interface OnboardingStep {
   optional?: boolean;
   mobileOnly?: boolean;
   exampleText?: string;
+  arrivedTitle?: string;
+  arrivedDescription?: string;
+  formOpenTitle?: string;
+  formOpenDescription?: string;
+  completedTitle?: string;
+  completedDescription?: string;
 }
 
 const ONBOARDING_STEPS: OnboardingStep[] = [
@@ -26,6 +34,12 @@ const ONBOARDING_STEPS: OnboardingStep[] = [
     action: "navigate",
     targetRoute: "/cards",
     detectionTable: "cards",
+    arrivedTitle: "Ótimo! Agora adicione seu cartão",
+    arrivedDescription: "Clique no botão '+' ou 'Adicionar Cartão' para cadastrar seu primeiro cartão.",
+    formOpenTitle: "Preencha os dados do cartão",
+    formOpenDescription: "Digite o nome do cartão (ex: Nubank), escolha o tipo e preencha os campos. Depois clique em 'Adicionar'.",
+    completedTitle: "Cartão cadastrado! 🎉",
+    completedDescription: "Seu cartão foi adicionado com sucesso! Deseja adicionar outro ou prosseguir?",
   },
   {
     id: "add-category",
@@ -97,12 +111,16 @@ interface OnboardingContextType {
   progress: number;
   isCompleted: boolean;
   showCompletionDialog: boolean;
+  subPhase: OnboardingSubPhase;
   startOnboarding: () => void;
   skipOnboarding: () => void;
   skipCurrentStep: () => void;
   completeStep: (stepId: string) => void;
   closeCompletionDialog: () => void;
   navigateToStep: () => void;
+  setSubPhase: (phase: OnboardingSubPhase) => void;
+  addAnotherItem: () => void;
+  proceedToNextStep: () => void;
 }
 
 const OnboardingContext = createContext<OnboardingContextType | undefined>(undefined);
@@ -118,6 +136,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set());
   const [showCompletionDialog, setShowCompletionDialog] = useState(false);
+  const [subPhase, setSubPhase] = useState<OnboardingSubPhase>("navigate");
 
   // Filtrar steps mobile-only se não estiver em plataforma nativa
   const availableSteps = ONBOARDING_STEPS.filter(
@@ -128,6 +147,15 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   const totalSteps = availableSteps.length;
   const progress = (completedSteps.size / totalSteps) * 100;
   const isCompleted = localStorage.getItem(STORAGE_KEY) === "true";
+
+  // Detectar mudança de rota para avançar subPhase
+  useEffect(() => {
+    if (!isOpen || !currentStep?.targetRoute) return;
+    
+    if (location.pathname === currentStep.targetRoute && subPhase === "navigate") {
+      setSubPhase("arrived");
+    }
+  }, [location.pathname, isOpen, currentStep, subPhase]);
 
   // Carregar progresso salvo
   useEffect(() => {
@@ -171,7 +199,12 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
           filter: `user_id=eq.${user.id}`,
         },
         () => {
-          completeStep(currentStep.id);
+          // Quando detecta INSERT, mudar para fase "completed" em vez de avançar direto
+          if (currentStep.targetRoute) {
+            setSubPhase("completed");
+          } else {
+            completeStep(currentStep.id);
+          }
         }
       )
       .subscribe();
@@ -242,8 +275,21 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
 
     setCompletedSteps(preCompleted);
     setCurrentStepIndex(firstPendingIndex);
+    setSubPhase("navigate");
     setIsOpen(true);
     localStorage.removeItem(PROGRESS_KEY);
+  };
+
+  const addAnotherItem = () => {
+    // Resetar para fase "arrived" para adicionar outro item
+    setSubPhase("arrived");
+  };
+
+  const proceedToNextStep = () => {
+    // Marcar step atual como completo e avançar
+    if (currentStep) {
+      completeStep(currentStep.id);
+    }
   };
 
   const skipOnboarding = () => {
@@ -271,10 +317,14 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem(PROGRESS_KEY);
     } else {
       setCurrentStepIndex(nextIndex);
-      // Se próximo step requer navegação, navegar
+      setSubPhase("navigate"); // Resetar subPhase para o novo step
+      // Se próximo step requer navegação e não estamos lá, navegar
       const nextStep = availableSteps[nextIndex];
       if (nextStep?.targetRoute && nextStep.targetRoute !== location.pathname) {
         navigate(nextStep.targetRoute);
+      } else if (nextStep?.targetRoute && nextStep.targetRoute === location.pathname) {
+        // Já estamos na rota correta, avançar para "arrived"
+        setSubPhase("arrived");
       }
     }
   };
@@ -299,12 +349,16 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         progress,
         isCompleted,
         showCompletionDialog,
+        subPhase,
         startOnboarding,
         skipOnboarding,
         skipCurrentStep,
         completeStep,
         closeCompletionDialog,
         navigateToStep,
+        setSubPhase,
+        addAnotherItem,
+        proceedToNextStep,
       }}
     >
       {children}
