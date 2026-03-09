@@ -1,102 +1,48 @@
 
 
-## Plano: Corrigir aritmética de datas do billing + filtro só crédito + multi-cartões
+## Plano: Auto-detectar dados existentes e pular steps do onboarding
 
-### Problema 1: `computeClosingDay` usa aritmética fixa (dia - offset + 30)
+### Problema
+Quando o onboarding inicia, ele sempre começa do passo 1, mesmo que o usuário já tenha cartões, despesas, metas etc. cadastrados.
 
-Em `card-manager.tsx` linha 80-84 e no preview do formulário (linha 334), o fechamento é calculado como `dueDay - daysBefore + 30` — ignora meses reais. Também em `billing-period.ts`, `calculateBillingPeriod` calcula o fechamento posicionando o due_day no mesmo mês da despesa e subtraindo dias, mas o modelo correto é: o vencimento da fatura M fica no mês M+1, e o fechamento = vencimento - dias_antes.
-
-### Problema 2: Modo Fatura mostra PIX/Débito
-
-Em `Index.tsx` linhas 1225-1234, quando `viewMode === "billing"` mas a despesa NÃO é crédito, o código cai no `else` e filtra por data — deveria retornar `false` diretamente.
-
-### Problema 3: Multi-cartões sem seleção obrigatória
-
-Não há exigência de selecionar um cartão no modo Fatura. Sem isso, faturas de cartões com ciclos diferentes se misturam.
-
----
+### Solução
+Adicionar uma função `checkExistingData` que roda ao iniciar o onboarding. Ela consulta cada tabela relevante (`cards`, `user_categories`, `expenses`, `recurring_expenses`, `incomes`, `budget_goals`) e marca como completos os steps cujos dados já existem. O onboarding então avança direto para o primeiro step pendente. Se todos já estiverem completos, mostra o diálogo de conclusão.
 
 ### Mudanças
 
-#### 1. `src/utils/billing-period.ts` — Reescrever `calculateBillingPeriod` (novo modelo)
+**Arquivo: `src/hooks/use-onboarding-tour.tsx`**
 
-Nova lógica para `due_day + days_before_due`:
-
-```ts
-// Para determinar a qual fatura M (yyyy-MM) uma compra pertence:
-// Fatura "M" tem vencimento no mês M+1, dia due_day (clamped)
-// Fechamento = vencimento - days_before_due (subtração real de dias via Date)
-// Período da fatura M = (fechamento da fatura M-1) + 1 dia  até  fechamento da fatura M
-// 
-// Algoritmo: testar fatura do mês da compra e do mês anterior.
-// Se compra <= fechamento do mês → pertence a esse mês
-// Senão → pertence ao mês seguinte
+1. Criar função `checkExistingData(userId)` que faz queries paralelas:
+```typescript
+const checkExistingData = async (userId: string) => {
+  const [cards, categories, expenses, recurring, incomes, goals] = await Promise.all([
+    supabase.from("cards").select("id").eq("user_id", userId).limit(1),
+    supabase.from("user_categories").select("id").eq("user_id", userId).eq("is_default", false).limit(1),
+    supabase.from("expenses").select("id").eq("user_id", userId).limit(1),
+    supabase.from("recurring_expenses").select("id").eq("user_id", userId).limit(1),
+    supabase.from("incomes").select("id").eq("user_id", userId).limit(1),
+    supabase.from("budget_goals").select("id").eq("user_id", userId).limit(1),
+  ]);
+  // Mapear resultados para step IDs completados
+};
 ```
 
-Criar helper `getBillingClosingDate(billingMonth: string, config)`:
-- Parse `billingMonth` → ano/mês (ex: "2026-03" → março)
-- `dueDate = new Date(ano, mês, clamp(due_day, daysInMonth))` — vencimento no próprio mês da fatura (NÃO mês+1, conforme o pedido do usuário: fatura de março fecha em março e vence em abril)
+2. Chamar `checkExistingData` dentro de `startOnboarding()` antes de abrir o modal
 
-Correção: conforme o critério de aceite do usuário:
-- Fatura de Março/2026, vencimento dia 10 → `dueDate = 10/04/2026` (mês seguinte)
-- `closingDate = dueDate - 12 dias = 29/03/2026`
-- `previousDueDate = 10/03/2026`, `previousClosingDate = 26/02/2026`
-- Período = 27/02 a 29/03
+3. Pular para o primeiro step não completado. Se todos completos, mostrar diálogo de conclusão direto
 
-Então a fórmula é:
-```ts
-function getClosingDateForBillingMonth(year: number, month: number, dueDay: number, daysBefore: number): Date {
-  // Vencimento cai no MÊS SEGUINTE ao mês da fatura
-  const nextMonth = month + 1;
-  const ny = nextMonth > 11 ? year + 1 : year;
-  const nm = nextMonth > 11 ? 0 : nextMonth;
-  const dueDate = new Date(ny, nm, Math.min(dueDay, daysInMonth(ny, nm)));
-  const closingDate = new Date(dueDate);
-  closingDate.setDate(closingDate.getDate() - daysBefore);
-  return closingDate;
-}
-```
+4. Também verificar PIN no localStorage para step `setup-security`
 
-`calculateBillingPeriod(expenseDate, config)`:
-- Tentar fatura do mês da despesa: calcular closingDate e previousClosingDate
-- previousClosingDate = closingDate da fatura do mês anterior
-- Se `expenseDate > previousClosingDate && expenseDate <= closingDate` → fatura desse mês
-- Senão se `expenseDate > closingDate` → fatura do mês seguinte
-- Senão → fatura do mês anterior
+### Detalhes de mapeamento step → query
 
-Também atualizar `getNextBillingDates` com a mesma lógica corrigida (vencimento no mês seguinte).
-
-#### 2. `src/components/card-manager.tsx`
-
-- **Remover `computeClosingDay`** (linhas 80-84) — não mais necessário
-- **Formulário preview** (linha 331-339): trocar texto para:
-  ```
-  "Vence dia {due_day} • Fecha {days_before_due} dias antes"
-  ```
-  E adicionar "Próximo fechamento: DD/MM • Próximo vencimento: DD/MM" usando `getNextBillingDates` com data real.
-- No `handleSubmit` (linhas 112-120): calcular `closing_day` usando a nova `getClosingDateForBillingMonth` para o mês atual, pegar `.getDate()` (compatibilidade).
-
-#### 3. `src/pages/Index.tsx` — Modo Fatura só crédito + cartão obrigatório
-
-**Filtro (linhas 1207-1235):**
-- Quando `viewMode === "billing"`: se `expense.payment_method !== "credit"` → `return false` (não cair no else)
-
-**Totais (linhas 1482-1498):**
-- Mesma correção: no modo billing, só considerar crédito
-
-**Toggle UI (linhas 1556-1582):**
-- Quando `viewMode === "billing"` e existem 2+ cartões de crédito: mostrar seletor de cartão obrigatório abaixo do toggle
-- Se 1 cartão: auto-selecionar
-- Se 0 cartões de crédito: mostrar mensagem "Cadastre um cartão de crédito"
-- Adicionar state `billingCardId: string | null` — no filtro, usar esse cartão como `filters.cardId` forçado
-
----
-
-### Arquivos impactados
-
-| Arquivo | Mudança |
-|---|---|
-| `src/utils/billing-period.ts` | Reescrever cálculo: vencimento no mês+1, subtração real de dias |
-| `src/components/card-manager.tsx` | Preview com datas reais, remover `computeClosingDay` |
-| `src/pages/Index.tsx` | Modo Fatura: só crédito, seletor de cartão obrigatório |
+| Step ID | Tabela | Condição |
+|---------|--------|----------|
+| `add-card` | `cards` | qualquer registro |
+| `add-category` | `user_categories` | `is_default = false` |
+| `add-expense` | `expenses` | qualquer registro |
+| `add-recurring-expense` | `recurring_expenses` | qualquer registro |
+| `add-income` | `incomes` | qualquer registro |
+| `add-budget-goal` | `budget_goals` | qualquer registro |
+| `setup-security` | localStorage | `gastinho_app_lock_pin` existe |
+| `import-spreadsheet` | sempre pula (opcional) | - |
 
