@@ -195,10 +195,54 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(checkPIN);
   }, [isOpen, currentStep]);
 
-  const startOnboarding = () => {
+  const checkExistingData = async (userId: string): Promise<Set<string>> => {
+    const completed = new Set<string>();
+
+    const [cards, categories, expenses, recurring, incomes, goals] = await Promise.all([
+      supabase.from("cards").select("id").eq("user_id", userId).limit(1),
+      supabase.from("user_categories").select("id").eq("user_id", userId).eq("is_default", false).limit(1),
+      supabase.from("expenses").select("id").eq("user_id", userId).limit(1),
+      supabase.from("recurring_expenses").select("id").eq("user_id", userId).limit(1),
+      supabase.from("incomes").select("id").eq("user_id", userId).limit(1),
+      supabase.from("budget_goals").select("id").eq("user_id", userId).limit(1),
+    ]);
+
+    if (cards.data && cards.data.length > 0) completed.add("add-card");
+    if (categories.data && categories.data.length > 0) completed.add("add-category");
+    if (expenses.data && expenses.data.length > 0) completed.add("add-expense");
+    if (recurring.data && recurring.data.length > 0) completed.add("add-recurring-expense");
+    if (incomes.data && incomes.data.length > 0) completed.add("add-income");
+    if (goals.data && goals.data.length > 0) completed.add("add-budget-goal");
+
+    if (localStorage.getItem("gastinho_app_lock_pin")) completed.add("setup-security");
+    // import-spreadsheet is always optional, skip it
+    completed.add("import-spreadsheet");
+
+    return completed;
+  };
+
+  const startOnboarding = async () => {
+    let preCompleted = new Set<string>();
+    if (user) {
+      preCompleted = await checkExistingData(user.id);
+    }
+
+    // Find first incomplete step
+    const firstPendingIndex = availableSteps.findIndex(
+      (step) => !preCompleted.has(step.id)
+    );
+
+    if (firstPendingIndex === -1) {
+      // All steps already done
+      setShowCompletionDialog(true);
+      localStorage.setItem(STORAGE_KEY, "true");
+      localStorage.removeItem(PROGRESS_KEY);
+      return;
+    }
+
+    setCompletedSteps(preCompleted);
+    setCurrentStepIndex(firstPendingIndex);
     setIsOpen(true);
-    setCurrentStepIndex(0);
-    setCompletedSteps(new Set());
     localStorage.removeItem(PROGRESS_KEY);
   };
 
