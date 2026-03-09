@@ -640,8 +640,11 @@ function NotificationsTab({ allEmails }: { allEmails: string[] }) {
   const [searchLog, setSearchLog] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [logPage, setLogPage] = useState(1);
+  const LOGS_PER_PAGE = 15;
 
   const filteredLogs = useMemo(() => {
+    setLogPage(1);
     return logs.filter((log) => {
       if (searchLog) {
         const q = searchLog.toLowerCase();
@@ -652,6 +655,9 @@ function NotificationsTab({ allEmails }: { allEmails: string[] }) {
       return true;
     });
   }, [logs, searchLog, statusFilter, typeFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / LOGS_PER_PAGE));
+  const paginatedLogs = filteredLogs.slice((logPage - 1) * LOGS_PER_PAGE, logPage * LOGS_PER_PAGE);
 
   const fetchLogs = useCallback(async () => {
     try {
