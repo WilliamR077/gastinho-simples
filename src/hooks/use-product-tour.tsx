@@ -53,19 +53,19 @@ export const tourSteps: TourStep[] = [
     placement: "bottom",
   },
   {
-    target: "[data-tour='tabs'] [value='expenses']",
+    target: "[data-tour='tab-expenses']",
     title: "Aba Despesas 💸",
     description: "Aqui ficam todas as suas despesas do mês. Você também pode ver e gerenciar suas Despesas Fixas (recorrentes).",
     placement: "top",
   },
   {
-    target: "[data-tour='tabs'] [value='incomes']",
+    target: "[data-tour='tab-incomes']",
     title: "Aba Entradas 💰",
     description: "Registre suas receitas mensais como salário, freelance ou vendas. Também tem Entradas Fixas para receitas recorrentes!",
     placement: "top",
   },
   {
-    target: "[data-tour='tabs'] [value='goals']",
+    target: "[data-tour='tab-goals']",
     title: "Aba Metas 🎯",
     description: "Defina limites de gastos por categoria ou total do mês. Receba alertas quando estiver perto de estourar!",
     placement: "top",
