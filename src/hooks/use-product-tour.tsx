@@ -49,7 +49,7 @@ export const tourSteps: TourStep[] = [
   {
     target: "[data-tour='tabs']",
     title: "Organize tudo",
-    description: "Alterne entre Despesas, Despesas Fixas (recorrentes) e Metas de gastos.",
+    description: "Alterne entre Despesas, Receitas, Despesas Fixas (recorrentes) e Metas de gastos.",
     placement: "top",
   },
   {
@@ -59,27 +59,21 @@ export const tourSteps: TourStep[] = [
     placement: "bottom",
   },
   {
-    target: "[data-tour='cards-button']",
-    title: "Gerencie seus cartões 💳",
-    description: "Configure seus cartões de crédito e débito com datas de fechamento personalizadas.",
-    placement: "bottom",
-  },
-  {
     target: "[data-tour='values-toggle']",
     title: "Mostrar/Esconder valores 👁️",
     description: "Se alguém estiver por perto, esconda seus valores com um toque! Sua privacidade é importante.",
     placement: "bottom",
   },
   {
-    target: "[data-tour='calculator-button']",
-    title: "Calculadora integrada 🧮",
-    description: "Precisa fazer contas? Use a calculadora e envie o resultado direto para um novo gasto!",
-    placement: "top",
+    target: "[data-tour='menu-button']",
+    title: "Menu lateral ☰",
+    description: "Aqui você acessa Cartões, Configurações, Lembretes, Conta e muito mais. Tudo organizado num só lugar!",
+    placement: "bottom",
   },
   {
     target: "[data-tour='fab-main-button']",
     title: "Adicione gastos rapidamente ➕",
-    description: "Toque no '+' sempre que fizer um gasto. O formulário é simples: descrição, valor, data e categoria!",
+    description: "Toque no '+' para registrar despesas, receitas ou metas. Também tem calculadora integrada para fazer contas na hora!",
     placement: "top",
   },
   {
