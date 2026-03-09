@@ -189,31 +189,29 @@ const AppContent = () => {
   }
 
   return (
-    <>
+    <BrowserRouter>
       <Toaster />
       <Sonner />
       <OnboardingTour />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/landing" element={<Landing />} />
-          <Route path="/about" element={<About />} />
-          <Route path="/contact" element={<Contact />} />
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/account" element={<Account />} />
-          <Route path="/cards" element={<Cards />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/reports" element={<Reports />} />
-          <Route path="/subscription" element={<Subscription />} />
-          <Route path="/privacy" element={<PrivacyPolicy />} />
-          <Route path="/notification-debug" element={<NotificationDebug />} />
-          <Route path="/admin" element={<Admin />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </>
+      <Routes>
+        <Route path="/" element={<Index />} />
+        <Route path="/landing" element={<Landing />} />
+        <Route path="/about" element={<About />} />
+        <Route path="/contact" element={<Contact />} />
+        <Route path="/auth" element={<Auth />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/account" element={<Account />} />
+        <Route path="/cards" element={<Cards />} />
+        <Route path="/settings" element={<Settings />} />
+        <Route path="/reports" element={<Reports />} />
+        <Route path="/subscription" element={<Subscription />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/notification-debug" element={<NotificationDebug />} />
+        <Route path="/admin" element={<Admin />} />
+        {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </BrowserRouter>
   );
 };
 
@@ -225,11 +223,11 @@ const App = () => (
           <IncomeCategoriesProvider>
             <SharedGroupsProvider>
               <ValuesVisibilityProvider>
-                <OnboardingProvider>
-                  <TooltipProvider>
+                <TooltipProvider>
+                  <OnboardingProvider>
                     <AppContent />
-                  </TooltipProvider>
-                </OnboardingProvider>
+                  </OnboardingProvider>
+                </TooltipProvider>
               </ValuesVisibilityProvider>
             </SharedGroupsProvider>
           </IncomeCategoriesProvider>
