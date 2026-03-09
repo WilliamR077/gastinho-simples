@@ -16,6 +16,16 @@ interface TargetRect {
 export function TourOverlay({ targetSelector, isVisible }: TourOverlayProps) {
   const [targetRect, setTargetRect] = useState<TargetRect | null>(null);
 
+  // Travar scroll da página enquanto o tour estiver ativo
+  useEffect(() => {
+    if (isVisible) {
+      document.body.style.overflow = "hidden";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isVisible]);
+
   useEffect(() => {
     if (!isVisible) return;
 

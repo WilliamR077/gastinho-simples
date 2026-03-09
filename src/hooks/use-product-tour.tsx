@@ -29,6 +29,12 @@ export const tourSteps: TourStep[] = [
     placement: "bottom",
   },
   {
+    target: "[data-tour='view-mode-toggle']",
+    title: "Modo Fatura 💳",
+    description: "Alterne entre Calendário e Fatura! No modo Fatura, você vê os gastos do cartão de crédito agrupados pelo período de cobrança.",
+    placement: "bottom",
+  },
+  {
     target: "[data-tour='expense-filters']",
     title: "Filtros poderosos",
     description: "Filtre por cartão, valor, descrição e período de fatura do cartão de crédito.",
@@ -47,9 +53,21 @@ export const tourSteps: TourStep[] = [
     placement: "bottom",
   },
   {
-    target: "[data-tour='tabs']",
-    title: "Organize tudo",
-    description: "Alterne entre Despesas, Receitas, Despesas Fixas (recorrentes) e Metas de gastos.",
+    target: "[data-tour='tabs'] [value='expenses']",
+    title: "Aba Despesas 💸",
+    description: "Aqui ficam todas as suas despesas do mês. Você também pode ver e gerenciar suas Despesas Fixas (recorrentes).",
+    placement: "top",
+  },
+  {
+    target: "[data-tour='tabs'] [value='incomes']",
+    title: "Aba Entradas 💰",
+    description: "Registre suas receitas mensais como salário, freelance ou vendas. Também tem Entradas Fixas para receitas recorrentes!",
+    placement: "top",
+  },
+  {
+    target: "[data-tour='tabs'] [value='goals']",
+    title: "Aba Metas 🎯",
+    description: "Defina limites de gastos por categoria ou total do mês. Receba alertas quando estiver perto de estourar!",
     placement: "top",
   },
   {
