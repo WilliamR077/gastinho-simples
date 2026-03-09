@@ -1,0 +1,277 @@
+import { useState, useEffect, createContext, useContext, ReactNode } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "./use-auth";
+import { Capacitor } from "@capacitor/core";
+
+interface OnboardingStep {
+  id: string;
+  title: string;
+  description: string;
+  emoji: string;
+  action: "navigate" | "wait";
+  targetRoute?: string;
+  detectionTable?: string;
+  optional?: boolean;
+  mobileOnly?: boolean;
+  exampleText?: string;
+}
+
+const ONBOARDING_STEPS: OnboardingStep[] = [
+  {
+    id: "add-card",
+    title: "Configure seu Primeiro Cartão",
+    description: "Vamos cadastrar seu primeiro cartão! Pode ser de crédito ou débito. Isso vai te ajudar a acompanhar seus gastos.",
+    emoji: "🏦",
+    action: "navigate",
+    targetRoute: "/cards",
+    detectionTable: "cards",
+  },
+  {
+    id: "add-category",
+    title: "Personalize suas Categorias",
+    description: "Adicione categorias que fazem sentido para você, como 'Academia', 'Pets' ou 'Streaming'. Ou pule se preferir usar as categorias padrão.",
+    emoji: "📦",
+    action: "wait",
+    detectionTable: "user_categories",
+    optional: true,
+  },
+  {
+    id: "add-expense",
+    title: "Registre seu Primeiro Gasto",
+    description: "Agora vamos registrar uma despesa! Toque no botão '+' e preencha os dados de um gasto recente.",
+    emoji: "💸",
+    action: "wait",
+    detectionTable: "expenses",
+  },
+  {
+    id: "add-recurring-expense",
+    title: "Adicione Despesas Fixas",
+    description: "Cadastre suas contas mensais fixas (luz, internet, Netflix...). O app vai lançar automaticamente todo mês!",
+    emoji: "🔄",
+    action: "wait",
+    detectionTable: "recurring_expenses",
+    exampleText: "Exemplo: Netflix - R$ 29,90",
+  },
+  {
+    id: "add-income",
+    title: "Registre sua Primeira Entrada",
+    description: "Registre uma receita! Pode ser salário, freelance, venda ou qualquer entrada de dinheiro.",
+    emoji: "💰",
+    action: "wait",
+    detectionTable: "incomes",
+  },
+  {
+    id: "add-budget-goal",
+    title: "Defina uma Meta de Gastos",
+    description: "Estabeleça um limite de gastos para o mês! Isso te ajuda a não estourar o orçamento e ter controle financeiro.",
+    emoji: "🎯",
+    action: "wait",
+    detectionTable: "budget_goals",
+  },
+  {
+    id: "setup-security",
+    title: "Configure Segurança com PIN",
+    description: "Proteja seus dados! Configure um PIN para bloquear o app quando ele estiver em segundo plano.",
+    emoji: "🔐",
+    action: "navigate",
+    targetRoute: "/settings",
+    mobileOnly: true,
+  },
+  {
+    id: "import-spreadsheet",
+    title: "Importar Planilha (Opcional)",
+    description: "Se você já tem seus gastos em uma planilha, pode importar aqui! Caso contrário, pode pular esta etapa.",
+    emoji: "📊",
+    action: "navigate",
+    targetRoute: "/settings",
+    optional: true,
+  },
+];
+
+interface OnboardingContextType {
+  isOpen: boolean;
+  currentStepIndex: number;
+  currentStep: OnboardingStep | null;
+  totalSteps: number;
+  progress: number;
+  isCompleted: boolean;
+  showCompletionDialog: boolean;
+  startOnboarding: () => void;
+  skipOnboarding: () => void;
+  skipCurrentStep: () => void;
+  completeStep: (stepId: string) => void;
+  closeCompletionDialog: () => void;
+  navigateToStep: () => void;
+}
+
+const OnboardingContext = createContext<OnboardingContextType | undefined>(undefined);
+
+const STORAGE_KEY = "gastinho_onboarding_completed";
+const PROGRESS_KEY = "gastinho_onboarding_progress";
+
+export function OnboardingProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [isOpen, setIsOpen] = useState(false);
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set());
+  const [showCompletionDialog, setShowCompletionDialog] = useState(false);
+
+  // Filtrar steps mobile-only se não estiver em plataforma nativa
+  const availableSteps = ONBOARDING_STEPS.filter(
+    (step) => !step.mobileOnly || Capacitor.isNativePlatform()
+  );
+
+  const currentStep = availableSteps[currentStepIndex] || null;
+  const totalSteps = availableSteps.length;
+  const progress = (completedSteps.size / totalSteps) * 100;
+  const isCompleted = localStorage.getItem(STORAGE_KEY) === "true";
+
+  // Carregar progresso salvo
+  useEffect(() => {
+    const savedProgress = localStorage.getItem(PROGRESS_KEY);
+    if (savedProgress) {
+      try {
+        const { stepIndex, completed } = JSON.parse(savedProgress);
+        setCurrentStepIndex(stepIndex);
+        setCompletedSteps(new Set(completed));
+      } catch (e) {
+        console.error("Erro ao carregar progresso do onboarding:", e);
+      }
+    }
+  }, []);
+
+  // Salvar progresso
+  useEffect(() => {
+    if (isOpen) {
+      localStorage.setItem(
+        PROGRESS_KEY,
+        JSON.stringify({
+          stepIndex: currentStepIndex,
+          completed: Array.from(completedSteps),
+        })
+      );
+    }
+  }, [currentStepIndex, completedSteps, isOpen]);
+
+  // Detectar conclusão de steps via Supabase Realtime
+  useEffect(() => {
+    if (!user || !isOpen || !currentStep?.detectionTable) return;
+
+    const channel = supabase
+      .channel(`onboarding-${currentStep.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: currentStep.detectionTable,
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          completeStep(currentStep.id);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      channel.unsubscribe();
+    };
+  }, [user, isOpen, currentStep]);
+
+  // Detectar PIN configurado (step de segurança)
+  useEffect(() => {
+    if (!isOpen || currentStep?.id !== "setup-security") return;
+
+    const checkPIN = setInterval(() => {
+      const pinExists = localStorage.getItem("gastinho_app_lock_pin");
+      if (pinExists) {
+        completeStep("setup-security");
+      }
+    }, 1000);
+
+    return () => clearInterval(checkPIN);
+  }, [isOpen, currentStep]);
+
+  const startOnboarding = () => {
+    setIsOpen(true);
+    setCurrentStepIndex(0);
+    setCompletedSteps(new Set());
+    localStorage.removeItem(PROGRESS_KEY);
+  };
+
+  const skipOnboarding = () => {
+    setIsOpen(false);
+    localStorage.setItem(STORAGE_KEY, "true");
+    localStorage.removeItem(PROGRESS_KEY);
+  };
+
+  const skipCurrentStep = () => {
+    if (currentStep?.optional) {
+      completeStep(currentStep.id);
+    }
+  };
+
+  const completeStep = (stepId: string) => {
+    setCompletedSteps((prev) => new Set([...prev, stepId]));
+
+    // Avançar para próximo step
+    const nextIndex = currentStepIndex + 1;
+    if (nextIndex >= availableSteps.length) {
+      // Tour completo!
+      setIsOpen(false);
+      setShowCompletionDialog(true);
+      localStorage.setItem(STORAGE_KEY, "true");
+      localStorage.removeItem(PROGRESS_KEY);
+    } else {
+      setCurrentStepIndex(nextIndex);
+      // Se próximo step requer navegação, navegar
+      const nextStep = availableSteps[nextIndex];
+      if (nextStep?.targetRoute && nextStep.targetRoute !== location.pathname) {
+        navigate(nextStep.targetRoute);
+      }
+    }
+  };
+
+  const closeCompletionDialog = () => {
+    setShowCompletionDialog(false);
+  };
+
+  const navigateToStep = () => {
+    if (currentStep?.targetRoute) {
+      navigate(currentStep.targetRoute);
+    }
+  };
+
+  return (
+    <OnboardingContext.Provider
+      value={{
+        isOpen,
+        currentStepIndex,
+        currentStep,
+        totalSteps,
+        progress,
+        isCompleted,
+        showCompletionDialog,
+        startOnboarding,
+        skipOnboarding,
+        skipCurrentStep,
+        completeStep,
+        closeCompletionDialog,
+        navigateToStep,
+      }}
+    >
+      {children}
+    </OnboardingContext.Provider>
+  );
+}
+
+export function useOnboardingTour() {
+  const context = useContext(OnboardingContext);
+  if (!context) {
+    throw new Error("useOnboardingTour must be used within OnboardingProvider");
+  }
+  return context;
+}

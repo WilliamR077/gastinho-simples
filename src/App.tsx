@@ -10,6 +10,8 @@ import { SharedGroupsProvider } from "@/hooks/use-shared-groups";
 import { ValuesVisibilityProvider } from "@/hooks/use-values-visibility";
 import { CategoriesProvider } from "@/hooks/use-categories";
 import { IncomeCategoriesProvider } from "@/hooks/use-income-categories";
+import { OnboardingProvider } from "@/hooks/use-onboarding-tour";
+import { OnboardingTour } from "@/components/onboarding-tour";
 import { firebaseNotificationService } from "@/services/firebase-notification-service";
 import { adMobService } from "@/services/admob-service";
 import { appLockService } from "@/services/app-lock-service";
@@ -190,6 +192,7 @@ const AppContent = () => {
     <>
       <Toaster />
       <Sonner />
+      <OnboardingTour />
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
@@ -222,9 +225,11 @@ const App = () => (
           <IncomeCategoriesProvider>
             <SharedGroupsProvider>
               <ValuesVisibilityProvider>
-                <TooltipProvider>
-                  <AppContent />
-                </TooltipProvider>
+                <OnboardingProvider>
+                  <TooltipProvider>
+                    <AppContent />
+                  </TooltipProvider>
+                </OnboardingProvider>
               </ValuesVisibilityProvider>
             </SharedGroupsProvider>
           </IncomeCategoriesProvider>
