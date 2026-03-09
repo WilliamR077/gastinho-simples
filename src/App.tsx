@@ -189,7 +189,7 @@ const AppContent = () => {
   }
 
   return (
-    <BrowserRouter>
+    <>
       <Toaster />
       <Sonner />
       <OnboardingTour />
@@ -211,7 +211,7 @@ const AppContent = () => {
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>
-    </BrowserRouter>
+    </>
   );
 };
 
@@ -219,19 +219,21 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider defaultTheme="dark">
       <AuthProvider>
-        <CategoriesProvider>
-          <IncomeCategoriesProvider>
-            <SharedGroupsProvider>
-              <ValuesVisibilityProvider>
-                <TooltipProvider>
-                  <OnboardingProvider>
-                    <AppContent />
-                  </OnboardingProvider>
-                </TooltipProvider>
-              </ValuesVisibilityProvider>
-            </SharedGroupsProvider>
-          </IncomeCategoriesProvider>
-        </CategoriesProvider>
+        <BrowserRouter>
+          <CategoriesProvider>
+            <IncomeCategoriesProvider>
+              <SharedGroupsProvider>
+                <ValuesVisibilityProvider>
+                  <TooltipProvider>
+                    <OnboardingProvider>
+                      <AppContent />
+                    </OnboardingProvider>
+                  </TooltipProvider>
+                </ValuesVisibilityProvider>
+              </SharedGroupsProvider>
+            </IncomeCategoriesProvider>
+          </CategoriesProvider>
+        </BrowserRouter>
       </AuthProvider>
     </ThemeProvider>
   </QueryClientProvider>
