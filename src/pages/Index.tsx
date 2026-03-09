@@ -1582,7 +1582,7 @@ export default function Index() {
         </div>
 
         {/* Toggle Calendário / Fatura */}
-        <div className="flex items-center justify-center gap-1.5 mb-3">
+        <div data-tour="view-mode-toggle" className="flex items-center justify-center gap-1.5 mb-3">
           <button
             onClick={() => setViewMode("calendar")}
             className={cn(

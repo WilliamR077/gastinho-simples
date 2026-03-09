@@ -1,44 +1,102 @@
 
 
-## Plano: Melhorias no Tutorial
+## Plano: Corrigir aritmética de datas do billing + filtro só crédito + multi-cartões
 
-### Resumo das Mudanças
+### Problema 1: `computeClosingDay` usa aritmética fixa (dia - offset + 30)
 
-| Arquivo | Ação |
-|---------|------|
-| `src/components/tour-overlay.tsx` | Adicionar `overflow: hidden` no body quando tour ativo |
-| `src/pages/Index.tsx` | Adicionar `data-tour="view-mode-toggle"` no container dos botões Calendário/Fatura |
-| `src/hooks/use-product-tour.tsx` | Atualizar `tourSteps`: inserir step fatura, dividir step abas em 3 dedicados |
+Em `card-manager.tsx` linha 80-84 e no preview do formulário (linha 334), o fechamento é calculado como `dueDay - daysBefore + 30` — ignora meses reais. Também em `billing-period.ts`, `calculateBillingPeriod` calcula o fechamento posicionando o due_day no mesmo mês da despesa e subtraindo dias, mas o modelo correto é: o vencimento da fatura M fica no mês M+1, e o fechamento = vencimento - dias_antes.
+
+### Problema 2: Modo Fatura mostra PIX/Débito
+
+Em `Index.tsx` linhas 1225-1234, quando `viewMode === "billing"` mas a despesa NÃO é crédito, o código cai no `else` e filtra por data — deveria retornar `false` diretamente.
+
+### Problema 3: Multi-cartões sem seleção obrigatória
+
+Não há exigência de selecionar um cartão no modo Fatura. Sem isso, faturas de cartões com ciclos diferentes se misturam.
 
 ---
 
-### Detalhes Técnicos
+### Mudanças
 
-**1. Travar Scroll (tour-overlay.tsx)**
-- Adicionar `useEffect` que aplica `document.body.style.overflow = "hidden"` quando `isVisible=true`
-- Cleanup restaura `overflow = ""` quando tour fechar
+#### 1. `src/utils/billing-period.ts` — Reescrever `calculateBillingPeriod` (novo modelo)
 
-**2. Atributo data-tour (Index.tsx)**
-- Linha 1585: adicionar `data-tour="view-mode-toggle"` no `<div>` que envolve os botões Calendário/Fatura
+Nova lógica para `due_day + days_before_due`:
 
-**3. Novos Steps (use-product-tour.tsx)**
+```ts
+// Para determinar a qual fatura M (yyyy-MM) uma compra pertence:
+// Fatura "M" tem vencimento no mês M+1, dia due_day (clamped)
+// Fechamento = vencimento - days_before_due (subtração real de dias via Date)
+// Período da fatura M = (fechamento da fatura M-1) + 1 dia  até  fechamento da fatura M
+// 
+// Algoritmo: testar fatura do mês da compra e do mês anterior.
+// Se compra <= fechamento do mês → pertence a esse mês
+// Senão → pertence ao mês seguinte
+```
 
-Steps atualizados:
-1. Bem-vindo ao Gastinho
-2. Grupos compartilhados
-3. Navegue pelos meses
-4. **NOVO:** Modo Fatura (`[data-tour='view-mode-toggle']`) → "Alterne entre Calendário e Fatura para visualizar gastos de cartão por período de cobrança"
-5. Filtros poderosos
-6. Suas categorias
-7. Resumo por forma de pagamento
-8. **Aba Despesas** (`[data-tour='tabs'] [value='expenses']`) → "Despesas do mês e despesas fixas recorrentes"
-9. **Aba Entradas** (`[data-tour='tabs'] [value='incomes']`) → "Suas receitas mensais e entradas fixas"
-10. **Aba Metas** (`[data-tour='tabs'] [value='goals']`) → "Defina limites de gastos e acompanhe seu orçamento"
-11. Relatórios detalhados
-12. Mostrar/Esconder valores
-13. Menu lateral
-14. Adicione gastos rapidamente
-15. Tudo pronto!
+Criar helper `getBillingClosingDate(billingMonth: string, config)`:
+- Parse `billingMonth` → ano/mês (ex: "2026-03" → março)
+- `dueDate = new Date(ano, mês, clamp(due_day, daysInMonth))` — vencimento no próprio mês da fatura (NÃO mês+1, conforme o pedido do usuário: fatura de março fecha em março e vence em abril)
 
-**Total:** 15 steps (era 12)
+Correção: conforme o critério de aceite do usuário:
+- Fatura de Março/2026, vencimento dia 10 → `dueDate = 10/04/2026` (mês seguinte)
+- `closingDate = dueDate - 12 dias = 29/03/2026`
+- `previousDueDate = 10/03/2026`, `previousClosingDate = 26/02/2026`
+- Período = 27/02 a 29/03
+
+Então a fórmula é:
+```ts
+function getClosingDateForBillingMonth(year: number, month: number, dueDay: number, daysBefore: number): Date {
+  // Vencimento cai no MÊS SEGUINTE ao mês da fatura
+  const nextMonth = month + 1;
+  const ny = nextMonth > 11 ? year + 1 : year;
+  const nm = nextMonth > 11 ? 0 : nextMonth;
+  const dueDate = new Date(ny, nm, Math.min(dueDay, daysInMonth(ny, nm)));
+  const closingDate = new Date(dueDate);
+  closingDate.setDate(closingDate.getDate() - daysBefore);
+  return closingDate;
+}
+```
+
+`calculateBillingPeriod(expenseDate, config)`:
+- Tentar fatura do mês da despesa: calcular closingDate e previousClosingDate
+- previousClosingDate = closingDate da fatura do mês anterior
+- Se `expenseDate > previousClosingDate && expenseDate <= closingDate` → fatura desse mês
+- Senão se `expenseDate > closingDate` → fatura do mês seguinte
+- Senão → fatura do mês anterior
+
+Também atualizar `getNextBillingDates` com a mesma lógica corrigida (vencimento no mês seguinte).
+
+#### 2. `src/components/card-manager.tsx`
+
+- **Remover `computeClosingDay`** (linhas 80-84) — não mais necessário
+- **Formulário preview** (linha 331-339): trocar texto para:
+  ```
+  "Vence dia {due_day} • Fecha {days_before_due} dias antes"
+  ```
+  E adicionar "Próximo fechamento: DD/MM • Próximo vencimento: DD/MM" usando `getNextBillingDates` com data real.
+- No `handleSubmit` (linhas 112-120): calcular `closing_day` usando a nova `getClosingDateForBillingMonth` para o mês atual, pegar `.getDate()` (compatibilidade).
+
+#### 3. `src/pages/Index.tsx` — Modo Fatura só crédito + cartão obrigatório
+
+**Filtro (linhas 1207-1235):**
+- Quando `viewMode === "billing"`: se `expense.payment_method !== "credit"` → `return false` (não cair no else)
+
+**Totais (linhas 1482-1498):**
+- Mesma correção: no modo billing, só considerar crédito
+
+**Toggle UI (linhas 1556-1582):**
+- Quando `viewMode === "billing"` e existem 2+ cartões de crédito: mostrar seletor de cartão obrigatório abaixo do toggle
+- Se 1 cartão: auto-selecionar
+- Se 0 cartões de crédito: mostrar mensagem "Cadastre um cartão de crédito"
+- Adicionar state `billingCardId: string | null` — no filtro, usar esse cartão como `filters.cardId` forçado
+
+---
+
+### Arquivos impactados
+
+| Arquivo | Mudança |
+|---|---|
+| `src/utils/billing-period.ts` | Reescrever cálculo: vencimento no mês+1, subtração real de dias |
+| `src/components/card-manager.tsx` | Preview com datas reais, remover `computeClosingDay` |
+| `src/pages/Index.tsx` | Modo Fatura: só crédito, seletor de cartão obrigatório |
 
