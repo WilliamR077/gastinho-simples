@@ -36,7 +36,7 @@ export function OnboardingTour() {
       <Dialog open={showCompletionDialog} onOpenChange={closeCompletionDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader className="text-center space-y-4">
-            <div className="mx-auto w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center">
+            <div className="mx-auto w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center">
               <Check className="w-8 h-8 text-white" />
             </div>
             <DialogTitle className="text-2xl">
@@ -124,7 +124,7 @@ export function OnboardingTour() {
 
   return (
     <Dialog open={isOpen} onOpenChange={() => {}}>
-      <DialogContent className="max-w-md" hideClose>
+      <DialogContent className="max-w-md">
         <DialogHeader className="space-y-4">
           {/* Progress bar */}
           <div className="space-y-2">
