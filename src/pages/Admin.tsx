@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Navigate, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -637,6 +637,21 @@ function NotificationsTab({ allEmails }: { allEmails: string[] }) {
   const [targetType, setTargetType] = useState("broadcast");
   const [targetEmail, setTargetEmail] = useState("");
   const [sending, setSending] = useState(false);
+  const [searchLog, setSearchLog] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+
+  const filteredLogs = useMemo(() => {
+    return logs.filter((log) => {
+      if (searchLog) {
+        const q = searchLog.toLowerCase();
+        if (!log.title.toLowerCase().includes(q) && !log.body.toLowerCase().includes(q) && !(log.target_email || "").toLowerCase().includes(q)) return false;
+      }
+      if (statusFilter !== "all" && log.status !== statusFilter) return false;
+      if (typeFilter !== "all" && log.target_type !== typeFilter) return false;
+      return true;
+    });
+  }, [logs, searchLog, statusFilter, typeFilter]);
 
   const fetchLogs = useCallback(async () => {
     try {
@@ -727,12 +742,33 @@ function NotificationsTab({ allEmails }: { allEmails: string[] }) {
 
       <Card>
         <CardHeader className="pb-3"><CardTitle className="text-base flex items-center gap-2"><Bell className="h-4 w-4" /> Histórico de Notificações</CardTitle></CardHeader>
-        <CardContent>
-          {loading ? <LoadingSpinner /> : logs.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">Nenhuma notificação enviada</p>
+        <CardContent className="space-y-3">
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Input placeholder="Buscar por título, corpo ou email..." value={searchLog} onChange={(e) => setSearchLog(e.target.value)} className="flex-1" />
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full sm:w-[150px]"><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os status</SelectItem>
+                <SelectItem value="sent">Enviado</SelectItem>
+                <SelectItem value="partial">Parcial</SelectItem>
+                <SelectItem value="no_tokens">Sem tokens</SelectItem>
+                <SelectItem value="failed">Falhou</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="w-full sm:w-[150px]"><SelectValue placeholder="Tipo" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os tipos</SelectItem>
+                <SelectItem value="broadcast">Broadcast</SelectItem>
+                <SelectItem value="user">Usuário específico</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {loading ? <LoadingSpinner /> : filteredLogs.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">{logs.length === 0 ? "Nenhuma notificação enviada" : "Nenhum resultado para os filtros aplicados"}</p>
           ) : (
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {logs.map((log) => (
+            <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+              {filteredLogs.map((log) => (
                 <div key={log.id} className="p-3 rounded-lg border border-border space-y-1">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-medium text-foreground truncate">{log.title}</p>
