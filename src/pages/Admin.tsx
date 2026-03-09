@@ -640,6 +640,8 @@ function NotificationsTab({ allEmails }: { allEmails: string[] }) {
   const [searchLog, setSearchLog] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [logPage, setLogPage] = useState(1);
+  const LOGS_PER_PAGE = 15;
 
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
@@ -652,6 +654,10 @@ function NotificationsTab({ allEmails }: { allEmails: string[] }) {
       return true;
     });
   }, [logs, searchLog, statusFilter, typeFilter]);
+  useEffect(() => { setLogPage(1); }, [searchLog, statusFilter, typeFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / LOGS_PER_PAGE));
+  const paginatedLogs = filteredLogs.slice((logPage - 1) * LOGS_PER_PAGE, logPage * LOGS_PER_PAGE);
 
   const fetchLogs = useCallback(async () => {
     try {
@@ -764,27 +770,43 @@ function NotificationsTab({ allEmails }: { allEmails: string[] }) {
               </SelectContent>
             </Select>
           </div>
+          {filteredLogs.length > 0 && (
+            <p className="text-xs text-muted-foreground">{filteredLogs.length} registro(s) encontrado(s)</p>
+          )}
           {loading ? <LoadingSpinner /> : filteredLogs.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-4">{logs.length === 0 ? "Nenhuma notificação enviada" : "Nenhum resultado para os filtros aplicados"}</p>
           ) : (
-            <div className="space-y-2 max-h-[60vh] overflow-y-auto">
-              {filteredLogs.map((log) => (
-                <div key={log.id} className="p-3 rounded-lg border border-border space-y-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-medium text-foreground truncate">{log.title}</p>
-                    <Badge variant={log.status === "sent" ? "default" : log.status === "partial" ? "secondary" : "destructive"} className="text-xs">
-                      {log.status === "sent" ? "Enviado" : log.status === "partial" ? "Parcial" : log.status === "no_tokens" ? "Sem tokens" : "Falhou"}
-                    </Badge>
+            <>
+              <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+                {paginatedLogs.map((log) => (
+                  <div key={log.id} className="p-3 rounded-lg border border-border space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-foreground truncate">{log.title}</p>
+                      <Badge variant={log.status === "sent" ? "default" : log.status === "partial" ? "secondary" : "destructive"} className="text-xs">
+                        {log.status === "sent" ? "Enviado" : log.status === "partial" ? "Parcial" : log.status === "no_tokens" ? "Sem tokens" : "Falhou"}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{log.body}</p>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      <span>{new Date(log.sent_at).toLocaleString("pt-BR")}</span>
+                      <span>{log.target_type === "broadcast" ? "📢 Todos" : `👤 ${log.target_email}`}</span>
+                      <span>{log.recipients_count} destinatário(s)</span>
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">{log.body}</p>
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                    <span>{new Date(log.sent_at).toLocaleString("pt-BR")}</span>
-                    <span>{log.target_type === "broadcast" ? "📢 Todos" : `👤 ${log.target_email}`}</span>
-                    <span>{log.recipients_count} destinatário(s)</span>
-                  </div>
+                ))}
+              </div>
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between pt-2">
+                  <Button variant="outline" size="sm" disabled={logPage <= 1} onClick={() => setLogPage(p => p - 1)}>
+                    Anterior
+                  </Button>
+                  <span className="text-xs text-muted-foreground">Página {logPage} de {totalPages}</span>
+                  <Button variant="outline" size="sm" disabled={logPage >= totalPages} onClick={() => setLogPage(p => p + 1)}>
+                    Próxima
+                  </Button>
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
