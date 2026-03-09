@@ -644,7 +644,6 @@ function NotificationsTab({ allEmails }: { allEmails: string[] }) {
   const LOGS_PER_PAGE = 15;
 
   const filteredLogs = useMemo(() => {
-    setLogPage(1);
     return logs.filter((log) => {
       if (searchLog) {
         const q = searchLog.toLowerCase();
