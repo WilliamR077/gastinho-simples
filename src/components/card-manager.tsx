@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardFormData, CardType, cardTypeLabels } from "@/types/card";
 import { useToast } from "@/hooks/use-toast";
 import { useSubscription } from "@/hooks/use-subscription";
+import { useOnboardingTour } from "@/hooks/use-onboarding-tour";
 import { Button } from "@/components/ui/button";
 import { Card as CardUI, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -23,7 +24,15 @@ export function CardManager() {
   const [deleteCardId, setDeleteCardId] = useState<string | null>(null);
   const { toast } = useToast();
   const { canAddCard, features } = useSubscription();
+  const { isOpen: isOnboardingOpen, currentStep, setSubPhase, subPhase } = useOnboardingTour();
   const navigate = useNavigate();
+
+  // Notificar onboarding quando formulário abre
+  useEffect(() => {
+    if (isOnboardingOpen && currentStep?.id === "add-card" && showForm && subPhase === "arrived") {
+      setSubPhase("form-open");
+    }
+  }, [showForm, isOnboardingOpen, currentStep, subPhase, setSubPhase]);
 
   const [formData, setFormData] = useState<CardFormData>({
     name: "",

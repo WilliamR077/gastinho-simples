@@ -1,57 +1,102 @@
 
-## Plano: Tutorial Interativo com Sub-fases
 
-### Problema Identificado
-Quando o usuário clica "Ir para Cartões", ele é redirecionado mas o modal continua mostrando o mesmo botão. O tutorial precisa ter **sub-fases** dentro de cada step para guiar o usuário passo a passo.
+## Plano: Corrigir aritmética de datas do billing + filtro só crédito + multi-cartões
 
-### Solução
+### Problema 1: `computeClosingDay` usa aritmética fixa (dia - offset + 30)
 
-Reformular o onboarding para ter **fases internas** em cada step:
+Em `card-manager.tsx` linha 80-84 e no preview do formulário (linha 334), o fechamento é calculado como `dueDay - daysBefore + 30` — ignora meses reais. Também em `billing-period.ts`, `calculateBillingPeriod` calcula o fechamento posicionando o due_day no mesmo mês da despesa e subtraindo dias, mas o modelo correto é: o vencimento da fatura M fica no mês M+1, e o fechamento = vencimento - dias_antes.
 
+### Problema 2: Modo Fatura mostra PIX/Débito
+
+Em `Index.tsx` linhas 1225-1234, quando `viewMode === "billing"` mas a despesa NÃO é crédito, o código cai no `else` e filtra por data — deveria retornar `false` diretamente.
+
+### Problema 3: Multi-cartões sem seleção obrigatória
+
+Não há exigência de selecionar um cartão no modo Fatura. Sem isso, faturas de cartões com ciclos diferentes se misturam.
+
+---
+
+### Mudanças
+
+#### 1. `src/utils/billing-period.ts` — Reescrever `calculateBillingPeriod` (novo modelo)
+
+Nova lógica para `due_day + days_before_due`:
+
+```ts
+// Para determinar a qual fatura M (yyyy-MM) uma compra pertence:
+// Fatura "M" tem vencimento no mês M+1, dia due_day (clamped)
+// Fechamento = vencimento - days_before_due (subtração real de dias via Date)
+// Período da fatura M = (fechamento da fatura M-1) + 1 dia  até  fechamento da fatura M
+// 
+// Algoritmo: testar fatura do mês da compra e do mês anterior.
+// Se compra <= fechamento do mês → pertence a esse mês
+// Senão → pertence ao mês seguinte
 ```
-Step: add-card
-├─ Fase 1: "navigate" → Mostrar botão "Ir para Cartões"
-├─ Fase 2: "arrived" → Detectou que está em /cards → Guiar para clicar "+"
-├─ Fase 3: "form-open" → Formulário aberto → Explicar campos
-└─ Fase 4: "completed" → Cartão salvo → Perguntar se quer adicionar outro
+
+Criar helper `getBillingClosingDate(billingMonth: string, config)`:
+- Parse `billingMonth` → ano/mês (ex: "2026-03" → março)
+- `dueDate = new Date(ano, mês, clamp(due_day, daysInMonth))` — vencimento no próprio mês da fatura (NÃO mês+1, conforme o pedido do usuário: fatura de março fecha em março e vence em abril)
+
+Correção: conforme o critério de aceite do usuário:
+- Fatura de Março/2026, vencimento dia 10 → `dueDate = 10/04/2026` (mês seguinte)
+- `closingDate = dueDate - 12 dias = 29/03/2026`
+- `previousDueDate = 10/03/2026`, `previousClosingDate = 26/02/2026`
+- Período = 27/02 a 29/03
+
+Então a fórmula é:
+```ts
+function getClosingDateForBillingMonth(year: number, month: number, dueDay: number, daysBefore: number): Date {
+  // Vencimento cai no MÊS SEGUINTE ao mês da fatura
+  const nextMonth = month + 1;
+  const ny = nextMonth > 11 ? year + 1 : year;
+  const nm = nextMonth > 11 ? 0 : nextMonth;
+  const dueDate = new Date(ny, nm, Math.min(dueDay, daysInMonth(ny, nm)));
+  const closingDate = new Date(dueDate);
+  closingDate.setDate(closingDate.getDate() - daysBefore);
+  return closingDate;
+}
 ```
 
-### Mudanças Técnicas
+`calculateBillingPeriod(expenseDate, config)`:
+- Tentar fatura do mês da despesa: calcular closingDate e previousClosingDate
+- previousClosingDate = closingDate da fatura do mês anterior
+- Se `expenseDate > previousClosingDate && expenseDate <= closingDate` → fatura desse mês
+- Senão se `expenseDate > closingDate` → fatura do mês seguinte
+- Senão → fatura do mês anterior
 
-**1. `src/hooks/use-onboarding-tour.tsx`**
-- Adicionar `subPhase: "navigate" | "arrived" | "form-open" | "completed"` ao estado
-- Detectar mudança de rota para avançar fase (ex: quando chega em `/cards` → mudar para "arrived")
-- Exportar `setSubPhase` para componentes externos notificarem (ex: quando formulário abre)
-- Nova função `askAddAnother()` para perguntar se quer repetir
+Também atualizar `getNextBillingDates` com a mesma lógica corrigida (vencimento no mês seguinte).
 
-**2. `src/components/onboarding-tour.tsx`**
-- Renderização condicional baseada em `subPhase`:
-  - "navigate" → Botão "Ir para Cartões"
-  - "arrived" → Texto "Agora clique no botão + para adicionar" + destaque visual
-  - "form-open" → Dicas sobre os campos do formulário
-  - "completed" → Botões "Adicionar outro" / "Prosseguir"
+#### 2. `src/components/card-manager.tsx`
 
-**3. `src/components/card-manager.tsx`**
-- Quando `showForm` muda para `true`, notificar onboarding: `setSubPhase("form-open")`
-- Quando cartão é salvo com sucesso, não precisa mudar (Realtime já detecta)
+- **Remover `computeClosingDay`** (linhas 80-84) — não mais necessário
+- **Formulário preview** (linha 331-339): trocar texto para:
+  ```
+  "Vence dia {due_day} • Fecha {days_before_due} dias antes"
+  ```
+  E adicionar "Próximo fechamento: DD/MM • Próximo vencimento: DD/MM" usando `getNextBillingDates` com data real.
+- No `handleSubmit` (linhas 112-120): calcular `closing_day` usando a nova `getClosingDateForBillingMonth` para o mês atual, pegar `.getDate()` (compatibilidade).
 
-**4. Detecção de rota**
-- `useLocation()` no hook para detectar quando pathname muda para o `targetRoute`
-- Automaticamente avançar subPhase de "navigate" → "arrived"
+#### 3. `src/pages/Index.tsx` — Modo Fatura só crédito + cartão obrigatório
 
-### Fluxo UX Final
+**Filtro (linhas 1207-1235):**
+- Quando `viewMode === "billing"`: se `expense.payment_method !== "credit"` → `return false` (não cair no else)
 
-1. Modal: "Vamos cadastrar seu primeiro cartão!" + [Ir para Cartões]
-2. *Usuário clica* → Navega para /cards
-3. Modal muda: "Ótimo! Agora toque no botão +" (com seta ou destaque)
-4. *Usuário clica +* → Formulário abre
-5. Modal muda: "Preencha os dados: Nome, Tipo, Vencimento..." (posição lateral/minimizada)
-6. *Usuário salva* → Realtime detecta INSERT
-7. Modal: "Cartão criado! 🎉" + [Adicionar outro] / [Prosseguir]
+**Totais (linhas 1482-1498):**
+- Mesma correção: no modo billing, só considerar crédito
 
-### Arquivos Afetados
+**Toggle UI (linhas 1556-1582):**
+- Quando `viewMode === "billing"` e existem 2+ cartões de crédito: mostrar seletor de cartão obrigatório abaixo do toggle
+- Se 1 cartão: auto-selecionar
+- Se 0 cartões de crédito: mostrar mensagem "Cadastre um cartão de crédito"
+- Adicionar state `billingCardId: string | null` — no filtro, usar esse cartão como `filters.cardId` forçado
+
+---
+
+### Arquivos impactados
+
 | Arquivo | Mudança |
-|---------|---------|
-| `use-onboarding-tour.tsx` | Adicionar subPhase, detecção de rota, askAddAnother |
-| `onboarding-tour.tsx` | UI condicional por subPhase |
-| `card-manager.tsx` | Notificar quando form abre |
+|---|---|
+| `src/utils/billing-period.ts` | Reescrever cálculo: vencimento no mês+1, subtração real de dias |
+| `src/components/card-manager.tsx` | Preview com datas reais, remover `computeClosingDay` |
+| `src/pages/Index.tsx` | Modo Fatura: só crédito, seletor de cartão obrigatório |
+
