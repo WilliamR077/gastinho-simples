@@ -83,6 +83,7 @@ export function AppHeader({ recurringExpenses, onSignOut }: AppHeaderProps) {
                 onClick={() => setMenuOpen(true)}
                 className="h-11 w-11 touch-manipulation"
                 aria-label="Menu"
+                data-tour="menu-button"
               >
                 <Menu className="h-5 w-5" />
               </Button>
