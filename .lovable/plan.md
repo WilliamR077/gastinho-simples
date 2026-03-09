@@ -1,102 +1,166 @@
 
 
-## Plano: Corrigir aritmética de datas do billing + filtro só crédito + multi-cartões
+# Plano: Tutorial Interativo de Configuração de Conta
 
-### Problema 1: `computeClosingDay` usa aritmética fixa (dia - offset + 30)
+## Avaliação da Ideia
 
-Em `card-manager.tsx` linha 80-84 e no preview do formulário (linha 334), o fechamento é calculado como `dueDay - daysBefore + 30` — ignora meses reais. Também em `billing-period.ts`, `calculateBillingPeriod` calcula o fechamento posicionando o due_day no mesmo mês da despesa e subtraindo dias, mas o modelo correto é: o vencimento da fatura M fica no mês M+1, e o fechamento = vencimento - dias_antes.
+**Excelente ideia!** Um tutorial interativo de onboarding que "pega pela mão" do usuário é muito mais eficaz do que apenas mostrar onde estão as funcionalidades. Isso resolve dois problemas:
 
-### Problema 2: Modo Fatura mostra PIX/Débito
+1. **Engajamento inicial**: Usuários novos ficam perdidos sem dados na aplicação
+2. **Aprendizado prático**: Fazer é melhor que apenas ver
 
-Em `Index.tsx` linhas 1225-1234, quando `viewMode === "billing"` mas a despesa NÃO é crédito, o código cai no `else` e filtra por data — deveria retornar `false` diretamente.
+## Arquitetura Proposta
 
-### Problema 3: Multi-cartões sem seleção obrigatória
+Criar um **segundo sistema de tour** independente do atual:
+- `use-onboarding-tour.tsx` - Hook dedicado ao onboarding
+- `onboarding-tour.tsx` - Componente com lógica diferente do ProductTour
+- Chave localStorage separada: `gastinho_onboarding_completed`
 
-Não há exigência de selecionar um cartão no modo Fatura. Sem isso, faturas de cartões com ciclos diferentes se misturam.
+### Diferenças do Tour Atual
 
----
+| Tour Atual (Demonstração) | Novo Tour (Onboarding) |
+|---------------------------|------------------------|
+| Passivo - apenas mostra | Ativo - usuário executa |
+| 15 steps explicativos | 8-10 steps de ação |
+| Spotlight em elementos | Modais interativos + navegação |
+| Não verifica conclusão | Detecta quando tarefa foi concluída |
+| Pula etapas livremente | Sequencial obrigatório |
 
-### Mudanças
+## Fases do Tutorial Interativo
 
-#### 1. `src/utils/billing-period.ts` — Reescrever `calculateBillingPeriod` (novo modelo)
+### **Fase 1: Configurar Primeiro Cartão** 🏦
+- **Ação**: Navegar para /cards e adicionar cartão
+- **Detecção**: Aguardar inserção na tabela `cards` 
+- **Tooltip**: Modal flutuante com instruções + botão "Ir para Cartões"
+- **Conteúdo**: "Para começar, vamos cadastrar seu primeiro cartão! Pode ser de crédito ou débito. Clique no botão abaixo para ir à página de cartões."
 
-Nova lógica para `due_day + days_before_due`:
+### **Fase 2: Adicionar Categorias Personalizadas** 📦
+- **Ação**: Voltar para /, abrir CategoryManager (settings menu) e criar 1-2 categorias
+- **Detecção**: Verificar `user_categories` > 0 (além das padrão)
+- **Tooltip**: "Personalize suas categorias! Adicione uma categoria que faça sentido para você, como 'Academia' ou 'Pets'."
+- **Opcional**: Pode pular se usuário preferir usar categorias padrão
 
-```ts
-// Para determinar a qual fatura M (yyyy-MM) uma compra pertence:
-// Fatura "M" tem vencimento no mês M+1, dia due_day (clamped)
-// Fechamento = vencimento - days_before_due (subtração real de dias via Date)
-// Período da fatura M = (fechamento da fatura M-1) + 1 dia  até  fechamento da fatura M
-// 
-// Algoritmo: testar fatura do mês da compra e do mês anterior.
-// Se compra <= fechamento do mês → pertence a esse mês
-// Senão → pertence ao mês seguinte
-```
+### **Fase 3: Registrar Primeira Despesa** 💸
+- **Ação**: Abrir FAB, adicionar despesa
+- **Detecção**: Primeira entrada em `expenses`
+- **Tooltip**: "Agora registre seu primeiro gasto! Toque no botão '+' e preencha os dados."
 
-Criar helper `getBillingClosingDate(billingMonth: string, config)`:
-- Parse `billingMonth` → ano/mês (ex: "2026-03" → março)
-- `dueDate = new Date(ano, mês, clamp(due_day, daysInMonth))` — vencimento no próprio mês da fatura (NÃO mês+1, conforme o pedido do usuário: fatura de março fecha em março e vence em abril)
+### **Fase 4: Adicionar Despesas Fixas** 🔄
+- **Ação**: Tab "Despesas" → sub-tab "Fixas" → Adicionar recurring_expense
+- **Detecção**: Primeira entrada em `recurring_expenses`
+- **Tooltip**: "Cadastre suas contas mensais fixas (luz, internet, streaming). O app vai adicionar automaticamente todo mês!"
+- **Exemplo sugerido**: "Netflix - R$ 29,90"
 
-Correção: conforme o critério de aceite do usuário:
-- Fatura de Março/2026, vencimento dia 10 → `dueDate = 10/04/2026` (mês seguinte)
-- `closingDate = dueDate - 12 dias = 29/03/2026`
-- `previousDueDate = 10/03/2026`, `previousClosingDate = 26/02/2026`
-- Período = 27/02 a 29/03
+### **Fase 5: Registrar Primeira Entrada** 💰
+- **Ação**: Tab "Entradas" → adicionar income
+- **Detecção**: Primeira entrada em `incomes`
+- **Tooltip**: "Registre sua primeira receita! Pode ser salário, freelance, venda..."
 
-Então a fórmula é:
-```ts
-function getClosingDateForBillingMonth(year: number, month: number, dueDay: number, daysBefore: number): Date {
-  // Vencimento cai no MÊS SEGUINTE ao mês da fatura
-  const nextMonth = month + 1;
-  const ny = nextMonth > 11 ? year + 1 : year;
-  const nm = nextMonth > 11 ? 0 : nextMonth;
-  const dueDate = new Date(ny, nm, Math.min(dueDay, daysInMonth(ny, nm)));
-  const closingDate = new Date(dueDate);
-  closingDate.setDate(closingDate.getDate() - daysBefore);
-  return closingDate;
+### **Fase 6: Definir Meta de Gastos** 🎯
+- **Ação**: Tab "Metas" → adicionar budget_goal
+- **Detecção**: Primeira entrada em `budget_goals`
+- **Tooltip**: "Defina um limite de gastos para o mês! Isso te ajuda a não estourar o orçamento."
+
+### **Fase 7: Configurar Segurança (PIN)** 🔐
+- **Ação**: Menu → Configurações → Ativar bloqueio + definir PIN
+- **Detecção**: `localStorage.getItem('gastinho_app_lock_pin')` exists
+- **Tooltip**: "Proteja seus dados! Configure um PIN para bloquear o app quando estiver em segundo plano."
+- **Condicional**: Só no mobile (Capacitor.isNativePlatform)
+
+### **Fase 8: Importar Planilha** 📊
+- **Ação**: Menu → Configurações → Importar Planilha
+- **Detecção**: Importação bem-sucedida (expenses criados via import)
+- **Tooltip**: "Se você já tem seus gastos em planilha, importe aqui! (Passo opcional)"
+- **Opcional**: Botão "Pular" visível
+
+### **Fase Final: Conclusão + CTA Premium** ✨
+- **Ação**: Mostrar conquistas
+- **Conteúdo**: 
+  - "Parabéns! Você configurou sua conta! 🎉"
+  - Lista do que foi feito (checkmarks)
+  - CTA: "Quer mais? Com Premium você ganha: grupos compartilhados, relatórios avançados, exportação..."
+  - Botões: "Conhecer Premium" / "Começar a usar"
+
+## Estrutura de Dados
+
+```typescript
+interface OnboardingStep {
+  id: string;
+  title: string;
+  description: string;
+  action: "navigate" | "wait" | "modal";
+  targetRoute?: string;
+  detectionQuery?: {
+    table: string;
+    condition: (data: any) => boolean;
+  };
+  optional?: boolean;
+  mobileOnly?: boolean;
 }
 ```
 
-`calculateBillingPeriod(expenseDate, config)`:
-- Tentar fatura do mês da despesa: calcular closingDate e previousClosingDate
-- previousClosingDate = closingDate da fatura do mês anterior
-- Se `expenseDate > previousClosingDate && expenseDate <= closingDate` → fatura desse mês
-- Senão se `expenseDate > closingDate` → fatura do mês seguinte
-- Senão → fatura do mês anterior
+## Detecção de Conclusão
 
-Também atualizar `getNextBillingDates` com a mesma lógica corrigida (vencimento no mês seguinte).
+Usar **Supabase Realtime** para detectar inserções:
+```typescript
+useEffect(() => {
+  const subscription = supabase
+    .channel('onboarding-progress')
+    .on('postgres_changes', 
+      { event: 'INSERT', schema: 'public', table: 'cards' },
+      () => completeStep('add-card')
+    )
+    .subscribe();
+}, []);
+```
 
-#### 2. `src/components/card-manager.tsx`
+## Fluxo de UX
 
-- **Remover `computeClosingDay`** (linhas 80-84) — não mais necessário
-- **Formulário preview** (linha 331-339): trocar texto para:
-  ```
-  "Vence dia {due_day} • Fecha {days_before_due} dias antes"
-  ```
-  E adicionar "Próximo fechamento: DD/MM • Próximo vencimento: DD/MM" usando `getNextBillingDates` com data real.
-- No `handleSubmit` (linhas 112-120): calcular `closing_day` usando a nova `getClosingDateForBillingMonth` para o mês atual, pegar `.getDate()` (compatibilidade).
+1. **Gatilho**: Após completar o tour de demonstração, mostrar diálogo:
+   - "Quer ajuda para configurar sua conta?"
+   - Botões: "Sim, me ajude!" / "Não, vou explorar sozinho"
 
-#### 3. `src/pages/Index.tsx` — Modo Fatura só crédito + cartão obrigatório
+2. **Navegação automática**: Quando step requer outra página, mostrar modal com botão que navega
 
-**Filtro (linhas 1207-1235):**
-- Quando `viewMode === "billing"`: se `expense.payment_method !== "credit"` → `return false` (não cair no else)
+3. **Validação**: Não avança até ação ser concluída (exceto steps opcionais)
 
-**Totais (linhas 1482-1498):**
-- Mesma correção: no modo billing, só considerar crédito
+4. **Persistência**: Salvar progresso no localStorage para retomar depois
 
-**Toggle UI (linhas 1556-1582):**
-- Quando `viewMode === "billing"` e existem 2+ cartões de crédito: mostrar seletor de cartão obrigatório abaixo do toggle
-- Se 1 cartão: auto-selecionar
-- Se 0 cartões de crédito: mostrar mensagem "Cadastre um cartão de crédito"
-- Adicionar state `billingCardId: string | null` — no filtro, usar esse cartão como `filters.cardId` forçado
+5. **Saída**: Botão "Sair do tutorial" sempre visível (confirma antes)
 
----
+## Arquivos a Criar/Modificar
 
-### Arquivos impactados
+| Arquivo | Ação |
+|---------|------|
+| `src/hooks/use-onboarding-tour.tsx` | Criar hook com state machine |
+| `src/components/onboarding-tour.tsx` | Criar componente modal/overlay |
+| `src/components/tour-premium-cta.tsx` | Reutilizar ou adaptar |
+| `src/components/product-tour.tsx` | Adicionar pergunta ao final |
+| `src/App.tsx` | Adicionar `<OnboardingTour />` |
+| `src/pages/Index.tsx` | Listeners para eventos de conclusão |
 
-| Arquivo | Mudança |
-|---|---|
-| `src/utils/billing-period.ts` | Reescrever cálculo: vencimento no mês+1, subtração real de dias |
-| `src/components/card-manager.tsx` | Preview com datas reais, remover `computeClosingDay` |
-| `src/pages/Index.tsx` | Modo Fatura: só crédito, seletor de cartão obrigatório |
+## Considerações Técnicas
+
+**Navegação entre páginas**: 
+- Usar `useNavigate()` programaticamente
+- Tooltip segue o usuário (state global)
+
+**Detecção mobile-only**:
+- Steps de segurança/PIN só aparecem se `Capacitor.isNativePlatform()`
+
+**Gamificação**:
+- Mostrar barra de progresso: "3/8 concluídas"
+- Animações de confete ao completar
+
+**Analytics**:
+- Registrar qual step o usuário para
+- Taxa de conclusão do onboarding
+
+## Próximos Passos
+
+1. Criar estrutura base (hook + componente)
+2. Implementar navegação e detecção
+3. Adicionar conteúdo e copy
+4. Integrar com ProductTour existente
+5. Testes end-to-end
 
