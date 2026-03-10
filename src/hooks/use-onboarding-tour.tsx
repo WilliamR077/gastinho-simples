@@ -17,6 +17,7 @@ interface OnboardingStep {
   optional?: boolean;
   mobileOnly?: boolean;
   exampleText?: string;
+  onboardingTarget?: string;
   arrivedTitle?: string;
   arrivedDescription?: string;
   formOpenTitle?: string;
