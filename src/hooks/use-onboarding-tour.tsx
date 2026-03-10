@@ -35,6 +35,7 @@ const ONBOARDING_STEPS: OnboardingStep[] = [
     action: "navigate",
     targetRoute: "/cards",
     detectionTable: "cards",
+    onboardingTarget: "add-card-btn",
     arrivedTitle: "Ótimo! Agora adicione seu cartão",
     arrivedDescription: "Clique no botão '+' ou 'Adicionar Cartão' para cadastrar seu primeiro cartão.",
     formOpenTitle: "Preencha os dados do cartão",
