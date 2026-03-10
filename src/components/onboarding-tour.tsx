@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Check, Sparkles, Crown, Users, FileText, Download, Plus, ArrowRight, X, HandPointing } from "lucide-react";
+import { Check, Sparkles, Crown, Users, FileText, Download, Plus, ArrowRight, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 export function OnboardingTour() {
