@@ -255,7 +255,7 @@ export function CardManager() {
               <span className="hidden sm:inline">Upgrade</span>
             </Button>
           )}
-          <Button onClick={handleAddCard} size="sm" disabled={!canAddMoreCards && !editingCard}>
+          <Button onClick={handleAddCard} size="sm" disabled={!canAddMoreCards && !editingCard} data-onboarding="add-card-btn">
             <Plus className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">Adicionar Cartão</span>
           </Button>

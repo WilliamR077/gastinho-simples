@@ -231,8 +231,9 @@ Deno.serve(async (req) => {
       },
       audit_logs,
     });
-  } catch (err) {
-    const status = err.message === "Acesso negado" ? 403 : err.message === "Não autorizado" ? 401 : 500;
-    return jsonResponse({ error: err.message }, status);
+  } catch (err: unknown) {
+    const message = (err as Error).message || "Erro interno";
+    const status = message === "Acesso negado" ? 403 : message === "Não autorizado" ? 401 : 500;
+    return jsonResponse({ error: message }, status);
   }
 });
