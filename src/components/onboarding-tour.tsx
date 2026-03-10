@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useOnboardingTour } from "@/hooks/use-onboarding-tour";
 import {
   Dialog,
@@ -9,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Check, Sparkles, Crown, Users, FileText, Download, Plus, ArrowRight } from "lucide-react";
+import { Check, Sparkles, Crown, Users, FileText, Download, Plus, ArrowRight, X, HandPointing } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 export function OnboardingTour() {
@@ -30,8 +31,50 @@ export function OnboardingTour() {
   } = useOnboardingTour();
 
   const navigate = useNavigate();
+  const spotlightCleanupRef = useRef<(() => void) | null>(null);
 
-  // Obter título e descrição baseado na subPhase
+  // Spotlight effect: highlight target element when in "arrived" phase
+  useEffect(() => {
+    // Clean up previous spotlight
+    if (spotlightCleanupRef.current) {
+      spotlightCleanupRef.current();
+      spotlightCleanupRef.current = null;
+    }
+
+    if (!isOpen || subPhase !== "arrived" || !currentStep?.onboardingTarget) return;
+
+    const applySpotlight = () => {
+      const target = document.querySelector(`[data-onboarding="${currentStep.onboardingTarget}"]`) as HTMLElement;
+      if (!target) return;
+
+      // Add spotlight classes
+      target.classList.add(
+        "ring-4", "ring-primary", "animate-pulse", "relative", "z-[60]",
+        "shadow-[0_0_20px_rgba(var(--primary),0.5)]"
+      );
+      target.style.setProperty("box-shadow", "0 0 0 4px hsl(var(--primary) / 0.3), 0 0 20px hsl(var(--primary) / 0.2)");
+
+      spotlightCleanupRef.current = () => {
+        target.classList.remove(
+          "ring-4", "ring-primary", "animate-pulse", "relative", "z-[60]",
+          "shadow-[0_0_20px_rgba(var(--primary),0.5)]"
+        );
+        target.style.removeProperty("box-shadow");
+      };
+    };
+
+    // Small delay to ensure DOM is ready
+    const timer = setTimeout(applySpotlight, 300);
+    return () => {
+      clearTimeout(timer);
+      if (spotlightCleanupRef.current) {
+        spotlightCleanupRef.current();
+        spotlightCleanupRef.current = null;
+      }
+    };
+  }, [isOpen, subPhase, currentStep?.onboardingTarget]);
+
+  // Get step content based on subPhase
   const getStepContent = () => {
     if (!currentStep) return { title: "", description: "", emoji: "" };
 
@@ -67,7 +110,7 @@ export function OnboardingTour() {
 
   if (!isOpen && !showCompletionDialog) return null;
 
-  // Modal de conclusão do onboarding
+  // Completion dialog
   if (showCompletionDialog) {
     return (
       <Dialog open={showCompletionDialog} onOpenChange={closeCompletionDialog}>
@@ -85,7 +128,6 @@ export function OnboardingTour() {
             </DialogDescription>
           </DialogHeader>
 
-          {/* Lista de conquistas */}
           <div className="space-y-3 py-4">
             <div className="flex items-center gap-3 text-sm">
               <div className="w-6 h-6 rounded-full bg-green-500/20 flex items-center justify-center">
@@ -107,7 +149,6 @@ export function OnboardingTour() {
             </div>
           </div>
 
-          {/* CTA Premium */}
           <div className="bg-gradient-to-br from-primary/10 to-purple-500/10 rounded-lg p-4 space-y-3">
             <div className="flex items-center gap-2">
               <Crown className="w-5 h-5 text-primary" />
@@ -156,14 +197,53 @@ export function OnboardingTour() {
     );
   }
 
-  // Modal do step atual
   if (!currentStep) return null;
 
+  // For "arrived" and "form-open" phases: render a non-blocking floating banner
+  const isInteractivePhase = subPhase === "arrived" || subPhase === "form-open";
+
+  if (isInteractivePhase) {
+    return (
+      <div className="fixed bottom-0 left-0 right-0 z-50 p-3 pointer-events-none">
+        <div className="max-w-lg mx-auto bg-card border border-border rounded-xl shadow-2xl p-4 pointer-events-auto">
+          {/* Progress */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">{stepContent.emoji}</span>
+              <span className="text-xs text-muted-foreground font-medium">
+                Passo {currentStepIndex + 1} de {totalSteps}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {currentStep.optional && (
+                <Button variant="ghost" size="sm" onClick={skipCurrentStep} className="text-xs h-7 px-2">
+                  Pular
+                </Button>
+              )}
+              <Button variant="ghost" size="icon" onClick={skipOnboarding} className="h-7 w-7">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="space-y-1">
+            <h3 className="font-semibold text-sm">{stepContent.title}</h3>
+            <p className="text-xs text-muted-foreground">{stepContent.description}</p>
+          </div>
+
+          {/* Progress bar */}
+          <Progress value={progress} className="h-1 mt-3" />
+        </div>
+      </div>
+    );
+  }
+
+  // For "navigate" and "completed" phases: use Dialog modal
   return (
     <Dialog open={isOpen} onOpenChange={() => {}}>
       <DialogContent className="max-w-md">
         <DialogHeader className="space-y-4">
-          {/* Progress bar */}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-sm text-muted-foreground">
               <span>
@@ -174,7 +254,6 @@ export function OnboardingTour() {
             <Progress value={progress} className="h-2" />
           </div>
 
-          {/* Emoji e título */}
           <div className="text-center space-y-3">
             <div className="text-5xl">{stepContent.emoji}</div>
             <DialogTitle className="text-xl">{stepContent.title}</DialogTitle>
@@ -190,7 +269,7 @@ export function OnboardingTour() {
         </DialogHeader>
 
         <DialogFooter className="flex-col sm:flex-col gap-2">
-          {/* SubPhase: navigate - Mostrar botão de navegação */}
+          {/* navigate phase */}
           {subPhase === "navigate" && currentStep.action === "navigate" && (
             <Button onClick={navigateToStep} className="w-full" size="lg">
               {currentStep.targetRoute === "/cards"
@@ -201,29 +280,7 @@ export function OnboardingTour() {
             </Button>
           )}
 
-          {/* SubPhase: arrived - Mostrar dica para clicar no botão + */}
-          {subPhase === "arrived" && (
-            <div className="w-full p-4 bg-primary/10 rounded-lg text-center space-y-2">
-              <div className="flex items-center justify-center gap-2 text-primary font-medium">
-                <Plus className="h-5 w-5" />
-                <span>Clique no botão "+" acima</span>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                O tutorial vai continuar automaticamente
-              </p>
-            </div>
-          )}
-
-          {/* SubPhase: form-open - Mostrar dica sobre o formulário */}
-          {subPhase === "form-open" && (
-            <div className="w-full p-4 bg-primary/10 rounded-lg text-center space-y-2">
-              <p className="text-sm text-muted-foreground">
-                Preencha os campos e clique em <strong>Adicionar</strong>
-              </p>
-            </div>
-          )}
-
-          {/* SubPhase: completed - Mostrar opções */}
+          {/* completed phase */}
           {subPhase === "completed" && (
             <div className="flex flex-col gap-2 w-full">
               <Button onClick={addAnotherItem} variant="outline" className="w-full">
@@ -237,14 +294,14 @@ export function OnboardingTour() {
             </div>
           )}
 
-          {/* SubPhase: wait (para steps sem navegação) */}
+          {/* wait steps */}
           {currentStep.action === "wait" && subPhase === "navigate" && (
             <div className="w-full p-4 bg-muted rounded-lg text-center text-sm text-muted-foreground">
               Aguardando você completar esta ação...
             </div>
           )}
 
-          {/* Botões secundários */}
+          {/* Secondary buttons */}
           <div className="flex gap-2 w-full">
             {currentStep.optional && subPhase !== "completed" && (
               <Button
