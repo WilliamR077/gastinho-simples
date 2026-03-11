@@ -286,7 +286,7 @@ export function CardManager() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4" data-onboarding="card-form">
               <div className="space-y-2">
                 <Label htmlFor="name">Nome do Cartão</Label>
                 <Input
