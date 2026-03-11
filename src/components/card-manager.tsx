@@ -138,6 +138,10 @@ export function CardManager() {
         const { error } = await supabase.from("cards").insert([cardData]);
         if (error) throw error;
         toast({ title: "Sucesso", description: "Cartão adicionado com sucesso!" });
+        // Notify onboarding that card was added
+        if (isOnboardingOpen && currentStep?.id === "add-card") {
+          setSubPhase("completed");
+        }
       }
 
       resetForm();
