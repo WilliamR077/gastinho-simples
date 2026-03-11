@@ -1,61 +1,102 @@
 
 
-## Plano: Overlay escuro + tooltip posicionado + detecção de conclusão
+## Plano: Corrigir aritmética de datas do billing + filtro só crédito + multi-cartões
 
-### Problemas atuais
-1. O banner fica no rodapé da tela, longe do botão destacado
-2. Não tem overlay escuro bloqueando o resto da tela — o usuário pode clicar em qualquer lugar
-3. Após adicionar cartão, o tutorial não muda para "Deseja adicionar outro?" (a fase "completed" não está sendo acionada corretamente)
+### Problema 1: `computeClosingDay` usa aritmética fixa (dia - offset + 30)
 
-### Solução
+Em `card-manager.tsx` linha 80-84 e no preview do formulário (linha 334), o fechamento é calculado como `dueDay - daysBefore + 30` — ignora meses reais. Também em `billing-period.ts`, `calculateBillingPeriod` calcula o fechamento posicionando o due_day no mesmo mês da despesa e subtraindo dias, mas o modelo correto é: o vencimento da fatura M fica no mês M+1, e o fechamento = vencimento - dias_antes.
 
-**1. Overlay escuro com recorte (spotlight)**
+### Problema 2: Modo Fatura mostra PIX/Débito
 
-Adicionar um overlay `fixed inset-0` com `bg-black/70 z-[55]` que escurece toda a tela. O elemento alvo (botão "+", campo do formulário) fica com `z-[60]` acima do overlay, criando o efeito de "spotlight" onde só o alvo é clicável.
+Em `Index.tsx` linhas 1225-1234, quando `viewMode === "billing"` mas a despesa NÃO é crédito, o código cai no `else` e filtra por data — deveria retornar `false` diretamente.
 
-**2. Tooltip flutuante posicionado próximo ao alvo**
+### Problema 3: Multi-cartões sem seleção obrigatória
 
-Em vez de banner fixo no bottom, calcular a posição do elemento alvo via `getBoundingClientRect()` e renderizar o tooltip logo abaixo (ou acima) dele. O tooltip tem `z-[65]` para ficar acima do overlay.
+Não há exigência de selecionar um cartão no modo Fatura. Sem isso, faturas de cartões com ciclos diferentes se misturam.
 
-**3. Corrigir detecção de conclusão**
+---
 
-O Realtime pode falhar por latência. Adicionar detecção complementar: no `handleSubmit` do `card-manager.tsx`, após o INSERT com sucesso, chamar `setSubPhase("completed")` diretamente (sem depender apenas do Realtime).
+### Mudanças
 
-### Mudanças por arquivo
+#### 1. `src/utils/billing-period.ts` — Reescrever `calculateBillingPeriod` (novo modelo)
 
-**`src/components/onboarding-tour.tsx`**
-- Nas fases `arrived` e `form-open`: renderizar overlay escuro (`fixed inset-0 bg-black/70 z-[55]`)
-- Calcular posição do elemento `[data-onboarding="..."]` via `getBoundingClientRect()` e posicionar tooltip próximo a ele
-- O tooltip fica com `z-[65]`, o alvo com `z-[60]`
-- Usar `useEffect` + `ResizeObserver`/`setInterval` para recalcular posição se a tela rolar ou redimensionar
+Nova lógica para `due_day + days_before_due`:
 
-**`src/components/card-manager.tsx`**
-- No `handleSubmit`, após INSERT bem-sucedido (não editando), chamar `setSubPhase("completed")` diretamente
-- Adicionar `data-onboarding="card-form"` no formulário para a fase `form-open`
-
-**`src/hooks/use-onboarding-tour.tsx`**
-- Sem grandes mudanças, apenas garantir que a fase "completed" mostra o Dialog com "Adicionar outro" / "Prosseguir" (já funciona no código atual)
-
-### Layout visual
-
-```text
-┌─────────────────────────────────────────────┐
-│░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░│
-│░░░░░░ Meus Cartões ░░░░░ [+] ← SPOTLIGHT ░│
-│░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░│
-│░░░░░░░░░░░░░░░░░░┌──────────────┐░░░░░░░░░│
-│░░░░░░░░░░░░░░░░░░│ 👆 Passo 1/7 │░░░░░░░░░│
-│░░░░░░░░░░░░░░░░░░│ Clique no +  │░░░░░░░░░│
-│░░░░░░░░░░░░░░░░░░│ para adicionar│░░░░░░░░░│
-│░░░░░░░░░░░░░░░░░░└──────────────┘░░░░░░░░░│
-│░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░│
-└─────────────────────────────────────────────┘
-  ░ = overlay escuro (não clicável)
+```ts
+// Para determinar a qual fatura M (yyyy-MM) uma compra pertence:
+// Fatura "M" tem vencimento no mês M+1, dia due_day (clamped)
+// Fechamento = vencimento - days_before_due (subtração real de dias via Date)
+// Período da fatura M = (fechamento da fatura M-1) + 1 dia  até  fechamento da fatura M
+// 
+// Algoritmo: testar fatura do mês da compra e do mês anterior.
+// Se compra <= fechamento do mês → pertence a esse mês
+// Senão → pertence ao mês seguinte
 ```
 
-### Arquivos afetados
+Criar helper `getBillingClosingDate(billingMonth: string, config)`:
+- Parse `billingMonth` → ano/mês (ex: "2026-03" → março)
+- `dueDate = new Date(ano, mês, clamp(due_day, daysInMonth))` — vencimento no próprio mês da fatura (NÃO mês+1, conforme o pedido do usuário: fatura de março fecha em março e vence em abril)
+
+Correção: conforme o critério de aceite do usuário:
+- Fatura de Março/2026, vencimento dia 10 → `dueDate = 10/04/2026` (mês seguinte)
+- `closingDate = dueDate - 12 dias = 29/03/2026`
+- `previousDueDate = 10/03/2026`, `previousClosingDate = 26/02/2026`
+- Período = 27/02 a 29/03
+
+Então a fórmula é:
+```ts
+function getClosingDateForBillingMonth(year: number, month: number, dueDay: number, daysBefore: number): Date {
+  // Vencimento cai no MÊS SEGUINTE ao mês da fatura
+  const nextMonth = month + 1;
+  const ny = nextMonth > 11 ? year + 1 : year;
+  const nm = nextMonth > 11 ? 0 : nextMonth;
+  const dueDate = new Date(ny, nm, Math.min(dueDay, daysInMonth(ny, nm)));
+  const closingDate = new Date(dueDate);
+  closingDate.setDate(closingDate.getDate() - daysBefore);
+  return closingDate;
+}
+```
+
+`calculateBillingPeriod(expenseDate, config)`:
+- Tentar fatura do mês da despesa: calcular closingDate e previousClosingDate
+- previousClosingDate = closingDate da fatura do mês anterior
+- Se `expenseDate > previousClosingDate && expenseDate <= closingDate` → fatura desse mês
+- Senão se `expenseDate > closingDate` → fatura do mês seguinte
+- Senão → fatura do mês anterior
+
+Também atualizar `getNextBillingDates` com a mesma lógica corrigida (vencimento no mês seguinte).
+
+#### 2. `src/components/card-manager.tsx`
+
+- **Remover `computeClosingDay`** (linhas 80-84) — não mais necessário
+- **Formulário preview** (linha 331-339): trocar texto para:
+  ```
+  "Vence dia {due_day} • Fecha {days_before_due} dias antes"
+  ```
+  E adicionar "Próximo fechamento: DD/MM • Próximo vencimento: DD/MM" usando `getNextBillingDates` com data real.
+- No `handleSubmit` (linhas 112-120): calcular `closing_day` usando a nova `getClosingDateForBillingMonth` para o mês atual, pegar `.getDate()` (compatibilidade).
+
+#### 3. `src/pages/Index.tsx` — Modo Fatura só crédito + cartão obrigatório
+
+**Filtro (linhas 1207-1235):**
+- Quando `viewMode === "billing"`: se `expense.payment_method !== "credit"` → `return false` (não cair no else)
+
+**Totais (linhas 1482-1498):**
+- Mesma correção: no modo billing, só considerar crédito
+
+**Toggle UI (linhas 1556-1582):**
+- Quando `viewMode === "billing"` e existem 2+ cartões de crédito: mostrar seletor de cartão obrigatório abaixo do toggle
+- Se 1 cartão: auto-selecionar
+- Se 0 cartões de crédito: mostrar mensagem "Cadastre um cartão de crédito"
+- Adicionar state `billingCardId: string | null` — no filtro, usar esse cartão como `filters.cardId` forçado
+
+---
+
+### Arquivos impactados
+
 | Arquivo | Mudança |
-|---------|---------|
-| `onboarding-tour.tsx` | Overlay escuro + tooltip posicionado por getBoundingClientRect |
-| `card-manager.tsx` | Chamar setSubPhase("completed") após INSERT bem-sucedido |
+|---|---|
+| `src/utils/billing-period.ts` | Reescrever cálculo: vencimento no mês+1, subtração real de dias |
+| `src/components/card-manager.tsx` | Preview com datas reais, remover `computeClosingDay` |
+| `src/pages/Index.tsx` | Modo Fatura: só crédito, seletor de cartão obrigatório |
 

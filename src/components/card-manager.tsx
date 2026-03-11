@@ -138,6 +138,10 @@ export function CardManager() {
         const { error } = await supabase.from("cards").insert([cardData]);
         if (error) throw error;
         toast({ title: "Sucesso", description: "Cartão adicionado com sucesso!" });
+        // Notify onboarding that card was added
+        if (isOnboardingOpen && currentStep?.id === "add-card") {
+          setSubPhase("completed");
+        }
       }
 
       resetForm();
@@ -282,7 +286,7 @@ export function CardManager() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4" data-onboarding="card-form">
               <div className="space-y-2">
                 <Label htmlFor="name">Nome do Cartão</Label>
                 <Input

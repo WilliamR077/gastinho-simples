@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useOnboardingTour } from "@/hooks/use-onboarding-tour";
 import {
   Dialog,
@@ -12,6 +12,100 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Check, Sparkles, Crown, Users, FileText, Download, Plus, ArrowRight, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+
+interface TargetRect {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+}
+
+function SpotlightOverlay({ targetRect }: { targetRect: TargetRect | null }) {
+  const padding = 8;
+  return (
+    <div className="fixed inset-0 z-[55] pointer-events-auto">
+      <svg className="absolute inset-0 w-full h-full">
+        <defs>
+          <mask id="onboarding-spotlight-mask">
+            <rect x="0" y="0" width="100%" height="100%" fill="white" />
+            {targetRect && (
+              <rect
+                x={targetRect.left - padding}
+                y={targetRect.top - padding}
+                width={targetRect.width + padding * 2}
+                height={targetRect.height + padding * 2}
+                rx="12"
+                fill="black"
+              />
+            )}
+          </mask>
+        </defs>
+        <rect
+          x="0"
+          y="0"
+          width="100%"
+          height="100%"
+          fill="rgba(0, 0, 0, 0.75)"
+          mask="url(#onboarding-spotlight-mask)"
+        />
+      </svg>
+      {/* Highlight border around target */}
+      {targetRect && (
+        <div
+          className="absolute border-2 border-primary rounded-xl animate-pulse pointer-events-none"
+          style={{
+            top: targetRect.top - padding,
+            left: targetRect.left - padding,
+            width: targetRect.width + padding * 2,
+            height: targetRect.height + padding * 2,
+            boxShadow: "0 0 0 4px hsl(var(--primary) / 0.3), 0 0 20px hsl(var(--primary) / 0.2)",
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function PositionedTooltip({
+  targetRect,
+  children,
+}: {
+  targetRect: TargetRect | null;
+  children: React.ReactNode;
+}) {
+  if (!targetRect) {
+    // Fallback: center of screen
+    return (
+      <div className="fixed inset-0 z-[65] flex items-center justify-center pointer-events-none">
+        <div className="pointer-events-auto max-w-sm mx-4">{children}</div>
+      </div>
+    );
+  }
+
+  const padding = 8;
+  const tooltipGap = 16;
+  const targetBottom = targetRect.top + targetRect.height + padding + tooltipGap;
+  const targetCenterX = targetRect.left + targetRect.width / 2;
+
+  // Check if tooltip fits below, otherwise place above
+  const fitsBelow = targetBottom + 150 < window.innerHeight;
+  const top = fitsBelow
+    ? targetBottom
+    : targetRect.top - padding - tooltipGap - 150;
+
+  return (
+    <div
+      className="fixed z-[65] pointer-events-none"
+      style={{
+        top: Math.max(8, top),
+        left: Math.max(16, Math.min(targetCenterX - 160, window.innerWidth - 336)),
+        width: 320,
+      }}
+    >
+      <div className="pointer-events-auto">{children}</div>
+    </div>
+  );
+}
 
 export function OnboardingTour() {
   const {
@@ -31,48 +125,52 @@ export function OnboardingTour() {
   } = useOnboardingTour();
 
   const navigate = useNavigate();
-  const spotlightCleanupRef = useRef<(() => void) | null>(null);
+  const [targetRect, setTargetRect] = useState<TargetRect | null>(null);
 
-  // Spotlight effect: highlight target element when in "arrived" phase
+  // Track target element position
+  const updateTargetRect = useCallback(() => {
+    if (!currentStep?.onboardingTarget) {
+      setTargetRect(null);
+      return;
+    }
+    const el = document.querySelector(`[data-onboarding="${currentStep.onboardingTarget}"]`) as HTMLElement;
+    if (el) {
+      const rect = el.getBoundingClientRect();
+      setTargetRect({ top: rect.top, left: rect.left, width: rect.width, height: rect.height });
+      // Ensure target is above overlay
+      el.style.position = "relative";
+      el.style.zIndex = "60";
+    } else {
+      setTargetRect(null);
+    }
+  }, [currentStep?.onboardingTarget]);
+
+  // Update position on phase changes and continuously
   useEffect(() => {
-    // Clean up previous spotlight
-    if (spotlightCleanupRef.current) {
-      spotlightCleanupRef.current();
-      spotlightCleanupRef.current = null;
+    if (!isOpen || (subPhase !== "arrived" && subPhase !== "form-open")) {
+      setTargetRect(null);
+      return;
     }
 
-    if (!isOpen || subPhase !== "arrived" || !currentStep?.onboardingTarget) return;
+    updateTargetRect();
+    const interval = setInterval(updateTargetRect, 500);
+    window.addEventListener("resize", updateTargetRect);
+    window.addEventListener("scroll", updateTargetRect);
 
-    const applySpotlight = () => {
-      const target = document.querySelector(`[data-onboarding="${currentStep.onboardingTarget}"]`) as HTMLElement;
-      if (!target) return;
-
-      // Add spotlight classes
-      target.classList.add(
-        "ring-4", "ring-primary", "animate-pulse", "relative", "z-[60]",
-        "shadow-[0_0_20px_rgba(var(--primary),0.5)]"
-      );
-      target.style.setProperty("box-shadow", "0 0 0 4px hsl(var(--primary) / 0.3), 0 0 20px hsl(var(--primary) / 0.2)");
-
-      spotlightCleanupRef.current = () => {
-        target.classList.remove(
-          "ring-4", "ring-primary", "animate-pulse", "relative", "z-[60]",
-          "shadow-[0_0_20px_rgba(var(--primary),0.5)]"
-        );
-        target.style.removeProperty("box-shadow");
-      };
-    };
-
-    // Small delay to ensure DOM is ready
-    const timer = setTimeout(applySpotlight, 300);
     return () => {
-      clearTimeout(timer);
-      if (spotlightCleanupRef.current) {
-        spotlightCleanupRef.current();
-        spotlightCleanupRef.current = null;
+      clearInterval(interval);
+      window.removeEventListener("resize", updateTargetRect);
+      window.removeEventListener("scroll", updateTargetRect);
+      // Clean up z-index from target
+      if (currentStep?.onboardingTarget) {
+        const el = document.querySelector(`[data-onboarding="${currentStep.onboardingTarget}"]`) as HTMLElement;
+        if (el) {
+          el.style.position = "";
+          el.style.zIndex = "";
+        }
       }
     };
-  }, [isOpen, subPhase, currentStep?.onboardingTarget]);
+  }, [isOpen, subPhase, currentStep?.onboardingTarget, updateTargetRect]);
 
   // Get step content based on subPhase
   const getStepContent = () => {
@@ -199,43 +297,49 @@ export function OnboardingTour() {
 
   if (!currentStep) return null;
 
-  // For "arrived" and "form-open" phases: render a non-blocking floating banner
+  // For "arrived" and "form-open" phases: overlay + positioned tooltip
   const isInteractivePhase = subPhase === "arrived" || subPhase === "form-open";
 
   if (isInteractivePhase) {
     return (
-      <div className="fixed bottom-0 left-0 right-0 z-50 p-3 pointer-events-none">
-        <div className="max-w-lg mx-auto bg-card border border-border rounded-xl shadow-2xl p-4 pointer-events-auto">
-          {/* Progress */}
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl">{stepContent.emoji}</span>
-              <span className="text-xs text-muted-foreground font-medium">
-                Passo {currentStepIndex + 1} de {totalSteps}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              {currentStep.optional && (
-                <Button variant="ghost" size="sm" onClick={skipCurrentStep} className="text-xs h-7 px-2">
-                  Pular
+      <>
+        {/* Dark overlay with spotlight cutout */}
+        <SpotlightOverlay targetRect={targetRect} />
+
+        {/* Positioned tooltip near target */}
+        <PositionedTooltip targetRect={targetRect}>
+          <div className="bg-card border border-border rounded-xl shadow-2xl p-4">
+            {/* Progress */}
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">{stepContent.emoji}</span>
+                <span className="text-xs text-muted-foreground font-medium">
+                  Passo {currentStepIndex + 1} de {totalSteps}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {currentStep.optional && (
+                  <Button variant="ghost" size="sm" onClick={skipCurrentStep} className="text-xs h-7 px-2">
+                    Pular
+                  </Button>
+                )}
+                <Button variant="ghost" size="icon" onClick={skipOnboarding} className="h-7 w-7">
+                  <X className="h-4 w-4" />
                 </Button>
-              )}
-              <Button variant="ghost" size="icon" onClick={skipOnboarding} className="h-7 w-7">
-                <X className="h-4 w-4" />
-              </Button>
+              </div>
             </div>
-          </div>
 
-          {/* Content */}
-          <div className="space-y-1">
-            <h3 className="font-semibold text-sm">{stepContent.title}</h3>
-            <p className="text-xs text-muted-foreground">{stepContent.description}</p>
-          </div>
+            {/* Content */}
+            <div className="space-y-1">
+              <h3 className="font-semibold text-sm">{stepContent.title}</h3>
+              <p className="text-xs text-muted-foreground">{stepContent.description}</p>
+            </div>
 
-          {/* Progress bar */}
-          <Progress value={progress} className="h-1 mt-3" />
-        </div>
-      </div>
+            {/* Progress bar */}
+            <Progress value={progress} className="h-1 mt-3" />
+          </div>
+        </PositionedTooltip>
+      </>
     );
   }
 
