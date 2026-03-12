@@ -24,15 +24,15 @@ export function CardManager() {
   const [deleteCardId, setDeleteCardId] = useState<string | null>(null);
   const { toast } = useToast();
   const { canAddCard, features } = useSubscription();
-  const { isOpen: isOnboardingOpen, currentStep, setSubPhase, subPhase } = useOnboardingTour();
+  const { isOpen: isOnboardingOpen, currentStep, notifyEvent } = useOnboardingTour();
   const navigate = useNavigate();
 
-  // Notificar onboarding quando formulário abre
+  // Notify onboarding when form opens
   useEffect(() => {
-    if (isOnboardingOpen && currentStep?.id === "add-card" && showForm && subPhase === "arrived") {
-      setSubPhase("form-open");
+    if (isOnboardingOpen && currentStep?.id === "add-card" && showForm) {
+      notifyEvent("card-form-opened");
     }
-  }, [showForm, isOnboardingOpen, currentStep, subPhase, setSubPhase]);
+  }, [showForm, isOnboardingOpen, currentStep?.id]);
 
   const [formData, setFormData] = useState<CardFormData>({
     name: "",
@@ -86,8 +86,6 @@ export function CardManager() {
     }
   };
 
-  // Removed computeClosingDay — now uses real date arithmetic via getClosingDateForBillingMonth
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -138,9 +136,9 @@ export function CardManager() {
         const { error } = await supabase.from("cards").insert([cardData]);
         if (error) throw error;
         toast({ title: "Sucesso", description: "Cartão adicionado com sucesso!" });
-        // Notify onboarding that card was added
+        // Notify onboarding engine
         if (isOnboardingOpen && currentStep?.id === "add-card") {
-          setSubPhase("completed");
+          notifyEvent("card-submitted");
         }
       }
 
@@ -217,21 +215,19 @@ export function CardManager() {
     const daysBefore = (card as any).days_before_due;
 
     if (dueDay && daysBefore) {
-      const billing = getNextBillingDates({
+      return getNextBillingDates({
         opening_day: card.opening_day || 1,
         closing_day: card.closing_day || 15,
         due_day: dueDay,
         days_before_due: daysBefore,
       }, new Date());
-      return billing;
     }
 
     if (card.closing_day) {
-      const billing = getNextBillingDates({
+      return getNextBillingDates({
         opening_day: card.opening_day || 1,
         closing_day: card.closing_day,
       }, new Date());
-      return billing;
     }
 
     return null;
@@ -259,7 +255,12 @@ export function CardManager() {
               <span className="hidden sm:inline">Upgrade</span>
             </Button>
           )}
-          <Button onClick={handleAddCard} size="sm" disabled={!canAddMoreCards && !editingCard} data-onboarding="add-card-btn">
+          <Button
+            onClick={handleAddCard}
+            size="sm"
+            disabled={!canAddMoreCards && !editingCard}
+            data-onboarding="cards-add-btn"
+          >
             <Plus className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">Adicionar Cartão</span>
           </Button>
@@ -294,10 +295,11 @@ export function CardManager() {
                   placeholder="Ex: Nubank, Inter"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  data-onboarding="card-name-input"
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2" data-onboarding="card-type-select">
                 <Label htmlFor="card_type">Tipo</Label>
                 <Select value={formData.card_type} onValueChange={(value) => setFormData({ ...formData, card_type: value as CardType })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -321,6 +323,7 @@ export function CardManager() {
                       placeholder="Ex: 10"
                       value={formData.due_day || ""}
                       onChange={(e) => setFormData({ ...formData, due_day: parseInt(e.target.value) || undefined })}
+                      data-onboarding="card-due-day-input"
                     />
                   </div>
 
@@ -334,6 +337,7 @@ export function CardManager() {
                       placeholder="Ex: 10"
                       value={formData.days_before_due || ""}
                       onChange={(e) => setFormData({ ...formData, days_before_due: parseInt(e.target.value) || 10 })}
+                      data-onboarding="card-close-days-input"
                     />
                     <p className="text-xs text-muted-foreground">
                       Quantos dias antes do vencimento a fatura fecha (geralmente 7 a 12 dias)
@@ -359,7 +363,7 @@ export function CardManager() {
                 </>
               )}
 
-              <div className="space-y-2">
+              <div className="space-y-2" data-onboarding="card-optional-section">
                 <Label htmlFor="card_limit">Limite (Opcional)</Label>
                 <Input
                   id="card_limit"
@@ -397,7 +401,9 @@ export function CardManager() {
               </div>
 
               <div className="flex gap-2">
-                <Button type="submit">{editingCard ? "Atualizar" : "Adicionar"}</Button>
+                <Button type="submit" data-onboarding="card-submit-btn">
+                  {editingCard ? "Atualizar" : "Adicionar"}
+                </Button>
                 <Button type="button" variant="outline" onClick={resetForm}>Cancelar</Button>
               </div>
             </form>

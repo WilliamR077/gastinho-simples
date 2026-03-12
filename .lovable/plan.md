@@ -1,159 +1,102 @@
 
 
-## Plano: Refatoração completa do onboarding com microsteps declarativos
+## Plano: Corrigir aritmética de datas do billing + filtro só crédito + multi-cartões
 
-### Arquitetura
+### Problema 1: `computeClosingDay` usa aritmética fixa (dia - offset + 30)
 
-Substituir o sistema atual de "subPhase" genérico por um modelo declarativo de **steps + substeps**, onde cada substep define: alvo, tipo de ação, texto, condição de conclusão e placement do tooltip.
+Em `card-manager.tsx` linha 80-84 e no preview do formulário (linha 334), o fechamento é calculado como `dueDay - daysBefore + 30` — ignora meses reais. Também em `billing-period.ts`, `calculateBillingPeriod` calcula o fechamento posicionando o due_day no mesmo mês da despesa e subtraindo dias, mas o modelo correto é: o vencimento da fatura M fica no mês M+1, e o fechamento = vencimento - dias_antes.
 
-### Novos arquivos
+### Problema 2: Modo Fatura mostra PIX/Débito
 
-**`src/lib/onboarding/onboarding-steps.ts`** — Configuração declarativa
+Em `Index.tsx` linhas 1225-1234, quando `viewMode === "billing"` mas a despesa NÃO é crédito, o código cai no `else` e filtra por data — deveria retornar `false` diretamente.
 
-Define tipos e configuração de todos os steps/substeps:
+### Problema 3: Multi-cartões sem seleção obrigatória
 
-```typescript
-type SubstepActionType = "navigate" | "click" | "fill" | "select" | "optional-group" | "submit" | "completion";
+Não há exigência de selecionar um cartão no modo Fatura. Sem isso, faturas de cartões com ciclos diferentes se misturam.
 
-interface OnboardingSubstep {
-  id: string;
-  targetSelector?: string; // data-onboarding="..."
-  actionType: SubstepActionType;
-  title: string;
-  description: string;
-  emoji: string;
-  placement?: "above" | "below" | "auto";
-  // Completion rules
-  autoAdvanceOnClick?: boolean;      // click: advance when target clicked
-  autoAdvanceOnRoute?: string;       // navigate: advance when route matches
-  requiresValidation?: boolean;      // fill: show "Próximo" button, enabled when valid
-  validationFn?: (el: HTMLElement) => boolean; // check if input is valid
-  autoAdvanceOnSubmit?: boolean;     // submit: advance via explicit event
-  skipLabel?: string;                // optional: show skip button
-  focusTarget?: boolean;             // auto-focus the target element
-  scrollToTarget?: boolean;          // scrollIntoView before showing
-  // Completion step specific
-  repeatLabel?: string;
-  proceedLabel?: string;
-}
+---
 
-interface OnboardingStepConfig {
-  id: string;
-  detectionTable?: string;
-  targetRoute?: string;
-  substeps: OnboardingSubstep[];
+### Mudanças
+
+#### 1. `src/utils/billing-period.ts` — Reescrever `calculateBillingPeriod` (novo modelo)
+
+Nova lógica para `due_day + days_before_due`:
+
+```ts
+// Para determinar a qual fatura M (yyyy-MM) uma compra pertence:
+// Fatura "M" tem vencimento no mês M+1, dia due_day (clamped)
+// Fechamento = vencimento - days_before_due (subtração real de dias via Date)
+// Período da fatura M = (fechamento da fatura M-1) + 1 dia  até  fechamento da fatura M
+// 
+// Algoritmo: testar fatura do mês da compra e do mês anterior.
+// Se compra <= fechamento do mês → pertence a esse mês
+// Senão → pertence ao mês seguinte
+```
+
+Criar helper `getBillingClosingDate(billingMonth: string, config)`:
+- Parse `billingMonth` → ano/mês (ex: "2026-03" → março)
+- `dueDate = new Date(ano, mês, clamp(due_day, daysInMonth))` — vencimento no próprio mês da fatura (NÃO mês+1, conforme o pedido do usuário: fatura de março fecha em março e vence em abril)
+
+Correção: conforme o critério de aceite do usuário:
+- Fatura de Março/2026, vencimento dia 10 → `dueDate = 10/04/2026` (mês seguinte)
+- `closingDate = dueDate - 12 dias = 29/03/2026`
+- `previousDueDate = 10/03/2026`, `previousClosingDate = 26/02/2026`
+- Período = 27/02 a 29/03
+
+Então a fórmula é:
+```ts
+function getClosingDateForBillingMonth(year: number, month: number, dueDay: number, daysBefore: number): Date {
+  // Vencimento cai no MÊS SEGUINTE ao mês da fatura
+  const nextMonth = month + 1;
+  const ny = nextMonth > 11 ? year + 1 : year;
+  const nm = nextMonth > 11 ? 0 : nextMonth;
+  const dueDate = new Date(ny, nm, Math.min(dueDay, daysInMonth(ny, nm)));
+  const closingDate = new Date(dueDate);
+  closingDate.setDate(closingDate.getDate() - daysBefore);
+  return closingDate;
 }
 ```
 
-**Etapa de Cartões — substeps concretos:**
+`calculateBillingPeriod(expenseDate, config)`:
+- Tentar fatura do mês da despesa: calcular closingDate e previousClosingDate
+- previousClosingDate = closingDate da fatura do mês anterior
+- Se `expenseDate > previousClosingDate && expenseDate <= closingDate` → fatura desse mês
+- Senão se `expenseDate > closingDate` → fatura do mês seguinte
+- Senão → fatura do mês anterior
 
-1. `go-to-cards` — navigate, autoAdvanceOnRoute: "/cards"
-2. `click-add-card` — click, target: `cards-add-btn`, autoAdvanceOnClick
-3. `fill-card-name` — fill, target: `card-name-input`, requiresValidation (não vazio), focusTarget
-4. `select-card-type` — select, target: `card-type-select`, autoAdvanceOnClick (com botão Próximo)
-5. `fill-due-day` — fill, target: `card-due-day-input`, requiresValidation (1-31), condicional (só crédito)
-6. `fill-close-days` — fill, target: `card-close-days-input`, requiresValidation (1-28), condicional
-7. `optional-limit-color` — optional-group, target: `card-optional-section`, skipLabel: "Pular"
-8. `submit-card` — submit, target: `card-submit-btn`, autoAdvanceOnSubmit
-9. `card-created` — completion, repeatLabel: "Adicionar outro", proceedLabel: "Prosseguir"
+Também atualizar `getNextBillingDates` com a mesma lógica corrigida (vencimento no mês seguinte).
 
----
+#### 2. `src/components/card-manager.tsx`
 
-**`src/hooks/use-onboarding-engine.tsx`** — Hook/Provider central (substitui use-onboarding-tour)
+- **Remover `computeClosingDay`** (linhas 80-84) — não mais necessário
+- **Formulário preview** (linha 331-339): trocar texto para:
+  ```
+  "Vence dia {due_day} • Fecha {days_before_due} dias antes"
+  ```
+  E adicionar "Próximo fechamento: DD/MM • Próximo vencimento: DD/MM" usando `getNextBillingDates` com data real.
+- No `handleSubmit` (linhas 112-120): calcular `closing_day` usando a nova `getClosingDateForBillingMonth` para o mês atual, pegar `.getDate()` (compatibilidade).
 
-Estado principal:
-- `currentStepIndex` — step principal (cards, expenses, etc.)
-- `currentSubstepIndex` — substep dentro do step
-- `isOpen`
-- Funções: `advanceSubstep()`, `skipStep()`, `skipOnboarding()`, `repeatStep()`, `notifyEvent(eventName)`
+#### 3. `src/pages/Index.tsx` — Modo Fatura só crédito + cartão obrigatório
 
-Lógica do engine:
-- Observa rota via `useLocation` para auto-advance de substeps `navigate`
-- Usa `MutationObserver` para detectar quando target aparece no DOM
-- `scrollIntoView({ behavior: "smooth", block: "center" })` antes de posicionar
-- Recalcula posição via `requestAnimationFrame` loop (não setInterval)
-- Expõe `notifyEvent("form-opened")`, `notifyEvent("card-submitted")` para componentes externos chamarem
-- Cleanup: restaura z-index/position de elementos ao mudar substep
+**Filtro (linhas 1207-1235):**
+- Quando `viewMode === "billing"`: se `expense.payment_method !== "credit"` → `return false` (não cair no else)
 
----
+**Totais (linhas 1482-1498):**
+- Mesma correção: no modo billing, só considerar crédito
 
-**`src/components/onboarding/onboarding-overlay.tsx`** — Overlay + Spotlight
-
-- SVG mask com recorte no alvo (já existe, será extraído e melhorado)
-- O alvo recebe `position: relative; z-index: 60` para ficar acima do overlay
-- O overlay bloqueia cliques (`pointer-events: auto`) exceto no recorte
-- Padding de 8px ao redor do alvo
-
-**`src/components/onboarding/onboarding-tooltip.tsx`** — Tooltip posicionado
-
-- Calcula posição via `getBoundingClientRect()` do alvo
-- Placement auto: abaixo se cabe, senão acima
-- Clamp para não sair da viewport (especialmente mobile)
-- Conteúdo dinâmico baseado no `actionType`:
-  - `fill`: mostra botão "Próximo" (disabled até validação)
-  - `click/submit`: só texto instrucional
-  - `optional-group`: botões "Pular" e "Continuar"
-  - `completion`: botões "Adicionar outro" e "Prosseguir"
-- Sempre mostra: "Passo X de Y", botão X (fechar), "Pular etapa"
-- Seta visual (CSS triangle) apontando para o alvo
-
-**`src/components/onboarding/onboarding-renderer.tsx`** — Componente principal
-
-- Renderiza overlay + tooltip para substeps interativos
-- Renderiza Dialog modal para substeps "navigate" e "completion"
-- Substitui `<OnboardingTour />` no App.tsx
+**Toggle UI (linhas 1556-1582):**
+- Quando `viewMode === "billing"` e existem 2+ cartões de crédito: mostrar seletor de cartão obrigatório abaixo do toggle
+- Se 1 cartão: auto-selecionar
+- Se 0 cartões de crédito: mostrar mensagem "Cadastre um cartão de crédito"
+- Adicionar state `billingCardId: string | null` — no filtro, usar esse cartão como `filters.cardId` forçado
 
 ---
 
-### Mudanças em `src/components/card-manager.tsx`
+### Arquivos impactados
 
-Adicionar `data-onboarding` em todos os alvos:
-
-| Elemento | Atributo |
-|----------|----------|
-| Botão Adicionar | `data-onboarding="cards-add-btn"` |
-| Input Nome | `data-onboarding="card-name-input"` |
-| Select Tipo | `data-onboarding="card-type-select"` |
-| Input Vencimento | `data-onboarding="card-due-day-input"` |
-| Input Dias antes | `data-onboarding="card-close-days-input"` |
-| Div limite+cor | `data-onboarding="card-optional-section"` |
-| Botão Submit | `data-onboarding="card-submit-btn"` |
-
-Eventos para o engine:
-- Quando `showForm` muda para true → `notifyEvent("card-form-opened")`
-- Após INSERT com sucesso → `notifyEvent("card-submitted")`
-
-### Mudanças em `src/App.tsx`
-
-- Trocar `OnboardingProvider` por novo provider
-- Trocar `<OnboardingTour />` por `<OnboardingRenderer />`
-
-### Arquivos removidos/obsoletos
-
-- `src/components/onboarding-tour.tsx` — substituído por `onboarding-renderer.tsx`
-- O hook `use-onboarding-tour.tsx` será reescrito como `use-onboarding-engine.tsx` (mesmo path para minimizar imports)
-
-### Comportamento de recuperação
-
-- Se o alvo sumir do DOM (usuário fechou formulário), o engine volta ao substep anterior relevante (ex: `click-add-card`)
-- Se o alvo não aparecer em 3s, mostra fallback "O elemento não foi encontrado. Tente clicar manualmente."
-- Fechar tutorial sempre disponível
-
-### Responsividade
-
-- Tooltip com `max-width: min(320px, calc(100vw - 32px))`
-- Em mobile, quando teclado abre (viewport height diminui), reposicionar tooltip acima do campo
-- `scrollIntoView` antes de cada substep com alvo
-
-### Arquivos afetados (resumo)
-
-| Arquivo | Ação |
-|---------|------|
-| `src/lib/onboarding/onboarding-steps.ts` | Criar — config declarativa |
-| `src/hooks/use-onboarding-tour.tsx` | Reescrever — engine com substeps |
-| `src/components/onboarding/onboarding-overlay.tsx` | Criar — overlay SVG |
-| `src/components/onboarding/onboarding-tooltip.tsx` | Criar — tooltip posicionado |
-| `src/components/onboarding-tour.tsx` | Reescrever — renderer principal |
-| `src/components/card-manager.tsx` | Editar — data-onboarding + eventos |
-| `src/components/tour-overlay.tsx` | Pode ser removido (substituído) |
+| Arquivo | Mudança |
+|---|---|
+| `src/utils/billing-period.ts` | Reescrever cálculo: vencimento no mês+1, subtração real de dias |
+| `src/components/card-manager.tsx` | Preview com datas reais, remover `computeClosingDay` |
+| `src/pages/Index.tsx` | Modo Fatura: só crédito, seletor de cartão obrigatório |
 
