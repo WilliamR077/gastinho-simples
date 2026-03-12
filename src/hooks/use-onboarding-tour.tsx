@@ -1,131 +1,50 @@
-import { useState, useEffect, createContext, useContext, ReactNode } from "react";
+import {
+  useState,
+  useEffect,
+  createContext,
+  useContext,
+  useCallback,
+  useRef,
+  ReactNode,
+} from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./use-auth";
 import { Capacitor } from "@capacitor/core";
+import {
+  ONBOARDING_STEPS,
+  type OnboardingStepConfig,
+  type OnboardingSubstep,
+} from "@/lib/onboarding/onboarding-steps";
 
-export type OnboardingSubPhase = "navigate" | "arrived" | "form-open" | "completed";
-
-interface OnboardingStep {
-  id: string;
-  title: string;
-  description: string;
-  emoji: string;
-  action: "navigate" | "wait";
-  targetRoute?: string;
-  detectionTable?: string;
-  optional?: boolean;
-  mobileOnly?: boolean;
-  exampleText?: string;
-  onboardingTarget?: string;
-  arrivedTitle?: string;
-  arrivedDescription?: string;
-  formOpenTitle?: string;
-  formOpenDescription?: string;
-  completedTitle?: string;
-  completedDescription?: string;
-}
-
-const ONBOARDING_STEPS: OnboardingStep[] = [
-  {
-    id: "add-card",
-    title: "Configure seu Primeiro Cartão",
-    description: "Vamos cadastrar seu primeiro cartão! Pode ser de crédito ou débito. Isso vai te ajudar a acompanhar seus gastos.",
-    emoji: "🏦",
-    action: "navigate",
-    targetRoute: "/cards",
-    detectionTable: "cards",
-    onboardingTarget: "add-card-btn",
-    arrivedTitle: "Ótimo! Agora adicione seu cartão",
-    arrivedDescription: "Clique no botão '+' ou 'Adicionar Cartão' para cadastrar seu primeiro cartão.",
-    formOpenTitle: "Preencha os dados do cartão",
-    formOpenDescription: "Digite o nome do cartão (ex: Nubank), escolha o tipo e preencha os campos. Depois clique em 'Adicionar'.",
-    completedTitle: "Cartão cadastrado! 🎉",
-    completedDescription: "Seu cartão foi adicionado com sucesso! Deseja adicionar outro ou prosseguir?",
-  },
-  {
-    id: "add-category",
-    title: "Personalize suas Categorias",
-    description: "Adicione categorias que fazem sentido para você, como 'Academia', 'Pets' ou 'Streaming'. Ou pule se preferir usar as categorias padrão.",
-    emoji: "📦",
-    action: "wait",
-    detectionTable: "user_categories",
-    optional: true,
-  },
-  {
-    id: "add-expense",
-    title: "Registre seu Primeiro Gasto",
-    description: "Agora vamos registrar uma despesa! Toque no botão '+' e preencha os dados de um gasto recente.",
-    emoji: "💸",
-    action: "wait",
-    detectionTable: "expenses",
-  },
-  {
-    id: "add-recurring-expense",
-    title: "Adicione Despesas Fixas",
-    description: "Cadastre suas contas mensais fixas (luz, internet, Netflix...). O app vai lançar automaticamente todo mês!",
-    emoji: "🔄",
-    action: "wait",
-    detectionTable: "recurring_expenses",
-    exampleText: "Exemplo: Netflix - R$ 29,90",
-  },
-  {
-    id: "add-income",
-    title: "Registre sua Primeira Entrada",
-    description: "Registre uma receita! Pode ser salário, freelance, venda ou qualquer entrada de dinheiro.",
-    emoji: "💰",
-    action: "wait",
-    detectionTable: "incomes",
-  },
-  {
-    id: "add-budget-goal",
-    title: "Defina uma Meta de Gastos",
-    description: "Estabeleça um limite de gastos para o mês! Isso te ajuda a não estourar o orçamento e ter controle financeiro.",
-    emoji: "🎯",
-    action: "wait",
-    detectionTable: "budget_goals",
-  },
-  {
-    id: "setup-security",
-    title: "Configure Segurança com PIN",
-    description: "Proteja seus dados! Configure um PIN para bloquear o app quando ele estiver em segundo plano.",
-    emoji: "🔐",
-    action: "navigate",
-    targetRoute: "/settings",
-    mobileOnly: true,
-  },
-  {
-    id: "import-spreadsheet",
-    title: "Importar Planilha (Opcional)",
-    description: "Se você já tem seus gastos em uma planilha, pode importar aqui! Caso contrário, pode pular esta etapa.",
-    emoji: "📊",
-    action: "navigate",
-    targetRoute: "/settings",
-    optional: true,
-  },
-];
-
+// ─── Context ──────────────────────────────────────────────────
 interface OnboardingContextType {
   isOpen: boolean;
+  currentStep: OnboardingStepConfig | null;
+  currentSubstep: OnboardingSubstep | null;
   currentStepIndex: number;
-  currentStep: OnboardingStep | null;
+  currentSubstepIndex: number;
   totalSteps: number;
+  totalSubsteps: number;
   progress: number;
   isCompleted: boolean;
   showCompletionDialog: boolean;
-  subPhase: OnboardingSubPhase;
+
   startOnboarding: () => void;
   skipOnboarding: () => void;
   skipCurrentStep: () => void;
-  completeStep: (stepId: string) => void;
-  closeCompletionDialog: () => void;
-  navigateToStep: () => void;
-  setSubPhase: (phase: OnboardingSubPhase) => void;
-  addAnotherItem: () => void;
+  advanceSubstep: () => void;
+  repeatStep: () => void;
   proceedToNextStep: () => void;
+  notifyEvent: (eventName: string) => void;
+  closeCompletionDialog: () => void;
+  // For validation-gated substeps: check if current target is valid
+  isCurrentTargetValid: () => boolean;
 }
 
-const OnboardingContext = createContext<OnboardingContextType | undefined>(undefined);
+const OnboardingContext = createContext<OnboardingContextType | undefined>(
+  undefined
+);
 
 const STORAGE_KEY = "gastinho_onboarding_completed";
 const PROGRESS_KEY = "gastinho_onboarding_progress";
@@ -134,59 +53,117 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
   const [isOpen, setIsOpen] = useState(false);
-  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [stepIndex, setStepIndex] = useState(0);
+  const [substepIndex, setSubstepIndex] = useState(0);
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set());
   const [showCompletionDialog, setShowCompletionDialog] = useState(false);
-  const [subPhase, setSubPhase] = useState<OnboardingSubPhase>("navigate");
 
-  // Filtrar steps mobile-only se não estiver em plataforma nativa
+  // Filter mobile-only steps
   const availableSteps = ONBOARDING_STEPS.filter(
-    (step) => !step.mobileOnly || Capacitor.isNativePlatform()
+    (s) => !s.mobileOnly || Capacitor.isNativePlatform()
   );
 
-  const currentStep = availableSteps[currentStepIndex] || null;
+  const currentStep = availableSteps[stepIndex] || null;
+  const currentSubstep = currentStep?.substeps[substepIndex] || null;
   const totalSteps = availableSteps.length;
+  const totalSubsteps = currentStep?.substeps.length || 0;
   const progress = (completedSteps.size / totalSteps) * 100;
   const isCompleted = localStorage.getItem(STORAGE_KEY) === "true";
 
-  // Detectar mudança de rota para avançar subPhase
+  // Ref to avoid stale closure in notifyEvent
+  const stateRef = useRef({ stepIndex, substepIndex, isOpen });
   useEffect(() => {
-    if (!isOpen || !currentStep?.targetRoute) return;
-    
-    if (location.pathname === currentStep.targetRoute && subPhase === "navigate") {
-      setSubPhase("arrived");
-    }
-  }, [location.pathname, isOpen, currentStep, subPhase]);
+    stateRef.current = { stepIndex, substepIndex, isOpen };
+  }, [stepIndex, substepIndex, isOpen]);
 
-  // Carregar progresso salvo
+  // ─── Route-based auto-advance ─────────────────────────────
   useEffect(() => {
-    const savedProgress = localStorage.getItem(PROGRESS_KEY);
-    if (savedProgress) {
-      try {
-        const { stepIndex, completed } = JSON.parse(savedProgress);
-        setCurrentStepIndex(stepIndex);
-        setCompletedSteps(new Set(completed));
-      } catch (e) {
-        console.error("Erro ao carregar progresso do onboarding:", e);
+    if (!isOpen || !currentSubstep?.autoAdvanceOnRoute) return;
+    if (location.pathname === currentSubstep.autoAdvanceOnRoute) {
+      // Already on the right route, advance
+      advanceSubstepInternal();
+    }
+  }, [location.pathname, isOpen, currentSubstep?.id]);
+
+  // ─── MutationObserver: wait for target to appear ──────────
+  useEffect(() => {
+    if (!isOpen || !currentSubstep?.targetSelector) return;
+
+    const selector = `[data-onboarding="${currentSubstep.targetSelector}"]`;
+
+    // Check if already in DOM
+    const existing = document.querySelector(selector);
+    if (existing) {
+      handleTargetAppeared(existing as HTMLElement);
+      return;
+    }
+
+    // Watch for it
+    const observer = new MutationObserver(() => {
+      const el = document.querySelector(selector);
+      if (el) {
+        observer.disconnect();
+        handleTargetAppeared(el as HTMLElement);
       }
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    // Timeout fallback — don't crash if element never appears
+    const timeout = setTimeout(() => {
+      observer.disconnect();
+    }, 10000);
+
+    return () => {
+      observer.disconnect();
+      clearTimeout(timeout);
+    };
+  }, [isOpen, currentSubstep?.id, currentSubstep?.targetSelector]);
+
+  // ─── Condition check: skip substep if condition fails ─────
+  useEffect(() => {
+    if (!isOpen || !currentSubstep?.condition) return;
+
+    // Small delay to let DOM settle
+    const timer = setTimeout(() => {
+      if (currentSubstep.condition && !currentSubstep.condition({})) {
+        advanceSubstepInternal();
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [isOpen, currentSubstep?.id]);
+
+  // ─── Load saved progress ─────────────────────────────────
+  useEffect(() => {
+    const saved = localStorage.getItem(PROGRESS_KEY);
+    if (saved) {
+      try {
+        const { stepIdx, substepIdx, completed } = JSON.parse(saved);
+        setStepIndex(stepIdx);
+        setSubstepIndex(substepIdx);
+        setCompletedSteps(new Set(completed));
+      } catch {}
     }
   }, []);
 
-  // Salvar progresso
+  // ─── Save progress ───────────────────────────────────────
   useEffect(() => {
     if (isOpen) {
       localStorage.setItem(
         PROGRESS_KEY,
         JSON.stringify({
-          stepIndex: currentStepIndex,
+          stepIdx: stepIndex,
+          substepIdx: substepIndex,
           completed: Array.from(completedSteps),
         })
       );
     }
-  }, [currentStepIndex, completedSteps, isOpen]);
+  }, [stepIndex, substepIndex, completedSteps, isOpen]);
 
-  // Detectar conclusão de steps via Supabase Realtime
+  // ─── Supabase Realtime detection (backup) ─────────────────
   useEffect(() => {
     if (!user || !isOpen || !currentStep?.detectionTable) return;
 
@@ -201,11 +178,13 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
           filter: `user_id=eq.${user.id}`,
         },
         () => {
-          // Quando detecta INSERT, mudar para fase "completed" em vez de avançar direto
-          if (currentStep.targetRoute) {
-            setSubPhase("completed");
-          } else {
-            completeStep(currentStep.id);
+          // Only use as fallback — primary is notifyEvent
+          // Go to completion substep if exists
+          const completionIdx = currentStep.substeps.findIndex(
+            (s) => s.actionType === "completion"
+          );
+          if (completionIdx >= 0) {
+            setSubstepIndex(completionIdx);
           }
         }
       )
@@ -214,61 +193,137 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     return () => {
       channel.unsubscribe();
     };
-  }, [user, isOpen, currentStep]);
+  }, [user, isOpen, currentStep?.id]);
 
-  // Detectar PIN configurado (step de segurança)
+  // ─── PIN detection for security step ──────────────────────
   useEffect(() => {
     if (!isOpen || currentStep?.id !== "setup-security") return;
-
-    const checkPIN = setInterval(() => {
-      const pinExists = localStorage.getItem("gastinho_app_lock_pin");
-      if (pinExists) {
-        completeStep("setup-security");
+    const interval = setInterval(() => {
+      if (localStorage.getItem("gastinho_app_lock_pin")) {
+        completeCurrentStep();
       }
     }, 1000);
+    return () => clearInterval(interval);
+  }, [isOpen, currentStep?.id]);
 
-    return () => clearInterval(checkPIN);
-  }, [isOpen, currentStep]);
+  // ─── Helpers ──────────────────────────────────────────────
 
-  const checkExistingData = async (userId: string): Promise<Set<string>> => {
+  function handleTargetAppeared(el: HTMLElement) {
+    if (!currentSubstep) return;
+
+    if (currentSubstep.scrollToTarget) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    if (currentSubstep.focusTarget) {
+      setTimeout(() => {
+        const input =
+          el.tagName === "INPUT" || el.tagName === "TEXTAREA"
+            ? el
+            : el.querySelector("input, textarea, select");
+        if (input) (input as HTMLElement).focus();
+      }, 400);
+    }
+  }
+
+  function advanceSubstepInternal() {
+    if (!currentStep) return;
+
+    let nextIdx = substepIndex + 1;
+
+    // Skip substeps whose condition is false
+    while (nextIdx < currentStep.substeps.length) {
+      const next = currentStep.substeps[nextIdx];
+      if (next.condition && !next.condition({})) {
+        nextIdx++;
+      } else {
+        break;
+      }
+    }
+
+    if (nextIdx < currentStep.substeps.length) {
+      setSubstepIndex(nextIdx);
+    } else {
+      // Step complete, go to next step
+      completeCurrentStep();
+    }
+  }
+
+  function completeCurrentStep() {
+    if (!currentStep) return;
+    setCompletedSteps((prev) => new Set([...prev, currentStep.id]));
+
+    const nextStepIdx = stepIndex + 1;
+    if (nextStepIdx >= availableSteps.length) {
+      setIsOpen(false);
+      setShowCompletionDialog(true);
+      localStorage.setItem(STORAGE_KEY, "true");
+      localStorage.removeItem(PROGRESS_KEY);
+    } else {
+      setStepIndex(nextStepIdx);
+      setSubstepIndex(0);
+      // Navigate if needed
+      const nextStep = availableSteps[nextStepIdx];
+      if (nextStep.targetRoute && nextStep.targetRoute !== location.pathname) {
+        navigate(nextStep.targetRoute);
+      }
+    }
+  }
+
+  const checkExistingData = async (
+    userId: string
+  ): Promise<Set<string>> => {
     const completed = new Set<string>();
 
-    const [cards, categories, expenses, recurring, incomes, goals] = await Promise.all([
-      supabase.from("cards").select("id").eq("user_id", userId).limit(1),
-      supabase.from("user_categories").select("id").eq("user_id", userId).eq("is_default", false).limit(1),
-      supabase.from("expenses").select("id").eq("user_id", userId).limit(1),
-      supabase.from("recurring_expenses").select("id").eq("user_id", userId).limit(1),
-      supabase.from("incomes").select("id").eq("user_id", userId).limit(1),
-      supabase.from("budget_goals").select("id").eq("user_id", userId).limit(1),
-    ]);
+    const [cards, categories, expenses, recurring, incomes, goals] =
+      await Promise.all([
+        supabase.from("cards").select("id").eq("user_id", userId).limit(1),
+        supabase
+          .from("user_categories")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("is_default", false)
+          .limit(1),
+        supabase.from("expenses").select("id").eq("user_id", userId).limit(1),
+        supabase
+          .from("recurring_expenses")
+          .select("id")
+          .eq("user_id", userId)
+          .limit(1),
+        supabase.from("incomes").select("id").eq("user_id", userId).limit(1),
+        supabase
+          .from("budget_goals")
+          .select("id")
+          .eq("user_id", userId)
+          .limit(1),
+      ]);
 
-    if (cards.data && cards.data.length > 0) completed.add("add-card");
-    if (categories.data && categories.data.length > 0) completed.add("add-category");
-    if (expenses.data && expenses.data.length > 0) completed.add("add-expense");
-    if (recurring.data && recurring.data.length > 0) completed.add("add-recurring-expense");
-    if (incomes.data && incomes.data.length > 0) completed.add("add-income");
-    if (goals.data && goals.data.length > 0) completed.add("add-budget-goal");
-
-    if (localStorage.getItem("gastinho_app_lock_pin")) completed.add("setup-security");
-    // import-spreadsheet is always optional, skip it
+    if (cards.data?.length) completed.add("add-card");
+    if (categories.data?.length) completed.add("add-category");
+    if (expenses.data?.length) completed.add("add-expense");
+    if (recurring.data?.length) completed.add("add-recurring-expense");
+    if (incomes.data?.length) completed.add("add-income");
+    if (goals.data?.length) completed.add("add-budget-goal");
+    if (localStorage.getItem("gastinho_app_lock_pin"))
+      completed.add("setup-security");
     completed.add("import-spreadsheet");
 
     return completed;
   };
 
-  const startOnboarding = async () => {
+  // ─── Public API ───────────────────────────────────────────
+
+  const startOnboarding = useCallback(async () => {
     let preCompleted = new Set<string>();
     if (user) {
       preCompleted = await checkExistingData(user.id);
     }
 
-    // Find first incomplete step
-    const firstPendingIndex = availableSteps.findIndex(
-      (step) => !preCompleted.has(step.id)
+    const firstPendingIdx = availableSteps.findIndex(
+      (s) => !preCompleted.has(s.id)
     );
 
-    if (firstPendingIndex === -1) {
-      // All steps already done
+    if (firstPendingIdx === -1) {
       setShowCompletionDialog(true);
       localStorage.setItem(STORAGE_KEY, "true");
       localStorage.removeItem(PROGRESS_KEY);
@@ -276,91 +331,105 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     }
 
     setCompletedSteps(preCompleted);
-    setCurrentStepIndex(firstPendingIndex);
-    setSubPhase("navigate");
+    setStepIndex(firstPendingIdx);
+    setSubstepIndex(0);
     setIsOpen(true);
     localStorage.removeItem(PROGRESS_KEY);
-  };
+  }, [user, availableSteps]);
 
-  const addAnotherItem = () => {
-    // Resetar para fase "arrived" para adicionar outro item
-    setSubPhase("arrived");
-  };
-
-  const proceedToNextStep = () => {
-    // Marcar step atual como completo e avançar
-    if (currentStep) {
-      completeStep(currentStep.id);
-    }
-  };
-
-  const skipOnboarding = () => {
+  const skipOnboarding = useCallback(() => {
     setIsOpen(false);
     localStorage.setItem(STORAGE_KEY, "true");
     localStorage.removeItem(PROGRESS_KEY);
-  };
+  }, []);
 
-  const skipCurrentStep = () => {
-    if (currentStep?.optional) {
-      completeStep(currentStep.id);
-    }
-  };
+  const skipCurrentStep = useCallback(() => {
+    completeCurrentStep();
+  }, [currentStep, stepIndex]);
 
-  const completeStep = (stepId: string) => {
-    setCompletedSteps((prev) => new Set([...prev, stepId]));
+  const advanceSubstep = useCallback(() => {
+    advanceSubstepInternal();
+  }, [currentStep, substepIndex]);
 
-    // Avançar para próximo step
-    const nextIndex = currentStepIndex + 1;
-    if (nextIndex >= availableSteps.length) {
-      // Tour completo!
-      setIsOpen(false);
-      setShowCompletionDialog(true);
-      localStorage.setItem(STORAGE_KEY, "true");
-      localStorage.removeItem(PROGRESS_KEY);
-    } else {
-      setCurrentStepIndex(nextIndex);
-      setSubPhase("navigate"); // Resetar subPhase para o novo step
-      // Se próximo step requer navegação e não estamos lá, navegar
-      const nextStep = availableSteps[nextIndex];
-      if (nextStep?.targetRoute && nextStep.targetRoute !== location.pathname) {
-        navigate(nextStep.targetRoute);
-      } else if (nextStep?.targetRoute && nextStep.targetRoute === location.pathname) {
-        // Já estamos na rota correta, avançar para "arrived"
-        setSubPhase("arrived");
+  const repeatStep = useCallback(() => {
+    // Go back to substep 1 (skip navigate)
+    if (!currentStep) return;
+    const clickIdx = currentStep.substeps.findIndex(
+      (s) => s.actionType === "click"
+    );
+    setSubstepIndex(clickIdx >= 0 ? clickIdx : 0);
+  }, [currentStep]);
+
+  const proceedToNextStep = useCallback(() => {
+    completeCurrentStep();
+  }, [currentStep, stepIndex]);
+
+  const notifyEvent = useCallback(
+    (eventName: string) => {
+      if (!isOpen || !currentSubstep) return;
+
+      if (currentSubstep.autoAdvanceOnEvent === eventName) {
+        advanceSubstepInternal();
       }
-    }
-  };
+    },
+    [isOpen, currentSubstep?.id, currentStep, substepIndex]
+  );
 
-  const closeCompletionDialog = () => {
+  const isCurrentTargetValid = useCallback((): boolean => {
+    if (!currentSubstep?.targetSelector) return false;
+
+    const el = document.querySelector(
+      `[data-onboarding="${currentSubstep.targetSelector}"]`
+    ) as HTMLElement | null;
+
+    if (!el) return false;
+
+    if (currentSubstep.actionType === "fill") {
+      const input =
+        el.tagName === "INPUT"
+          ? (el as HTMLInputElement)
+          : el.querySelector("input");
+      if (input) {
+        const val = (input as HTMLInputElement).value.trim();
+        return val.length > 0;
+      }
+      return false;
+    }
+
+    if (currentSubstep.actionType === "select") {
+      // Select always has a value (default), so always valid
+      return true;
+    }
+
+    return true;
+  }, [currentSubstep?.id, currentSubstep?.targetSelector]);
+
+  const closeCompletionDialog = useCallback(() => {
     setShowCompletionDialog(false);
-  };
-
-  const navigateToStep = () => {
-    if (currentStep?.targetRoute) {
-      navigate(currentStep.targetRoute);
-    }
-  };
+  }, []);
 
   return (
     <OnboardingContext.Provider
       value={{
         isOpen,
-        currentStepIndex,
         currentStep,
+        currentSubstep,
+        currentStepIndex: stepIndex,
+        currentSubstepIndex: substepIndex,
         totalSteps,
+        totalSubsteps,
         progress,
         isCompleted,
         showCompletionDialog,
-        subPhase,
         startOnboarding,
         skipOnboarding,
         skipCurrentStep,
-        completeStep,
-        closeCompletionDialog,
-        navigateToStep,
-        setSubPhase,
-        addAnotherItem,
+        advanceSubstep,
+        repeatStep,
         proceedToNextStep,
+        notifyEvent,
+        closeCompletionDialog,
+        isCurrentTargetValid,
       }}
     >
       {children}
