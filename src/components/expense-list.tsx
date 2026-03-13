@@ -150,8 +150,8 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onDuplic
                       {isGroupContext && expense.user_id && groupMembers.length > 0 && (
                         <>
                           <span>•</span>
-                          <User className="h-3 w-3 shrink-0" />
-                          <span className="truncate">{getUserDisplayName(expense.user_id, groupMembers) || '?'}</span>
+                           <User className="h-3 w-3 shrink-0" style={{ color: getMemberColor(expense.user_id, groupMembers) }} />
+                          <span className="truncate" style={{ color: getMemberColor(expense.user_id, groupMembers) }}>{getUserDisplayName(expense.user_id, groupMembers) || '?'}</span>
                         </>
                       )}
                     </div>

@@ -6,20 +6,37 @@ import { Expense } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
 import { SharedGroupMember } from "@/types/shared-group";
 
+// Paleta com bom contraste em tema escuro
+const MEMBER_COLORS = [
+  "#22d3ee", // cyan
+  "#a78bfa", // violet
+  "#fbbf24", // amber
+  "#34d399", // emerald
+  "#fb923c", // orange
+  "#f472b6", // pink
+  "#60a5fa", // blue
+  "#e879f9", // fuchsia
+];
+
+/**
+ * Retorna a cor de um membro de forma determinística baseada na ordem de joined_at.
+ * Estável para todos os membros do grupo, independente de quem visualiza.
+ */
+export function getMemberColor(userId: string, groupMembers: SharedGroupMember[]): string {
+  // Ordena por joined_at (ordem estável de entrada no grupo)
+  const sorted = [...groupMembers].sort(
+    (a, b) => new Date(a.joined_at).getTime() - new Date(b.joined_at).getTime()
+  );
+  const index = sorted.findIndex(m => m.user_id === userId);
+  if (index < 0) return MEMBER_COLORS[0];
+  return MEMBER_COLORS[index % MEMBER_COLORS.length];
+}
+
 interface GroupMemberSummaryProps {
   expenses: Expense[];
   recurringExpenses: RecurringExpense[];
   groupMembers: SharedGroupMember[];
 }
-
-const MEMBER_COLORS = [
-  "hsl(var(--primary))",
-  "hsl(142, 71%, 45%)",
-  "hsl(38, 92%, 50%)",
-  "hsl(280, 65%, 60%)",
-  "hsl(195, 85%, 45%)",
-  "hsl(350, 80%, 55%)",
-];
 
 export function GroupMemberSummary({ expenses, recurringExpenses, groupMembers }: GroupMemberSummaryProps) {
   const { isHidden } = useValuesVisibility();
@@ -27,25 +44,22 @@ export function GroupMemberSummary({ expenses, recurringExpenses, groupMembers }
   const memberTotals = useMemo(() => {
     const totals: Record<string, number> = {};
 
-    // Sum expenses per user
     for (const exp of expenses) {
       totals[exp.user_id] = (totals[exp.user_id] || 0) + Number(exp.amount);
     }
 
-    // Sum active recurring expenses per user
     for (const rec of recurringExpenses) {
       if (rec.is_active) {
         totals[rec.user_id] = (totals[rec.user_id] || 0) + Number(rec.amount);
       }
     }
 
-    // Map to members with email, sorted by total desc
     return groupMembers
-      .map((member, index) => ({
+      .map((member) => ({
         userId: member.user_id,
         email: member.user_email || "Sem email",
         total: totals[member.user_id] || 0,
-        color: MEMBER_COLORS[index % MEMBER_COLORS.length],
+        color: getMemberColor(member.user_id, groupMembers),
       }))
       .sort((a, b) => b.total - a.total);
   }, [expenses, recurringExpenses, groupMembers]);

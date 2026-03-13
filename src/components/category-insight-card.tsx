@@ -76,9 +76,9 @@ export function CategoryInsightCard({
       shouldInclude = true;
     }
     if (shouldInclude) {
-      const cat = getCategoryInfo(exp.category_id, exp.category);
-      if (!categoryTotals[cat.id]) categoryTotals[cat.id] = { total: 0, name: cat.name, icon: cat.icon };
-      categoryTotals[cat.id].total += Number(exp.amount);
+      const cat = getCategoryDisplay(exp.category_name, exp.category_icon, exp.category_id, exp.category);
+      if (!categoryTotals[cat.key]) categoryTotals[cat.key] = { total: 0, name: cat.name, icon: cat.icon };
+      categoryTotals[cat.key].total += Number(exp.amount);
     }
   });
 

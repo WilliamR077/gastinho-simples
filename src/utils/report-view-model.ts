@@ -263,14 +263,14 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
   // Category data
   const categoryDataMap: Record<string, { name: string; icon: string; value: number }> = {};
   filteredExpenses.forEach(e => {
-    const c = getCategoryInfo(e.category_id, e.category);
-    if (!categoryDataMap[c.id]) categoryDataMap[c.id] = { name: c.name, icon: c.icon, value: 0 };
-    categoryDataMap[c.id].value += Number(e.amount);
+    const c = getCategoryDisplay(e.category_name, e.category_icon, e.category_id, e.category);
+    if (!categoryDataMap[c.key]) categoryDataMap[c.key] = { name: c.name, icon: c.icon, value: 0 };
+    categoryDataMap[c.key].value += Number(e.amount);
   });
   filteredRecurringExpenses.forEach(r => {
-    const c = getCategoryInfo(r.category_id, r.category);
-    if (!categoryDataMap[c.id]) categoryDataMap[c.id] = { name: c.name, icon: c.icon, value: 0 };
-    categoryDataMap[c.id].value += Number(r.amount) * rm;
+    const c = getCategoryDisplay(r.category_name, r.category_icon, r.category_id, r.category);
+    if (!categoryDataMap[c.key]) categoryDataMap[c.key] = { name: c.name, icon: c.icon, value: 0 };
+    categoryDataMap[c.key].value += Number(r.amount) * rm;
   });
   const catDataTotal = Object.values(categoryDataMap).reduce((s, i) => s + i.value, 0);
   let categoryData: CategoryDataItem[] = Object.values(categoryDataMap)
