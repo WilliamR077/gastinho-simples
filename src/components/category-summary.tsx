@@ -64,11 +64,11 @@ export function CategorySummary({
   const categoryTotals: Record<string, { total: number; name: string; icon: string }> = {};
 
   expenses.forEach(expense => {
-    const catInfo = getCategoryInfo(expense.category_id, expense.category);
-    if (!categoryTotals[catInfo.id]) {
-      categoryTotals[catInfo.id] = { total: 0, name: catInfo.name, icon: catInfo.icon };
+    const cat = getCategoryDisplay(expense.category_name, expense.category_icon, expense.category_id, expense.category);
+    if (!categoryTotals[cat.key]) {
+      categoryTotals[cat.key] = { total: 0, name: cat.name, icon: cat.icon };
     }
-    categoryTotals[catInfo.id].total += Number(expense.amount);
+    categoryTotals[cat.key].total += Number(expense.amount);
   });
 
   // Add recurring expenses if they're within the filter period
