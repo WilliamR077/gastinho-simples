@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type CSSProperties, type ReactNode } from "react";
 import { Expense, categoryLabels, categoryIcons, ExpenseCategory } from "@/types/expense";
 import { Income, incomeCategoryLabels, incomeCategoryIcons } from "@/types/income";
 import { RecurringExpense } from "@/types/recurring-expense";
@@ -9,7 +9,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Pencil, Copy, Trash2, CreditCard, Smartphone, Calendar, Tag, Clock, Users, Power, Receipt } from "lucide-react";
+import { Pencil, Copy, Trash2, CreditCard, Smartphone, Calendar, Tag, Clock, Users, Power, Receipt, User } from "lucide-react";
 import { calculateBillingPeriod, formatBillingPeriodLabel, getNextBillingDates, CreditCardConfig } from "@/utils/billing-period";
 import { Card as CardType } from "@/types/card";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,8 @@ import {
   DrawerTitle,
   DrawerFooter,
 } from "@/components/ui/drawer";
+import { getMemberColor } from "@/components/group-member-summary";
+import { SharedGroupMember } from "@/types/shared-group";
 
 interface TransactionDetailSheetProps {
   expense?: Expense | null;
@@ -35,6 +37,8 @@ interface TransactionDetailSheetProps {
   onDelete: () => void;
   formatCurrency?: (value: number) => string;
   onToggleActive?: (id: string, isActive: boolean) => void;
+  groupMembers?: SharedGroupMember[];
+  isGroupContext?: boolean;
 }
 
 const paymentMethodLabels: Record<string, string> = {
@@ -55,6 +59,12 @@ const parseLocalDate = (dateString: string): Date => {
   return new Date(year, month - 1, day);
 };
 
+const getUserDisplayName = (userId: string, members: SharedGroupMember[]): string | null => {
+  const member = members.find((m) => m.user_id === userId);
+  if (!member?.user_email) return null;
+  return member.user_email.split("@")[0];
+};
+
 export function TransactionDetailSheet({
   expense,
   income,
@@ -66,6 +76,8 @@ export function TransactionDetailSheet({
   onDuplicate,
   onDelete,
   onToggleActive,
+  groupMembers = [],
+  isGroupContext = false,
 }: TransactionDetailSheetProps) {
   const { user } = useAuth();
   const [cardsData, setCardsData] = useState<CardType[]>([]);
@@ -87,6 +99,17 @@ export function TransactionDetailSheet({
   const isExpense = !!expense || !!recurringExpense;
   const transaction = expense || income || recurringExpense || recurringIncome;
   if (!transaction) return null;
+
+  const createdByUserId = (transaction as any).user_id;
+const createdByName =
+  isGroupContext && createdByUserId && groupMembers.length > 0
+    ? getUserDisplayName(createdByUserId, groupMembers) || "?"
+    : null;
+
+const createdByColor =
+  isGroupContext && createdByUserId && groupMembers.length > 0
+    ? getMemberColor(createdByUserId, groupMembers)
+    : undefined;
 
   // Category info
   let catIcon = "📦";
@@ -270,12 +293,22 @@ export function TransactionDetailSheet({
             </div>
           )}
 
-          {/* Criado em */}
-          <DetailRow
-            icon={<Clock className="h-4 w-4" />}
-            label="Criado em"
-            value={format(new Date(createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-          />
+{/* Criado em */}
+<DetailRow
+  icon={<Clock className="h-4 w-4" />}
+  label="Criado em"
+  value={format(new Date(createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+/>
+
+{/* Criado por */}
+{isGroupContext && createdByName && createdByColor && (
+  <DetailRow
+    icon={<User className="h-4 w-4" style={{ color: createdByColor }} />}
+    label="Criado por"
+    value={createdByName}
+    valueStyle={{ color: createdByColor }}
+  />
+)}
         </div>
 
         <Separator />
@@ -313,12 +346,24 @@ export function TransactionDetailSheet({
   );
 }
 
-function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function DetailRow({
+  icon,
+  label,
+  value,
+  valueStyle,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  valueStyle?: CSSProperties;
+}) {
   return (
     <div className="flex items-center gap-3">
       <span className="text-muted-foreground shrink-0">{icon}</span>
       <span className="text-sm text-muted-foreground shrink-0 w-20">{label}</span>
-      <span className="text-sm font-medium text-foreground truncate">{value}</span>
+      <span className="text-sm font-medium text-foreground truncate" style={valueStyle}>
+        {value}
+      </span>
     </div>
   );
 }

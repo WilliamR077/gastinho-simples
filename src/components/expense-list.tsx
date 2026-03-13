@@ -187,15 +187,17 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onDuplic
         </CardContent>
       </Card>
 
-      <TransactionDetailSheet
-        expense={selectedExpense}
-        open={!!selectedExpense}
-        onOpenChange={(open) => { if (!open) setSelectedExpense(null); }}
-        onEdit={() => { if (selectedExpense) onEditExpense(selectedExpense); }}
-        onDuplicate={() => { if (selectedExpense && onDuplicateExpense) onDuplicateExpense(selectedExpense); }}
-        onDelete={() => { if (selectedExpense) setDeleteId(selectedExpense.id); }}
-        formatCurrency={formatCurrency}
-      />
+<TransactionDetailSheet
+  expense={selectedExpense}
+  open={!!selectedExpense}
+  onOpenChange={(open) => { if (!open) setSelectedExpense(null); }}
+  onEdit={() => { if (selectedExpense) onEditExpense(selectedExpense); }}
+  onDuplicate={() => { if (selectedExpense && onDuplicateExpense) onDuplicateExpense(selectedExpense); }}
+  onDelete={() => { if (selectedExpense) setDeleteId(selectedExpense.id); }}
+  formatCurrency={formatCurrency}
+  groupMembers={groupMembers}
+  isGroupContext={isGroupContext}
+/>
 
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>

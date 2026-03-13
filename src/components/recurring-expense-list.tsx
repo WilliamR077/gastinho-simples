@@ -1,12 +1,14 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
-import { CreditCard, Smartphone, Calendar } from "lucide-react"
+import { CreditCard, Smartphone, Calendar, User } from "lucide-react"
 import { RecurringExpense } from "@/types/recurring-expense"
 import { categoryLabels, categoryIcons, ExpenseCategory } from "@/types/expense"
 import { useCategories } from "@/hooks/use-categories"
 import { useValuesVisibility } from "@/hooks/use-values-visibility"
 import { TransactionDetailSheet } from "@/components/transaction-detail-sheet"
 import { useState } from "react"
+import { SharedGroupMember } from "@/types/shared-group"
+import { getMemberColor } from "@/components/group-member-summary"
 
 interface RecurringExpenseListProps {
   expenses: RecurringExpense[]
@@ -14,7 +16,15 @@ interface RecurringExpenseListProps {
   onToggleActive: (id: string, isActive: boolean) => void
   onEditRecurringExpense: (expense: RecurringExpense) => void
   onSendToCalculator?: (value: number) => void
+  groupMembers?: SharedGroupMember[]
+  isGroupContext?: boolean
 }
+
+const getUserDisplayName = (userId: string, members: SharedGroupMember[]): string | null => {
+  const member = members.find((m) => m.user_id === userId);
+  if (!member?.user_email) return null;
+  return member.user_email.split("@")[0];
+};
 
 const paymentMethodConfig = {
   pix: { label: "PIX", icon: Smartphone },
@@ -22,7 +32,15 @@ const paymentMethodConfig = {
   credit: { label: "Crédito", icon: CreditCard }
 }
 
-export function RecurringExpenseList({ expenses, onDeleteExpense, onToggleActive, onEditRecurringExpense, onSendToCalculator }: RecurringExpenseListProps) {
+export function RecurringExpenseList({
+  expenses,
+  onDeleteExpense,
+  onToggleActive,
+  onEditRecurringExpense,
+  onSendToCalculator,
+  groupMembers = [],
+  isGroupContext = false,
+}: RecurringExpenseListProps) {
   const { categories } = useCategories()
   const { isHidden } = useValuesVisibility()
   const [selectedExpense, setSelectedExpense] = useState<RecurringExpense | null>(null)
@@ -99,17 +117,33 @@ export function RecurringExpenseList({ expenses, onDeleteExpense, onToggleActive
                     </p>
                   </div>
 
-                  {/* Line 2: category • day • method */}
-                  <div className="flex items-center mt-1 ml-7">
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0 flex-1">
-                      <span className="truncate">{categoryDisplay.label}</span>
-                      <span>•</span>
-                      <span className="whitespace-nowrap">Dia {expense.day_of_month}</span>
-                      <span>•</span>
-                      <Icon className="h-3 w-3 shrink-0" />
-                      <span className="truncate">{methodLabel}</span>
-                    </div>
+                {/* Line 2: category • day • method • criado por */}
+                <div className="flex items-center mt-1 ml-7">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0 flex-1">
+                    <span className="truncate">{categoryDisplay.label}</span>
+                    <span>•</span>
+                    <span className="whitespace-nowrap">Dia {expense.day_of_month}</span>
+                    <span>•</span>
+                    <Icon className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{methodLabel}</span>
+
+                    {isGroupContext && expense.user_id && groupMembers.length > 0 && (
+                      <>
+                        <span>•</span>
+                        <User
+                          className="h-3 w-3 shrink-0"
+                          style={{ color: getMemberColor(expense.user_id, groupMembers) }}
+                        />
+                        <span
+                          className="truncate"
+                          style={{ color: getMemberColor(expense.user_id, groupMembers) }}
+                        >
+                          {getUserDisplayName(expense.user_id, groupMembers) || "?"}
+                        </span>
+                      </>
+                    )}
                   </div>
+                </div>
                 </div>
               )
             })}
@@ -117,14 +151,16 @@ export function RecurringExpenseList({ expenses, onDeleteExpense, onToggleActive
         </CardContent>
       </Card>
 
-      <TransactionDetailSheet
-        recurringExpense={selectedExpense}
-        open={!!selectedExpense}
-        onOpenChange={(open) => { if (!open) setSelectedExpense(null) }}
-        onEdit={() => { if (selectedExpense) onEditRecurringExpense(selectedExpense) }}
-        onDelete={() => { if (selectedExpense) onDeleteExpense(selectedExpense.id) }}
-        onToggleActive={onToggleActive}
-      />
+    <TransactionDetailSheet
+      recurringExpense={selectedExpense}
+      open={!!selectedExpense}
+      onOpenChange={(open) => { if (!open) setSelectedExpense(null) }}
+      onEdit={() => { if (selectedExpense) onEditRecurringExpense(selectedExpense) }}
+      onDelete={() => { if (selectedExpense) onDeleteExpense(selectedExpense.id) }}
+      onToggleActive={onToggleActive}
+      groupMembers={groupMembers}
+      isGroupContext={isGroupContext}
+    />
     </>
   )
 }

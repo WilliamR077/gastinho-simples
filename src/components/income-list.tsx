@@ -17,15 +17,33 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { User } from "lucide-react";
+import { SharedGroupMember } from "@/types/shared-group";
+import { getMemberColor } from "@/components/group-member-summary";
 
 interface IncomeListProps {
   incomes: Income[];
   onDelete: (id: string) => void;
   onEdit?: (income: Income) => void;
   onDuplicate?: (income: Income) => void;
+  groupMembers?: SharedGroupMember[];
+  isGroupContext?: boolean;
 }
 
-export function IncomeList({ incomes, onDelete, onEdit, onDuplicate }: IncomeListProps) {
+const getUserDisplayName = (userId: string, members: SharedGroupMember[]): string | null => {
+  const member = members.find((m) => m.user_id === userId);
+  if (!member?.user_email) return null;
+  return member.user_email.split("@")[0];
+};
+
+export function IncomeList({
+  incomes,
+  onDelete,
+  onEdit,
+  onDuplicate,
+  groupMembers = [],
+  isGroupContext = false,
+}: IncomeListProps) {
   const { isHidden } = useValuesVisibility();
   const { categories: incomeCats } = useIncomeCategories();
   const [visibleCount, setVisibleCount] = useState(10);
@@ -78,6 +96,7 @@ export function IncomeList({ incomes, onDelete, onEdit, onDuplicate }: IncomeLis
           <div className="divide-y divide-border/30">
             {currentIncomes.map((income) => {
               const catInfo = getIncomeCatInfo(income);
+              const createdByUserId = (income as any).user_id;
               return (
                 <div
                   key={income.id}
@@ -93,14 +112,30 @@ export function IncomeList({ incomes, onDelete, onEdit, onDuplicate }: IncomeLis
                     </p>
                   </div>
 
-                  {/* Line 2: category • date */}
-                  <div className="flex items-center mt-1 ml-7">
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <span>{catInfo.name}</span>
-                      <span>•</span>
-                      <span>{format(parseLocalDate(income.income_date), "dd/MM", { locale: ptBR })}</span>
-                    </div>
+                {/* Line 2: category • date • criado por */}
+                <div className="flex items-center mt-1 ml-7">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0 flex-1">
+                    <span className="truncate">{catInfo.name}</span>
+                    <span>•</span>
+                    <span>{format(parseLocalDate(income.income_date), "dd/MM", { locale: ptBR })}</span>
+
+                    {isGroupContext && createdByUserId && groupMembers.length > 0 && (
+                      <>
+                        <span>•</span>
+                        <User
+                          className="h-3 w-3 shrink-0"
+                          style={{ color: getMemberColor(createdByUserId, groupMembers) }}
+                        />
+                        <span
+                          className="truncate"
+                          style={{ color: getMemberColor(createdByUserId, groupMembers) }}
+                        >
+                          {getUserDisplayName(createdByUserId, groupMembers) || "?"}
+                        </span>
+                      </>
+                    )}
                   </div>
+                </div>
                 </div>
               );
             })}
@@ -129,6 +164,8 @@ export function IncomeList({ incomes, onDelete, onEdit, onDuplicate }: IncomeLis
         onDuplicate={() => { if (selectedIncome && onDuplicate) onDuplicate(selectedIncome); }}
         onDelete={() => { if (selectedIncome) setDeleteId(selectedIncome.id); }}
         formatCurrency={formatCurrency}
+        groupMembers={groupMembers}
+        isGroupContext={isGroupContext}
       />
 
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>

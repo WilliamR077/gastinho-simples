@@ -2,22 +2,34 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RecurringIncome, incomeCategoryLabels, incomeCategoryIcons } from "@/types/income";
 import { useIncomeCategories } from "@/hooks/use-income-categories";
 import { useValuesVisibility } from "@/hooks/use-values-visibility";
-import { Calendar } from "lucide-react";
+import { Calendar, User } from "lucide-react";
 import { TransactionDetailSheet } from "@/components/transaction-detail-sheet";
 import { useState } from "react";
+import { SharedGroupMember } from "@/types/shared-group";
+import { getMemberColor } from "@/components/group-member-summary";
 
 interface RecurringIncomeListProps {
   incomes: RecurringIncome[];
   onDelete: (id: string) => void;
   onToggleActive: (id: string, isActive: boolean) => void;
   onEdit?: (income: RecurringIncome) => void;
+  groupMembers?: SharedGroupMember[];
+  isGroupContext?: boolean;
 }
+
+const getUserDisplayName = (userId: string, members: SharedGroupMember[]): string | null => {
+  const member = members.find((m) => m.user_id === userId);
+  if (!member?.user_email) return null;
+  return member.user_email.split("@")[0];
+};
 
 export function RecurringIncomeList({ 
   incomes, 
   onDelete, 
   onToggleActive,
-  onEdit 
+  onEdit,
+  groupMembers = [],
+  isGroupContext = false,
 }: RecurringIncomeListProps) {
   const { isHidden } = useValuesVisibility();
   const { categories: incomeCats } = useIncomeCategories();
@@ -61,6 +73,7 @@ export function RecurringIncomeList({
           <div className="divide-y divide-border/30">
             {incomes.map((income) => {
               const catInfo = getIncomeCatInfo(income);
+              const createdByUserId = (income as any).user_id;
               return (
                 <div
                   key={income.id}
@@ -78,12 +91,28 @@ export function RecurringIncomeList({
                     </p>
                   </div>
 
-                  {/* Line 2: category • day */}
+                  {/* Line 2: category • day • criado por */}
                   <div className="flex items-center mt-1 ml-7">
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <span>{catInfo.name}</span>
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0 flex-1">
+                      <span className="truncate">{catInfo.name}</span>
                       <span>•</span>
                       <span>Dia {income.day_of_month}</span>
+
+                      {isGroupContext && createdByUserId && groupMembers.length > 0 && (
+                        <>
+                          <span>•</span>
+                          <User
+                            className="h-3 w-3 shrink-0"
+                            style={{ color: getMemberColor(createdByUserId, groupMembers) }}
+                          />
+                          <span
+                            className="truncate"
+                            style={{ color: getMemberColor(createdByUserId, groupMembers) }}
+                          >
+                            {getUserDisplayName(createdByUserId, groupMembers) || "?"}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -93,14 +122,16 @@ export function RecurringIncomeList({
         </CardContent>
       </Card>
 
-      <TransactionDetailSheet
-        recurringIncome={selectedIncome}
-        open={!!selectedIncome}
-        onOpenChange={(open) => { if (!open) setSelectedIncome(null) }}
-        onEdit={() => { if (selectedIncome && onEdit) onEdit(selectedIncome) }}
-        onDelete={() => { if (selectedIncome) onDelete(selectedIncome.id) }}
-        onToggleActive={onToggleActive}
-      />
+    <TransactionDetailSheet
+      recurringIncome={selectedIncome}
+      open={!!selectedIncome}
+      onOpenChange={(open) => { if (!open) setSelectedIncome(null) }}
+      onEdit={() => { if (selectedIncome && onEdit) onEdit(selectedIncome) }}
+      onDelete={() => { if (selectedIncome) onDelete(selectedIncome.id) }}
+      onToggleActive={onToggleActive}
+      groupMembers={groupMembers}
+      isGroupContext={isGroupContext}
+    />
     </>
   );
 }

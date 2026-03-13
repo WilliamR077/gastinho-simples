@@ -1798,11 +1798,13 @@ export default function Index() {
 
 
               <RecurringExpenseList
-                expenses={displayedRecurringExpenses}
-                onDeleteExpense={deleteRecurringExpense}
-                onToggleActive={toggleRecurringExpenseActive}
-                onEditRecurringExpense={handleEditRecurringExpense}
-                onSendToCalculator={handleSendToCalculator} />
+              expenses={displayedRecurringExpenses}
+              onDeleteExpense={deleteRecurringExpense}
+              onToggleActive={toggleRecurringExpenseActive}
+              onEditRecurringExpense={handleEditRecurringExpense}
+              onSendToCalculator={handleSendToCalculator}
+              groupMembers={groupMembers}
+              isGroupContext={currentContext.type === 'group'} />
 
               }
             </div>
@@ -1867,14 +1869,18 @@ export default function Index() {
                 incomes={displayedIncomes}
                 onDelete={deleteIncome}
                 onEdit={handleEditIncome}
-                onDuplicate={handleDuplicateIncome} /> :
+                onDuplicate={handleDuplicateIncome}
+                groupMembers={groupMembers}
+                isGroupContext={currentContext.type === 'group'} /> :
 
 
               <RecurringIncomeList
                 incomes={displayedRecurringIncomes}
                 onDelete={deleteRecurringIncome}
                 onToggleActive={toggleRecurringIncomeActive}
-                onEdit={handleEditRecurringIncome} />
+                onEdit={handleEditRecurringIncome}
+                groupMembers={groupMembers}
+                isGroupContext={currentContext.type === 'group'} />
 
               }
             </div>
