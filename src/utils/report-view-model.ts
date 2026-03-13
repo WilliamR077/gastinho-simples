@@ -239,9 +239,9 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
   // Top category
   const catTotals: Record<string, { name: string; value: number }> = {};
   filteredExpenses.forEach(e => {
-    const c = getCategoryInfo(e.category_id, e.category);
-    if (!catTotals[c.id]) catTotals[c.id] = { name: c.name, value: 0 };
-    catTotals[c.id].value += Number(e.amount);
+    const c = getCategoryDisplay(e.category_name, e.category_icon, e.category_id, e.category);
+    if (!catTotals[c.key]) catTotals[c.key] = { name: c.name, value: 0 };
+    catTotals[c.key].value += Number(e.amount);
   });
   const catSorted = Object.values(catTotals).sort((a, b) => b.value - a.value);
   const catTotal = catSorted.reduce((s, i) => s + i.value, 0);
