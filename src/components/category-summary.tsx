@@ -38,21 +38,26 @@ export function CategorySummary({
   const { categories } = useCategories()
   const { isHidden } = useValuesVisibility()
 
-  // Helper para obter categoria por ID ou fallback
-  const getCategoryInfo = (categoryId: string | null, categoryEnum: string): { id: string; name: string; icon: string } => {
+  // Helper: prioriza dados denormalizados (funciona cross-user em grupos)
+  const getCategoryDisplay = (
+    categoryName: string | null | undefined,
+    categoryIcon: string | null | undefined,
+    categoryId: string | null,
+    categoryEnum: string
+  ): { key: string; name: string; icon: string } => {
+    // 1. Dados denormalizados (confiáveis para grupo)
+    if (categoryName) {
+      return { key: categoryName, name: categoryName, icon: categoryIcon || "📦" };
+    }
+    // 2. Lookup local (funciona para despesas do próprio usuário)
     if (categoryId) {
-      const userCategory = categories.find(c => c.id === categoryId);
-      if (userCategory) {
-        return { id: userCategory.id, name: userCategory.name, icon: userCategory.icon };
-      }
+      const uc = categories.find(c => c.id === categoryId);
+      if (uc) return { key: uc.name, name: uc.name, icon: uc.icon };
     }
-    // Fallback para categoria antiga
-    const fallbackCategory = categories.find(c => c.name.toLowerCase() === categoryEnum.replace('ao', 'ão').toLowerCase() || 
-      c.name.toLowerCase() === categoryEnum.toLowerCase());
-    if (fallbackCategory) {
-      return { id: fallbackCategory.id, name: fallbackCategory.name, icon: fallbackCategory.icon };
-    }
-    return { id: categoryEnum, name: categoryEnum, icon: "📦" };
+    // 3. Fallback enum
+    const fb = categories.find(c => c.name.toLowerCase() === categoryEnum.toLowerCase());
+    if (fb) return { key: fb.name, name: fb.name, icon: fb.icon };
+    return { key: categoryEnum || "Outros", name: categoryEnum || "Outros", icon: "📦" };
   };
 
   // Calculate totals by category from regular expenses
