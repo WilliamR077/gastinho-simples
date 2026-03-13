@@ -121,17 +121,23 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
     isGroupContext, groupMembers
   } = params;
 
-  // Helper to resolve category
-  const getCategoryInfo = (categoryId: string | null | undefined, categoryEnum: ExpenseCategory | null | undefined) => {
+  // Helper: prioriza dados denormalizados (cross-user em grupos)
+  const getCategoryDisplay = (
+    categoryName: string | null | undefined,
+    categoryIcon: string | null | undefined,
+    categoryId: string | null | undefined,
+    categoryEnum: ExpenseCategory | null | undefined
+  ): { key: string; name: string; icon: string } => {
+    if (categoryName) return { key: categoryName, name: categoryName, icon: categoryIcon || '📦' };
     if (categoryId && categories.length > 0) {
       const found = categories.find(c => c.id === categoryId);
-      if (found) return { id: found.id, name: found.name, icon: found.icon };
+      if (found) return { key: found.name, name: found.name, icon: found.icon };
     }
     if (categoryEnum) {
       const label = categoryLabels[categoryEnum] || categoryEnum;
-      return { id: categoryEnum, name: label, icon: '📦' };
+      return { key: label, name: label, icon: '📦' };
     }
-    return { id: 'outros', name: 'Outros', icon: '📦' };
+    return { key: 'Outros', name: 'Outros', icon: '📦' };
   };
 
   // Build cards config map for billing period calculation
@@ -233,9 +239,9 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
   // Top category
   const catTotals: Record<string, { name: string; value: number }> = {};
   filteredExpenses.forEach(e => {
-    const c = getCategoryInfo(e.category_id, e.category);
-    if (!catTotals[c.id]) catTotals[c.id] = { name: c.name, value: 0 };
-    catTotals[c.id].value += Number(e.amount);
+    const c = getCategoryDisplay(e.category_name, e.category_icon, e.category_id, e.category);
+    if (!catTotals[c.key]) catTotals[c.key] = { name: c.name, value: 0 };
+    catTotals[c.key].value += Number(e.amount);
   });
   const catSorted = Object.values(catTotals).sort((a, b) => b.value - a.value);
   const catTotal = catSorted.reduce((s, i) => s + i.value, 0);
@@ -257,14 +263,14 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
   // Category data
   const categoryDataMap: Record<string, { name: string; icon: string; value: number }> = {};
   filteredExpenses.forEach(e => {
-    const c = getCategoryInfo(e.category_id, e.category);
-    if (!categoryDataMap[c.id]) categoryDataMap[c.id] = { name: c.name, icon: c.icon, value: 0 };
-    categoryDataMap[c.id].value += Number(e.amount);
+    const c = getCategoryDisplay(e.category_name, e.category_icon, e.category_id, e.category);
+    if (!categoryDataMap[c.key]) categoryDataMap[c.key] = { name: c.name, icon: c.icon, value: 0 };
+    categoryDataMap[c.key].value += Number(e.amount);
   });
   filteredRecurringExpenses.forEach(r => {
-    const c = getCategoryInfo(r.category_id, r.category);
-    if (!categoryDataMap[c.id]) categoryDataMap[c.id] = { name: c.name, icon: c.icon, value: 0 };
-    categoryDataMap[c.id].value += Number(r.amount) * rm;
+    const c = getCategoryDisplay(r.category_name, r.category_icon, r.category_id, r.category);
+    if (!categoryDataMap[c.key]) categoryDataMap[c.key] = { name: c.name, icon: c.icon, value: 0 };
+    categoryDataMap[c.key].value += Number(r.amount) * rm;
   });
   const catDataTotal = Object.values(categoryDataMap).reduce((s, i) => s + i.value, 0);
   let categoryData: CategoryDataItem[] = Object.values(categoryDataMap)

@@ -31,22 +31,28 @@ export function CategoryInsightCard({
   const { categories } = useCategories();
   const { isHidden } = useValuesVisibility();
 
-  const getCategoryInfo = (categoryId: string | null, categoryEnum: string) => {
+  const getCategoryDisplay = (
+    categoryName: string | null | undefined,
+    categoryIcon: string | null | undefined,
+    categoryId: string | null,
+    categoryEnum: string
+  ): { key: string; name: string; icon: string } => {
+    if (categoryName) return { key: categoryName, name: categoryName, icon: categoryIcon || "📦" };
     if (categoryId) {
       const uc = categories.find(c => c.id === categoryId);
-      if (uc) return { id: uc.id, name: uc.name, icon: uc.icon };
+      if (uc) return { key: uc.name, name: uc.name, icon: uc.icon };
     }
     const fb = categories.find(c => c.name.toLowerCase() === categoryEnum.toLowerCase());
-    if (fb) return { id: fb.id, name: fb.name, icon: fb.icon };
-    return { id: categoryEnum, name: categoryEnum, icon: "📦" };
+    if (fb) return { key: fb.name, name: fb.name, icon: fb.icon };
+    return { key: categoryEnum || "Outros", name: categoryEnum || "Outros", icon: "📦" };
   };
 
   const categoryTotals: Record<string, { total: number; name: string; icon: string }> = {};
 
   expenses.forEach(exp => {
-    const cat = getCategoryInfo(exp.category_id, exp.category);
-    if (!categoryTotals[cat.id]) categoryTotals[cat.id] = { total: 0, name: cat.name, icon: cat.icon };
-    categoryTotals[cat.id].total += Number(exp.amount);
+    const cat = getCategoryDisplay(exp.category_name, exp.category_icon, exp.category_id, exp.category);
+    if (!categoryTotals[cat.key]) categoryTotals[cat.key] = { total: 0, name: cat.name, icon: cat.icon };
+    categoryTotals[cat.key].total += Number(exp.amount);
   });
 
   recurringExpenses.forEach(exp => {
@@ -70,9 +76,9 @@ export function CategoryInsightCard({
       shouldInclude = true;
     }
     if (shouldInclude) {
-      const cat = getCategoryInfo(exp.category_id, exp.category);
-      if (!categoryTotals[cat.id]) categoryTotals[cat.id] = { total: 0, name: cat.name, icon: cat.icon };
-      categoryTotals[cat.id].total += Number(exp.amount);
+      const cat = getCategoryDisplay(exp.category_name, exp.category_icon, exp.category_id, exp.category);
+      if (!categoryTotals[cat.key]) categoryTotals[cat.key] = { total: 0, name: cat.name, icon: cat.icon };
+      categoryTotals[cat.key].total += Number(exp.amount);
     }
   });
 

@@ -5,6 +5,7 @@ import { CreditCard, Smartphone, Receipt, Users, User, Calculator } from "lucide
 import { Expense, categoryLabels, categoryIcons, ExpenseCategory } from "@/types/expense"
 import { SharedGroupMember } from "@/types/shared-group"
 import { useCategories } from "@/hooks/use-categories"
+import { getMemberColor } from "@/components/group-member-summary"
 import { useValuesVisibility } from "@/hooks/use-values-visibility"
 import { TransactionDetailSheet } from "@/components/transaction-detail-sheet"
 import {
@@ -149,8 +150,8 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onDuplic
                       {isGroupContext && expense.user_id && groupMembers.length > 0 && (
                         <>
                           <span>•</span>
-                          <User className="h-3 w-3 shrink-0" />
-                          <span className="truncate">{getUserDisplayName(expense.user_id, groupMembers) || '?'}</span>
+                           <User className="h-3 w-3 shrink-0" style={{ color: getMemberColor(expense.user_id, groupMembers) }} />
+                          <span className="truncate" style={{ color: getMemberColor(expense.user_id, groupMembers) }}>{getUserDisplayName(expense.user_id, groupMembers) || '?'}</span>
                         </>
                       )}
                     </div>
