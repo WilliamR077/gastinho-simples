@@ -121,17 +121,23 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
     isGroupContext, groupMembers
   } = params;
 
-  // Helper to resolve category
-  const getCategoryInfo = (categoryId: string | null | undefined, categoryEnum: ExpenseCategory | null | undefined) => {
+  // Helper: prioriza dados denormalizados (cross-user em grupos)
+  const getCategoryDisplay = (
+    categoryName: string | null | undefined,
+    categoryIcon: string | null | undefined,
+    categoryId: string | null | undefined,
+    categoryEnum: ExpenseCategory | null | undefined
+  ): { key: string; name: string; icon: string } => {
+    if (categoryName) return { key: categoryName, name: categoryName, icon: categoryIcon || '📦' };
     if (categoryId && categories.length > 0) {
       const found = categories.find(c => c.id === categoryId);
-      if (found) return { id: found.id, name: found.name, icon: found.icon };
+      if (found) return { key: found.name, name: found.name, icon: found.icon };
     }
     if (categoryEnum) {
       const label = categoryLabels[categoryEnum] || categoryEnum;
-      return { id: categoryEnum, name: label, icon: '📦' };
+      return { key: label, name: label, icon: '📦' };
     }
-    return { id: 'outros', name: 'Outros', icon: '📦' };
+    return { key: 'Outros', name: 'Outros', icon: '📦' };
   };
 
   // Build cards config map for billing period calculation
