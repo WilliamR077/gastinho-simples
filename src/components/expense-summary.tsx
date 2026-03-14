@@ -104,7 +104,7 @@ export function ExpenseSummary({
   filter((e) => e.payment_method === 'credit').
   reduce((acc, expense) => {
     const cardName = expense.card?.name || expense.card_name || 'Sem cartão';
-    const cardColor = expense.card?.color || '#FFA500';
+    const cardColor = expense.card?.color || expense.card_color || '#FFA500';
     if (!acc[cardName]) {
       acc[cardName] = { total: 0, color: cardColor };
     }
@@ -117,7 +117,7 @@ export function ExpenseSummary({
   filter((e) => e.payment_method === 'credit').
   forEach((expense) => {
     const cardName = expense.card?.name || expense.card_name || 'Sem cartão';
-    const cardColor = expense.card?.color || '#FFA500';
+    const cardColor = expense.card?.color || expense.card_color || '#FFA500';
     if (!creditCardTotals[cardName]) {
       creditCardTotals[cardName] = { total: 0, color: cardColor };
     }
@@ -129,7 +129,7 @@ export function ExpenseSummary({
   filter((e) => e.payment_method === 'debit').
   reduce((acc, expense) => {
     const cardName = expense.card?.name || expense.card_name || 'Sem cartão';
-    const cardColor = expense.card?.color || '#3B82F6';
+    const cardColor = expense.card?.color || expense.card_color || '#3B82F6';
     if (!acc[cardName]) {
       acc[cardName] = { total: 0, color: cardColor };
     }
@@ -142,7 +142,7 @@ export function ExpenseSummary({
   filter((e) => e.payment_method === 'debit').
   forEach((expense) => {
     const cardName = expense.card?.name || expense.card_name || 'Sem cartão';
-    const cardColor = expense.card?.color || '#3B82F6';
+    const cardColor = expense.card?.color || expense.card_color || '#3B82F6';
     if (!debitCardTotals[cardName]) {
       debitCardTotals[cardName] = { total: 0, color: cardColor };
     }
