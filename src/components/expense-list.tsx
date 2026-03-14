@@ -104,12 +104,10 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onDuplic
               const Icon = config.icon
               const categoryDisplay = getCategoryDisplay(expense)
               const cardName = expense.card?.name || expense.card_name;
+              const cardColor = expense.card?.color || expense.card_color || undefined;
               const shortCardName = cardName
                 ? (cardName.length > 5 ? cardName.slice(0, 5) + '…' : cardName)
                 : null;
-              const methodLabel = shortCardName
-                ? `${config.label} • ${shortCardName}`
-                : config.label;
               
               return (
                 <div
@@ -139,7 +137,13 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onDuplic
                       <span className="whitespace-nowrap">{parseLocalDate(expense.expense_date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
                       <span>•</span>
                       <Icon className="h-3 w-3 shrink-0" />
-                      <span className="truncate">{methodLabel}</span>
+                      <span className="truncate">{config.label}</span>
+                      {shortCardName && (
+                        <>
+                          <span>•</span>
+                          <span className="truncate" style={cardColor ? { color: cardColor } : undefined}>{shortCardName}</span>
+                        </>
+                      )}
                       {expense.shared_group && (
                         <>
                           <span>•</span>

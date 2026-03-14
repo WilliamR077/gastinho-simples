@@ -78,6 +78,7 @@ export default function Index() {
   const [incomeSubTab, setIncomeSubTab] = useState("monthly");
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string | null>(null);
   const [activeIncomeCategoryFilter, setActiveIncomeCategoryFilter] = useState<string | null>(null);
+  const [activeCardFilter, setActiveCardFilter] = useState<{ cardName: string; method: PaymentMethod } | null>(null);
   // filterTab removed - CompactFilterBar adapts automatically to activeTab
   const [viewMode, setViewMode] = useState<"calendar" | "billing">("calendar");
   const [billingCardId, setBillingCardId] = useState<string | null>(null);
@@ -688,7 +689,8 @@ export default function Index() {
           // Campos desnormalizados para visualização em grupos
           category_name: categoryName,
           category_icon: categoryIcon,
-          card_name: cardName
+          card_name: cardName,
+          card_color: selectedCard?.color || null
         }).
         select(`
           *,
@@ -725,7 +727,8 @@ export default function Index() {
             // Campos desnormalizados para visualização em grupos
             category_name: categoryName,
             category_icon: categoryIcon,
-            card_name: cardName
+            card_name: cardName,
+            card_color: selectedCard?.color || null
           });
         }
 
@@ -836,7 +839,8 @@ export default function Index() {
         // Campos desnormalizados para visualização em grupos
         category_name: categoryName,
         category_icon: categoryIcon,
-        card_name: cardName
+        card_name: cardName,
+        card_color: selectedCard?.color || null
       }).
       select(`
         *,
@@ -1327,55 +1331,84 @@ export default function Index() {
     });
   };
 
+  // Handler para filtro por cartão específico
+  const handleCardFilter = (cardName: string, method: PaymentMethod) => {
+    setActiveCardFilter((prev) => {
+      if (prev?.cardName === cardName && prev?.method === method) {
+        toast({
+          title: "Filtro removido",
+          description: "Exibindo todos os cartões"
+        });
+        return null;
+      } else {
+        toast({
+          title: "Filtro aplicado",
+          description: `Filtrando por ${cardName}`
+        });
+        return { cardName, method };
+      }
+    });
+  };
+
   // Filtrar despesas recorrentes baseado nos filtros aplicados
   const filteredRecurringExpenses = useMemo(() => {
     return recurringExpenses.filter((expense) => {
-      // Filtro de descrição
       if (filters.description) {
         if (!expense.description.toLowerCase().includes(filters.description.toLowerCase())) {
           return false;
         }
       }
-
-      // Filtro de valor mínimo
       if (filters.minAmount !== undefined) {
         if (expense.amount < filters.minAmount) return false;
       }
-
-      // Filtro de valor máximo
       if (filters.maxAmount !== undefined) {
         if (expense.amount > filters.maxAmount) return false;
       }
-
-      // Filtro de forma de pagamento
       if (filters.paymentMethod) {
         if (expense.payment_method !== filters.paymentMethod) return false;
       }
-
-      // Filtro de cartão
       if (filters.cardId && expense.card_id !== filters.cardId) {
         return false;
       }
-
       return true;
     });
   }, [recurringExpenses, filters]);
 
-  // Despesas filtradas por categoria
+  // Despesas filtradas por categoria e cartão
   const displayedExpenses = useMemo(() => {
-    if (!activeCategoryFilter) return filteredExpenses;
-    return filteredExpenses.filter((e) =>
-    e.category_id === activeCategoryFilter || e.category === activeCategoryFilter
-    );
-  }, [filteredExpenses, activeCategoryFilter]);
+    let result = filteredExpenses;
+    if (activeCategoryFilter) {
+      result = result.filter((e) =>
+        e.category_id === activeCategoryFilter || e.category === activeCategoryFilter
+      );
+    }
+    if (activeCardFilter) {
+      result = result.filter((e) => {
+        if (e.payment_method !== activeCardFilter.method) return false;
+        const expCardName = e.card?.name || e.card_name || 'Sem cartão';
+        return expCardName === activeCardFilter.cardName;
+      });
+    }
+    return result;
+  }, [filteredExpenses, activeCategoryFilter, activeCardFilter]);
 
-  // Despesas recorrentes filtradas por categoria
+  // Despesas recorrentes filtradas por categoria e cartão
   const displayedRecurringExpenses = useMemo(() => {
-    if (!activeCategoryFilter) return filteredRecurringExpenses;
-    return filteredRecurringExpenses.filter((e) =>
-    e.category_id === activeCategoryFilter || e.category === activeCategoryFilter
-    );
-  }, [filteredRecurringExpenses, activeCategoryFilter]);
+    let result = filteredRecurringExpenses;
+    if (activeCategoryFilter) {
+      result = result.filter((e) =>
+        e.category_id === activeCategoryFilter || e.category === activeCategoryFilter
+      );
+    }
+    if (activeCardFilter) {
+      result = result.filter((e) => {
+        if (e.payment_method !== activeCardFilter.method) return false;
+        const expCardName = e.card?.name || e.card_name || 'Sem cartão';
+        return expCardName === activeCardFilter.cardName;
+      });
+    }
+    return result;
+  }, [filteredRecurringExpenses, activeCategoryFilter, activeCardFilter]);
 
   // Verificar se há filtros ativos
   const hasActiveFilters = useMemo(() => {
@@ -1386,9 +1419,10 @@ export default function Index() {
     filters.paymentMethod ||
     filters.cardId ||
     activeCategoryFilter ||
-    activeIncomeCategoryFilter);
+    activeIncomeCategoryFilter ||
+    activeCardFilter);
 
-  }, [filters, activeCategoryFilter, activeIncomeCategoryFilter]);
+  }, [filters, activeCategoryFilter, activeIncomeCategoryFilter, activeCardFilter]);
 
   // Função para limpar todos os filtros
   const clearAllFilters = () => {
@@ -1402,6 +1436,7 @@ export default function Index() {
     }));
     setActiveCategoryFilter(null);
     setActiveIncomeCategoryFilter(null);
+    setActiveCardFilter(null);
   };
 
   // Handler para filtro de categoria de entrada
@@ -1669,7 +1704,9 @@ export default function Index() {
             onPaymentMethodClick={handlePaymentMethodFilter}
             activePaymentMethod={filters.paymentMethod}
             budgetGoals={budgetGoals.filter((g) => g.type === "monthly_total" || g.type === "category")}
-            onNavigateToGoals={() => setActiveTab("goals")} />
+            onNavigateToGoals={() => setActiveTab("goals")}
+            onCardClick={handleCardFilter}
+            activeCardName={activeCardFilter?.cardName} />
 
         </div>
 

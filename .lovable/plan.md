@@ -1,68 +1,102 @@
 
 
-## Plano: Cor real do cartão + Filtro por cartão específico
+## Plano: Corrigir aritmética de datas do billing + filtro só crédito + multi-cartões
 
-### Causa raiz da inconsistência de cor
+### Problema 1: `computeClosingDay` usa aritmética fixa (dia - offset + 30)
 
-A cor do cartão em "Gastos por Método" usa `expense.card?.color`, que vem de um JOIN com a tabela `cards`. Devido ao RLS, `cards` só é visível para o dono — outros membros do grupo recebem `card: null`, caindo no fallback genérico (`#FFA500` para crédito, `#3B82F6` para débito). É o mesmo padrão do bug anterior com `card_name`.
+Em `card-manager.tsx` linha 80-84 e no preview do formulário (linha 334), o fechamento é calculado como `dueDay - daysBefore + 30` — ignora meses reais. Também em `billing-period.ts`, `calculateBillingPeriod` calcula o fechamento posicionando o due_day no mesmo mês da despesa e subtraindo dias, mas o modelo correto é: o vencimento da fatura M fica no mês M+1, e o fechamento = vencimento - dias_antes.
 
-**Solução**: Denormalizar `card_color` nas tabelas `expenses` e `recurring_expenses`, da mesma forma que já existe `card_name`.
+### Problema 2: Modo Fatura mostra PIX/Débito
+
+Em `Index.tsx` linhas 1225-1234, quando `viewMode === "billing"` mas a despesa NÃO é crédito, o código cai no `else` e filtra por data — deveria retornar `false` diretamente.
+
+### Problema 3: Multi-cartões sem seleção obrigatória
+
+Não há exigência de selecionar um cartão no modo Fatura. Sem isso, faturas de cartões com ciclos diferentes se misturam.
+
+---
 
 ### Mudanças
 
-#### 1. Migração: adicionar coluna `card_color`
+#### 1. `src/utils/billing-period.ts` — Reescrever `calculateBillingPeriod` (novo modelo)
 
-```sql
-ALTER TABLE expenses ADD COLUMN card_color text DEFAULT NULL;
-ALTER TABLE recurring_expenses ADD COLUMN card_color text DEFAULT NULL;
+Nova lógica para `due_day + days_before_due`:
 
--- Backfill dados existentes a partir dos cards
-UPDATE expenses e SET card_color = c.color FROM cards c WHERE e.card_id = c.id AND e.card_color IS NULL;
-UPDATE recurring_expenses re SET card_color = c.color FROM cards c WHERE re.card_id = c.id AND re.card_color IS NULL;
+```ts
+// Para determinar a qual fatura M (yyyy-MM) uma compra pertence:
+// Fatura "M" tem vencimento no mês M+1, dia due_day (clamped)
+// Fechamento = vencimento - days_before_due (subtração real de dias via Date)
+// Período da fatura M = (fechamento da fatura M-1) + 1 dia  até  fechamento da fatura M
+// 
+// Algoritmo: testar fatura do mês da compra e do mês anterior.
+// Se compra <= fechamento do mês → pertence a esse mês
+// Senão → pertence ao mês seguinte
 ```
 
-#### 2. `src/pages/Index.tsx` — Salvar `card_color` no INSERT
+Criar helper `getBillingClosingDate(billingMonth: string, config)`:
+- Parse `billingMonth` → ano/mês (ex: "2026-03" → março)
+- `dueDate = new Date(ano, mês, clamp(due_day, daysInMonth))` — vencimento no próprio mês da fatura (NÃO mês+1, conforme o pedido do usuário: fatura de março fecha em março e vence em abril)
 
-Nos inserts de `addExpense` e `addRecurringExpense`, adicionar `card_color: selectedCard?.color || null` junto ao `card_name`.
+Correção: conforme o critério de aceite do usuário:
+- Fatura de Março/2026, vencimento dia 10 → `dueDate = 10/04/2026` (mês seguinte)
+- `closingDate = dueDate - 12 dias = 29/03/2026`
+- `previousDueDate = 10/03/2026`, `previousClosingDate = 26/02/2026`
+- Período = 27/02 a 29/03
 
-#### 3. `src/components/expense-summary.tsx` — Usar cor denormalizada + Filtro por cartão
+Então a fórmula é:
+```ts
+function getClosingDateForBillingMonth(year: number, month: number, dueDay: number, daysBefore: number): Date {
+  // Vencimento cai no MÊS SEGUINTE ao mês da fatura
+  const nextMonth = month + 1;
+  const ny = nextMonth > 11 ? year + 1 : year;
+  const nm = nextMonth > 11 ? 0 : nextMonth;
+  const dueDate = new Date(ny, nm, Math.min(dueDay, daysInMonth(ny, nm)));
+  const closingDate = new Date(dueDate);
+  closingDate.setDate(closingDate.getDate() - daysBefore);
+  return closingDate;
+}
+```
 
-**Cor**: Mudar `expense.card?.color || '#FFA500'` para `expense.card?.color || expense.card_color || '#FFA500'` (prioriza join local, fallback para denormalizado, depois genérico).
+`calculateBillingPeriod(expenseDate, config)`:
+- Tentar fatura do mês da despesa: calcular closingDate e previousClosingDate
+- previousClosingDate = closingDate da fatura do mês anterior
+- Se `expenseDate > previousClosingDate && expenseDate <= closingDate` → fatura desse mês
+- Senão se `expenseDate > closingDate` → fatura do mês seguinte
+- Senão → fatura do mês anterior
 
-**Filtro por cartão**: 
-- Nova prop `onCardClick?: (cardName: string, method: PaymentMethod) => void` e `activeCardName?: string`
-- Tornar cada item de cartão clicável
-- Destacar visualmente o cartão selecionado (background sutil)
+Também atualizar `getNextBillingDates` com a mesma lógica corrigida (vencimento no mês seguinte).
 
-#### 4. `src/pages/Index.tsx` — Handler de filtro por cartão
+#### 2. `src/components/card-manager.tsx`
 
-- Novo estado `activeCardFilter: { cardName: string; method: PaymentMethod } | null`
-- `handleCardFilter(cardName, method)`: toggle filtro
-- Aplicar filtro em `displayedExpenses` e `displayedRecurringExpenses`: filtrar por `card_name === cardName` (ou "Sem cartão" para `card_name === null`)
-- Incluir no `hasActiveFilters` e `clearAllFilters`
-- Passar `onCardClick` e `activeCardName` ao `ExpenseSummary`
+- **Remover `computeClosingDay`** (linhas 80-84) — não mais necessário
+- **Formulário preview** (linha 331-339): trocar texto para:
+  ```
+  "Vence dia {due_day} • Fecha {days_before_due} dias antes"
+  ```
+  E adicionar "Próximo fechamento: DD/MM • Próximo vencimento: DD/MM" usando `getNextBillingDates` com data real.
+- No `handleSubmit` (linhas 112-120): calcular `closing_day` usando a nova `getClosingDateForBillingMonth` para o mês atual, pegar `.getDate()` (compatibilidade).
 
-#### 5. `src/components/expense-list.tsx` — Cor do nome do cartão
+#### 3. `src/pages/Index.tsx` — Modo Fatura só crédito + cartão obrigatório
 
-No `methodLabel`, separar o rendering: "Crédito" em cor normal + nome do cartão com `style={{ color: cardColor }}`, usando `expense.card?.color || expense.card_color || undefined`.
+**Filtro (linhas 1207-1235):**
+- Quando `viewMode === "billing"`: se `expense.payment_method !== "credit"` → `return false` (não cair no else)
 
-#### 6. `src/components/recurring-expense-list.tsx` — Mesma cor do cartão
+**Totais (linhas 1482-1498):**
+- Mesma correção: no modo billing, só considerar crédito
 
-Mesmo padrão: colorir o nome do cartão com a cor real.
+**Toggle UI (linhas 1556-1582):**
+- Quando `viewMode === "billing"` e existem 2+ cartões de crédito: mostrar seletor de cartão obrigatório abaixo do toggle
+- Se 1 cartão: auto-selecionar
+- Se 0 cartões de crédito: mostrar mensagem "Cadastre um cartão de crédito"
+- Adicionar state `billingCardId: string | null` — no filtro, usar esse cartão como `filters.cardId` forçado
 
-#### 7. Tipos — Atualizar `Expense` e `RecurringExpense`
+---
 
-Adicionar `card_color?: string | null` nos tipos (após a migração, o campo estará no DB e nos types gerados, mas enquanto os types não se atualizam, declarar no type extension).
-
-### Arquivos afetados
+### Arquivos impactados
 
 | Arquivo | Mudança |
-|---------|---------|
-| Migração SQL | Adicionar `card_color` em expenses e recurring_expenses |
-| `src/types/expense.ts` | Adicionar `card_color` no type |
-| `src/types/recurring-expense.ts` | Adicionar `card_color` no type |
-| `src/pages/Index.tsx` | Salvar `card_color` nos inserts, novo estado/handler de filtro por cartão, aplicar filtro |
-| `src/components/expense-summary.tsx` | Usar cor denormalizada, tornar cartões clicáveis, highlight ativo |
-| `src/components/expense-list.tsx` | Colorir nome do cartão |
-| `src/components/recurring-expense-list.tsx` | Colorir nome do cartão |
+|---|---|
+| `src/utils/billing-period.ts` | Reescrever cálculo: vencimento no mês+1, subtração real de dias |
+| `src/components/card-manager.tsx` | Preview com datas reais, remover `computeClosingDay` |
+| `src/pages/Index.tsx` | Modo Fatura: só crédito, seletor de cartão obrigatório |
 
