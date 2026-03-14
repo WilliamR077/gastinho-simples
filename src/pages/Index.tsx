@@ -688,7 +688,8 @@ export default function Index() {
           // Campos desnormalizados para visualização em grupos
           category_name: categoryName,
           category_icon: categoryIcon,
-          card_name: cardName
+          card_name: cardName,
+          card_color: selectedCard?.color || null
         }).
         select(`
           *,
