@@ -279,18 +279,24 @@ export function ExpenseSummary({
             {/* Card details */}
             {hasCardDetails && (
               <div className="pl-8 pb-2 flex flex-wrap gap-x-4 gap-y-1 px-0">
-                {Object.entries(cardTotals).map(([cardName, data]) => (
-                  <div
-                    key={cardName}
-                    className="flex items-center gap-1.5 text-xs text-muted-foreground"
-                  >
+                {Object.entries(cardTotals).map(([cardName, data]) => {
+                  const isCardActive = activeCardName === cardName;
+                  return (
                     <div
-                      style={{ backgroundColor: data.color }}
-                      className="w-2 h-2 rounded-full flex-shrink-0"
-                    />
-                    <span>{cardName}: {formatCurrency(data.total)}</span>
-                  </div>
-                ))}
+                      key={cardName}
+                      onClick={(e) => { e.stopPropagation(); onCardClick?.(cardName, key); }}
+                      className={`flex items-center gap-1.5 text-xs cursor-pointer transition-colors rounded-md px-1.5 py-0.5 ${
+                        isCardActive ? 'bg-muted/80 text-foreground' : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <div
+                        style={{ backgroundColor: data.color }}
+                        className="w-2 h-2 rounded-full flex-shrink-0"
+                      />
+                      <span>{cardName}: {formatCurrency(data.total)}</span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

@@ -123,7 +123,13 @@ export function RecurringExpenseList({
                     <span className="whitespace-nowrap">Dia {expense.day_of_month}</span>
                     <span>•</span>
                     <Icon className="h-3 w-3 shrink-0" />
-                    <span className="truncate">{methodLabel}</span>
+                    <span className="truncate">{config.label}</span>
+                    {shortCardName && (
+                      <>
+                        <span>•</span>
+                        <span className="truncate" style={cardColor ? { color: cardColor } : undefined}>{shortCardName}</span>
+                      </>
+                    )}
 
                     {isGroupContext && expense.user_id && groupMembers.length > 0 && (
                       <>

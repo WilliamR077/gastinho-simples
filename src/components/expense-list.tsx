@@ -137,7 +137,13 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onDuplic
                       <span className="whitespace-nowrap">{parseLocalDate(expense.expense_date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
                       <span>•</span>
                       <Icon className="h-3 w-3 shrink-0" />
-                      <span className="truncate">{methodLabel}</span>
+                      <span className="truncate">{config.label}</span>
+                      {shortCardName && (
+                        <>
+                          <span>•</span>
+                          <span className="truncate" style={cardColor ? { color: cardColor } : undefined}>{shortCardName}</span>
+                        </>
+                      )}
                       {expense.shared_group && (
                         <>
                           <span>•</span>
