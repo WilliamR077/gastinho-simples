@@ -78,6 +78,7 @@ export default function Index() {
   const [incomeSubTab, setIncomeSubTab] = useState("monthly");
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string | null>(null);
   const [activeIncomeCategoryFilter, setActiveIncomeCategoryFilter] = useState<string | null>(null);
+  const [activeCardFilter, setActiveCardFilter] = useState<{ cardName: string; method: PaymentMethod } | null>(null);
   // filterTab removed - CompactFilterBar adapts automatically to activeTab
   const [viewMode, setViewMode] = useState<"calendar" | "billing">("calendar");
   const [billingCardId, setBillingCardId] = useState<string | null>(null);
