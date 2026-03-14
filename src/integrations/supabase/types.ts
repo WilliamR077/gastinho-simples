@@ -234,6 +234,7 @@ export type Database = {
       expenses: {
         Row: {
           amount: number
+          card_color: string | null
           card_id: string | null
           card_name: string | null
           category: Database["public"]["Enums"]["expense_category"]
@@ -254,6 +255,7 @@ export type Database = {
         }
         Insert: {
           amount: number
+          card_color?: string | null
           card_id?: string | null
           card_name?: string | null
           category?: Database["public"]["Enums"]["expense_category"]
@@ -274,6 +276,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          card_color?: string | null
           card_id?: string | null
           card_name?: string | null
           category?: Database["public"]["Enums"]["expense_category"]
@@ -412,6 +415,7 @@ export type Database = {
       recurring_expenses: {
         Row: {
           amount: number
+          card_color: string | null
           card_id: string | null
           card_name: string | null
           category: Database["public"]["Enums"]["expense_category"]
@@ -432,6 +436,7 @@ export type Database = {
         }
         Insert: {
           amount: number
+          card_color?: string | null
           card_id?: string | null
           card_name?: string | null
           category?: Database["public"]["Enums"]["expense_category"]
@@ -452,6 +457,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          card_color?: string | null
           card_id?: string | null
           card_name?: string | null
           category?: Database["public"]["Enums"]["expense_category"]
