@@ -16,6 +16,7 @@ export type RecurringExpense = Database["public"]["Tables"]["recurring_expenses"
   category_name?: string | null;
   category_icon?: string | null;
   card_name?: string | null;
+  card_color?: string | null;
 };
 export type RecurringExpenseInsert = Database["public"]["Tables"]["recurring_expenses"]["Insert"];
 export type PaymentMethod = Database["public"]["Enums"]["payment_method"];

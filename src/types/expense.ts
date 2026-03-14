@@ -9,6 +9,7 @@ export type Expense = Database["public"]["Tables"]["expenses"]["Row"] & {
   category_name?: string | null;
   category_icon?: string | null;
   card_name?: string | null;
+  card_color?: string | null;
 };
 export type ExpenseInsert = Database["public"]["Tables"]["expenses"]["Insert"];
 export type PaymentMethod = Database["public"]["Enums"]["payment_method"];
