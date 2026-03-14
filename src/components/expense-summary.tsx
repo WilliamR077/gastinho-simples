@@ -18,6 +18,8 @@ interface ExpenseSummaryProps {
   activePaymentMethod?: PaymentMethod;
   budgetGoals?: BudgetGoal[];
   onNavigateToGoals?: () => void;
+  onCardClick?: (cardName: string, method: PaymentMethod) => void;
+  activeCardName?: string;
 }
 
 export function ExpenseSummary({
