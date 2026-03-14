@@ -32,7 +32,9 @@ export function ExpenseSummary({
   onPaymentMethodClick,
   activePaymentMethod,
   budgetGoals = [],
-  onNavigateToGoals
+  onNavigateToGoals,
+  onCardClick,
+  activeCardName
 }: ExpenseSummaryProps) {
   const totals = expenses.reduce(
     (acc, expense) => {
