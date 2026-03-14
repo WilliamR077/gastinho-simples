@@ -1704,7 +1704,9 @@ export default function Index() {
             onPaymentMethodClick={handlePaymentMethodFilter}
             activePaymentMethod={filters.paymentMethod}
             budgetGoals={budgetGoals.filter((g) => g.type === "monthly_total" || g.type === "category")}
-            onNavigateToGoals={() => setActiveTab("goals")} />
+            onNavigateToGoals={() => setActiveTab("goals")}
+            onCardClick={handleCardFilter}
+            activeCardName={activeCardFilter?.cardName} />
 
         </div>
 
