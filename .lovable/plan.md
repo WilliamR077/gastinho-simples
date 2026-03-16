@@ -1,69 +1,102 @@
 
 
-## Plano: Corrigir renovação de assinatura Google Play
+## Plano: Corrigir aritmética de datas do billing + filtro só crédito + multi-cartões
 
-### Causa raiz confirmada
+### Problema 1: `computeClosingDay` usa aritmética fixa (dia - offset + 30)
 
-O DB mostra exatamente o problema descrito:
-- `user_id: 65e6ec36` (você) — `platform: android`, `is_active: false`, `expires_at: 2026-03-15` 
-- `user_id: a0ff8162` — `platform: manual`, `is_active: true`, mesmo `purchase_token`
+Em `card-manager.tsx` linha 80-84 e no preview do formulário (linha 334), o fechamento é calculado como `dueDay - daysBefore + 30` — ignora meses reais. Também em `billing-period.ts`, `calculateBillingPeriod` calcula o fechamento posicionando o due_day no mesmo mês da despesa e subtraindo dias, mas o modelo correto é: o vencimento da fatura M fica no mês M+1, e o fechamento = vencimento - dias_antes.
 
-A ownership check em `validate-purchase` (linha 113-118) usa `.eq('purchase_token', purchaseToken).neq('user_id', user.id).single()` — encontra o registro manual do outro usuário e bloqueia.
+### Problema 2: Modo Fatura mostra PIX/Débito
 
-Adicionalmente, `checkAndSyncSubscription` (linha 967) vê `is_active: false` + `expires_at` no passado, e como `currentTier` seria `'free'` (pois `get_user_subscription_tier` retorna `'free'` quando `is_active = false` ou expirado), ele entra no branch de `free` e tenta `restorePurchases()`, que por sua vez chama `validate-purchase`, que é bloqueada novamente.
+Em `Index.tsx` linhas 1225-1234, quando `viewMode === "billing"` mas a despesa NÃO é crédito, o código cai no `else` e filtra por data — deveria retornar `false` diretamente.
+
+### Problema 3: Multi-cartões sem seleção obrigatória
+
+Não há exigência de selecionar um cartão no modo Fatura. Sem isso, faturas de cartões com ciclos diferentes se misturam.
+
+---
 
 ### Mudanças
 
-#### 1. Migração SQL — Limpeza + proteções estruturais
+#### 1. `src/utils/billing-period.ts` — Reescrever `calculateBillingPeriod` (novo modelo)
 
-```sql
--- Limpar token de registros manuais
-UPDATE subscriptions SET purchase_token = NULL 
-WHERE platform = 'manual' AND purchase_token IS NOT NULL;
+Nova lógica para `due_day + days_before_due`:
 
--- Reativar assinatura do usuário correto
-UPDATE subscriptions SET is_active = true, expires_at = '2026-04-15T16:43:44.963Z'
-WHERE user_id = '65e6ec36-089b-41f9-af7a-eaba92e30eff' AND platform = 'android';
-
--- Constraint: manual nunca pode ter token
-ALTER TABLE subscriptions ADD CONSTRAINT subscriptions_manual_no_token
-CHECK (platform <> 'manual' OR purchase_token IS NULL);
-
--- Índice único para tokens Android
-CREATE UNIQUE INDEX IF NOT EXISTS idx_subscriptions_android_token_unique
-ON subscriptions (purchase_token) WHERE platform = 'android' AND purchase_token IS NOT NULL;
+```ts
+// Para determinar a qual fatura M (yyyy-MM) uma compra pertence:
+// Fatura "M" tem vencimento no mês M+1, dia due_day (clamped)
+// Fechamento = vencimento - days_before_due (subtração real de dias via Date)
+// Período da fatura M = (fechamento da fatura M-1) + 1 dia  até  fechamento da fatura M
+// 
+// Algoritmo: testar fatura do mês da compra e do mês anterior.
+// Se compra <= fechamento do mês → pertence a esse mês
+// Senão → pertence ao mês seguinte
 ```
 
-#### 2. `validate-purchase/index.ts` — Ownership check só Android + maybeSingle
+Criar helper `getBillingClosingDate(billingMonth: string, config)`:
+- Parse `billingMonth` → ano/mês (ex: "2026-03" → março)
+- `dueDate = new Date(ano, mês, clamp(due_day, daysInMonth))` — vencimento no próprio mês da fatura (NÃO mês+1, conforme o pedido do usuário: fatura de março fecha em março e vence em abril)
 
-Linhas 113-118: mudar para `.eq('platform', 'android').maybeSingle()` em vez de `.single()`.
+Correção: conforme o critério de aceite do usuário:
+- Fatura de Março/2026, vencimento dia 10 → `dueDate = 10/04/2026` (mês seguinte)
+- `closingDate = dueDate - 12 dias = 29/03/2026`
+- `previousDueDate = 10/03/2026`, `previousClosingDate = 26/02/2026`
+- Período = 27/02 a 29/03
 
-#### 3. `recover-subscription/index.ts` — Mesma correção
+Então a fórmula é:
+```ts
+function getClosingDateForBillingMonth(year: number, month: number, dueDay: number, daysBefore: number): Date {
+  // Vencimento cai no MÊS SEGUINTE ao mês da fatura
+  const nextMonth = month + 1;
+  const ny = nextMonth > 11 ? year + 1 : year;
+  const nm = nextMonth > 11 ? 0 : nextMonth;
+  const dueDate = new Date(ny, nm, Math.min(dueDay, daysInMonth(ny, nm)));
+  const closingDate = new Date(dueDate);
+  closingDate.setDate(closingDate.getDate() - daysBefore);
+  return closingDate;
+}
+```
 
-Linhas 125-130: `.eq('platform', 'android').maybeSingle()`.
+`calculateBillingPeriod(expenseDate, config)`:
+- Tentar fatura do mês da despesa: calcular closingDate e previousClosingDate
+- previousClosingDate = closingDate da fatura do mês anterior
+- Se `expenseDate > previousClosingDate && expenseDate <= closingDate` → fatura desse mês
+- Senão se `expenseDate > closingDate` → fatura do mês seguinte
+- Senão → fatura do mês anterior
 
-#### 4. `sync-subscription/index.ts` — Mesma correção
+Também atualizar `getNextBillingDates` com a mesma lógica corrigida (vencimento no mês seguinte).
 
-Duas queries de ownership (linhas ~80-88 e ~76): adicionar `.eq('platform', 'android')` e usar `.maybeSingle()`.
+#### 2. `src/components/card-manager.tsx`
 
-#### 5. `google-play-webhook/index.ts` — Buscar só Android + abortar em ambiguidade
+- **Remover `computeClosingDay`** (linhas 80-84) — não mais necessário
+- **Formulário preview** (linha 331-339): trocar texto para:
+  ```
+  "Vence dia {due_day} • Fecha {days_before_due} dias antes"
+  ```
+  E adicionar "Próximo fechamento: DD/MM • Próximo vencimento: DD/MM" usando `getNextBillingDates` com data real.
+- No `handleSubmit` (linhas 112-120): calcular `closing_day` usando a nova `getClosingDateForBillingMonth` para o mês atual, pegar `.getDate()` (compatibilidade).
 
-Linhas 124-128: trocar `.single()` por `.eq('platform', 'android').maybeSingle()`. Se retornar mais de um registro (que o unique index previne), logar erro e abortar.
+#### 3. `src/pages/Index.tsx` — Modo Fatura só crédito + cartão obrigatório
 
-#### 6. `billing-service.ts` — `checkAndSyncSubscription` tratar `is_active: false` com token
+**Filtro (linhas 1207-1235):**
+- Quando `viewMode === "billing"`: se `expense.payment_method !== "credit"` → `return false` (não cair no else)
 
-Na lógica de `checkAndSyncSubscription` (linhas 947-1037):
-- Antes do check de `currentTier === 'free'`, adicionar: se `subscription?.purchase_token` existe mas `!subscription?.is_active`, forçar `restorePurchases()` imediatamente (sem throttling de 4h) pois indica inconsistência.
-- Isso cobre o caso em que o tier no DB é "premium" mas `is_active=false` — a RPC `get_user_subscription_tier` retorna `'free'`, mas o registro real tem token.
+**Totais (linhas 1482-1498):**
+- Mesma correção: no modo billing, só considerar crédito
 
-### Arquivos afetados
+**Toggle UI (linhas 1556-1582):**
+- Quando `viewMode === "billing"` e existem 2+ cartões de crédito: mostrar seletor de cartão obrigatório abaixo do toggle
+- Se 1 cartão: auto-selecionar
+- Se 0 cartões de crédito: mostrar mensagem "Cadastre um cartão de crédito"
+- Adicionar state `billingCardId: string | null` — no filtro, usar esse cartão como `filters.cardId` forçado
+
+---
+
+### Arquivos impactados
 
 | Arquivo | Mudança |
-|---------|---------|
-| Migração SQL | Limpeza de token manual, constraint, unique index |
-| `validate-purchase/index.ts` | Ownership: `.eq('platform','android').maybeSingle()` |
-| `recover-subscription/index.ts` | Ownership: `.eq('platform','android').maybeSingle()` |
-| `sync-subscription/index.ts` | Ownership: `.eq('platform','android').maybeSingle()` |
-| `google-play-webhook/index.ts` | Busca: `.eq('platform','android').maybeSingle()` |
-| `billing-service.ts` | `checkAndSyncSubscription`: tratar `is_active=false` + token |
+|---|---|
+| `src/utils/billing-period.ts` | Reescrever cálculo: vencimento no mês+1, subtração real de dias |
+| `src/components/card-manager.tsx` | Preview com datas reais, remover `computeClosingDay` |
+| `src/pages/Index.tsx` | Modo Fatura: só crédito, seletor de cartão obrigatório |
 

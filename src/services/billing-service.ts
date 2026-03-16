@@ -961,6 +961,19 @@ class BillingService {
       const currentTier = subscription?.tier || 'free';
       const expiresAt = subscription?.expires_at ? new Date(subscription.expires_at) : null;
       const now = new Date();
+
+      // Caso especial: assinatura inativa mas com purchase_token válido
+      // Indica inconsistência (ex: renovação bloqueada) — forçar sync imediato sem throttling
+      if (!subscription?.is_active && subscription?.purchase_token) {
+        console.log('🔄 Assinatura inativa com purchase_token — forçando sync imediato...');
+        const result = await this.restorePurchases();
+        if (result.success) {
+          console.log('✅ Assinatura recuperada automaticamente:', result.tier);
+        } else {
+          console.log('⚠️ Não foi possível recuperar assinatura automaticamente');
+        }
+        return;
+      }
       
       // Lógica para tier free: tentar restaurar compras pendentes
       // (com throttling para não chamar toda vez que abre o app)
