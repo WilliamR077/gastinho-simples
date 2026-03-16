@@ -121,13 +121,14 @@ serve(async (req) => {
       );
     }
 
-    // Verificar se o purchase_token já pertence a outro usuário
+    // Verificar se o purchase_token já pertence a outro usuário (apenas registros Android)
     const { data: existingSub } = await supabaseAdmin
       .from('subscriptions')
       .select('user_id')
       .eq('purchase_token', purchaseToken)
+      .eq('platform', 'android')
       .neq('user_id', user.id)
-      .single();
+      .maybeSingle();
 
     if (existingSub) {
       console.log('⚠️ Token já pertence a outro usuário:', existingSub.user_id);

@@ -119,15 +119,16 @@ serve(async (req) => {
         purchaseToken: subNotification.purchaseToken?.substring(0, 30) + '...',
       });
 
-      // Buscar assinatura pelo purchase_token
+      // Buscar assinatura pelo purchase_token (apenas registros Android)
       let subscription: any = null;
       const { data: foundSubscription, error: findError } = await supabaseAdmin
         .from('subscriptions')
         .select('*')
         .eq('purchase_token', subNotification.purchaseToken)
-        .single();
+        .eq('platform', 'android')
+        .maybeSingle();
 
-      if (findError && findError.code !== 'PGRST116') {
+      if (findError) {
         console.error('❌ Erro ao buscar assinatura por purchase_token:', findError);
       }
 
