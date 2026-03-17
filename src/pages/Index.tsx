@@ -25,6 +25,7 @@ import { ProductTour } from "@/components/product-tour";
 import { BalanceSummary } from "@/components/balance-summary";
 import { UpsellBanner } from "@/components/upsell-banner";
 import { GroupMemberSummary } from "@/components/group-member-summary";
+import { GroupBalanceSummary } from "@/components/group-balance-summary";
 import { UnifiedIncomeFormSheet } from "@/components/unified-income-form-sheet";
 import { IncomeList } from "@/components/income-list";
 import { RecurringIncomeList } from "@/components/recurring-income-list";
