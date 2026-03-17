@@ -28,6 +28,7 @@ interface ExpenseListProps {
   onSendToCalculator?: (value: number) => void
   groupMembers?: SharedGroupMember[]
   isGroupContext?: boolean
+  currentUserId?: string
 }
 
 const getUserDisplayName = (userId: string, members: SharedGroupMember[]): string | null => {
