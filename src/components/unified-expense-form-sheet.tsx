@@ -68,6 +68,8 @@ export function UnifiedExpenseFormSheet({
   defaultAmount,
   preventClose,
   initialData,
+  groupMembers = [],
+  currentUserId = '',
 }: UnifiedExpenseFormSheetProps) {
   const [expenseType, setExpenseType] = useState<ExpenseType>("monthly");
   const [description, setDescription] = useState("");
