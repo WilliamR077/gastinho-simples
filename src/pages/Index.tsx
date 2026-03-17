@@ -715,8 +715,10 @@ export default function Index() {
           category_name: categoryName,
           category_icon: categoryIcon,
           card_name: cardName,
-          card_color: selectedCard?.color || null
-        }).
+          card_color: selectedCard?.color || null,
+          // Rateio
+          ...(data.isShared && { is_shared: true, paid_by: data.paidBy, split_type: data.splitType }),
+        } as any).
         select(`
           *,
           card:cards(id, name, color, card_type),
@@ -725,7 +727,25 @@ export default function Index() {
         single();
 
         if (error) throw error;
-        setExpenses((prev) => [insertedData, ...prev]);
+        
+        // Salvar splits se despesa compartilhada
+        let splits: any[] = [];
+        if (data.isShared && data.participants && data.participants.length > 0 && insertedData) {
+          const splitsToInsert = data.participants.map(p => ({
+            expense_id: insertedData.id,
+            user_id: p.userId,
+            share_amount: p.amount,
+            share_percentage: p.percentage || null,
+            user_email: p.email || null,
+          }));
+          const { data: insertedSplits } = await supabase
+            .from("expense_splits")
+            .insert(splitsToInsert)
+            .select("*");
+          splits = insertedSplits || [];
+        }
+        
+        setExpenses((prev) => [{ ...insertedData, splits }, ...prev]);
       } else {
         // Multiple installments
         const installmentGroupId = crypto.randomUUID();
