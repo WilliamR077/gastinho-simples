@@ -173,6 +173,24 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onDuplic
                       </Button>
                     )}
                   </div>
+
+                  {/* Line 3: Compartilhada badge + Sua parte */}
+                  {expense.is_shared && expense.splits && expense.splits.length > 0 && (
+                    <div className="flex items-center gap-2 mt-1 ml-7">
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-normal">
+                        Compartilhada • {expense.splits.length}
+                      </Badge>
+                      {currentUserId && (() => {
+                        const mySplit = expense.splits!.find(s => s.user_id === currentUserId);
+                        if (!mySplit) return null;
+                        return (
+                          <span className="text-[10px] text-muted-foreground">
+                            Sua parte: {formatCurrency(mySplit.share_amount)}
+                          </span>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
               )
             })}
