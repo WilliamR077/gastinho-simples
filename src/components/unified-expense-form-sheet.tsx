@@ -558,6 +558,23 @@ export function UnifiedExpenseFormSheet({
             </div>
           )}
 
+          {/* Seção de rateio - apenas para grupo e despesa do mês */}
+          {expenseType === "monthly" && selectedDestination !== "personal" && groupMembers.length > 0 && (
+            <ExpenseSplitSection
+              amount={parseFloat(amount || "0")}
+              groupMembers={groupMembers}
+              currentUserId={currentUserId}
+              isShared={isShared}
+              onIsSharedChange={setIsShared}
+              paidBy={paidBy}
+              onPaidByChange={setPaidBy}
+              splitType={splitType}
+              onSplitTypeChange={setSplitType}
+              participants={splitParticipants}
+              onParticipantsChange={setSplitParticipants}
+            />
+          )}
+
           <div data-tour="form-submit">
             <Button
               type="submit"
