@@ -247,6 +247,19 @@ export function UnifiedExpenseFormSheet({
       return;
     }
 
+    // Validações de split
+    const isGroupDestination = selectedDestination !== "personal";
+    if (isGroupDestination && isShared && splitParticipants.length > 0) {
+      if (splitType === 'percentage') {
+        const totalPct = splitParticipants.reduce((s, p) => s + (p.percentage || 0), 0);
+        if (Math.abs(totalPct - 100) > 0.1) return;
+      }
+      if (splitType === 'manual') {
+        const totalAmt = splitParticipants.reduce((s, p) => s + p.amount, 0);
+        if (Math.abs(totalAmt - numericAmount) > 0.01) return;
+      }
+    }
+
     if (expenseType === "monthly") {
       const installmentCount = paymentMethod === "credit" ? parseInt(installments) : 1;
 
@@ -259,6 +272,12 @@ export function UnifiedExpenseFormSheet({
         categoryId: category,
         cardId: cardId || undefined,
         sharedGroupId: selectedDestination !== "personal" ? selectedDestination : undefined,
+        ...(isGroupDestination && isShared && splitParticipants.length > 0 && {
+          isShared: true,
+          paidBy: paidBy,
+          splitType: splitType,
+          participants: splitParticipants,
+        }),
       });
     } else {
       onAddRecurringExpense({
