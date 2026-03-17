@@ -53,6 +53,8 @@ interface UnifiedExpenseFormSheetProps {
   defaultAmount?: number;
   preventClose?: boolean;
   initialData?: ExpenseInitialData;
+  groupMembers?: SharedGroupMember[];
+  currentUserId?: string;
 }
 
 export function UnifiedExpenseFormSheet({
