@@ -224,6 +224,10 @@ export function UnifiedExpenseFormSheet({
     setCategory(activeCategories.find(c => c.name.toLowerCase() === "outros")?.id || activeCategories[0]?.id || "");
     setCardId("");
     setDayOfMonth("1");
+    setIsShared(false);
+    setPaidBy(currentUserId);
+    setSplitType("equal");
+    setSplitParticipants([]);
     if (currentContext.type === "group" && currentContext.groupId) {
       setSelectedDestination(currentContext.groupId);
     } else {
