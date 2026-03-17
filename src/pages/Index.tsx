@@ -292,7 +292,31 @@ export default function Index() {
       const { data, error } = await query;
 
       if (error) throw error;
-      setExpenses(data || []);
+      
+      let expensesWithSplits = data || [];
+      
+      // Carregar splits para despesas compartilhadas
+      const sharedIds = expensesWithSplits.filter((e: any) => e.is_shared).map((e: any) => e.id);
+      if (sharedIds.length > 0) {
+        const { data: splits } = await supabase
+          .from("expense_splits")
+          .select("*")
+          .in("expense_id", sharedIds);
+        
+        if (splits) {
+          const splitsMap: Record<string, any[]> = {};
+          for (const s of splits) {
+            if (!splitsMap[s.expense_id]) splitsMap[s.expense_id] = [];
+            splitsMap[s.expense_id].push(s);
+          }
+          expensesWithSplits = expensesWithSplits.map((e: any) => ({
+            ...e,
+            splits: splitsMap[e.id] || [],
+          }));
+        }
+      }
+      
+      setExpenses(expensesWithSplits);
     } catch (error) {
       console.error("Error loading expenses:", error);
       toast({
