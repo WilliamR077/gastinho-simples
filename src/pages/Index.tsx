@@ -1734,7 +1734,13 @@ export default function Index() {
           expenses={filteredExpenses}
           recurringExpenses={filteredRecurringExpenses}
           groupMembers={groupMembers} />
+        }
 
+        {/* Group Balance Summary - only in group context */}
+        {currentContext.type === 'group' &&
+        <GroupBalanceSummary
+          expenses={filteredExpenses}
+          groupMembers={groupMembers} />
         }
 
         {/* Summary Cards */}
