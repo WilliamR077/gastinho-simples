@@ -2083,7 +2083,9 @@ export default function Index() {
           expenses={expenses}
           recurringExpenses={recurringExpenses}
           defaultAmount={expenseDefaultAmount}
-          initialData={expenseInitialData} />
+          initialData={expenseInitialData}
+          groupMembers={groupMembers}
+          currentUserId={user?.id || ''} />
 
 
         <BudgetGoalFormSheet
