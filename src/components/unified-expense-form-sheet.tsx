@@ -9,6 +9,9 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { CalendarIcon, AlertTriangle, Users, User } from "lucide-react";
+import { ExpenseSplitSection } from "@/components/expense-split-section";
+import { SplitType, SplitParticipant } from "@/types/expense-split";
+import { SharedGroupMember } from "@/types/shared-group";
 import { PaymentMethod, ExpenseFormData, Expense } from "@/types/expense";
 import { RecurringExpenseFormData } from "@/types/recurring-expense";
 import { cn, normalizeToLocalDate, parseLocalDate } from "@/lib/utils";
@@ -50,6 +53,8 @@ interface UnifiedExpenseFormSheetProps {
   defaultAmount?: number;
   preventClose?: boolean;
   initialData?: ExpenseInitialData;
+  groupMembers?: SharedGroupMember[];
+  currentUserId?: string;
 }
 
 export function UnifiedExpenseFormSheet({
@@ -63,6 +68,8 @@ export function UnifiedExpenseFormSheet({
   defaultAmount,
   preventClose,
   initialData,
+  groupMembers = [],
+  currentUserId = '',
 }: UnifiedExpenseFormSheetProps) {
   const [expenseType, setExpenseType] = useState<ExpenseType>("monthly");
   const [description, setDescription] = useState("");
@@ -75,6 +82,11 @@ export function UnifiedExpenseFormSheet({
   const [cards, setCards] = useState<CardType[]>([]);
   const [selectedDestination, setSelectedDestination] = useState<string>("personal");
   const [dayOfMonth, setDayOfMonth] = useState("1");
+  // Split state
+  const [isShared, setIsShared] = useState(false);
+  const [paidBy, setPaidBy] = useState(currentUserId);
+  const [splitType, setSplitType] = useState<SplitType>("equal");
+  const [splitParticipants, setSplitParticipants] = useState<SplitParticipant[]>([]);
   
   const { activeCategories } = useCategories();
   const { groups, currentContext } = useSharedGroups();
@@ -212,6 +224,10 @@ export function UnifiedExpenseFormSheet({
     setCategory(activeCategories.find(c => c.name.toLowerCase() === "outros")?.id || activeCategories[0]?.id || "");
     setCardId("");
     setDayOfMonth("1");
+    setIsShared(false);
+    setPaidBy(currentUserId);
+    setSplitType("equal");
+    setSplitParticipants([]);
     if (currentContext.type === "group" && currentContext.groupId) {
       setSelectedDestination(currentContext.groupId);
     } else {
@@ -231,6 +247,19 @@ export function UnifiedExpenseFormSheet({
       return;
     }
 
+    // Validações de split
+    const isGroupDestination = selectedDestination !== "personal";
+    if (isGroupDestination && isShared && splitParticipants.length > 0) {
+      if (splitType === 'percentage') {
+        const totalPct = splitParticipants.reduce((s, p) => s + (p.percentage || 0), 0);
+        if (Math.abs(totalPct - 100) > 0.1) return;
+      }
+      if (splitType === 'manual') {
+        const totalAmt = splitParticipants.reduce((s, p) => s + p.amount, 0);
+        if (Math.abs(totalAmt - numericAmount) > 0.01) return;
+      }
+    }
+
     if (expenseType === "monthly") {
       const installmentCount = paymentMethod === "credit" ? parseInt(installments) : 1;
 
@@ -243,6 +272,12 @@ export function UnifiedExpenseFormSheet({
         categoryId: category,
         cardId: cardId || undefined,
         sharedGroupId: selectedDestination !== "personal" ? selectedDestination : undefined,
+        ...(isGroupDestination && isShared && splitParticipants.length > 0 && {
+          isShared: true,
+          paidBy: paidBy,
+          splitType: splitType,
+          participants: splitParticipants,
+        }),
       });
     } else {
       onAddRecurringExpense({
@@ -521,6 +556,23 @@ export function UnifiedExpenseFormSheet({
                 </SelectContent>
               </Select>
             </div>
+          )}
+
+          {/* Seção de rateio - apenas para grupo e despesa do mês */}
+          {expenseType === "monthly" && selectedDestination !== "personal" && groupMembers.length > 0 && (
+            <ExpenseSplitSection
+              amount={parseFloat(amount || "0")}
+              groupMembers={groupMembers}
+              currentUserId={currentUserId}
+              isShared={isShared}
+              onIsSharedChange={setIsShared}
+              paidBy={paidBy}
+              onPaidByChange={setPaidBy}
+              splitType={splitType}
+              onSplitTypeChange={setSplitType}
+              participants={splitParticipants}
+              onParticipantsChange={setSplitParticipants}
+            />
           )}
 
           <div data-tour="form-submit">

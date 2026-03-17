@@ -25,6 +25,7 @@ import { ProductTour } from "@/components/product-tour";
 import { BalanceSummary } from "@/components/balance-summary";
 import { UpsellBanner } from "@/components/upsell-banner";
 import { GroupMemberSummary } from "@/components/group-member-summary";
+import { GroupBalanceSummary } from "@/components/group-balance-summary";
 import { UnifiedIncomeFormSheet } from "@/components/unified-income-form-sheet";
 import { IncomeList } from "@/components/income-list";
 import { RecurringIncomeList } from "@/components/recurring-income-list";
@@ -291,7 +292,31 @@ export default function Index() {
       const { data, error } = await query;
 
       if (error) throw error;
-      setExpenses(data || []);
+      
+      let expensesWithSplits = data || [];
+      
+      // Carregar splits para despesas compartilhadas
+      const sharedIds = expensesWithSplits.filter((e: any) => e.is_shared).map((e: any) => e.id);
+      if (sharedIds.length > 0) {
+        const { data: splits } = await supabase
+          .from("expense_splits")
+          .select("*")
+          .in("expense_id", sharedIds);
+        
+        if (splits) {
+          const splitsMap: Record<string, any[]> = {};
+          for (const s of splits) {
+            if (!splitsMap[s.expense_id]) splitsMap[s.expense_id] = [];
+            splitsMap[s.expense_id].push(s);
+          }
+          expensesWithSplits = expensesWithSplits.map((e: any) => ({
+            ...e,
+            splits: splitsMap[e.id] || [],
+          }));
+        }
+      }
+      
+      setExpenses(expensesWithSplits);
     } catch (error) {
       console.error("Error loading expenses:", error);
       toast({
@@ -690,8 +715,10 @@ export default function Index() {
           category_name: categoryName,
           category_icon: categoryIcon,
           card_name: cardName,
-          card_color: selectedCard?.color || null
-        }).
+          card_color: selectedCard?.color || null,
+          // Rateio
+          ...(data.isShared && { is_shared: true, paid_by: data.paidBy, split_type: data.splitType }),
+        } as any).
         select(`
           *,
           card:cards(id, name, color, card_type),
@@ -700,7 +727,25 @@ export default function Index() {
         single();
 
         if (error) throw error;
-        setExpenses((prev) => [insertedData, ...prev]);
+        
+        // Salvar splits se despesa compartilhada
+        let splits: any[] = [];
+        if (data.isShared && data.participants && data.participants.length > 0 && insertedData) {
+          const splitsToInsert = data.participants.map(p => ({
+            expense_id: insertedData.id,
+            user_id: p.userId,
+            share_amount: p.amount,
+            share_percentage: p.percentage || null,
+            user_email: p.email || null,
+          }));
+          const { data: insertedSplits } = await supabase
+            .from("expense_splits")
+            .insert(splitsToInsert)
+            .select("*");
+          splits = insertedSplits || [];
+        }
+        
+        setExpenses((prev) => [{ ...insertedData, splits }, ...prev]);
       } else {
         // Multiple installments
         const installmentGroupId = crypto.randomUUID();
@@ -1689,7 +1734,13 @@ export default function Index() {
           expenses={filteredExpenses}
           recurringExpenses={filteredRecurringExpenses}
           groupMembers={groupMembers} />
+        }
 
+        {/* Group Balance Summary - only in group context */}
+        {currentContext.type === 'group' &&
+        <GroupBalanceSummary
+          expenses={filteredExpenses}
+          groupMembers={groupMembers} />
         }
 
         {/* Summary Cards */}
@@ -1831,7 +1882,8 @@ export default function Index() {
                 onDuplicateExpense={handleDuplicateExpense}
                 onSendToCalculator={handleSendToCalculator}
                 groupMembers={groupMembers}
-                isGroupContext={currentContext.type === 'group'} /> :
+                isGroupContext={currentContext.type === 'group'}
+                currentUserId={user?.id} /> :
 
 
               <RecurringExpenseList
@@ -2032,7 +2084,9 @@ export default function Index() {
           expenses={expenses}
           recurringExpenses={recurringExpenses}
           defaultAmount={expenseDefaultAmount}
-          initialData={expenseInitialData} />
+          initialData={expenseInitialData}
+          groupMembers={groupMembers}
+          currentUserId={user?.id || ''} />
 
 
         <BudgetGoalFormSheet

@@ -9,7 +9,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Pencil, Copy, Trash2, CreditCard, Smartphone, Calendar, Tag, Clock, Users, Power, Receipt, User } from "lucide-react";
+import { Pencil, Copy, Trash2, CreditCard, Smartphone, Calendar, Tag, Clock, Users, Power, Receipt, User, Scale } from "lucide-react";
+import { splitTypeLabels, SplitType } from "@/types/expense-split";
 import { calculateBillingPeriod, formatBillingPeriodLabel, getNextBillingDates, CreditCardConfig } from "@/utils/billing-period";
 import { Card as CardType } from "@/types/card";
 import { Button } from "@/components/ui/button";
@@ -272,6 +273,64 @@ const createdByColor =
               label="Grupo"
               value={expense.shared_group.name}
             />
+          )}
+
+          {/* Rateio - despesa compartilhada */}
+          {expense?.is_shared && expense.splits && expense.splits.length > 0 && (
+            <>
+              <div className="pt-2 pb-1">
+                <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                  <Scale className="h-3.5 w-3.5" />
+                  Rateio
+                </p>
+              </div>
+              {expense.paid_by && (
+                <DetailRow
+                  icon={<User className="h-4 w-4" />}
+                  label="Pago por"
+                  value={
+                    groupMembers.find(m => m.user_id === expense.paid_by)
+                      ? getUserDisplayName(expense.paid_by!, groupMembers) || '?'
+                      : getUserDisplayName(expense.user_id, groupMembers) || '?'
+                  }
+                  valueStyle={expense.paid_by ? { color: getMemberColor(expense.paid_by, groupMembers) } : undefined}
+                />
+              )}
+              <DetailRow
+                icon={<Users className="h-4 w-4" />}
+                label="Tipo"
+                value={`${splitTypeLabels[(expense.split_type as SplitType) || 'equal']} • ${expense.splits.length} participantes`}
+              />
+              <div className="space-y-1 ml-7">
+                {expense.splits.map(s => {
+                  const name = s.user_email?.split('@')[0] || '?';
+                  const color = getMemberColor(s.user_id, groupMembers);
+                  const isMe = s.user_id === user?.id;
+                  return (
+                    <div key={s.id || s.user_id} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <div className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+                        <span className={isMe ? 'font-semibold' : ''}>{name}{isMe ? ' (você)' : ''}</span>
+                      </div>
+                      <span className="font-medium">
+                        {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(s.share_amount)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              {user && (() => {
+                const mySplit = expense.splits!.find(s => s.user_id === user.id);
+                if (!mySplit) return null;
+                return (
+                  <DetailRow
+                    icon={<Receipt className="h-4 w-4 text-primary" />}
+                    label="Sua parte"
+                    value={new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(mySplit.share_amount)}
+                  />
+                );
+              })()}
+            </>
           )}
 
           {/* Status ativo (recurring) */}

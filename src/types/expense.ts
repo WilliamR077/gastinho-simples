@@ -1,6 +1,7 @@
 import { Database } from "@/integrations/supabase/types";
 import { Card } from "./card";
 import { SharedGroup } from "./shared-group";
+import { ExpenseSplit, SplitType, SplitParticipant } from "./expense-split";
 
 export type Expense = Database["public"]["Tables"]["expenses"]["Row"] & {
   card?: Pick<Card, 'id' | 'name' | 'color' | 'card_type'>;
@@ -10,6 +11,11 @@ export type Expense = Database["public"]["Tables"]["expenses"]["Row"] & {
   category_icon?: string | null;
   card_name?: string | null;
   card_color?: string | null;
+  // Rateio
+  is_shared?: boolean;
+  paid_by?: string | null;
+  split_type?: string | null;
+  splits?: ExpenseSplit[];
 };
 export type ExpenseInsert = Database["public"]["Tables"]["expenses"]["Insert"];
 export type PaymentMethod = Database["public"]["Enums"]["payment_method"];
@@ -25,6 +31,11 @@ export interface ExpenseFormData {
   cardId?: string;
   sharedGroupId?: string | null;
   categoryId?: string;
+  // Rateio
+  isShared?: boolean;
+  paidBy?: string;
+  splitType?: SplitType;
+  participants?: SplitParticipant[];
 }
 
 export const categoryLabels: Record<ExpenseCategory, string> = {

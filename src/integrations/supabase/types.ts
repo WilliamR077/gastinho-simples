@@ -231,6 +231,44 @@ export type Database = {
         }
         Relationships: []
       }
+      expense_splits: {
+        Row: {
+          created_at: string | null
+          expense_id: string
+          id: string
+          share_amount: number
+          share_percentage: number | null
+          user_email: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          expense_id: string
+          id?: string
+          share_amount: number
+          share_percentage?: number | null
+          user_email?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          expense_id?: string
+          id?: string
+          share_amount?: number
+          share_percentage?: number | null
+          user_email?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_splits_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       expenses: {
         Row: {
           amount: number
@@ -247,8 +285,11 @@ export type Database = {
           id: string
           installment_group_id: string | null
           installment_number: number | null
+          is_shared: boolean
+          paid_by: string | null
           payment_method: Database["public"]["Enums"]["payment_method"]
           shared_group_id: string | null
+          split_type: string | null
           total_installments: number | null
           updated_at: string
           user_id: string
@@ -268,8 +309,11 @@ export type Database = {
           id?: string
           installment_group_id?: string | null
           installment_number?: number | null
+          is_shared?: boolean
+          paid_by?: string | null
           payment_method: Database["public"]["Enums"]["payment_method"]
           shared_group_id?: string | null
+          split_type?: string | null
           total_installments?: number | null
           updated_at?: string
           user_id: string
@@ -289,8 +333,11 @@ export type Database = {
           id?: string
           installment_group_id?: string | null
           installment_number?: number | null
+          is_shared?: boolean
+          paid_by?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"]
           shared_group_id?: string | null
+          split_type?: string | null
           total_installments?: number | null
           updated_at?: string
           user_id?: string
