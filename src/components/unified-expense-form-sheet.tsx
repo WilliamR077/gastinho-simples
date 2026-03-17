@@ -82,6 +82,11 @@ export function UnifiedExpenseFormSheet({
   const [cards, setCards] = useState<CardType[]>([]);
   const [selectedDestination, setSelectedDestination] = useState<string>("personal");
   const [dayOfMonth, setDayOfMonth] = useState("1");
+  // Split state
+  const [isShared, setIsShared] = useState(false);
+  const [paidBy, setPaidBy] = useState(currentUserId);
+  const [splitType, setSplitType] = useState<SplitType>("equal");
+  const [splitParticipants, setSplitParticipants] = useState<SplitParticipant[]>([]);
   
   const { activeCategories } = useCategories();
   const { groups, currentContext } = useSharedGroups();
