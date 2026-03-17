@@ -1882,7 +1882,8 @@ export default function Index() {
                 onDuplicateExpense={handleDuplicateExpense}
                 onSendToCalculator={handleSendToCalculator}
                 groupMembers={groupMembers}
-                isGroupContext={currentContext.type === 'group'} /> :
+                isGroupContext={currentContext.type === 'group'}
+                currentUserId={user?.id} /> :
 
 
               <RecurringExpenseList
