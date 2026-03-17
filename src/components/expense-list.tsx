@@ -49,7 +49,7 @@ const parseLocalDate = (dateString: string) => {
   return new Date(year, month - 1, day);
 };
 
-export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onDuplicateExpense, onSendToCalculator, groupMembers = [], isGroupContext = false }: ExpenseListProps) {
+export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onDuplicateExpense, onSendToCalculator, groupMembers = [], isGroupContext = false, currentUserId }: ExpenseListProps) {
   const [visibleCount, setVisibleCount] = useState(10)
   const { categories } = useCategories()
   const { isHidden } = useValuesVisibility()
