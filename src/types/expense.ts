@@ -31,6 +31,11 @@ export interface ExpenseFormData {
   cardId?: string;
   sharedGroupId?: string | null;
   categoryId?: string;
+  // Rateio
+  isShared?: boolean;
+  paidBy?: string;
+  splitType?: SplitType;
+  participants?: SplitParticipant[];
 }
 
 export const categoryLabels: Record<ExpenseCategory, string> = {
