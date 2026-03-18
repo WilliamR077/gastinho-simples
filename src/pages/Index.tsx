@@ -1777,7 +1777,9 @@ export default function Index() {
         {currentContext.type === 'group' &&
         <GroupBalanceSummary
           expenses={filteredExpenses}
-          groupMembers={groupMembers} />
+          groupMembers={groupMembers}
+          groupName={currentContext.groupName || 'Grupo'}
+          currentUserId={user?.id} />
         }
 
         {/* Summary Cards */}
