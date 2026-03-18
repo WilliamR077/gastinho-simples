@@ -2152,7 +2152,10 @@ export default function Index() {
           expense={editingExpense}
           open={expenseDialogOpen}
           onOpenChange={setExpenseDialogOpen}
-          onSave={updateExpense} />
+          onSave={updateExpense}
+          groupMembers={groupMembers}
+          currentUserId={user?.id || ''}
+          isGroupContext={currentContext.type === 'group'} />
 
 
         <RecurringExpenseEditDialog
