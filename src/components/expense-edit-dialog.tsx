@@ -13,11 +13,14 @@ import { CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Expense, PaymentMethod, ExpenseFormData } from "@/types/expense";
+import { SplitType, SplitParticipant } from "@/types/expense-split";
+import { SharedGroupMember } from "@/types/shared-group";
 import { cn, parseLocalDate, normalizeToLocalDate } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { Card as CardType } from "@/types/card";
 import { CategorySelector } from "@/components/category-selector";
 import { useCategories } from "@/hooks/use-categories";
+import { ExpenseSplitSection } from "@/components/expense-split-section";
 
 const expenseEditSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
@@ -35,12 +38,30 @@ interface ExpenseEditDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (id: string, data: ExpenseFormData) => void;
+  groupMembers?: SharedGroupMember[];
+  currentUserId?: string;
+  isGroupContext?: boolean;
 }
 
-export function ExpenseEditDialog({ expense, open, onOpenChange, onSave }: ExpenseEditDialogProps) {
+export function ExpenseEditDialog({
+  expense,
+  open,
+  onOpenChange,
+  onSave,
+  groupMembers = [],
+  currentUserId = '',
+  isGroupContext = false,
+}: ExpenseEditDialogProps) {
   const [cards, setCards] = useState<CardType[]>([]);
   const { activeCategories } = useCategories();
   const lastExpenseIdRef = useRef<string | null>(null);
+
+  // Split state
+  const [isShared, setIsShared] = useState(false);
+  const [paidBy, setPaidBy] = useState(currentUserId);
+  const [splitType, setSplitType] = useState<SplitType>("equal");
+  const [splitParticipants, setSplitParticipants] = useState<SplitParticipant[]>([]);
+  const [splitError, setSplitError] = useState<string | null>(null);
 
   const form = useForm<ExpenseEditFormData>({
     resolver: zodResolver(expenseEditSchema),
@@ -89,16 +110,13 @@ export function ExpenseEditDialog({ expense, open, onOpenChange, onSave }: Expen
     });
   };
 
-  // Preencher formulário quando a despesa mudar
+  // Populate form when expense changes
   useEffect(() => {
-    // Só fazer reset se o expense mudou de verdade (diferente ID)
     if (expense && activeCategories.length > 0 && expense.id !== lastExpenseIdRef.current) {
       lastExpenseIdRef.current = expense.id;
       
-      // Encontrar a categoria pelo category_id ou pelo nome
       let categoryId = expense.category_id || "";
       if (!categoryId && expense.category) {
-        // Fallback: tentar encontrar pelo nome da categoria
         const found = activeCategories.find(c => 
           c.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_") === expense.category
         );
@@ -113,19 +131,55 @@ export function ExpenseEditDialog({ expense, open, onOpenChange, onSave }: Expen
         categoryId: categoryId,
         cardId: expense.card_id || "",
       });
+
+      // Populate split state from expense data
+      setIsShared(!!expense.is_shared);
+      setPaidBy(expense.paid_by || currentUserId);
+      setSplitType((expense.split_type as SplitType) || "equal");
+      setSplitError(null);
+      
+      // Note: splitParticipants are populated via initialSelectedUserIds + initialManualAmounts/Percentages
+      // passed to ExpenseSplitSection
     }
     
-    // Limpar ref quando fechar o diálogo
     if (!expense) {
       lastExpenseIdRef.current = null;
+      setIsShared(false);
+      setPaidBy(currentUserId);
+      setSplitType("equal");
+      setSplitParticipants([]);
+      setSplitError(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expense, activeCategories]);
 
   const handleSubmit = (data: ExpenseEditFormData) => {
     if (!expense) return;
-    
+    setSplitError(null);
+
     const selectedCategory = activeCategories.find(c => c.id === data.categoryId);
+    
+    // Validate split
+    if (isGroupContext && isShared) {
+      if (splitParticipants.length === 0) {
+        setSplitError("Selecione pelo menos um participante para criar uma despesa compartilhada.");
+        return;
+      }
+      if (splitType === 'percentage') {
+        const totalPct = splitParticipants.reduce((s, p) => s + (p.percentage || 0), 0);
+        if (Math.abs(totalPct - 100) > 0.1) {
+          setSplitError("A soma das porcentagens precisa ser 100%.");
+          return;
+        }
+      }
+      if (splitType === 'manual') {
+        const totalAmt = splitParticipants.reduce((s, p) => s + p.amount, 0);
+        if (Math.abs(totalAmt - data.amount) > 0.01) {
+          setSplitError("A soma dos valores precisa ser igual ao valor total da despesa.");
+          return;
+        }
+      }
+    }
     
     const formData: ExpenseFormData = {
       description: data.description,
@@ -135,14 +189,39 @@ export function ExpenseEditDialog({ expense, open, onOpenChange, onSave }: Expen
       category: selectedCategory?.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_") as any || "outros",
       cardId: data.cardId || undefined,
       categoryId: data.categoryId || undefined,
+      ...(isGroupContext && isShared && splitParticipants.length > 0 && {
+        isShared: true,
+        paidBy: paidBy,
+        splitType: splitType,
+        participants: splitParticipants,
+      }),
+      // If changed from shared to individual, signal removal
+      ...(isGroupContext && !isShared && expense.is_shared && {
+        isShared: false,
+      }),
     };
     onSave(expense.id, formData);
     onOpenChange(false);
   };
 
+  // Build initial data for ExpenseSplitSection from existing splits
+  const initialSelectedUserIds = expense?.splits?.map(s => s.user_id) || [];
+  const initialManualAmounts: Record<string, string> = {};
+  const initialManualPercentages: Record<string, string> = {};
+  if (expense?.splits) {
+    for (const s of expense.splits) {
+      if (expense.split_type === 'manual') {
+        initialManualAmounts[s.user_id] = String(s.share_amount);
+      }
+      if (expense.split_type === 'percentage' && s.share_percentage != null) {
+        initialManualPercentages[s.user_id] = String(s.share_percentage);
+      }
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-primary">Editar Despesa</DialogTitle>
         </DialogHeader>
@@ -301,6 +380,31 @@ export function ExpenseEditDialog({ expense, open, onOpenChange, onSave }: Expen
                 ⚠️ Esta é uma despesa parcelada ({expense.installment_number}/{expense.total_installments}). 
                 Você pode editar os detalhes, mas não o número de parcelas.
               </div>
+            )}
+
+            {/* Split section - only for group context */}
+            {isGroupContext && groupMembers.length > 0 && (
+              <>
+                <ExpenseSplitSection
+                  amount={form.watch("amount") || 0}
+                  groupMembers={groupMembers}
+                  currentUserId={currentUserId}
+                  isShared={isShared}
+                  onIsSharedChange={(v) => { setIsShared(v); setSplitError(null); }}
+                  paidBy={paidBy}
+                  onPaidByChange={setPaidBy}
+                  splitType={splitType}
+                  onSplitTypeChange={setSplitType}
+                  participants={splitParticipants}
+                  onParticipantsChange={(p) => { setSplitParticipants(p); setSplitError(null); }}
+                  initialSelectedUserIds={initialSelectedUserIds}
+                  initialManualAmounts={initialManualAmounts}
+                  initialManualPercentages={initialManualPercentages}
+                />
+                {splitError && (
+                  <p className="text-xs text-destructive font-medium -mt-2 px-1">{splitError}</p>
+                )}
+              </>
             )}
 
             <div className="flex gap-2 pt-4">
