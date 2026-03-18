@@ -1085,6 +1085,10 @@ export default function Index() {
         return `${year}-${month}-${day}`;
       };
 
+      // Buscar dados desnormalizados
+      const selectedCategory = data.categoryId ? categories.find((c) => c.id === data.categoryId) : null;
+      const selectedCard = data.cardId ? cards.find((c) => c.id === data.cardId) : null;
+
       const { data: updatedData, error } = await supabase.
       from("expenses").
       update({
@@ -1093,20 +1097,53 @@ export default function Index() {
         payment_method: data.paymentMethod,
         expense_date: formatDateLocal(data.expenseDate),
         ...(data.categoryId && { category_id: data.categoryId }),
-        ...(data.cardId && { card_id: data.cardId })
+        ...(data.cardId && { card_id: data.cardId }),
+        // Update denormalized fields
+        category_name: selectedCategory?.name || null,
+        category_icon: selectedCategory?.icon || null,
+        card_name: selectedCard?.name || null,
+        card_color: selectedCard?.color || null,
+        // Split fields
+        is_shared: !!data.isShared,
+        paid_by: data.isShared ? (data.paidBy || null) : null,
+        split_type: data.isShared ? (data.splitType || null) : null,
       }).
       eq("id", id).
       select(`
           *,
-          card:cards(id, name, color, card_type)
+          card:cards(id, name, color, card_type),
+          shared_group:shared_groups(id, name, color)
         `).
       single();
 
       if (error) throw error;
 
+      // Handle splits update
+      let splits: any[] = [];
+      if (data.isShared && data.participants && data.participants.length > 0) {
+        // Delete old splits
+        await supabase.from("expense_splits").delete().eq("expense_id", id);
+        // Insert new splits
+        const splitsToInsert = data.participants.map(p => ({
+          expense_id: id,
+          user_id: p.userId,
+          share_amount: p.amount,
+          share_percentage: p.percentage || null,
+          user_email: p.email || null,
+        }));
+        const { data: insertedSplits } = await supabase
+          .from("expense_splits")
+          .insert(splitsToInsert)
+          .select("*");
+        splits = insertedSplits || [];
+      } else if (data.isShared === false) {
+        // Changed from shared to individual - delete old splits
+        await supabase.from("expense_splits").delete().eq("expense_id", id);
+      }
+
       if (updatedData) {
         setExpenses((prev) => prev.map((e) =>
-        e.id === id ? updatedData : e
+          e.id === id ? { ...updatedData, splits } : e
         ));
       }
 
@@ -1740,7 +1777,9 @@ export default function Index() {
         {currentContext.type === 'group' &&
         <GroupBalanceSummary
           expenses={filteredExpenses}
-          groupMembers={groupMembers} />
+          groupMembers={groupMembers}
+          groupName={currentContext.groupName || 'Grupo'}
+          currentUserId={user?.id} />
         }
 
         {/* Summary Cards */}
@@ -2115,7 +2154,10 @@ export default function Index() {
           expense={editingExpense}
           open={expenseDialogOpen}
           onOpenChange={setExpenseDialogOpen}
-          onSave={updateExpense} />
+          onSave={updateExpense}
+          groupMembers={groupMembers}
+          currentUserId={user?.id || ''}
+          isGroupContext={currentContext.type === 'group'} />
 
 
         <RecurringExpenseEditDialog

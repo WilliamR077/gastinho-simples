@@ -235,8 +235,11 @@ export function UnifiedExpenseFormSheet({
     }
   };
 
+  const [splitError, setSplitError] = useState<string | null>(null);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setSplitError(null);
 
     if (!description.trim() || !amount || !paymentMethod) {
       return;
@@ -249,7 +252,11 @@ export function UnifiedExpenseFormSheet({
 
     // Validações de split
     const isGroupDestination = selectedDestination !== "personal";
-    if (isGroupDestination && isShared && splitParticipants.length > 0) {
+    if (isGroupDestination && isShared) {
+      if (splitParticipants.length === 0) {
+        setSplitError("Selecione pelo menos um participante para criar uma despesa compartilhada.");
+        return;
+      }
       if (splitType === 'percentage') {
         const totalPct = splitParticipants.reduce((s, p) => s + (p.percentage || 0), 0);
         if (Math.abs(totalPct - 100) > 0.1) return;
@@ -560,19 +567,24 @@ export function UnifiedExpenseFormSheet({
 
           {/* Seção de rateio - apenas para grupo e despesa do mês */}
           {expenseType === "monthly" && selectedDestination !== "personal" && groupMembers.length > 0 && (
-            <ExpenseSplitSection
-              amount={parseFloat(amount || "0")}
-              groupMembers={groupMembers}
-              currentUserId={currentUserId}
-              isShared={isShared}
-              onIsSharedChange={setIsShared}
-              paidBy={paidBy}
-              onPaidByChange={setPaidBy}
-              splitType={splitType}
-              onSplitTypeChange={setSplitType}
-              participants={splitParticipants}
-              onParticipantsChange={setSplitParticipants}
-            />
+            <>
+              <ExpenseSplitSection
+                amount={parseFloat(amount || "0")}
+                groupMembers={groupMembers}
+                currentUserId={currentUserId}
+                isShared={isShared}
+                onIsSharedChange={(v) => { setIsShared(v); setSplitError(null); }}
+                paidBy={paidBy}
+                onPaidByChange={setPaidBy}
+                splitType={splitType}
+                onSplitTypeChange={setSplitType}
+                participants={splitParticipants}
+                onParticipantsChange={(p) => { setSplitParticipants(p); setSplitError(null); }}
+              />
+              {splitError && (
+                <p className="text-xs text-destructive font-medium -mt-2 px-1">{splitError}</p>
+              )}
+            </>
           )}
 
           <div data-tour="form-submit">

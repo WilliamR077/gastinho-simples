@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { SharedGroupMember } from "@/types/shared-group";
 import { SplitType, SplitParticipant, calculateEqualSplit, splitTypeLabels } from "@/types/expense-split";
 import { getMemberColor } from "@/components/group-member-summary";
-import { Users, User, AlertTriangle } from "lucide-react";
+import { Users, AlertTriangle } from "lucide-react";
 
 interface ExpenseSplitSectionProps {
   amount: number;
@@ -21,6 +21,10 @@ interface ExpenseSplitSectionProps {
   onSplitTypeChange: (val: SplitType) => void;
   participants: SplitParticipant[];
   onParticipantsChange: (val: SplitParticipant[]) => void;
+  // Edit mode: initial values
+  initialSelectedUserIds?: string[];
+  initialManualAmounts?: Record<string, string>;
+  initialManualPercentages?: Record<string, string>;
 }
 
 export function ExpenseSplitSection({
@@ -35,10 +39,31 @@ export function ExpenseSplitSection({
   onSplitTypeChange,
   participants,
   onParticipantsChange,
+  initialSelectedUserIds,
+  initialManualAmounts,
+  initialManualPercentages,
 }: ExpenseSplitSectionProps) {
+  const [initialized, setInitialized] = useState(false);
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [manualAmounts, setManualAmounts] = useState<Record<string, string>>({});
   const [manualPercentages, setManualPercentages] = useState<Record<string, string>>({});
+
+  // Initialize from edit mode data (only once)
+  useEffect(() => {
+    if (!initialized && initialSelectedUserIds && initialSelectedUserIds.length > 0) {
+      setSelectedUserIds(initialSelectedUserIds);
+      if (initialManualAmounts) setManualAmounts(initialManualAmounts);
+      if (initialManualPercentages) setManualPercentages(initialManualPercentages);
+      setInitialized(true);
+    }
+  }, [initialized, initialSelectedUserIds, initialManualAmounts, initialManualPercentages]);
+
+  // Reset initialized flag when component unmounts or isShared changes to false
+  useEffect(() => {
+    if (!isShared) {
+      setInitialized(false);
+    }
+  }, [isShared]);
 
   // When members are selected, rebuild participants
   useEffect(() => {

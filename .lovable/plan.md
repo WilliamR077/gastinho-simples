@@ -1,115 +1,102 @@
 
 
-## Plano: Correções + Edição Compartilhada + Detalhamento do Acerto
+## Plano: Corrigir aritmética de datas do billing + filtro só crédito + multi-cartões
 
-### Escopo
+### Problema 1: `computeClosingDay` usa aritmética fixa (dia - offset + 30)
 
-10 itens organizados em 3 prioridades: (1) correções de permissão e validação, (2) edição completa de despesa compartilhada, (3) detalhamento premium do card "Acerto entre Membros" com compartilhamento.
+Em `card-manager.tsx` linha 80-84 e no preview do formulário (linha 334), o fechamento é calculado como `dueDay - daysBefore + 30` — ignora meses reais. Também em `billing-period.ts`, `calculateBillingPeriod` calcula o fechamento posicionando o due_day no mesmo mês da despesa e subtraindo dias, mas o modelo correto é: o vencimento da fatura M fica no mês M+1, e o fechamento = vencimento - dias_antes.
 
----
+### Problema 2: Modo Fatura mostra PIX/Débito
 
-### 1. Esconder Editar/Excluir para quem não criou
+Em `Index.tsx` linhas 1225-1234, quando `viewMode === "billing"` mas a despesa NÃO é crédito, o código cai no `else` e filtra por data — deveria retornar `false` diretamente.
 
-**Arquivo: `transaction-detail-sheet.tsx`**
+### Problema 3: Multi-cartões sem seleção obrigatória
 
-O `DrawerFooter` (linhas 375-402) mostra Editar, Duplicar e Excluir incondicionalmente. Solução:
-
-- Comparar `(transaction as any).user_id === user?.id`
-- Se `false` e `isGroupContext`, esconder os 3 botões
-- Mantém a estrutura para futuro suporte a admin/dono
+Não há exigência de selecionar um cartão no modo Fatura. Sem isso, faturas de cartões com ciclos diferentes se misturam.
 
 ---
 
-### 2. Impedir salvar compartilhada sem participantes
+### Mudanças
 
-**Arquivo: `unified-expense-form-sheet.tsx`**
+#### 1. `src/utils/billing-period.ts` — Reescrever `calculateBillingPeriod` (novo modelo)
 
-Na `handleSubmit` (linha 252), a condição `splitParticipants.length > 0` faz com que despesa compartilhada sem participantes caia no branch sem split (salva como individual). Solução:
+Nova lógica para `due_day + days_before_due`:
 
-- Se `isShared === true` e `selectedDestination !== "personal"` e `splitParticipants.length === 0`: bloquear submit e mostrar toast/mensagem inline
-- Adicionar estado `splitError` exibido abaixo da seção de participantes
-
----
-
-### 3. Edição completa de despesa compartilhada
-
-**Arquivo: `expense-edit-dialog.tsx`** — Refatorar para suportar campos de split.
-
-Mudanças:
-- Adicionar props: `groupMembers`, `currentUserId`, `isGroupContext`
-- Adicionar estados de split (`isShared`, `paidBy`, `splitType`, `splitParticipants`) e preencher com dados existentes (`expense.is_shared`, `expense.paid_by`, `expense.split_type`, `expense.splits`)
-- Renderizar `ExpenseSplitSection` quando `isGroupContext`
-- No `handleSubmit`, incluir dados de split no `ExpenseFormData`
-
-**Arquivo: `Index.tsx`** — Na `updateExpense`:
-- Se `data.isShared`: atualizar `is_shared`, `paid_by`, `split_type` na expenses, depois deletar splits antigos e inserir novos
-- Se mudou de compartilhada para individual: setar `is_shared: false`, `paid_by: null`, `split_type: null`, deletar splits
-- Após salvar, recarregar splits para atualizar o card de saldo
-
-**Arquivo: `expense-list.tsx` e `recurring-expense-list.tsx`** — Passar `currentUserId` ao `TransactionDetailSheet` (já disponível via props).
-
-**Passagem de props**: `ExpenseEditDialog` precisa receber `groupMembers` e `currentUserId` de `Index.tsx`.
-
----
-
-### 4. Detalhamento do Acerto entre Membros
-
-**Novo arquivo: `src/components/group-settlement-detail.tsx`**
-
-Um Drawer/Sheet que abre ao clicar no card "Acerto entre Membros".
-
-**Seções:**
-
-1. **Cabeçalho**: nome do grupo, total a acertar, nº de transferências
-2. **Quem paga para quem**: algoritmo de reconciliação que minimiza transferências
-3. **Composição do saldo por membro**: lista de despesas que formaram cada saldo
-4. **Clique na despesa**: abre `TransactionDetailSheet` da despesa citada
-5. **Botão compartilhar**: gera texto estruturado e usa `navigator.share()` / clipboard
-
-**Algoritmo de reconciliação (minimizar transferências):**
-```
-1. Calcular saldo de cada membro (paid - owed)
-2. Separar devedores (saldo < 0) e credores (saldo > 0)
-3. Ordenar: devedores por maior dívida, credores por maior crédito
-4. Greedy matching: debtor paga ao credor o min(|dívida|, crédito)
-5. Repetir até todos zerados
+```ts
+// Para determinar a qual fatura M (yyyy-MM) uma compra pertence:
+// Fatura "M" tem vencimento no mês M+1, dia due_day (clamped)
+// Fechamento = vencimento - days_before_due (subtração real de dias via Date)
+// Período da fatura M = (fechamento da fatura M-1) + 1 dia  até  fechamento da fatura M
+// 
+// Algoritmo: testar fatura do mês da compra e do mês anterior.
+// Se compra <= fechamento do mês → pertence a esse mês
+// Senão → pertence ao mês seguinte
 ```
 
-**Composição do saldo**: Para cada membro, iterar pelas despesas compartilhadas e mostrar quanto foi sua parte vs. quanto pagou em cada uma.
+Criar helper `getBillingClosingDate(billingMonth: string, config)`:
+- Parse `billingMonth` → ano/mês (ex: "2026-03" → março)
+- `dueDate = new Date(ano, mês, clamp(due_day, daysInMonth))` — vencimento no próprio mês da fatura (NÃO mês+1, conforme o pedido do usuário: fatura de março fecha em março e vence em abril)
 
-**Arquivo: `group-balance-summary.tsx`** — Tornar o card clicável (onClick abre o drawer de detalhamento). Adicionar `cursor-pointer` e chevron visual.
+Correção: conforme o critério de aceite do usuário:
+- Fatura de Março/2026, vencimento dia 10 → `dueDate = 10/04/2026` (mês seguinte)
+- `closingDate = dueDate - 12 dias = 29/03/2026`
+- `previousDueDate = 10/03/2026`, `previousClosingDate = 26/02/2026`
+- Período = 27/02 a 29/03
+
+Então a fórmula é:
+```ts
+function getClosingDateForBillingMonth(year: number, month: number, dueDay: number, daysBefore: number): Date {
+  // Vencimento cai no MÊS SEGUINTE ao mês da fatura
+  const nextMonth = month + 1;
+  const ny = nextMonth > 11 ? year + 1 : year;
+  const nm = nextMonth > 11 ? 0 : nextMonth;
+  const dueDate = new Date(ny, nm, Math.min(dueDay, daysInMonth(ny, nm)));
+  const closingDate = new Date(dueDate);
+  closingDate.setDate(closingDate.getDate() - daysBefore);
+  return closingDate;
+}
+```
+
+`calculateBillingPeriod(expenseDate, config)`:
+- Tentar fatura do mês da despesa: calcular closingDate e previousClosingDate
+- previousClosingDate = closingDate da fatura do mês anterior
+- Se `expenseDate > previousClosingDate && expenseDate <= closingDate` → fatura desse mês
+- Senão se `expenseDate > closingDate` → fatura do mês seguinte
+- Senão → fatura do mês anterior
+
+Também atualizar `getNextBillingDates` com a mesma lógica corrigida (vencimento no mês seguinte).
+
+#### 2. `src/components/card-manager.tsx`
+
+- **Remover `computeClosingDay`** (linhas 80-84) — não mais necessário
+- **Formulário preview** (linha 331-339): trocar texto para:
+  ```
+  "Vence dia {due_day} • Fecha {days_before_due} dias antes"
+  ```
+  E adicionar "Próximo fechamento: DD/MM • Próximo vencimento: DD/MM" usando `getNextBillingDates` com data real.
+- No `handleSubmit` (linhas 112-120): calcular `closing_day` usando a nova `getClosingDateForBillingMonth` para o mês atual, pegar `.getDate()` (compatibilidade).
+
+#### 3. `src/pages/Index.tsx` — Modo Fatura só crédito + cartão obrigatório
+
+**Filtro (linhas 1207-1235):**
+- Quando `viewMode === "billing"`: se `expense.payment_method !== "credit"` → `return false` (não cair no else)
+
+**Totais (linhas 1482-1498):**
+- Mesma correção: no modo billing, só considerar crédito
+
+**Toggle UI (linhas 1556-1582):**
+- Quando `viewMode === "billing"` e existem 2+ cartões de crédito: mostrar seletor de cartão obrigatório abaixo do toggle
+- Se 1 cartão: auto-selecionar
+- Se 0 cartões de crédito: mostrar mensagem "Cadastre um cartão de crédito"
+- Adicionar state `billingCardId: string | null` — no filtro, usar esse cartão como `filters.cardId` forçado
 
 ---
 
-### 5. Compartilhar resumo do acerto
-
-Dentro do `group-settlement-detail.tsx`:
-- Botão "Compartilhar" no rodapé
-- Gera texto formatado:
-  ```
-  📊 Acerto — Grupo: [nome]
-  
-  💸 Transferências:
-  • William paga R$ 1.366,66 para João
-  • William paga R$ 66,67 para Viviane
-  
-  Gerado em dd/MM/yyyy pelo Gastinho Simples
-  ```
-- Usa `navigator.share({ text })` se disponível, senão `navigator.clipboard.writeText()` + toast
-
----
-
-### Arquivos afetados
+### Arquivos impactados
 
 | Arquivo | Mudança |
-|---------|---------|
-| `transaction-detail-sheet.tsx` | Esconder Editar/Excluir se `user_id !== user.id` |
-| `unified-expense-form-sheet.tsx` | Validação: bloquear submit se compartilhada sem participantes |
-| `expense-edit-dialog.tsx` | Adicionar seção de split completa (paidBy, participantes, tipo divisão) |
-| `Index.tsx` | `updateExpense`: atualizar splits no DB; passar `groupMembers`/`currentUserId` ao edit dialog |
-| `expense-list.tsx` | Passar `currentUserId` ao `TransactionDetailSheet` |
-| `recurring-expense-list.tsx` | Passar `currentUserId` ao `TransactionDetailSheet` |
-| `group-balance-summary.tsx` | Tornar clicável, abrir drawer de detalhamento |
-| `group-settlement-detail.tsx` | **Novo** — detalhamento completo do acerto com reconciliação, composição e compartilhamento |
-| `expense-split-section.tsx` | Suportar preenchimento inicial (modo edição) via props opcionais |
+|---|---|
+| `src/utils/billing-period.ts` | Reescrever cálculo: vencimento no mês+1, subtração real de dias |
+| `src/components/card-manager.tsx` | Preview com datas reais, remover `computeClosingDay` |
+| `src/pages/Index.tsx` | Modo Fatura: só crédito, seletor de cartão obrigatório |
 

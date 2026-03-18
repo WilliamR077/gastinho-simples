@@ -372,34 +372,40 @@ const createdByColor =
 
         <Separator />
 
-        <DrawerFooter className="flex-row gap-2 pt-3 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)]">
-          <Button
-            variant="outline"
-            className="flex-1 gap-1.5 touch-manipulation"
-            onClick={() => handleAction(onEdit)}
-          >
-            <Pencil className="h-4 w-4" />
-            Editar
-          </Button>
-          {!isRecurring && onDuplicate && (
-            <Button
-              variant="outline"
-              className="flex-1 gap-1.5 touch-manipulation"
-              onClick={() => handleAction(onDuplicate)}
-            >
-              <Copy className="h-4 w-4" />
-              Duplicar
-            </Button>
-          )}
-          <Button
-            variant="outline"
-            className="flex-1 gap-1.5 text-destructive hover:text-destructive touch-manipulation"
-            onClick={() => handleAction(onDelete)}
-          >
-            <Trash2 className="h-4 w-4" />
-            Excluir
-          </Button>
-        </DrawerFooter>
+        {(() => {
+          const isOwner = !isGroupContext || createdByUserId === user?.id;
+          if (!isOwner) return null;
+          return (
+            <DrawerFooter className="flex-row gap-2 pt-3 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)]">
+              <Button
+                variant="outline"
+                className="flex-1 gap-1.5 touch-manipulation"
+                onClick={() => handleAction(onEdit)}
+              >
+                <Pencil className="h-4 w-4" />
+                Editar
+              </Button>
+              {!isRecurring && onDuplicate && (
+                <Button
+                  variant="outline"
+                  className="flex-1 gap-1.5 touch-manipulation"
+                  onClick={() => handleAction(onDuplicate)}
+                >
+                  <Copy className="h-4 w-4" />
+                  Duplicar
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                className="flex-1 gap-1.5 text-destructive hover:text-destructive touch-manipulation"
+                onClick={() => handleAction(onDelete)}
+              >
+                <Trash2 className="h-4 w-4" />
+                Excluir
+              </Button>
+            </DrawerFooter>
+          );
+        })()}
       </DrawerContent>
     </Drawer>
   );
