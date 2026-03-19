@@ -112,6 +112,7 @@ export function IncomeList({
                     </p>
                   </div>
 
+
                 {/* Line 2: category • date • criado por */}
                 <div className="flex items-center mt-1 ml-7">
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0 flex-1">
