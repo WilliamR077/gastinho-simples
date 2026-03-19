@@ -9,7 +9,9 @@ import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Pencil, Copy, Trash2, CreditCard, Smartphone, Calendar, Tag, Clock, Users, Power, Receipt, User, Scale } from "lucide-react";
+import { Pencil, Copy, Trash2, CreditCard, Smartphone, Calendar, Tag, Clock, Users, Power, Receipt, User, Scale, ChevronDown, Layers } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { cn } from "@/lib/utils";
 import { splitTypeLabels, SplitType } from "@/types/expense-split";
 import { calculateBillingPeriod, formatBillingPeriodLabel, getNextBillingDates, CreditCardConfig } from "@/utils/billing-period";
 import { Card as CardType } from "@/types/card";
@@ -82,6 +84,7 @@ export function TransactionDetailSheet({
 }: TransactionDetailSheetProps) {
   const { user } = useAuth();
   const [cardsData, setCardsData] = useState<CardType[]>([]);
+  const [siblingInstallments, setSiblingInstallments] = useState<{ id: string; installment_number: number; total_installments: number; income_date: string; amount: number; description: string }[]>([]);
   const { categories } = useCategories();
   const { categories: incomeCats } = useIncomeCategories();
 
@@ -95,6 +98,20 @@ export function TransactionDetailSheet({
         .then(({ data }) => setCardsData(data || []));
     }
   }, [user, open]);
+
+  // Fetch sibling installments for income
+  useEffect(() => {
+    if (open && income && (income as any).installment_group_id && (income as any).total_installments > 1) {
+      supabase
+        .from("incomes")
+        .select("id, installment_number, total_installments, income_date, amount, description")
+        .eq("installment_group_id", (income as any).installment_group_id)
+        .order("installment_number", { ascending: true })
+        .then(({ data }) => setSiblingInstallments((data as any) || []));
+    } else {
+      setSiblingInstallments([]);
+    }
+  }, [open, income]);
 
   const isRecurring = !!recurringExpense || !!recurringIncome;
   const isExpense = !!expense || !!recurringExpense;
@@ -232,13 +249,58 @@ const createdByColor =
             );
           })()}
 
-          {/* Parcelas */}
+          {/* Parcelas de despesa */}
           {expense && expense.total_installments && expense.total_installments > 1 && (
             <DetailRow
               icon={<CreditCard className="h-4 w-4" />}
               label="Parcelas"
               value={`${expense.installment_number}/${expense.total_installments}x`}
             />
+          )}
+
+          {/* Parcelas de entrada */}
+          {income && (income as any).total_installments > 1 && (
+            <>
+              <DetailRow
+                icon={<Layers className="h-4 w-4" />}
+                label="Tipo"
+                value="Entrada Parcelada"
+              />
+              <DetailRow
+                icon={<CreditCard className="h-4 w-4" />}
+                label="Parcela"
+                value={`${(income as any).installment_number}/${(income as any).total_installments}`}
+              />
+              {siblingInstallments.length > 0 && (
+                <Collapsible>
+                  <CollapsibleTrigger className="flex items-center gap-2 text-sm text-primary hover:underline cursor-pointer ml-7 mt-1">
+                    <ChevronDown className="h-3.5 w-3.5" />
+                    Ver todas as parcelas
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="ml-7 mt-2 space-y-1.5">
+                    {siblingInstallments.map((s) => {
+                      const isCurrent = s.id === income.id;
+                      return (
+                        <div
+                          key={s.id}
+                          className={cn(
+                            "flex items-center justify-between text-xs px-2 py-1 rounded",
+                            isCurrent ? "bg-primary/10 font-semibold" : ""
+                          )}
+                        >
+                          <span className={isCurrent ? "text-foreground" : "text-muted-foreground"}>
+                            {s.installment_number}/{s.total_installments} — {format(parseLocalDate(s.income_date), "MMM/yyyy", { locale: ptBR })}
+                          </span>
+                          <span className={isCurrent ? "text-green-600 dark:text-green-400 font-bold" : "font-medium text-foreground"}>
+                            {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(s.amount)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+            </>
           )}
 
           {/* Fatura (billing info for credit expenses) */}

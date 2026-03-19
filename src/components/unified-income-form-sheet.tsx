@@ -15,7 +15,7 @@ import {
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CalendarIcon, Loader2 } from "lucide-react";
-import { format } from "date-fns";
+import { format, addMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useSharedGroups } from "@/hooks/use-shared-groups";
@@ -23,7 +23,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { IncomeCategorySelector } from "@/components/income-category-selector";
 import { useIncomeCategories } from "@/hooks/use-income-categories";
 
-type IncomeType = "monthly" | "recurring";
+type IncomeType = "monthly" | "recurring" | "installment";
 
 export interface IncomeInitialData {
   description: string;
@@ -53,6 +53,7 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
   const [categoryValue, setCategoryValue] = useState("");
   const [incomeDate, setIncomeDate] = useState<Date>(new Date());
   const [dayOfMonth, setDayOfMonth] = useState("5");
+  const [installmentCount, setInstallmentCount] = useState("2");
 
   const isGroupContext = currentContext.type === 'group';
 
@@ -83,7 +84,21 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
     setCategoryValue(activeCategories.length > 0 ? activeCategories[0].id : "");
     setIncomeDate(new Date());
     setDayOfMonth("5");
+    setInstallmentCount("2");
   };
+
+  const parsedAmount = parseFloat(amount.replace(",", "."));
+  const parsedInstallments = parseInt(installmentCount);
+  const validAmount = !isNaN(parsedAmount) && parsedAmount > 0;
+  const validInstallments = !isNaN(parsedInstallments) && parsedInstallments >= 2 && parsedInstallments <= 48;
+
+  const installmentPreview = incomeType === "installment" && validAmount && validInstallments
+    ? Array.from({ length: parsedInstallments }, (_, i) => ({
+        number: i + 1,
+        date: addMonths(incomeDate, i),
+        amount: parsedAmount,
+      }))
+    : [];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,10 +113,16 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
       return;
     }
 
-    const amountValue = parseFloat(amount.replace(",", "."));
-    if (isNaN(amountValue) || amountValue <= 0) {
+    if (!validAmount) {
       toast.error("Informe um valor válido");
       return;
+    }
+
+    if (incomeType === "installment") {
+      if (!validInstallments) {
+        toast.error("Informe entre 2 e 48 parcelas. Use entrada do mês para um único recebimento.");
+        return;
+      }
     }
 
     setIsLoading(true);
@@ -110,22 +131,26 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
       const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(categoryValue);
       const selectedCategory = isUUID ? activeCategories.find(c => c.id === categoryValue) : null;
 
+      const baseFields = {
+        user_id: user.id,
+        category: isUUID ? "outros" : categoryValue,
+        shared_group_id: isGroupContext ? currentContext.groupId : null,
+        income_category_id: isUUID ? categoryValue : null,
+        category_name: selectedCategory?.name || null,
+        category_icon: selectedCategory?.icon || null,
+      };
+
       if (incomeType === "monthly") {
         const { error } = await supabase.from("incomes").insert({
-          user_id: user.id,
+          ...baseFields,
           description: description.trim(),
-          amount: amountValue,
-          category: isUUID ? "outros" : categoryValue,
+          amount: parsedAmount,
           income_date: incomeDate.toISOString(),
-          shared_group_id: isGroupContext ? currentContext.groupId : null,
-          income_category_id: isUUID ? categoryValue : null,
-          category_name: selectedCategory?.name || null,
-          category_icon: selectedCategory?.icon || null,
         } as any);
 
         if (error) throw error;
         toast.success("Entrada adicionada com sucesso!");
-      } else {
+      } else if (incomeType === "recurring") {
         const day = parseInt(dayOfMonth);
         if (isNaN(day) || day < 1 || day > 31) {
           toast.error("Informe um dia válido (1-31)");
@@ -134,19 +159,29 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
         }
 
         const { error } = await supabase.from("recurring_incomes").insert({
-          user_id: user.id,
+          ...baseFields,
           description: description.trim(),
-          amount: amountValue,
-          category: isUUID ? "outros" : categoryValue,
+          amount: parsedAmount,
           day_of_month: day,
-          shared_group_id: isGroupContext ? currentContext.groupId : null,
-          income_category_id: isUUID ? categoryValue : null,
-          category_name: selectedCategory?.name || null,
-          category_icon: selectedCategory?.icon || null,
         } as any);
 
         if (error) throw error;
         toast.success("Entrada fixa adicionada com sucesso!");
+      } else if (incomeType === "installment") {
+        const groupId = crypto.randomUUID();
+        const records = Array.from({ length: parsedInstallments }, (_, i) => ({
+          ...baseFields,
+          description: `${description.trim()} (${i + 1}/${parsedInstallments})`,
+          amount: parsedAmount,
+          income_date: addMonths(incomeDate, i).toISOString(),
+          installment_group_id: groupId,
+          installment_number: i + 1,
+          total_installments: parsedInstallments,
+        }));
+
+        const { error } = await supabase.from("incomes").insert(records as any);
+        if (error) throw error;
+        toast.success(`${parsedInstallments} parcelas criadas com sucesso!`);
       }
 
       resetForm();
@@ -179,7 +214,7 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
             <RadioGroup
               value={incomeType}
               onValueChange={(v) => setIncomeType(v as IncomeType)}
-              className="flex gap-4"
+              className="flex flex-wrap gap-x-4 gap-y-2"
             >
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="monthly" id="income-monthly" />
@@ -193,6 +228,12 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
                   Entrada Fixa
                 </Label>
               </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="installment" id="income-installment" />
+                <Label htmlFor="income-installment" className="cursor-pointer font-normal">
+                  Entrada Parcelada
+                </Label>
+              </div>
             </RadioGroup>
           </div>
 
@@ -200,7 +241,11 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
             <Label htmlFor="description">Descrição</Label>
             <Input
               id="description"
-              placeholder={incomeType === "monthly" ? "Ex: Salário mensal" : "Ex: Salário"}
+              placeholder={
+                incomeType === "monthly" ? "Ex: Salário mensal" :
+                incomeType === "recurring" ? "Ex: Salário" :
+                "Ex: Projeto Site"
+              }
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               maxLength={100}
@@ -208,7 +253,9 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="amount">Valor (R$)</Label>
+            <Label htmlFor="amount">
+              {incomeType === "installment" ? "Valor da parcela (R$)" : "Valor (R$)"}
+            </Label>
             <Input
               id="amount"
               type="text"
@@ -224,9 +271,27 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
             <IncomeCategorySelector value={categoryValue} onValueChange={setCategoryValue} />
           </div>
 
-          {incomeType === "monthly" ? (
+          {incomeType === "installment" && (
             <div className="space-y-2">
-              <Label>Data</Label>
+              <Label htmlFor="installmentCount">Quantidade de parcelas</Label>
+              <Input
+                id="installmentCount"
+                type="number"
+                min="2"
+                max="48"
+                placeholder="3"
+                value={installmentCount}
+                onChange={(e) => setInstallmentCount(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Mínimo 2 parcelas. Para um único recebimento, use "Entrada do Mês".
+              </p>
+            </div>
+          )}
+
+          {incomeType === "monthly" || incomeType === "installment" ? (
+            <div className="space-y-2">
+              <Label>{incomeType === "installment" ? "Primeira data de recebimento" : "Data"}</Label>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
@@ -251,7 +316,7 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
                 </PopoverContent>
               </Popover>
             </div>
-          ) : (
+          ) : incomeType === "recurring" ? (
             <div className="space-y-2">
               <Label htmlFor="dayOfMonth">Dia do recebimento</Label>
               <Input
@@ -267,6 +332,28 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
                 Dia do mês em que você recebe essa entrada
               </p>
             </div>
+          ) : null}
+
+          {/* Preview de parcelas */}
+          {incomeType === "installment" && installmentPreview.length > 0 && (
+            <div className="space-y-2 p-3 rounded-lg bg-muted/50 border border-border">
+              <Label className="text-sm font-medium">Prévia das parcelas</Label>
+              <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                {installmentPreview.map((p) => (
+                  <div key={p.number} className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">
+                      Parcela {p.number}/{parsedInstallments} — {format(p.date, "MMM/yyyy", { locale: ptBR })}
+                    </span>
+                    <span className="font-medium text-green-600 dark:text-green-400">
+                      {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(p.amount)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Total: {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(parsedAmount * parsedInstallments)}
+              </p>
+            </div>
           )}
 
           <div className="flex gap-3 pt-4">
@@ -280,7 +367,9 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
             </Button>
             <Button type="submit" className="flex-1" disabled={isLoading}>
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {incomeType === "monthly" ? "Adicionar Entrada" : "Adicionar Entrada Fixa"}
+              {incomeType === "monthly" ? "Adicionar Entrada" :
+               incomeType === "recurring" ? "Adicionar Entrada Fixa" :
+               `Criar ${validInstallments ? parsedInstallments : ''} Parcelas`}
             </Button>
           </div>
         </form>

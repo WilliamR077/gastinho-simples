@@ -112,12 +112,20 @@ export function IncomeList({
                     </p>
                   </div>
 
-                {/* Line 2: category • date • criado por */}
+
+                {/* Line 2: category • date • installment • criado por */}
                 <div className="flex items-center mt-1 ml-7">
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0 flex-1">
                     <span className="truncate">{catInfo.name}</span>
                     <span>•</span>
                     <span>{format(parseLocalDate(income.income_date), "dd/MM", { locale: ptBR })}</span>
+
+                    {(income as any).total_installments > 1 && (
+                      <>
+                        <span>•</span>
+                        <span className="font-medium text-primary">{(income as any).installment_number}/{(income as any).total_installments}</span>
+                      </>
+                    )}
 
                     {isGroupContext && createdByUserId && groupMembers.length > 0 && (
                       <>
