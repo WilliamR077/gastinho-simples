@@ -11,6 +11,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Pencil, Copy, Trash2, CreditCard, Smartphone, Calendar, Tag, Clock, Users, Power, Receipt, User, Scale, ChevronDown, Layers } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { cn } from "@/lib/utils";
 import { splitTypeLabels, SplitType } from "@/types/expense-split";
 import { calculateBillingPeriod, formatBillingPeriodLabel, getNextBillingDates, CreditCardConfig } from "@/utils/billing-period";
 import { Card as CardType } from "@/types/card";
