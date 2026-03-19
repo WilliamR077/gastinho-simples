@@ -41,6 +41,9 @@ export interface Income {
   category: IncomeCategory;
   income_date: string;
   shared_group_id: string | null;
+  installment_group_id?: string | null;
+  installment_number?: number;
+  total_installments?: number;
   created_at: string;
   updated_at: string;
 }
