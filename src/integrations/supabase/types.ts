@@ -377,7 +377,10 @@ export type Database = {
           id: string
           income_category_id: string | null
           income_date: string
+          installment_group_id: string | null
+          installment_number: number | null
           shared_group_id: string | null
+          total_installments: number | null
           updated_at: string
           user_id: string
         }
@@ -391,7 +394,10 @@ export type Database = {
           id?: string
           income_category_id?: string | null
           income_date?: string
+          installment_group_id?: string | null
+          installment_number?: number | null
           shared_group_id?: string | null
+          total_installments?: number | null
           updated_at?: string
           user_id: string
         }
@@ -405,7 +411,10 @@ export type Database = {
           id?: string
           income_category_id?: string | null
           income_date?: string
+          installment_group_id?: string | null
+          installment_number?: number | null
           shared_group_id?: string | null
+          total_installments?: number | null
           updated_at?: string
           user_id?: string
         }
