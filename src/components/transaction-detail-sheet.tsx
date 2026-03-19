@@ -83,6 +83,7 @@ export function TransactionDetailSheet({
 }: TransactionDetailSheetProps) {
   const { user } = useAuth();
   const [cardsData, setCardsData] = useState<CardType[]>([]);
+  const [siblingInstallments, setSiblingInstallments] = useState<{ id: string; installment_number: number; total_installments: number; income_date: string; amount: number; description: string }[]>([]);
   const { categories } = useCategories();
   const { categories: incomeCats } = useIncomeCategories();
 
@@ -96,6 +97,20 @@ export function TransactionDetailSheet({
         .then(({ data }) => setCardsData(data || []));
     }
   }, [user, open]);
+
+  // Fetch sibling installments for income
+  useEffect(() => {
+    if (open && income && (income as any).installment_group_id && (income as any).total_installments > 1) {
+      supabase
+        .from("incomes")
+        .select("id, installment_number, total_installments, income_date, amount, description")
+        .eq("installment_group_id", (income as any).installment_group_id)
+        .order("installment_number", { ascending: true })
+        .then(({ data }) => setSiblingInstallments((data as any) || []));
+    } else {
+      setSiblingInstallments([]);
+    }
+  }, [open, income]);
 
   const isRecurring = !!recurringExpense || !!recurringIncome;
   const isExpense = !!expense || !!recurringExpense;
