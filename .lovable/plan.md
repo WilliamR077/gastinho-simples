@@ -1,102 +1,58 @@
 
 
-## Plano: Corrigir aritmética de datas do billing + filtro só crédito + multi-cartões
+## Plano: Entrada Parcelada
 
-### Problema 1: `computeClosingDay` usa aritmética fixa (dia - offset + 30)
+### Estratégia
 
-Em `card-manager.tsx` linha 80-84 e no preview do formulário (linha 334), o fechamento é calculado como `dueDay - daysBefore + 30` — ignora meses reais. Também em `billing-period.ts`, `calculateBillingPeriod` calcula o fechamento posicionando o due_day no mesmo mês da despesa e subtraindo dias, mas o modelo correto é: o vencimento da fatura M fica no mês M+1, e o fechamento = vencimento - dias_antes.
-
-### Problema 2: Modo Fatura mostra PIX/Débito
-
-Em `Index.tsx` linhas 1225-1234, quando `viewMode === "billing"` mas a despesa NÃO é crédito, o código cai no `else` e filtra por data — deveria retornar `false` diretamente.
-
-### Problema 3: Multi-cartões sem seleção obrigatória
-
-Não há exigência de selecionar um cartão no modo Fatura. Sem isso, faturas de cartões com ciclos diferentes se misturam.
+Replicar o padrão de despesas parceladas (`installment_group_id`, `installment_number`, `total_installments`) para `incomes`. Gerar N registros na criação. No detalhe, buscar as demais parcelas do mesmo grupo para exibir histórico/próximas.
 
 ---
 
-### Mudanças
+### 1. Migração SQL
 
-#### 1. `src/utils/billing-period.ts` — Reescrever `calculateBillingPeriod` (novo modelo)
-
-Nova lógica para `due_day + days_before_due`:
-
-```ts
-// Para determinar a qual fatura M (yyyy-MM) uma compra pertence:
-// Fatura "M" tem vencimento no mês M+1, dia due_day (clamped)
-// Fechamento = vencimento - days_before_due (subtração real de dias via Date)
-// Período da fatura M = (fechamento da fatura M-1) + 1 dia  até  fechamento da fatura M
-// 
-// Algoritmo: testar fatura do mês da compra e do mês anterior.
-// Se compra <= fechamento do mês → pertence a esse mês
-// Senão → pertence ao mês seguinte
+```sql
+ALTER TABLE incomes ADD COLUMN installment_group_id uuid DEFAULT NULL;
+ALTER TABLE incomes ADD COLUMN installment_number integer DEFAULT 1;
+ALTER TABLE incomes ADD COLUMN total_installments integer DEFAULT 1;
 ```
 
-Criar helper `getBillingClosingDate(billingMonth: string, config)`:
-- Parse `billingMonth` → ano/mês (ex: "2026-03" → março)
-- `dueDate = new Date(ano, mês, clamp(due_day, daysInMonth))` — vencimento no próprio mês da fatura (NÃO mês+1, conforme o pedido do usuário: fatura de março fecha em março e vence em abril)
+Sem nova tabela. RLS existente já cobre.
 
-Correção: conforme o critério de aceite do usuário:
-- Fatura de Março/2026, vencimento dia 10 → `dueDate = 10/04/2026` (mês seguinte)
-- `closingDate = dueDate - 12 dias = 29/03/2026`
-- `previousDueDate = 10/03/2026`, `previousClosingDate = 26/02/2026`
-- Período = 27/02 a 29/03
+### 2. Tipos — `src/types/income.ts`
 
-Então a fórmula é:
-```ts
-function getClosingDateForBillingMonth(year: number, month: number, dueDay: number, daysBefore: number): Date {
-  // Vencimento cai no MÊS SEGUINTE ao mês da fatura
-  const nextMonth = month + 1;
-  const ny = nextMonth > 11 ? year + 1 : year;
-  const nm = nextMonth > 11 ? 0 : nextMonth;
-  const dueDate = new Date(ny, nm, Math.min(dueDay, daysInMonth(ny, nm)));
-  const closingDate = new Date(dueDate);
-  closingDate.setDate(closingDate.getDate() - daysBefore);
-  return closingDate;
-}
-```
+Adicionar ao `Income`: `installment_group_id?: string | null`, `installment_number?: number`, `total_installments?: number`.
 
-`calculateBillingPeriod(expenseDate, config)`:
-- Tentar fatura do mês da despesa: calcular closingDate e previousClosingDate
-- previousClosingDate = closingDate da fatura do mês anterior
-- Se `expenseDate > previousClosingDate && expenseDate <= closingDate` → fatura desse mês
-- Senão se `expenseDate > closingDate` → fatura do mês seguinte
-- Senão → fatura do mês anterior
+### 3. Formulário — `src/components/unified-income-form-sheet.tsx`
 
-Também atualizar `getNextBillingDates` com a mesma lógica corrigida (vencimento no mês seguinte).
+- Expandir `IncomeType` para `"monthly" | "recurring" | "installment"`
+- Adicionar terceira opção no RadioGroup: "Entrada Parcelada"
+- Quando `installment`:
+  - Campo "Quantidade de parcelas" (min 2, max 48)
+  - Campo "Primeira data" (date picker, reusa o existente)
+  - Preview das parcelas: lista `Parcela 1/N — mês/ano — R$ X`
+  - Validação: parcelas < 2 → toast "Use entrada do mês para um único recebimento"
+- No submit: gerar N registros com `installment_group_id` compartilhado, descrição `"Desc (1/N)"`, datas incrementando mês a mês
 
-#### 2. `src/components/card-manager.tsx`
+### 4. Lista — `src/components/income-list.tsx`
 
-- **Remover `computeClosingDay`** (linhas 80-84) — não mais necessário
-- **Formulário preview** (linha 331-339): trocar texto para:
-  ```
-  "Vence dia {due_day} • Fecha {days_before_due} dias antes"
-  ```
-  E adicionar "Próximo fechamento: DD/MM • Próximo vencimento: DD/MM" usando `getNextBillingDates` com data real.
-- No `handleSubmit` (linhas 112-120): calcular `closing_day` usando a nova `getClosingDateForBillingMonth` para o mês atual, pegar `.getDate()` (compatibilidade).
+Quando `income.total_installments > 1`: mostrar badge discreto `X/N` na segunda linha (ex: "1/3").
 
-#### 3. `src/pages/Index.tsx` — Modo Fatura só crédito + cartão obrigatório
+### 5. Detalhe — `src/components/transaction-detail-sheet.tsx`
 
-**Filtro (linhas 1207-1235):**
-- Quando `viewMode === "billing"`: se `expense.payment_method !== "credit"` → `return false` (não cair no else)
+Quando `income.total_installments > 1`:
+- Mostrar "Tipo: Entrada Parcelada"
+- Mostrar "Parcela X de N"
+- **Buscar demais parcelas** do mesmo `installment_group_id` via query ao abrir o detalhe
+- Listar todas as parcelas do conjunto: número, mês/data, valor, com destaque na parcela atual
+- Usar `Collapsible` para não poluir a UI (expandir "Ver todas as parcelas")
 
-**Totais (linhas 1482-1498):**
-- Mesma correção: no modo billing, só considerar crédito
-
-**Toggle UI (linhas 1556-1582):**
-- Quando `viewMode === "billing"` e existem 2+ cartões de crédito: mostrar seletor de cartão obrigatório abaixo do toggle
-- Se 1 cartão: auto-selecionar
-- Se 0 cartões de crédito: mostrar mensagem "Cadastre um cartão de crédito"
-- Adicionar state `billingCardId: string | null` — no filtro, usar esse cartão como `filters.cardId` forçado
-
----
-
-### Arquivos impactados
+### Arquivos afetados
 
 | Arquivo | Mudança |
-|---|---|
-| `src/utils/billing-period.ts` | Reescrever cálculo: vencimento no mês+1, subtração real de dias |
-| `src/components/card-manager.tsx` | Preview com datas reais, remover `computeClosingDay` |
-| `src/pages/Index.tsx` | Modo Fatura: só crédito, seletor de cartão obrigatório |
+|---------|---------|
+| Migração SQL | 3 colunas em `incomes` |
+| `src/types/income.ts` | 3 campos no `Income` |
+| `src/components/unified-income-form-sheet.tsx` | Tipo `installment`, campos, preview, multi-insert |
+| `src/components/income-list.tsx` | Badge parcela X/N |
+| `src/components/transaction-detail-sheet.tsx` | Seção parcela + lista de parcelas do conjunto |
 
