@@ -9,13 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon } from "lucide-react";
+import { CalendarIcon, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Expense, PaymentMethod, ExpenseFormData } from "@/types/expense";
 import { SplitType, SplitParticipant } from "@/types/expense-split";
 import { SharedGroupMember } from "@/types/shared-group";
-import { cn, parseLocalDate, normalizeToLocalDate } from "@/lib/utils";
+import { cn, parseLocalDate, normalizeToLocalDate, stripInstallmentSuffix } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { Card as CardType } from "@/types/card";
 import { CategorySelector } from "@/components/category-selector";
@@ -123,8 +123,12 @@ export function ExpenseEditDialog({
         if (found) categoryId = found.id;
       }
 
+      const baseDescription = expense.total_installments > 1 
+        ? stripInstallmentSuffix(expense.description) 
+        : expense.description;
+
       form.reset({
-        description: expense.description,
+        description: baseDescription,
         amount: Number(expense.amount),
         paymentMethod: expense.payment_method as PaymentMethod,
         expenseDate: parseLocalDate(expense.expense_date),
@@ -376,9 +380,30 @@ export function ExpenseEditDialog({
             />
 
             {expense && expense.total_installments > 1 && (
-              <div className="text-sm text-muted-foreground bg-muted p-3 rounded-md">
-                ⚠️ Esta é uma despesa parcelada ({expense.installment_number}/{expense.total_installments}). 
-                Você pode editar os detalhes, mas não o número de parcelas.
+              <div className="space-y-3">
+                <div className="flex items-start gap-2.5 p-3 rounded-lg border border-amber-300/60 bg-amber-50/80 dark:border-amber-500/30 dark:bg-amber-950/30">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                  <p className="text-sm text-amber-800 dark:text-amber-300 leading-relaxed">
+                    Você está editando a 1ª parcela de uma série com {expense.total_installments} parcelas. 
+                    As alterações feitas aqui serão aplicadas às demais parcelas da série. 
+                    O número de parcelas não pode ser alterado nesta tela.
+                  </p>
+                </div>
+
+                {(() => {
+                  const watchedAmount = form.watch("amount");
+                  const total = (watchedAmount || 0) * expense.total_installments;
+                  return (
+                    <div className="p-3 rounded-lg border border-border bg-muted/50">
+                      <p className="text-sm font-medium text-foreground">
+                        {expense.total_installments} parcelas × R$ {(watchedAmount || 0).toFixed(2).replace('.', ',')} = <span className="text-primary font-semibold">R$ {total.toFixed(2).replace('.', ',')}</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Alterar o valor da parcela atualizará todas as parcelas da série.
+                      </p>
+                    </div>
+                  );
+                })()}
               </div>
             )}
 

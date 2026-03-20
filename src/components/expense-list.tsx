@@ -2,7 +2,7 @@ import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { CreditCard, Smartphone, Receipt, Users, User, Calculator } from "lucide-react"
+import { CreditCard, Smartphone, Receipt, Users, User, Calculator, AlertTriangle } from "lucide-react"
 import { Expense, categoryLabels, categoryIcons, ExpenseCategory } from "@/types/expense"
 import { SharedGroupMember } from "@/types/shared-group"
 import { useCategories } from "@/hooks/use-categories"
@@ -243,18 +243,27 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onDuplic
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>
+            <AlertDialogTitle className={isDeleteSeries ? "flex items-center gap-2 text-destructive" : ""}>
+              {isDeleteSeries && <AlertTriangle className="h-5 w-5" />}
               {isDeleteSeries ? "Excluir série parcelada?" : "Excluir despesa?"}
             </AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogDescription className={isDeleteSeries ? "text-foreground" : ""}>
               {isDeleteSeries 
-                ? `Esta é a 1ª parcela de uma série com ${deleteExpense?.total_installments} parcelas. Excluir esta parcela também excluirá as demais parcelas da série. Deseja continuar?`
+                ? (
+                  <span className="flex items-start gap-2 p-3 rounded-lg border border-destructive/30 bg-destructive/5 dark:bg-destructive/10 mt-2">
+                    <span className="text-sm leading-relaxed">
+                      <strong>Atenção:</strong> esta é a 1ª parcela de uma série com {deleteExpense?.total_installments} parcelas. 
+                      Excluir esta parcela também excluirá as demais parcelas da série. Esta ação não pode ser desfeita.
+                    </span>
+                  </span>
+                )
                 : "Esta ação não pode ser desfeita."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
+              className={isDeleteSeries ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : ""}
               onClick={() => {
                 if (deleteId) {
                   onDeleteExpense(deleteId);
@@ -263,7 +272,7 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onDuplic
                 }
               }}
             >
-              {isDeleteSeries ? "Excluir série" : "Excluir"}
+              {isDeleteSeries ? "Excluir série inteira" : "Excluir"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

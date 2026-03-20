@@ -64,3 +64,11 @@ export function formatCurrencyLocaleWithVisibility(value: number, isHidden: bool
     currency: 'BRL'
   });
 }
+
+/**
+ * Remove o sufixo visual de parcela "(X/N)" de uma descrição.
+ * Ex: "Notebook (1/4)" → "Notebook"
+ */
+export function stripInstallmentSuffix(desc: string): string {
+  return desc.replace(/\s*\(\d+\/\d+\)\s*$/, '').trim();
+}
