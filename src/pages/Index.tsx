@@ -2181,7 +2181,8 @@ export default function Index() {
                 onEdit={handleEditIncome}
                 onDuplicate={handleDuplicateIncome}
                 groupMembers={groupMembers}
-                isGroupContext={currentContext.type === 'group'} /> :
+                isGroupContext={currentContext.type === 'group'}
+                onOpenFirstInstallment={handleOpenFirstInstallment} /> :
 
 
               <RecurringIncomeList
