@@ -1,59 +1,78 @@
 
 
-## Plano: Polimento UX do Parcelamento como Série
+## Plano Revisado: Reordenar Tutoriais + Botão "Configurar Conta" com Progresso
 
 ### Visão Geral
 
-7 ajustes de UX nos modais de edição e exclusão de séries parceladas (despesas e entradas). Nenhuma mudança de lógica principal.
+Reordenar a sequência de tutoriais (Tour → Onboarding → Premium CTA), adicionar botão "Configurar Conta" com progresso na Settings, e banner de progresso na tela principal.
 
 ---
 
-### 1. Descrição base sem sufixo no campo de edição
+### Parte 1 — Reordenar sequência: Tour → Onboarding → Premium CTA
 
-**Utility function** em `src/lib/utils.ts`:
+**`src/hooks/use-product-tour.tsx`**
+- `completeTour()`: em vez de `setShowPremiumCta(true)`, setar um novo state `showOnboardingPrompt` (mover essa lógica do product-tour.tsx para o hook)
+
+**`src/components/product-tour.tsx`**
+- Após o tour terminar: mostrar prompt de onboarding (se não concluído)
+- Se pular onboarding: **agora** mostrar Premium CTA
+- Se aceitar onboarding: ao final do onboarding, o completion dialog já tem Premium CTA embutido
+- Fluxo: `Tour termina → onboarding prompt → (aceita: onboarding → completion com CTA) | (recusa: Premium CTA)`
+
+### Parte 2 — `getSetupProgress()` no hook de onboarding
+
+**`src/hooks/use-onboarding-tour.tsx`**
+
+Expor nova função no contexto:
 ```ts
-export function stripInstallmentSuffix(desc: string): string {
-  return desc.replace(/\s*\(\d+\/\d+\)\s*$/, '').trim();
-}
+getSetupProgress: () => Promise<{
+  completed: number;
+  total: number;
+  percentage: number;
+  completedSteps: string[];
+  pendingSteps: { id: string; label: string; emoji: string }[];
+}>
 ```
 
-**`expense-edit-dialog.tsx`** — no `form.reset()` (linha 127): usar `stripInstallmentSuffix(expense.description)` em vez de `expense.description` quando `expense.total_installments > 1`.
+Implementação:
+- Reutilizar `checkExistingData()` que já existe
+- **Reforço 1**: Filtrar `availableSteps` (que já exclui `mobileOnly` no desktop) para calcular o `total` correto por dispositivo
+- Excluir `import-spreadsheet` (opcional, sempre "concluído") do cálculo de progresso para não inflar
+- Retornar `pendingSteps` como array de `{ id, label, emoji }` para uso no banner
 
-**`income-edit-dialog.tsx`** — mesma lógica no `form.reset()` (linha 65): usar `stripInstallmentSuffix(income.description)` quando `(income as any).total_installments > 1`.
+### Parte 3 — Botão "Configurar Conta" na Settings
 
-A exibição visual `(X/N)` nas listas e no detalhe **não muda** — continua usando `expense.description` ou o badge existente diretamente.
+**`src/pages/Settings.tsx`**
 
-### 2. Aviso melhorado no modal de edição
+No card de "Tutorial" existente (linhas 457-484), adicionar abaixo do botão "Ver tutorial novamente":
+- Separator
+- Botão "Me ajude a configurar minha conta" com ícone `Sparkles`
+- Barra `Progress` com `X de Y etapas (Z%)`
+- Lista de etapas pendentes (máx 3) com ícone/emoji
 
-**`expense-edit-dialog.tsx`** — substituir o bloco de aviso existente (linhas 378-383) por um mais completo:
+**Reforço 3**: O botão estará **sempre visível**, independente de o onboarding ter sido pulado, fechado ou parcialmente concluído. Ele chama `startOnboarding()` que já faz skip automático de etapas com dados existentes.
 
-```
-⚠️ Você está editando a 1ª parcela de uma série com N parcelas. 
-As alterações feitas aqui serão aplicadas às demais parcelas da série. 
-O número de parcelas não pode ser alterado nesta tela.
-```
+Se progresso = 100%: mostrar "Conta configurada! ✅" em verde em vez da barra.
 
-Usar `border-amber-200 bg-amber-50` no dark e light, com ícone `AlertTriangle`.
+### Parte 4 — Banner de progresso na Index
 
-**`income-edit-dialog.tsx`** — adicionar bloco similar quando `income.total_installments > 1 && income.installment_number === 1`, antes dos botões de ação.
+**`src/components/setup-progress-banner.tsx`** (novo)
 
-### 3. Resumo do total da série (tempo real)
+Banner discreto que:
+- Mostra porcentagem e até **2-3 itens faltantes** (Reforço 2): `"Faltam: Cartões, Metas"`
+- Botão "Continuar configuração" → `startOnboarding()`
+- Botão X para dismiss → salvar `{ dismissed: true, timestamp: Date.now() }` em localStorage
+- Reaparece após 7 dias do dismiss
 
-**`expense-edit-dialog.tsx`** — abaixo do campo de valor, quando série (`expense.total_installments > 1`):
-- Mostrar: `N parcelas × R$ X = R$ Total`
-- Usar `form.watch("amount")` para atualizar em tempo real
-- Texto auxiliar: "Alterar o valor da parcela atualizará todas as parcelas da série."
+Condições de exibição (**Reforço 4**):
+- `isOpen === false` (não mostrar enquanto onboarding estiver rodando)
+- `percentage < 100` (não mostrar se conta 100% configurada)
+- Não foi dismissido nos últimos 7 dias
+- Usuário logado
 
-**`income-edit-dialog.tsx`** — mesma lógica: abaixo do campo de valor, quando `income.total_installments > 1`.
+**`src/pages/Index.tsx`**
 
-### 4. Confirmação de exclusão mais forte
-
-**`expense-list.tsx`** (linhas 243-270) — quando `isDeleteSeries`:
-- `AlertDialogAction` com classe `bg-destructive text-destructive-foreground hover:bg-destructive/90`
-- Adicionar ícone `AlertTriangle` no título
-- Texto: "⚠️ Atenção: esta é a 1ª parcela de uma série com N parcelas. Excluir esta parcela também excluirá as demais parcelas da série."
-
-**`income-list.tsx`** (linhas 186-213) — mesma melhoria visual.
+Adicionar `<SetupProgressBanner />` acima do `UpsellBanner`, passando o progresso como dados.
 
 ---
 
@@ -61,11 +80,12 @@ Usar `border-amber-200 bg-amber-50` no dark e light, com ícone `AlertTriangle`.
 
 | Arquivo | Mudança |
 |---------|---------|
-| `src/lib/utils.ts` | Nova função `stripInstallmentSuffix` |
-| `src/components/expense-edit-dialog.tsx` | Strip sufixo, aviso série melhorado, resumo total tempo real |
-| `src/components/income-edit-dialog.tsx` | Strip sufixo, aviso série, resumo total tempo real |
-| `src/components/expense-list.tsx` | AlertDialog de exclusão com visual de alerta mais forte |
-| `src/components/income-list.tsx` | AlertDialog de exclusão com visual de alerta mais forte |
+| `src/hooks/use-product-tour.tsx` | Ajustar `completeTour` para não mostrar Premium CTA diretamente |
+| `src/components/product-tour.tsx` | Reordenar: tour → onboarding prompt → Premium CTA (se pular) |
+| `src/hooks/use-onboarding-tour.tsx` | Expor `getSetupProgress()` com total correto por dispositivo |
+| `src/pages/Settings.tsx` | Botão "Configurar conta" + barra de progresso no card Tutorial |
+| `src/components/setup-progress-banner.tsx` | Novo: banner de progresso na Index |
+| `src/pages/Index.tsx` | Adicionar `SetupProgressBanner` |
 
-Nenhuma migração SQL necessária. Lógica principal inalterada.
+Nenhuma migração SQL necessária.
 
