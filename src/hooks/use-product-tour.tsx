@@ -106,11 +106,11 @@ export function useProductTour() {
   const [isOpen, setIsOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [showPremiumCta, setShowPremiumCta] = useState(false);
+  const [showOnboardingPrompt, setShowOnboardingPrompt] = useState(false);
 
   useEffect(() => {
     const hasSeenTour = localStorage.getItem(TOUR_STORAGE_KEY);
     if (!hasSeenTour) {
-      // Delay para garantir que os elementos estejam renderizados
       const timer = setTimeout(() => {
         setIsOpen(true);
       }, 1000);
@@ -120,18 +120,29 @@ export function useProductTour() {
 
   const completeTour = useCallback(() => {
     localStorage.setItem(TOUR_STORAGE_KEY, "true");
-    setShowPremiumCta(true);
+    setIsOpen(false);
+    // Show onboarding prompt instead of premium CTA
+    setShowOnboardingPrompt(true);
   }, []);
 
   const closeTour = useCallback(() => {
     setIsOpen(false);
     setShowPremiumCta(false);
+    setShowOnboardingPrompt(false);
     setCurrentStep(0);
   }, []);
 
   const closePremiumCta = useCallback(() => {
     setShowPremiumCta(false);
-    setIsOpen(false);
+  }, []);
+
+  const closeOnboardingPrompt = useCallback(() => {
+    setShowOnboardingPrompt(false);
+  }, []);
+
+  const showPremiumCtaAfterSkip = useCallback(() => {
+    setShowOnboardingPrompt(false);
+    setShowPremiumCta(true);
   }, []);
 
   const nextStep = useCallback(() => {
@@ -157,6 +168,7 @@ export function useProductTour() {
     localStorage.removeItem(TOUR_STORAGE_KEY);
     setCurrentStep(0);
     setShowPremiumCta(false);
+    setShowOnboardingPrompt(false);
     setIsOpen(true);
   }, []);
 
@@ -166,11 +178,14 @@ export function useProductTour() {
     totalSteps: tourSteps.length,
     currentStepData: tourSteps[currentStep],
     showPremiumCta,
+    showOnboardingPrompt,
     nextStep,
     prevStep,
     skipTour,
     closeTour,
     resetTour,
     closePremiumCta,
+    closeOnboardingPrompt,
+    showPremiumCtaAfterSkip,
   };
 }
