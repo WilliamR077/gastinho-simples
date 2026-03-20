@@ -1170,6 +1170,33 @@ export default function Index() {
     }
   };
 
+  // Handler to open the first installment of a series
+  const handleOpenFirstInstallment = (installmentGroupId: string, type: 'expense' | 'income') => {
+    if (type === 'expense') {
+      const first = expenses.find(e => e.installment_group_id === installmentGroupId && (e.installment_number ?? 1) === 1);
+      if (first) {
+        // Open the expense detail sheet by triggering the list's selection
+        // We set editing expense to trigger the detail view
+        setEditingExpense(first);
+        setExpenseDialogOpen(false);
+        // Small hack: we need to trigger the TransactionDetailSheet via the list
+        // Instead, let's directly open the edit dialog for the first installment
+        setEditingExpense(first);
+        setExpenseDialogOpen(true);
+      } else {
+        toast({ title: "1ª parcela não encontrada", description: "A primeira parcela desta série não está no período atual.", variant: "destructive" });
+      }
+    } else {
+      const first = incomes.find(i => (i as any).installment_group_id === installmentGroupId && ((i as any).installment_number ?? 1) === 1);
+      if (first) {
+        setEditingIncome(first);
+        setIncomeDialogOpen(true);
+      } else {
+        toast({ title: "1ª parcela não encontrada", description: "A primeira parcela desta série não está no período atual.", variant: "destructive" });
+      }
+    }
+  };
+
   // Funções de edição
   const handleEditExpense = (expense: Expense) => {
     setEditingExpense(expense);
