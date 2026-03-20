@@ -412,9 +412,26 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     return true;
   }, [currentSubstep?.id, currentSubstep?.targetSelector]);
 
-  const closeCompletionDialog = useCallback(() => {
-    setShowCompletionDialog(false);
-  }, []);
+  const getSetupProgress = useCallback(async (): Promise<SetupProgressResult> => {
+    // Steps that count for progress (exclude optional like import-spreadsheet)
+    const progressSteps = availableSteps.filter((s) => !s.optional);
+    const total = progressSteps.length;
+
+    let existingData = new Set<string>();
+    if (user) {
+      existingData = await checkExistingData(user.id);
+    }
+
+    const completedSteps = progressSteps.filter((s) => existingData.has(s.id)).map((s) => s.id);
+    const pendingSteps = progressSteps
+      .filter((s) => !existingData.has(s.id))
+      .map((s) => ({ id: s.id, label: s.label, emoji: s.emoji }));
+
+    const completed = completedSteps.length;
+    const percentage = total > 0 ? (completed / total) * 100 : 100;
+
+    return { completed, total, percentage, completedSteps, pendingSteps };
+  }, [user, availableSteps]);
 
   return (
     <OnboardingContext.Provider
@@ -438,6 +455,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         notifyEvent,
         closeCompletionDialog,
         isCurrentTargetValid,
+        getSetupProgress,
       }}
     >
       {children}
