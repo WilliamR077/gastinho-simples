@@ -59,6 +59,19 @@ export default function Settings() {
   const navigate = useNavigate();
   const { canExportPdf, canExportExcel, canImportSpreadsheet, importLimit } = useSubscription();
   const [importSheetOpen, setImportSheetOpen] = useState(false);
+  const { startOnboarding, getSetupProgress } = useOnboardingTour();
+  const [setupProgress, setSetupProgress] = useState<{
+    completed: number;
+    total: number;
+    percentage: number;
+    pendingSteps: { id: string; label: string; emoji: string }[];
+  } | null>(null);
+
+  useEffect(() => {
+    if (user) {
+      getSetupProgress().then(setSetupProgress);
+    }
+  }, [user, getSetupProgress]);
 
   // Audit log helper function
   const logAuditAction = async (action: string, details?: any) => {
