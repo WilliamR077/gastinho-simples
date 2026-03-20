@@ -36,6 +36,10 @@ export interface ExpenseFormData {
   paidBy?: string;
   splitType?: SplitType;
   participants?: SplitParticipant[];
+  // Responsável por parcela (grupo)
+  installmentAssignment?: "same" | "per_installment";
+  installmentResponsibles?: Record<number, string>;
+  sameResponsible?: string;
 }
 
 export const categoryLabels: Record<ExpenseCategory, string> = {
