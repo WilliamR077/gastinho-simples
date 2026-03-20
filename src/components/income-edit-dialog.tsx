@@ -62,8 +62,13 @@ export function IncomeEditDialog({ income, open, onOpenChange, onSave }: IncomeE
     if (income && income.id !== lastIncomeIdRef.current) {
       lastIncomeIdRef.current = income.id;
       
+      const totalInstallments = (income as any).total_installments || 1;
+      const baseDescription = totalInstallments > 1 
+        ? stripInstallmentSuffix(income.description) 
+        : income.description;
+
       form.reset({
-        description: income.description,
+        description: baseDescription,
         amount: Number(income.amount),
         category: (income as any).income_category_id || income.category,
         incomeDate: parseLocalDate(income.income_date),
