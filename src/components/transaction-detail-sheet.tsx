@@ -114,6 +114,20 @@ export function TransactionDetailSheet({
     }
   }, [open, income]);
 
+  // Fetch sibling installments for expense
+  useEffect(() => {
+    if (open && expense && expense.installment_group_id && expense.total_installments && expense.total_installments > 1) {
+      supabase
+        .from("expenses")
+        .select("id, installment_number, total_installments, expense_date, amount, description, paid_by")
+        .eq("installment_group_id", expense.installment_group_id)
+        .order("installment_number", { ascending: true })
+        .then(({ data }) => setSiblingExpenseInstallments((data as any) || []));
+    } else {
+      setSiblingExpenseInstallments([]);
+    }
+  }, [open, expense]);
+
   const isRecurring = !!recurringExpense || !!recurringIncome;
   const isExpense = !!expense || !!recurringExpense;
   const transaction = expense || income || recurringExpense || recurringIncome;
