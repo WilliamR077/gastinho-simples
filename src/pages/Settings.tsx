@@ -479,7 +479,7 @@ export default function Settings() {
               Aprenda como usar o aplicativo
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <Button
               onClick={() => {
                 localStorage.removeItem(TOUR_STORAGE_KEY);
@@ -495,6 +495,45 @@ export default function Settings() {
               <GraduationCap className="h-4 w-4" />
               Ver tutorial novamente
             </Button>
+
+            <Separator />
+
+            {/* Setup progress + button */}
+            <Button
+              onClick={() => {
+                startOnboarding();
+                navigate("/");
+              }}
+              variant="outline"
+              className="w-full gap-2"
+            >
+              <Sparkles className="h-4 w-4" />
+              Me ajude a configurar minha conta
+            </Button>
+
+            {setupProgress && (
+              <div className="space-y-2">
+                {setupProgress.percentage >= 100 ? (
+                  <div className="flex items-center gap-2 text-sm font-medium text-green-600 dark:text-green-400">
+                    <Check className="h-4 w-4" />
+                    Conta configurada!
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>Progresso da configuração</span>
+                      <span>{setupProgress.completed} de {setupProgress.total} ({Math.round(setupProgress.percentage)}%)</span>
+                    </div>
+                    <Progress value={setupProgress.percentage} className="h-2" />
+                    {setupProgress.pendingSteps.length > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Faltam: {setupProgress.pendingSteps.slice(0, 3).map((s) => `${s.emoji} ${s.label}`).join(", ")}
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 
