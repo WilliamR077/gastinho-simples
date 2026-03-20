@@ -2103,7 +2103,8 @@ export default function Index() {
                 onSendToCalculator={handleSendToCalculator}
                 groupMembers={groupMembers}
                 isGroupContext={currentContext.type === 'group'}
-                currentUserId={user?.id} /> :
+                currentUserId={user?.id}
+                onOpenFirstInstallment={handleOpenFirstInstallment} /> :
 
 
               <RecurringExpenseList
