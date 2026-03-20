@@ -87,6 +87,10 @@ export function UnifiedExpenseFormSheet({
   const [paidBy, setPaidBy] = useState(currentUserId);
   const [splitType, setSplitType] = useState<SplitType>("equal");
   const [splitParticipants, setSplitParticipants] = useState<SplitParticipant[]>([]);
+  // Installment responsible state
+  const [installmentAssignment, setInstallmentAssignment] = useState<"same" | "per_installment">("same");
+  const [installmentResponsibles, setInstallmentResponsibles] = useState<Record<number, string>>({});
+  const [sameResponsible, setSameResponsible] = useState(currentUserId);
   
   const { activeCategories } = useCategories();
   const { groups, currentContext } = useSharedGroups();
