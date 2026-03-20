@@ -197,6 +197,36 @@ export function IncomeEditDialog({ income, open, onOpenChange, onSave }: IncomeE
               )}
             />
 
+            {(() => {
+              const totalInstallments = (income as any)?.total_installments || 1;
+              const installmentNumber = (income as any)?.installment_number || 1;
+              if (totalInstallments > 1 && installmentNumber === 1) {
+                const watchedAmount = form.watch("amount");
+                const total = (watchedAmount || 0) * totalInstallments;
+                return (
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-2.5 p-3 rounded-lg border border-amber-300/60 bg-amber-50/80 dark:border-amber-500/30 dark:bg-amber-950/30">
+                      <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                      <p className="text-sm text-amber-800 dark:text-amber-300 leading-relaxed">
+                        Você está editando a 1ª parcela de uma série com {totalInstallments} parcelas. 
+                        As alterações feitas aqui serão aplicadas às demais parcelas da série. 
+                        O número de parcelas não pode ser alterado nesta tela.
+                      </p>
+                    </div>
+                    <div className="p-3 rounded-lg border border-border bg-muted/50">
+                      <p className="text-sm font-medium text-foreground">
+                        {totalInstallments} parcelas × R$ {(watchedAmount || 0).toFixed(2).replace('.', ',')} = <span className="text-emerald-600 dark:text-emerald-400 font-semibold">R$ {total.toFixed(2).replace('.', ',')}</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Alterar o valor da parcela atualizará todas as parcelas da série.
+                      </p>
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
             <div className="flex gap-2 pt-4">
               <Button
                 type="button"

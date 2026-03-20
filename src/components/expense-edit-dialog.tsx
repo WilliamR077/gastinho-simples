@@ -380,9 +380,30 @@ export function ExpenseEditDialog({
             />
 
             {expense && expense.total_installments > 1 && (
-              <div className="text-sm text-muted-foreground bg-muted p-3 rounded-md">
-                ⚠️ Esta é uma despesa parcelada ({expense.installment_number}/{expense.total_installments}). 
-                Você pode editar os detalhes, mas não o número de parcelas.
+              <div className="space-y-3">
+                <div className="flex items-start gap-2.5 p-3 rounded-lg border border-amber-300/60 bg-amber-50/80 dark:border-amber-500/30 dark:bg-amber-950/30">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                  <p className="text-sm text-amber-800 dark:text-amber-300 leading-relaxed">
+                    Você está editando a 1ª parcela de uma série com {expense.total_installments} parcelas. 
+                    As alterações feitas aqui serão aplicadas às demais parcelas da série. 
+                    O número de parcelas não pode ser alterado nesta tela.
+                  </p>
+                </div>
+
+                {(() => {
+                  const watchedAmount = form.watch("amount");
+                  const total = (watchedAmount || 0) * expense.total_installments;
+                  return (
+                    <div className="p-3 rounded-lg border border-border bg-muted/50">
+                      <p className="text-sm font-medium text-foreground">
+                        {expense.total_installments} parcelas × R$ {(watchedAmount || 0).toFixed(2).replace('.', ',')} = <span className="text-primary font-semibold">R$ {total.toFixed(2).replace('.', ',')}</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Alterar o valor da parcela atualizará todas as parcelas da série.
+                      </p>
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
