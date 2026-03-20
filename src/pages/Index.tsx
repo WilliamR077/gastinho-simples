@@ -455,6 +455,21 @@ export default function Index() {
 
   const deleteIncome = async (id: string) => {
     try {
+      const inc = incomes.find((i) => i.id === id);
+      // Guard: block deletion of secondary installments
+      if (inc && (inc as any).installment_group_id && ((inc as any).installment_number ?? 1) > 1) {
+        toast({ title: "Ação bloqueada", description: "Use a 1ª parcela para gerenciar esta série.", variant: "destructive" });
+        return;
+      }
+      // Series deletion: delete all installments in the group
+      if (inc && (inc as any).installment_group_id && ((inc as any).total_installments ?? 1) > 1) {
+        const groupId = (inc as any).installment_group_id;
+        const { error } = await supabase.from("incomes").delete().eq("installment_group_id", groupId);
+        if (error) throw error;
+        setIncomes((prev) => prev.filter((i) => (i as any).installment_group_id !== groupId));
+        toast({ title: "Série removida", description: `A série com ${(inc as any).total_installments} parcelas foi excluída.` });
+        return;
+      }
       const { error } = await supabase.from("incomes").delete().eq("id", id);
       if (error) throw error;
       setIncomes((prev) => prev.filter((i) => i.id !== id));
