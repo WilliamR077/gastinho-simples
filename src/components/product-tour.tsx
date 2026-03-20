@@ -12,7 +12,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
 import { Sparkles, BookOpen } from "lucide-react";
 
 export function ProductTour() {
@@ -22,40 +21,40 @@ export function ProductTour() {
     totalSteps,
     currentStepData,
     showPremiumCta,
+    showOnboardingPrompt,
     nextStep,
     prevStep,
     skipTour,
     closePremiumCta,
+    closeOnboardingPrompt,
+    showPremiumCtaAfterSkip,
   } = useProductTour();
 
   const { startOnboarding, isCompleted: onboardingCompleted } = useOnboardingTour();
-  const [showOnboardingPrompt, setShowOnboardingPrompt] = useState(false);
-
-  // Quando o tour de demonstração termina, mostrar pergunta sobre onboarding
-  const handlePremiumCtaClose = () => {
-    closePremiumCta();
-    if (!onboardingCompleted) {
-      setShowOnboardingPrompt(true);
-    }
-  };
 
   const handleStartOnboarding = () => {
-    setShowOnboardingPrompt(false);
+    closeOnboardingPrompt();
     startOnboarding();
   };
 
   const handleSkipOnboarding = () => {
-    setShowOnboardingPrompt(false);
+    // User skipped onboarding → show Premium CTA
+    showPremiumCtaAfterSkip();
   };
 
-  if (!isOpen && !showPremiumCta && !showOnboardingPrompt) return null;
+  // Show onboarding prompt only if onboarding not yet completed
+  const shouldShowOnboardingPrompt = showOnboardingPrompt && !onboardingCompleted;
+  // If onboarding already completed, skip straight to premium CTA
+  const shouldShowPremiumCta = showPremiumCta || (showOnboardingPrompt && onboardingCompleted);
+
+  if (!isOpen && !shouldShowPremiumCta && !shouldShowOnboardingPrompt) return null;
 
   return (
     <>
       {/* Overlay com spotlight */}
       <TourOverlay
         targetSelector={currentStepData?.target || ""}
-        isVisible={isOpen && !showPremiumCta}
+        isVisible={isOpen && !shouldShowPremiumCta && !shouldShowOnboardingPrompt}
       />
 
       {/* Tooltip do passo atual */}
@@ -67,15 +66,15 @@ export function ProductTour() {
           onNext={nextStep}
           onPrev={prevStep}
           onSkip={skipTour}
-          isVisible={isOpen && !showPremiumCta}
+          isVisible={isOpen && !shouldShowPremiumCta && !shouldShowOnboardingPrompt}
         />
       )}
 
-      {/* CTA Premium no final */}
-      <TourPremiumCta isVisible={showPremiumCta} onClose={handlePremiumCtaClose} />
+      {/* CTA Premium (after skipping onboarding or if onboarding already done) */}
+      <TourPremiumCta isVisible={shouldShowPremiumCta} onClose={closePremiumCta} />
 
-      {/* Pergunta sobre Onboarding */}
-      <Dialog open={showOnboardingPrompt} onOpenChange={setShowOnboardingPrompt}>
+      {/* Pergunta sobre Onboarding (after tour ends, before premium CTA) */}
+      <Dialog open={shouldShowOnboardingPrompt} onOpenChange={(open) => !open && handleSkipOnboarding()}>
         <DialogContent className="max-w-md">
           <DialogHeader className="text-center space-y-4">
             <div className="mx-auto w-16 h-16 bg-gradient-to-br from-primary to-purple-600 rounded-full flex items-center justify-center">

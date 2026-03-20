@@ -18,6 +18,14 @@ import {
 } from "@/lib/onboarding/onboarding-steps";
 
 // ─── Context ──────────────────────────────────────────────────
+interface SetupProgressResult {
+  completed: number;
+  total: number;
+  percentage: number;
+  completedSteps: string[];
+  pendingSteps: { id: string; label: string; emoji: string }[];
+}
+
 interface OnboardingContextType {
   isOpen: boolean;
   currentStep: OnboardingStepConfig | null;
@@ -38,8 +46,8 @@ interface OnboardingContextType {
   proceedToNextStep: () => void;
   notifyEvent: (eventName: string) => void;
   closeCompletionDialog: () => void;
-  // For validation-gated substeps: check if current target is valid
   isCurrentTargetValid: () => boolean;
+  getSetupProgress: () => Promise<SetupProgressResult>;
 }
 
 const OnboardingContext = createContext<OnboardingContextType | undefined>(
@@ -408,6 +416,27 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     setShowCompletionDialog(false);
   }, []);
 
+  const getSetupProgress = useCallback(async (): Promise<SetupProgressResult> => {
+    // Steps that count for progress (exclude optional like import-spreadsheet)
+    const progressSteps = availableSteps.filter((s) => !s.optional);
+    const total = progressSteps.length;
+
+    let existingData = new Set<string>();
+    if (user) {
+      existingData = await checkExistingData(user.id);
+    }
+
+    const completedSteps = progressSteps.filter((s) => existingData.has(s.id)).map((s) => s.id);
+    const pendingSteps = progressSteps
+      .filter((s) => !existingData.has(s.id))
+      .map((s) => ({ id: s.id, label: s.label, emoji: s.emoji }));
+
+    const completed = completedSteps.length;
+    const percentage = total > 0 ? (completed / total) * 100 : 100;
+
+    return { completed, total, percentage, completedSteps, pendingSteps };
+  }, [user, availableSteps]);
+
   return (
     <OnboardingContext.Provider
       value={{
@@ -430,6 +459,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         notifyEvent,
         closeCompletionDialog,
         isCurrentTargetValid,
+        getSetupProgress,
       }}
     >
       {children}

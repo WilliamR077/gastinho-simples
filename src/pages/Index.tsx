@@ -24,6 +24,7 @@ import { useCategories } from "@/hooks/use-categories";
 import { ProductTour } from "@/components/product-tour";
 import { BalanceSummary } from "@/components/balance-summary";
 import { UpsellBanner } from "@/components/upsell-banner";
+import { SetupProgressBanner } from "@/components/setup-progress-banner";
 import { GroupMemberSummary } from "@/components/group-member-summary";
 import { GroupBalanceSummary } from "@/components/group-balance-summary";
 import { UnifiedIncomeFormSheet } from "@/components/unified-income-form-sheet";
@@ -1942,6 +1943,9 @@ export default function Index() {
             totalIncome={monthlyTotals.totalIncome}
             totalExpense={monthlyTotals.totalExpense} />
         </div>
+
+        {/* Setup Progress Banner */}
+        <SetupProgressBanner />
 
         {/* Upsell Banner */}
         <UpsellBanner expenseCount={expenses.length} />

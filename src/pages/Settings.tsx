@@ -5,12 +5,14 @@ import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Settings as SettingsIcon, FileDown, FileSpreadsheet, Crown, Lock, GraduationCap, Upload } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { ArrowLeft, Settings as SettingsIcon, FileDown, FileSpreadsheet, Crown, Lock, GraduationCap, Upload, Sparkles, Check } from "lucide-react";
 import { useSubscription } from "@/hooks/use-subscription";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { SpreadsheetImportSheet } from "@/components/spreadsheet-import-sheet";
 import { FirebaseNotificationSettings } from "@/components/firebase-notification-settings";
 import { SecuritySettings } from "@/components/security-settings";
+import { useOnboardingTour } from "@/hooks/use-onboarding-tour";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -57,6 +59,19 @@ export default function Settings() {
   const navigate = useNavigate();
   const { canExportPdf, canExportExcel, canImportSpreadsheet, importLimit } = useSubscription();
   const [importSheetOpen, setImportSheetOpen] = useState(false);
+  const { startOnboarding, getSetupProgress } = useOnboardingTour();
+  const [setupProgress, setSetupProgress] = useState<{
+    completed: number;
+    total: number;
+    percentage: number;
+    pendingSteps: { id: string; label: string; emoji: string }[];
+  } | null>(null);
+
+  useEffect(() => {
+    if (user) {
+      getSetupProgress().then(setSetupProgress);
+    }
+  }, [user, getSetupProgress]);
 
   // Audit log helper function
   const logAuditAction = async (action: string, details?: any) => {
@@ -464,7 +479,7 @@ export default function Settings() {
               Aprenda como usar o aplicativo
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <Button
               onClick={() => {
                 localStorage.removeItem(TOUR_STORAGE_KEY);
@@ -480,6 +495,45 @@ export default function Settings() {
               <GraduationCap className="h-4 w-4" />
               Ver tutorial novamente
             </Button>
+
+            <Separator />
+
+            {/* Setup progress + button */}
+            <Button
+              onClick={() => {
+                startOnboarding();
+                navigate("/");
+              }}
+              variant="outline"
+              className="w-full gap-2"
+            >
+              <Sparkles className="h-4 w-4" />
+              Me ajude a configurar minha conta
+            </Button>
+
+            {setupProgress && (
+              <div className="space-y-2">
+                {setupProgress.percentage >= 100 ? (
+                  <div className="flex items-center gap-2 text-sm font-medium text-green-600 dark:text-green-400">
+                    <Check className="h-4 w-4" />
+                    Conta configurada!
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>Progresso da configuração</span>
+                      <span>{setupProgress.completed} de {setupProgress.total} ({Math.round(setupProgress.percentage)}%)</span>
+                    </div>
+                    <Progress value={setupProgress.percentage} className="h-2" />
+                    {setupProgress.pendingSteps.length > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Faltam: {setupProgress.pendingSteps.slice(0, 3).map((s) => `${s.emoji} ${s.label}`).join(", ")}
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 
