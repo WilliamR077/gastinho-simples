@@ -232,6 +232,9 @@ export function UnifiedExpenseFormSheet({
     setPaidBy(currentUserId);
     setSplitType("equal");
     setSplitParticipants([]);
+    setInstallmentAssignment("same");
+    setInstallmentResponsibles({});
+    setSameResponsible(currentUserId);
     if (currentContext.type === "group" && currentContext.groupId) {
       setSelectedDestination(currentContext.groupId);
     } else {
