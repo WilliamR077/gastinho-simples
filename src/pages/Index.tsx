@@ -756,6 +756,14 @@ export default function Index() {
           const installmentDate = new Date(expenseDate);
           installmentDate.setMonth(installmentDate.getMonth() + (i - 1));
 
+          // Determine paid_by for this installment
+          let installmentPaidBy: string | null = null;
+          if (data.installmentAssignment === "per_installment" && data.installmentResponsibles) {
+            installmentPaidBy = data.installmentResponsibles[i] || null;
+          } else if (data.installmentAssignment === "same" && data.sameResponsible) {
+            installmentPaidBy = data.sameResponsible;
+          }
+
           expensesToInsert.push({
             description: `${description} (${i}/${installments})`,
             amount: installmentAmount,
@@ -773,7 +781,8 @@ export default function Index() {
             category_name: categoryName,
             category_icon: categoryIcon,
             card_name: cardName,
-            card_color: selectedCard?.color || null
+            card_color: selectedCard?.color || null,
+            ...(installmentPaidBy && { paid_by: installmentPaidBy }),
           });
         }
 
