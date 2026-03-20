@@ -13,7 +13,7 @@ import { CalendarIcon, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Income, IncomeCategory } from "@/types/income";
-import { cn, parseLocalDate, normalizeToLocalDate } from "@/lib/utils";
+import { cn, parseLocalDate, normalizeToLocalDate, stripInstallmentSuffix } from "@/lib/utils";
 import { IncomeCategorySelector } from "@/components/income-category-selector";
 import { useIncomeCategories } from "@/hooks/use-income-categories";
 
