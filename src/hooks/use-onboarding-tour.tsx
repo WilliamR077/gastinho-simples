@@ -412,6 +412,10 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     return true;
   }, [currentSubstep?.id, currentSubstep?.targetSelector]);
 
+  const closeCompletionDialog = useCallback(() => {
+    setShowCompletionDialog(false);
+  }, []);
+
   const getSetupProgress = useCallback(async (): Promise<SetupProgressResult> => {
     // Steps that count for progress (exclude optional like import-spreadsheet)
     const progressSteps = availableSteps.filter((s) => !s.optional);
