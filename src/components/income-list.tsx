@@ -28,6 +28,7 @@ interface IncomeListProps {
   onDuplicate?: (income: Income) => void;
   groupMembers?: SharedGroupMember[];
   isGroupContext?: boolean;
+  onOpenFirstInstallment?: (installmentGroupId: string, type: 'expense' | 'income') => void;
 }
 
 const getUserDisplayName = (userId: string, members: SharedGroupMember[]): string | null => {
@@ -43,6 +44,7 @@ export function IncomeList({
   onDuplicate,
   groupMembers = [],
   isGroupContext = false,
+  onOpenFirstInstallment,
 }: IncomeListProps) {
   const { isHidden } = useValuesVisibility();
   const { categories: incomeCats } = useIncomeCategories();
@@ -70,6 +72,10 @@ export function IncomeList({
     const date = new Date(dateString);
     return new Date(date.getTime() + date.getTimezoneOffset() * 60000);
   };
+
+  // Get delete dialog info
+  const deleteIncome = deleteId ? incomes.find(i => i.id === deleteId) : null;
+  const isDeleteSeries = deleteIncome && (deleteIncome as any).installment_group_id && ((deleteIncome as any).total_installments ?? 1) > 1 && ((deleteIncome as any).installment_number ?? 1) === 1;
 
   if (incomes.length === 0) {
     return (
@@ -174,13 +180,20 @@ export function IncomeList({
         formatCurrency={formatCurrency}
         groupMembers={groupMembers}
         isGroupContext={isGroupContext}
+        onOpenFirstInstallment={onOpenFirstInstallment}
       />
 
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir entrada?</AlertDialogTitle>
-            <AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription>
+            <AlertDialogTitle>
+              {isDeleteSeries ? "Excluir série parcelada?" : "Excluir entrada?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {isDeleteSeries
+                ? `Esta é a 1ª parcela de uma série com ${(deleteIncome as any)?.total_installments} parcelas. Excluir esta parcela também excluirá as demais parcelas da série. Deseja continuar?`
+                : "Esta ação não pode ser desfeita."}
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
@@ -193,7 +206,7 @@ export function IncomeList({
                 }
               }}
             >
-              Excluir
+              {isDeleteSeries ? "Excluir série" : "Excluir"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

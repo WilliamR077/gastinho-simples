@@ -9,7 +9,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Pencil, Copy, Trash2, CreditCard, Smartphone, Calendar, Tag, Clock, Users, Power, Receipt, User, Scale, ChevronDown, Layers } from "lucide-react";
+import { Pencil, Copy, Trash2, CreditCard, Smartphone, Calendar, Tag, Clock, Users, Power, Receipt, User, Scale, ChevronDown, Layers, Info, ExternalLink } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { splitTypeLabels, SplitType } from "@/types/expense-split";
@@ -18,6 +18,7 @@ import { Card as CardType } from "@/types/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import {
   Drawer,
   DrawerContent,
@@ -42,6 +43,7 @@ interface TransactionDetailSheetProps {
   onToggleActive?: (id: string, isActive: boolean) => void;
   groupMembers?: SharedGroupMember[];
   isGroupContext?: boolean;
+  onOpenFirstInstallment?: (installmentGroupId: string, type: 'expense' | 'income') => void;
 }
 
 const paymentMethodLabels: Record<string, string> = {
@@ -81,6 +83,7 @@ export function TransactionDetailSheet({
   onToggleActive,
   groupMembers = [],
   isGroupContext = false,
+  onOpenFirstInstallment,
 }: TransactionDetailSheetProps) {
   const { user } = useAuth();
   const [cardsData, setCardsData] = useState<CardType[]>([]);
@@ -132,6 +135,16 @@ export function TransactionDetailSheet({
   const isExpense = !!expense || !!recurringExpense;
   const transaction = expense || income || recurringExpense || recurringIncome;
   if (!transaction) return null;
+
+  // Series detection
+  const isExpenseSeries = !!expense && !!expense.installment_group_id && (expense.total_installments ?? 1) > 1;
+  const isIncomeSeries = !!income && !!(income as any).installment_group_id && ((income as any).total_installments ?? 1) > 1;
+  const isSeries = isExpenseSeries || isIncomeSeries;
+  const installmentNumber = expense?.installment_number ?? (income as any)?.installment_number ?? 1;
+  const isFirstInstallment = installmentNumber === 1;
+  const isSeriesSecondary = isSeries && !isFirstInstallment;
+  const totalInstallments = expense?.total_installments ?? (income as any)?.total_installments ?? 1;
+  const installmentGroupId = expense?.installment_group_id ?? (income as any)?.installment_group_id;
 
   const createdByUserId = (transaction as any).user_id;
 const createdByName =
@@ -210,7 +223,19 @@ const createdByColor =
           <div className="flex items-center gap-3">
             <span className="text-3xl">{catIcon}</span>
             <div className="flex-1 min-w-0">
-              <DrawerTitle className="text-lg truncate">{description}</DrawerTitle>
+              <div className="flex items-center gap-2">
+                <DrawerTitle className="text-lg truncate">{description}</DrawerTitle>
+                {isSeries && isFirstInstallment && (
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-normal shrink-0 bg-primary/10 text-primary border-primary/20">
+                    Gerencia esta série
+                  </Badge>
+                )}
+                {isSeriesSecondary && (
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-normal shrink-0 bg-muted text-muted-foreground">
+                    Série
+                  </Badge>
+                )}
+              </div>
               <p
                 className={`text-xl font-bold mt-0.5 ${
                   isExpense
@@ -227,7 +252,35 @@ const createdByColor =
 
         <Separator />
 
-        <div className="px-4 py-3 space-y-3">
+        <div className="px-4 py-3 space-y-3 overflow-y-auto">
+          {/* Banner for secondary installments */}
+          {isSeriesSecondary && (
+            <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-2">
+              <div className="flex items-start gap-2">
+                <Info className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-800 dark:text-amber-200">
+                  Esta parcela faz parte de uma série parcelada. Para editar ou excluir esta série, abra a 1ª parcela.
+                </p>
+              </div>
+              {onOpenFirstInstallment && installmentGroupId && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full gap-1.5 text-xs border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/30"
+                  onClick={() => {
+                    onOpenChange(false);
+                    setTimeout(() => {
+                      onOpenFirstInstallment(installmentGroupId, isExpenseSeries ? 'expense' : 'income');
+                    }, 200);
+                  }}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Abrir 1ª parcela
+                </Button>
+              )}
+            </div>
+          )}
+
           {/* Categoria */}
           <DetailRow icon={<Tag className="h-4 w-4" />} label="Categoria" value={`${catIcon} ${catName}`} />
 
@@ -505,7 +558,8 @@ const createdByColor =
 
         {(() => {
           const isOwner = !isGroupContext || createdByUserId === user?.id;
-          if (!isOwner) return null;
+          // Hide actions for secondary installments in a series
+          if (!isOwner || isSeriesSecondary) return null;
           return (
             <DrawerFooter className="flex-row gap-2 pt-3 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)]">
               <Button
@@ -514,9 +568,9 @@ const createdByColor =
                 onClick={() => handleAction(onEdit)}
               >
                 <Pencil className="h-4 w-4" />
-                Editar
+                Editar{isSeries && isFirstInstallment ? " série" : ""}
               </Button>
-              {!isRecurring && onDuplicate && (
+              {!isRecurring && onDuplicate && !isSeries && (
                 <Button
                   variant="outline"
                   className="flex-1 gap-1.5 touch-manipulation"
@@ -532,7 +586,7 @@ const createdByColor =
                 onClick={() => handleAction(onDelete)}
               >
                 <Trash2 className="h-4 w-4" />
-                Excluir
+                Excluir{isSeries && isFirstInstallment ? " série" : ""}
               </Button>
             </DrawerFooter>
           );

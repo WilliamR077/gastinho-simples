@@ -455,6 +455,21 @@ export default function Index() {
 
   const deleteIncome = async (id: string) => {
     try {
+      const inc = incomes.find((i) => i.id === id);
+      // Guard: block deletion of secondary installments
+      if (inc && (inc as any).installment_group_id && ((inc as any).installment_number ?? 1) > 1) {
+        toast({ title: "Ação bloqueada", description: "Use a 1ª parcela para gerenciar esta série.", variant: "destructive" });
+        return;
+      }
+      // Series deletion: delete all installments in the group
+      if (inc && (inc as any).installment_group_id && ((inc as any).total_installments ?? 1) > 1) {
+        const groupId = (inc as any).installment_group_id;
+        const { error } = await supabase.from("incomes").delete().eq("installment_group_id", groupId);
+        if (error) throw error;
+        setIncomes((prev) => prev.filter((i) => (i as any).installment_group_id !== groupId));
+        toast({ title: "Série removida", description: `A série com ${(inc as any).total_installments} parcelas foi excluída.` });
+        return;
+      }
       const { error } = await supabase.from("incomes").delete().eq("id", id);
       if (error) throw error;
       setIncomes((prev) => prev.filter((i) => i.id !== id));
@@ -553,12 +568,79 @@ export default function Index() {
 
   const updateIncome = async (id: string, data: IncomeFormData) => {
     try {
+      const inc = incomes.find((i) => i.id === id);
+      // Guard: block update of secondary installments
+      if (inc && (inc as any).installment_group_id && ((inc as any).installment_number ?? 1) > 1) {
+        toast({ title: "Ação bloqueada", description: "Use a 1ª parcela para gerenciar esta série.", variant: "destructive" });
+        return;
+      }
+
       const formatDateLocal = (date: Date) => {
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
       };
+
+      // Series batch update
+      if (inc && (inc as any).installment_group_id && ((inc as any).total_installments ?? 1) > 1) {
+        const groupId = (inc as any).installment_group_id;
+        const totalInst = (inc as any).total_installments;
+        // Fetch all siblings
+        const { data: siblings } = await supabase
+          .from("incomes")
+          .select("id, installment_number, income_date")
+          .eq("installment_group_id", groupId)
+          .order("installment_number", { ascending: true });
+
+        if (siblings && siblings.length > 0) {
+          const baseDate = data.incomeDate;
+          // Strip installment suffix from description
+          const baseDesc = data.description.replace(/\s*\(\d+\/\d+\)\s*$/, '');
+          
+          for (const sib of siblings) {
+            const instNum = sib.installment_number ?? 1;
+            const newDate = new Date(baseDate);
+            newDate.setMonth(newDate.getMonth() + (instNum - 1));
+            
+            await supabase
+              .from("incomes")
+              .update({
+                description: `${baseDesc} (${instNum}/${totalInst})`,
+                amount: data.amount,
+                category: data.category,
+                income_date: formatDateLocal(newDate),
+                income_category_id: data.incomeCategoryId || null,
+                category_name: data.categoryName || null,
+                category_icon: data.categoryIcon || null,
+              } as any)
+              .eq("id", sib.id);
+          }
+          
+          // Update local state
+          setIncomes((prev) =>
+            prev.map((i) => {
+              if ((i as any).installment_group_id !== groupId) return i;
+              const instNum = (i as any).installment_number ?? 1;
+              const newDate = new Date(baseDate);
+              newDate.setMonth(newDate.getMonth() + (instNum - 1));
+              return {
+                ...i,
+                description: `${baseDesc} (${instNum}/${totalInst})`,
+                amount: data.amount,
+                category: data.category,
+                income_date: formatDateLocal(newDate),
+                income_category_id: data.incomeCategoryId || null,
+                category_name: data.categoryName || null,
+                category_icon: data.categoryIcon || null,
+              };
+            })
+          );
+          
+          toast({ title: "Série atualizada", description: `As ${totalInst} parcelas foram atualizadas.` });
+          return;
+        }
+      }
 
       const { error } = await supabase.
       from("incomes").
@@ -841,15 +923,24 @@ export default function Index() {
 
   const deleteExpense = async (id: string) => {
     try {
-      const { error } = await supabase.
-      from("expenses").
-      delete().
-      eq("id", id);
-
+      const exp = expenses.find((e) => e.id === id);
+      // Guard: block deletion of secondary installments
+      if (exp && exp.installment_group_id && (exp.installment_number ?? 1) > 1) {
+        toast({ title: "Ação bloqueada", description: "Use a 1ª parcela para gerenciar esta série.", variant: "destructive" });
+        return;
+      }
+      // Series deletion: delete all installments in the group
+      if (exp && exp.installment_group_id && (exp.total_installments ?? 1) > 1) {
+        const groupId = exp.installment_group_id;
+        const { error } = await supabase.from("expenses").delete().eq("installment_group_id", groupId);
+        if (error) throw error;
+        setExpenses((prev) => prev.filter((e) => e.installment_group_id !== groupId));
+        toast({ title: "Série removida", description: `A série com ${exp.total_installments} parcelas foi excluída.`, variant: "destructive" });
+        return;
+      }
+      const { error } = await supabase.from("expenses").delete().eq("id", id);
       if (error) throw error;
-
       setExpenses((prev) => prev.filter((expense) => expense.id !== id));
-
       toast({
         title: "Gasto removido",
         description: "O gasto foi excluído com sucesso.",
@@ -1079,6 +1170,33 @@ export default function Index() {
     }
   };
 
+  // Handler to open the first installment of a series
+  const handleOpenFirstInstallment = (installmentGroupId: string, type: 'expense' | 'income') => {
+    if (type === 'expense') {
+      const first = expenses.find(e => e.installment_group_id === installmentGroupId && (e.installment_number ?? 1) === 1);
+      if (first) {
+        // Open the expense detail sheet by triggering the list's selection
+        // We set editing expense to trigger the detail view
+        setEditingExpense(first);
+        setExpenseDialogOpen(false);
+        // Small hack: we need to trigger the TransactionDetailSheet via the list
+        // Instead, let's directly open the edit dialog for the first installment
+        setEditingExpense(first);
+        setExpenseDialogOpen(true);
+      } else {
+        toast({ title: "1ª parcela não encontrada", description: "A primeira parcela desta série não está no período atual.", variant: "destructive" });
+      }
+    } else {
+      const first = incomes.find(i => (i as any).installment_group_id === installmentGroupId && ((i as any).installment_number ?? 1) === 1);
+      if (first) {
+        setEditingIncome(first);
+        setIncomeDialogOpen(true);
+      } else {
+        toast({ title: "1ª parcela não encontrada", description: "A primeira parcela desta série não está no período atual.", variant: "destructive" });
+      }
+    }
+  };
+
   // Funções de edição
   const handleEditExpense = (expense: Expense) => {
     setEditingExpense(expense);
@@ -1087,6 +1205,13 @@ export default function Index() {
 
   const updateExpense = async (id: string, data: ExpenseFormData) => {
     try {
+      const exp = expenses.find((e) => e.id === id);
+      // Guard: block update of secondary installments
+      if (exp && exp.installment_group_id && (exp.installment_number ?? 1) > 1) {
+        toast({ title: "Ação bloqueada", description: "Use a 1ª parcela para gerenciar esta série.", variant: "destructive" });
+        return;
+      }
+
       const formatDateLocal = (date: Date) => {
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -1097,6 +1222,53 @@ export default function Index() {
       // Buscar dados desnormalizados
       const selectedCategory = data.categoryId ? categories.find((c) => c.id === data.categoryId) : null;
       const selectedCard = data.cardId ? cards.find((c) => c.id === data.cardId) : null;
+
+      // Series batch update
+      if (exp && exp.installment_group_id && (exp.total_installments ?? 1) > 1) {
+        const groupId = exp.installment_group_id;
+        const totalInst = exp.total_installments ?? 1;
+        const { data: siblings } = await supabase
+          .from("expenses")
+          .select("id, installment_number, expense_date, paid_by")
+          .eq("installment_group_id", groupId)
+          .order("installment_number", { ascending: true });
+
+        if (siblings && siblings.length > 0) {
+          const baseDate = data.expenseDate;
+          const baseDesc = data.description.replace(/\s*\(\d+\/\d+\)\s*$/, '');
+
+          for (const sib of siblings) {
+            const instNum = sib.installment_number ?? 1;
+            const newDate = new Date(baseDate);
+            newDate.setMonth(newDate.getMonth() + (instNum - 1));
+
+            await supabase
+              .from("expenses")
+              .update({
+                description: `${baseDesc} (${instNum}/${totalInst})`,
+                amount: data.amount,
+                payment_method: data.paymentMethod,
+                expense_date: formatDateLocal(newDate),
+                ...(data.categoryId && { category_id: data.categoryId }),
+                ...(data.cardId && { card_id: data.cardId }),
+                category_name: selectedCategory?.name || null,
+                category_icon: selectedCategory?.icon || null,
+                card_name: selectedCard?.name || null,
+                card_color: selectedCard?.color || null,
+                // Preserve individual paid_by per installment
+              })
+              .eq("id", sib.id);
+          }
+
+          // Reload to get fresh data with relations
+          await loadExpenses();
+
+          setExpenseDialogOpen(false);
+          setEditingExpense(null);
+          toast({ title: "Série atualizada", description: `As ${totalInst} parcelas foram atualizadas.` });
+          return;
+        }
+      }
 
       const { data: updatedData, error } = await supabase.
       from("expenses").
@@ -1931,7 +2103,8 @@ export default function Index() {
                 onSendToCalculator={handleSendToCalculator}
                 groupMembers={groupMembers}
                 isGroupContext={currentContext.type === 'group'}
-                currentUserId={user?.id} /> :
+                currentUserId={user?.id}
+                onOpenFirstInstallment={handleOpenFirstInstallment} /> :
 
 
               <RecurringExpenseList
@@ -2008,7 +2181,8 @@ export default function Index() {
                 onEdit={handleEditIncome}
                 onDuplicate={handleDuplicateIncome}
                 groupMembers={groupMembers}
-                isGroupContext={currentContext.type === 'group'} /> :
+                isGroupContext={currentContext.type === 'group'}
+                onOpenFirstInstallment={handleOpenFirstInstallment} /> :
 
 
               <RecurringIncomeList
