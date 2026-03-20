@@ -274,9 +274,19 @@ export function UnifiedExpenseFormSheet({
       }
     }
 
-    if (expenseType === "monthly") {
-      const installmentCount = paymentMethod === "credit" ? parseInt(installments) : 1;
+    // Validação de responsáveis por parcela
+    const installmentCount = paymentMethod === "credit" ? parseInt(installments) : 1;
+    const showInstallmentResponsible = isGroupDestination && paymentMethod === "credit" && installmentCount > 1 && expenseType === "monthly" && !isShared;
+    if (showInstallmentResponsible && installmentAssignment === "per_installment") {
+      for (let i = 1; i <= installmentCount; i++) {
+        if (!installmentResponsibles[i]) {
+          setSplitError(`Selecione o responsável pela parcela ${i}.`);
+          return;
+        }
+      }
+    }
 
+    if (expenseType === "monthly") {
       onAddExpense({
         description: description.trim(),
         amount: numericAmount,
@@ -291,6 +301,11 @@ export function UnifiedExpenseFormSheet({
           paidBy: paidBy,
           splitType: splitType,
           participants: splitParticipants,
+        }),
+        ...(showInstallmentResponsible && {
+          installmentAssignment,
+          installmentResponsibles,
+          sameResponsible,
         }),
       });
     } else {
