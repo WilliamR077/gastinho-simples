@@ -123,8 +123,12 @@ export function ExpenseEditDialog({
         if (found) categoryId = found.id;
       }
 
+      const baseDescription = expense.total_installments > 1 
+        ? stripInstallmentSuffix(expense.description) 
+        : expense.description;
+
       form.reset({
-        description: expense.description,
+        description: baseDescription,
         amount: Number(expense.amount),
         paymentMethod: expense.payment_method as PaymentMethod,
         expenseDate: parseLocalDate(expense.expense_date),
