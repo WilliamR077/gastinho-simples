@@ -18,6 +18,14 @@ import {
 } from "@/lib/onboarding/onboarding-steps";
 
 // ─── Context ──────────────────────────────────────────────────
+interface SetupProgressResult {
+  completed: number;
+  total: number;
+  percentage: number;
+  completedSteps: string[];
+  pendingSteps: { id: string; label: string; emoji: string }[];
+}
+
 interface OnboardingContextType {
   isOpen: boolean;
   currentStep: OnboardingStepConfig | null;
@@ -38,8 +46,8 @@ interface OnboardingContextType {
   proceedToNextStep: () => void;
   notifyEvent: (eventName: string) => void;
   closeCompletionDialog: () => void;
-  // For validation-gated substeps: check if current target is valid
   isCurrentTargetValid: () => boolean;
+  getSetupProgress: () => Promise<SetupProgressResult>;
 }
 
 const OnboardingContext = createContext<OnboardingContextType | undefined>(
