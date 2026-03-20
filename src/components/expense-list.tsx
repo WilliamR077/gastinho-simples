@@ -29,6 +29,7 @@ interface ExpenseListProps {
   groupMembers?: SharedGroupMember[]
   isGroupContext?: boolean
   currentUserId?: string
+  onOpenFirstInstallment?: (installmentGroupId: string, type: 'expense' | 'income') => void
 }
 
 const getUserDisplayName = (userId: string, members: SharedGroupMember[]): string | null => {
@@ -49,7 +50,7 @@ const parseLocalDate = (dateString: string) => {
   return new Date(year, month - 1, day);
 };
 
-export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onDuplicateExpense, onSendToCalculator, groupMembers = [], isGroupContext = false, currentUserId }: ExpenseListProps) {
+export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onDuplicateExpense, onSendToCalculator, groupMembers = [], isGroupContext = false, currentUserId, onOpenFirstInstallment }: ExpenseListProps) {
   const [visibleCount, setVisibleCount] = useState(10)
   const { categories } = useCategories()
   const { isHidden } = useValuesVisibility()
@@ -77,6 +78,10 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onDuplic
       label: categoryLabels[categoryKey] || "Outros"
     };
   };
+
+  // Get delete dialog info
+  const deleteExpense = deleteId ? expenses.find(e => e.id === deleteId) : null;
+  const isDeleteSeries = deleteExpense && deleteExpense.installment_group_id && (deleteExpense.total_installments ?? 1) > 1 && (deleteExpense.installment_number ?? 1) === 1;
 
   if (expenses.length === 0) {
     return (
@@ -232,13 +237,20 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onDuplic
   formatCurrency={formatCurrency}
   groupMembers={groupMembers}
   isGroupContext={isGroupContext}
+  onOpenFirstInstallment={onOpenFirstInstallment}
 />
 
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir despesa?</AlertDialogTitle>
-            <AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription>
+            <AlertDialogTitle>
+              {isDeleteSeries ? "Excluir série parcelada?" : "Excluir despesa?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {isDeleteSeries 
+                ? `Esta é a 1ª parcela de uma série com ${deleteExpense?.total_installments} parcelas. Excluir esta parcela também excluirá as demais parcelas da série. Deseja continuar?`
+                : "Esta ação não pode ser desfeita."}
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
@@ -251,7 +263,7 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onDuplic
                 }
               }}
             >
-              Excluir
+              {isDeleteSeries ? "Excluir série" : "Excluir"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
