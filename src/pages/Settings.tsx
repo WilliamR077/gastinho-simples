@@ -13,8 +13,6 @@ import { SpreadsheetImportSheet } from "@/components/spreadsheet-import-sheet";
 import { FirebaseNotificationSettings } from "@/components/firebase-notification-settings";
 import { SecuritySettings } from "@/components/security-settings";
 import { useOnboardingTour } from "@/hooks/use-onboarding-tour";
-import { FirebaseNotificationSettings } from "@/components/firebase-notification-settings";
-import { SecuritySettings } from "@/components/security-settings";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
