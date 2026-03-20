@@ -856,15 +856,24 @@ export default function Index() {
 
   const deleteExpense = async (id: string) => {
     try {
-      const { error } = await supabase.
-      from("expenses").
-      delete().
-      eq("id", id);
-
+      const exp = expenses.find((e) => e.id === id);
+      // Guard: block deletion of secondary installments
+      if (exp && exp.installment_group_id && (exp.installment_number ?? 1) > 1) {
+        toast({ title: "Ação bloqueada", description: "Use a 1ª parcela para gerenciar esta série.", variant: "destructive" });
+        return;
+      }
+      // Series deletion: delete all installments in the group
+      if (exp && exp.installment_group_id && (exp.total_installments ?? 1) > 1) {
+        const groupId = exp.installment_group_id;
+        const { error } = await supabase.from("expenses").delete().eq("installment_group_id", groupId);
+        if (error) throw error;
+        setExpenses((prev) => prev.filter((e) => e.installment_group_id !== groupId));
+        toast({ title: "Série removida", description: `A série com ${exp.total_installments} parcelas foi excluída.`, variant: "destructive" });
+        return;
+      }
+      const { error } = await supabase.from("expenses").delete().eq("id", id);
       if (error) throw error;
-
       setExpenses((prev) => prev.filter((expense) => expense.id !== id));
-
       toast({
         title: "Gasto removido",
         description: "O gasto foi excluído com sucesso.",
