@@ -1,87 +1,71 @@
 
 
-## Plano Revisado: Parcelamento como Série (com reforços confirmados)
+## Plano: Polimento UX do Parcelamento como Série
 
-### Estratégia
+### Visão Geral
 
-Mesma base do plano aprovado, com dois reforços explícitos:
+7 ajustes de UX nos modais de edição e exclusão de séries parceladas (despesas e entradas). Nenhuma mudança de lógica principal.
 
 ---
 
-### Reforço 1 — Proteção nos handlers (não só na UI)
+### 1. Descrição base sem sufixo no campo de edição
 
-Em `Index.tsx`, nos 4 handlers (`deleteExpense`, `deleteIncome`, `updateExpense`, `updateIncome`):
-
-**Guard no início de cada função:**
-- Buscar o item no state local pelo `id`
-- Se `installment_group_id` existir E `installment_number > 1` → bloquear com toast de erro ("Esta parcela não pode ser editada/excluída diretamente. Use a 1ª parcela da série.") e retornar sem executar
-- Isso garante que mesmo se a UI falhar em esconder os botões, a operação é barrada na lógica
-
-Exemplo para `deleteExpense`:
-```
-const expense = expenses.find(e => e.id === id);
-if (expense?.installment_group_id && (expense?.installment_number ?? 1) > 1) {
-  toast({ title: "Ação bloqueada", description: "Use a 1ª parcela para gerenciar esta série.", variant: "destructive" });
-  return;
+**Utility function** em `src/lib/utils.ts`:
+```ts
+export function stripInstallmentSuffix(desc: string): string {
+  return desc.replace(/\s*\(\d+\/\d+\)\s*$/, '').trim();
 }
 ```
 
-Mesma lógica para `deleteIncome`, `updateExpense`, `updateIncome`.
+**`expense-edit-dialog.tsx`** — no `form.reset()` (linha 127): usar `stripInstallmentSuffix(expense.description)` em vez de `expense.description` quando `expense.total_installments > 1`.
+
+**`income-edit-dialog.tsx`** — mesma lógica no `form.reset()` (linha 65): usar `stripInstallmentSuffix(income.description)` quando `(income as any).total_installments > 1`.
+
+A exibição visual `(X/N)` nas listas e no detalhe **não muda** — continua usando `expense.description` ou o badge existente diretamente.
+
+### 2. Aviso melhorado no modal de edição
+
+**`expense-edit-dialog.tsx`** — substituir o bloco de aviso existente (linhas 378-383) por um mais completo:
+
+```
+⚠️ Você está editando a 1ª parcela de uma série com N parcelas. 
+As alterações feitas aqui serão aplicadas às demais parcelas da série. 
+O número de parcelas não pode ser alterado nesta tela.
+```
+
+Usar `border-amber-200 bg-amber-50` no dark e light, com ícone `AlertTriangle`.
+
+**`income-edit-dialog.tsx`** — adicionar bloco similar quando `income.total_installments > 1 && income.installment_number === 1`, antes dos botões de ação.
+
+### 3. Resumo do total da série (tempo real)
+
+**`expense-edit-dialog.tsx`** — abaixo do campo de valor, quando série (`expense.total_installments > 1`):
+- Mostrar: `N parcelas × R$ X = R$ Total`
+- Usar `form.watch("amount")` para atualizar em tempo real
+- Texto auxiliar: "Alterar o valor da parcela atualizará todas as parcelas da série."
+
+**`income-edit-dialog.tsx`** — mesma lógica: abaixo do campo de valor, quando `income.total_installments > 1`.
+
+### 4. Confirmação de exclusão mais forte
+
+**`expense-list.tsx`** (linhas 243-270) — quando `isDeleteSeries`:
+- `AlertDialogAction` com classe `bg-destructive text-destructive-foreground hover:bg-destructive/90`
+- Adicionar ícone `AlertTriangle` no título
+- Texto: "⚠️ Atenção: esta é a 1ª parcela de uma série com N parcelas. Excluir esta parcela também excluirá as demais parcelas da série."
+
+**`income-list.tsx`** (linhas 186-213) — mesma melhoria visual.
 
 ---
-
-### Reforço 2 — Tratamento de datas na edição da série
-
-**Análise:** Os edit dialogs atuais permitem alterar a data (`expenseDate` / `incomeDate`). Na edição da 1ª parcela de uma série, a data editada será tratada assim:
-
-**Abordagem:** Ao editar a 1ª parcela de uma série:
-- A **data da 1ª parcela** é atualizada para o valor informado no formulário
-- As **datas das parcelas 2+ são recalculadas** incrementando mês a mês a partir da nova data da 1ª parcela
-- Parcela 2 = data da 1ª + 1 mês, Parcela 3 = data da 1ª + 2 meses, etc.
-- Isso mantém o cronograma consistente e previsível
-
-Campos propagados na série (mesma lógica para despesas e entradas):
-- `description` → atualizada com sufixo `(X/N)` preservado
-- `amount` → mesmo valor em todas
-- `category` / `category_id` / `category_name` / `category_icon` → propagados
-- `expense_date` / `income_date` → recalculadas mês a mês
-- Para despesas: `card_id`, `card_name`, `card_color`, `payment_method` → propagados
-- **Preservados individualmente:** `installment_number`, `paid_by` (responsável por parcela)
-
----
-
-### Implementação completa (6 partes)
-
-#### 1. `transaction-detail-sheet.tsx`
-- Parcela 2+: esconder Editar/Excluir, banner de aviso, botão "Abrir 1ª parcela"
-- Parcela 1: badge "Gerencia esta série", ações normais
-- Novo prop `onOpenFirstInstallment`
-
-#### 2. `Index.tsx` — Guards nos handlers
-- `deleteExpense`, `deleteIncome`: guard de `installment_number > 1`, depois exclusão em lote por `installment_group_id`
-- `updateExpense`, `updateIncome`: guard de `installment_number > 1`, depois edição em lote com recálculo de datas
-
-#### 3. `Index.tsx` — Exclusão em lote
-- Se parcela 1 com `installment_group_id`: `supabase.delete().eq('installment_group_id', groupId)`, atualizar state removendo todas
-
-#### 4. `Index.tsx` — Edição em lote
-- Buscar todas parcelas da série, atualizar campos comuns + recalcular datas, preservar `installment_number` e `paid_by`
-
-#### 5. `expense-list.tsx` e `income-list.tsx`
-- Mensagem de confirmação diferenciada para série na 1ª parcela
-- Esconder delete na UI para parcelas 2+
-
-#### 6. `Index.tsx` — Handler `handleOpenFirstInstallment`
-- Busca parcela 1 no state, abre detail sheet
 
 ### Arquivos afetados
 
 | Arquivo | Mudança |
 |---------|---------|
-| `transaction-detail-sheet.tsx` | Banner, ações condicionais, botão "Abrir 1ª parcela" |
-| `Index.tsx` | Guards, exclusão em lote, edição em lote com recálculo de datas, handler abrir 1ª parcela |
-| `expense-list.tsx` | Mensagem de série, esconder ações em parcela 2+ |
-| `income-list.tsx` | Mensagem de série, esconder ações em parcela 2+ |
+| `src/lib/utils.ts` | Nova função `stripInstallmentSuffix` |
+| `src/components/expense-edit-dialog.tsx` | Strip sufixo, aviso série melhorado, resumo total tempo real |
+| `src/components/income-edit-dialog.tsx` | Strip sufixo, aviso série, resumo total tempo real |
+| `src/components/expense-list.tsx` | AlertDialog de exclusão com visual de alerta mais forte |
+| `src/components/income-list.tsx` | AlertDialog de exclusão com visual de alerta mais forte |
 
-Nenhuma migração SQL necessária.
+Nenhuma migração SQL necessária. Lógica principal inalterada.
 
