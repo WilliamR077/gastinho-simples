@@ -186,18 +186,27 @@ export function IncomeList({
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>
+            <AlertDialogTitle className={isDeleteSeries ? "flex items-center gap-2 text-destructive" : ""}>
+              {isDeleteSeries && <AlertTriangle className="h-5 w-5" />}
               {isDeleteSeries ? "Excluir série parcelada?" : "Excluir entrada?"}
             </AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogDescription className={isDeleteSeries ? "text-foreground" : ""}>
               {isDeleteSeries
-                ? `Esta é a 1ª parcela de uma série com ${(deleteIncome as any)?.total_installments} parcelas. Excluir esta parcela também excluirá as demais parcelas da série. Deseja continuar?`
+                ? (
+                  <span className="flex items-start gap-2 p-3 rounded-lg border border-destructive/30 bg-destructive/5 dark:bg-destructive/10 mt-2">
+                    <span className="text-sm leading-relaxed">
+                      <strong>Atenção:</strong> esta é a 1ª parcela de uma série com {(deleteIncome as any)?.total_installments} parcelas. 
+                      Excluir esta parcela também excluirá as demais parcelas da série. Esta ação não pode ser desfeita.
+                    </span>
+                  </span>
+                )
                 : "Esta ação não pode ser desfeita."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
+              className={isDeleteSeries ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : ""}
               onClick={() => {
                 if (deleteId) {
                   onDelete(deleteId);
@@ -206,7 +215,7 @@ export function IncomeList({
                 }
               }}
             >
-              {isDeleteSeries ? "Excluir série" : "Excluir"}
+              {isDeleteSeries ? "Excluir série inteira" : "Excluir"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
