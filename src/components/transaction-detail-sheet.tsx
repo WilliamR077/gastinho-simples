@@ -85,6 +85,7 @@ export function TransactionDetailSheet({
   const { user } = useAuth();
   const [cardsData, setCardsData] = useState<CardType[]>([]);
   const [siblingInstallments, setSiblingInstallments] = useState<{ id: string; installment_number: number; total_installments: number; income_date: string; amount: number; description: string }[]>([]);
+  const [siblingExpenseInstallments, setSiblingExpenseInstallments] = useState<{ id: string; installment_number: number; total_installments: number; expense_date: string; amount: number; description: string; paid_by: string | null }[]>([]);
   const { categories } = useCategories();
   const { categories: incomeCats } = useIncomeCategories();
 
