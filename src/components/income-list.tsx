@@ -17,7 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { User } from "lucide-react";
+import { User, AlertTriangle } from "lucide-react";
 import { SharedGroupMember } from "@/types/shared-group";
 import { getMemberColor } from "@/components/group-member-summary";
 
