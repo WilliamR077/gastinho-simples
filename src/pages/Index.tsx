@@ -1943,6 +1943,9 @@ export default function Index() {
             totalExpense={monthlyTotals.totalExpense} />
         </div>
 
+        {/* Setup Progress Banner */}
+        <SetupProgressBanner />
+
         {/* Upsell Banner */}
         <UpsellBanner expenseCount={expenses.length} />
 
