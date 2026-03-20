@@ -568,12 +568,79 @@ export default function Index() {
 
   const updateIncome = async (id: string, data: IncomeFormData) => {
     try {
+      const inc = incomes.find((i) => i.id === id);
+      // Guard: block update of secondary installments
+      if (inc && (inc as any).installment_group_id && ((inc as any).installment_number ?? 1) > 1) {
+        toast({ title: "Ação bloqueada", description: "Use a 1ª parcela para gerenciar esta série.", variant: "destructive" });
+        return;
+      }
+
       const formatDateLocal = (date: Date) => {
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
       };
+
+      // Series batch update
+      if (inc && (inc as any).installment_group_id && ((inc as any).total_installments ?? 1) > 1) {
+        const groupId = (inc as any).installment_group_id;
+        const totalInst = (inc as any).total_installments;
+        // Fetch all siblings
+        const { data: siblings } = await supabase
+          .from("incomes")
+          .select("id, installment_number, income_date")
+          .eq("installment_group_id", groupId)
+          .order("installment_number", { ascending: true });
+
+        if (siblings && siblings.length > 0) {
+          const baseDate = data.incomeDate;
+          // Strip installment suffix from description
+          const baseDesc = data.description.replace(/\s*\(\d+\/\d+\)\s*$/, '');
+          
+          for (const sib of siblings) {
+            const instNum = sib.installment_number ?? 1;
+            const newDate = new Date(baseDate);
+            newDate.setMonth(newDate.getMonth() + (instNum - 1));
+            
+            await supabase
+              .from("incomes")
+              .update({
+                description: `${baseDesc} (${instNum}/${totalInst})`,
+                amount: data.amount,
+                category: data.category,
+                income_date: formatDateLocal(newDate),
+                income_category_id: data.incomeCategoryId || null,
+                category_name: data.categoryName || null,
+                category_icon: data.categoryIcon || null,
+              } as any)
+              .eq("id", sib.id);
+          }
+          
+          // Update local state
+          setIncomes((prev) =>
+            prev.map((i) => {
+              if ((i as any).installment_group_id !== groupId) return i;
+              const instNum = (i as any).installment_number ?? 1;
+              const newDate = new Date(baseDate);
+              newDate.setMonth(newDate.getMonth() + (instNum - 1));
+              return {
+                ...i,
+                description: `${baseDesc} (${instNum}/${totalInst})`,
+                amount: data.amount,
+                category: data.category,
+                income_date: formatDateLocal(newDate),
+                income_category_id: data.incomeCategoryId || null,
+                category_name: data.categoryName || null,
+                category_icon: data.categoryIcon || null,
+              };
+            })
+          );
+          
+          toast({ title: "Série atualizada", description: `As ${totalInst} parcelas foram atualizadas.` });
+          return;
+        }
+      }
 
       const { error } = await supabase.
       from("incomes").
