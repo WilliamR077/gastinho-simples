@@ -85,6 +85,7 @@ export function TransactionDetailSheet({
   const { user } = useAuth();
   const [cardsData, setCardsData] = useState<CardType[]>([]);
   const [siblingInstallments, setSiblingInstallments] = useState<{ id: string; installment_number: number; total_installments: number; income_date: string; amount: number; description: string }[]>([]);
+  const [siblingExpenseInstallments, setSiblingExpenseInstallments] = useState<{ id: string; installment_number: number; total_installments: number; expense_date: string; amount: number; description: string; paid_by: string | null }[]>([]);
   const { categories } = useCategories();
   const { categories: incomeCats } = useIncomeCategories();
 
@@ -112,6 +113,20 @@ export function TransactionDetailSheet({
       setSiblingInstallments([]);
     }
   }, [open, income]);
+
+  // Fetch sibling installments for expense
+  useEffect(() => {
+    if (open && expense && expense.installment_group_id && expense.total_installments && expense.total_installments > 1) {
+      supabase
+        .from("expenses")
+        .select("id, installment_number, total_installments, expense_date, amount, description, paid_by")
+        .eq("installment_group_id", expense.installment_group_id)
+        .order("installment_number", { ascending: true })
+        .then(({ data }) => setSiblingExpenseInstallments((data as any) || []));
+    } else {
+      setSiblingExpenseInstallments([]);
+    }
+  }, [open, expense]);
 
   const isRecurring = !!recurringExpense || !!recurringIncome;
   const isExpense = !!expense || !!recurringExpense;
@@ -256,6 +271,60 @@ const createdByColor =
               label="Parcelas"
               value={`${expense.installment_number}/${expense.total_installments}x`}
             />
+          )}
+
+          {/* Responsável da parcela */}
+          {expense && expense.paid_by && !expense.is_shared && isGroupContext && groupMembers.length > 0 && (
+            <DetailRow
+              icon={<User className="h-4 w-4" style={{ color: getMemberColor(expense.paid_by, groupMembers) }} />}
+              label="Responsável"
+              value={getUserDisplayName(expense.paid_by, groupMembers) || "?"}
+              valueStyle={{ color: getMemberColor(expense.paid_by, groupMembers) }}
+            />
+          )}
+
+          {/* Todas as parcelas da despesa com responsáveis */}
+          {expense && expense.total_installments && expense.total_installments > 1 && siblingExpenseInstallments.length > 0 && (
+            <Collapsible>
+              <CollapsibleTrigger className="flex items-center gap-2 text-sm text-primary hover:underline cursor-pointer ml-7 mt-1">
+                <ChevronDown className="h-3.5 w-3.5" />
+                Ver todas as parcelas
+              </CollapsibleTrigger>
+              <CollapsibleContent className="ml-7 mt-2 space-y-1.5">
+                {siblingExpenseInstallments.map((s) => {
+                  const isCurrent = s.id === expense.id;
+                  const responsibleName = s.paid_by && groupMembers.length > 0
+                    ? getUserDisplayName(s.paid_by, groupMembers)
+                    : null;
+                  const responsibleColor = s.paid_by && groupMembers.length > 0
+                    ? getMemberColor(s.paid_by, groupMembers)
+                    : undefined;
+                  return (
+                    <div
+                      key={s.id}
+                      className={cn(
+                        "flex items-center justify-between text-xs px-2 py-1 rounded",
+                        isCurrent ? "bg-primary/10 font-semibold" : ""
+                      )}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span className={isCurrent ? "text-foreground" : "text-muted-foreground"}>
+                          {s.installment_number}/{s.total_installments} — {format(parseLocalDate(s.expense_date), "MMM/yyyy", { locale: ptBR })}
+                        </span>
+                        {responsibleName && (
+                          <span className="text-[10px] px-1 py-0.5 rounded bg-muted" style={responsibleColor ? { color: responsibleColor } : undefined}>
+                            {responsibleName}
+                          </span>
+                        )}
+                      </div>
+                      <span className={isCurrent ? "text-red-500 dark:text-red-400 font-bold" : "font-medium text-foreground"}>
+                        {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(s.amount)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </CollapsibleContent>
+            </Collapsible>
           )}
 
           {/* Parcelas de entrada */}

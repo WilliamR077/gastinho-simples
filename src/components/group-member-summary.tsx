@@ -45,7 +45,8 @@ export function GroupMemberSummary({ expenses, recurringExpenses, groupMembers }
     const totals: Record<string, number> = {};
 
     for (const exp of expenses) {
-      totals[exp.user_id] = (totals[exp.user_id] || 0) + Number(exp.amount);
+      const responsibleId = exp.paid_by || exp.user_id;
+      totals[responsibleId] = (totals[responsibleId] || 0) + Number(exp.amount);
     }
 
     for (const rec of recurringExpenses) {

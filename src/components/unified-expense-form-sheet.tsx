@@ -87,6 +87,10 @@ export function UnifiedExpenseFormSheet({
   const [paidBy, setPaidBy] = useState(currentUserId);
   const [splitType, setSplitType] = useState<SplitType>("equal");
   const [splitParticipants, setSplitParticipants] = useState<SplitParticipant[]>([]);
+  // Installment responsible state
+  const [installmentAssignment, setInstallmentAssignment] = useState<"same" | "per_installment">("same");
+  const [installmentResponsibles, setInstallmentResponsibles] = useState<Record<number, string>>({});
+  const [sameResponsible, setSameResponsible] = useState(currentUserId);
   
   const { activeCategories } = useCategories();
   const { groups, currentContext } = useSharedGroups();
@@ -228,6 +232,9 @@ export function UnifiedExpenseFormSheet({
     setPaidBy(currentUserId);
     setSplitType("equal");
     setSplitParticipants([]);
+    setInstallmentAssignment("same");
+    setInstallmentResponsibles({});
+    setSameResponsible(currentUserId);
     if (currentContext.type === "group" && currentContext.groupId) {
       setSelectedDestination(currentContext.groupId);
     } else {
@@ -267,9 +274,19 @@ export function UnifiedExpenseFormSheet({
       }
     }
 
-    if (expenseType === "monthly") {
-      const installmentCount = paymentMethod === "credit" ? parseInt(installments) : 1;
+    // Validação de responsáveis por parcela
+    const installmentCount = paymentMethod === "credit" ? parseInt(installments) : 1;
+    const showInstallmentResponsible = isGroupDestination && paymentMethod === "credit" && installmentCount > 1 && expenseType === "monthly" && !isShared;
+    if (showInstallmentResponsible && installmentAssignment === "per_installment") {
+      for (let i = 1; i <= installmentCount; i++) {
+        if (!installmentResponsibles[i]) {
+          setSplitError(`Selecione o responsável pela parcela ${i}.`);
+          return;
+        }
+      }
+    }
 
+    if (expenseType === "monthly") {
       onAddExpense({
         description: description.trim(),
         amount: numericAmount,
@@ -284,6 +301,11 @@ export function UnifiedExpenseFormSheet({
           paidBy: paidBy,
           splitType: splitType,
           participants: splitParticipants,
+        }),
+        ...(showInstallmentResponsible && {
+          installmentAssignment,
+          installmentResponsibles,
+          sameResponsible,
         }),
       });
     } else {
@@ -565,8 +587,92 @@ export function UnifiedExpenseFormSheet({
             </div>
           )}
 
-          {/* Seção de rateio - apenas para grupo e despesa do mês */}
-          {expenseType === "monthly" && selectedDestination !== "personal" && groupMembers.length > 0 && (
+          {/* Seção de responsável por parcela - grupo, crédito, parcelas > 1, não compartilhada */}
+          {expenseType === "monthly" && selectedDestination !== "personal" && groupMembers.length > 0 && paymentMethod === "credit" && parseInt(installments) > 1 && !isShared && (
+            <div className="space-y-3 p-3 rounded-lg bg-muted/50 border border-border">
+              <Label className="text-sm font-medium flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Responsável pelas parcelas
+              </Label>
+              <RadioGroup
+                value={installmentAssignment}
+                onValueChange={(v) => setInstallmentAssignment(v as "same" | "per_installment")}
+                className="space-y-2"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="same" id="assign-same" />
+                  <Label htmlFor="assign-same" className="cursor-pointer font-normal text-sm">
+                    Mesmo responsável em todas
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="per_installment" id="assign-per" />
+                  <Label htmlFor="assign-per" className="cursor-pointer font-normal text-sm">
+                    Definir responsável por parcela
+                  </Label>
+                </div>
+              </RadioGroup>
+
+              {installmentAssignment === "same" && (
+                <Select value={sameResponsible} onValueChange={setSameResponsible}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o responsável" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {groupMembers.map((m) => (
+                      <SelectItem key={m.user_id} value={m.user_id}>
+                        {m.user_email?.split("@")[0] || "?"}{m.user_id === currentUserId ? " (você)" : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+
+              {installmentAssignment === "per_installment" && (
+                <div className="space-y-2">
+                  {Array.from({ length: parseInt(installments) }, (_, i) => i + 1).map((num) => {
+                    const installmentDate = new Date(expenseDate);
+                    installmentDate.setMonth(installmentDate.getMonth() + (num - 1));
+                    const monthLabel = format(installmentDate, "MMM/yyyy", { locale: ptBR });
+                    const parcValue = (parseFloat(amount || "0") / parseInt(installments)).toFixed(2).replace(".", ",");
+                    return (
+                      <div key={num} className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground whitespace-nowrap min-w-[120px]">
+                          {num}/{installments} — {monthLabel} — R$ {parcValue}
+                        </span>
+                        <Select
+                          value={installmentResponsibles[num] || ""}
+                          onValueChange={(v) => setInstallmentResponsibles(prev => ({ ...prev, [num]: v }))}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Responsável" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {groupMembers.map((m) => (
+                              <SelectItem key={m.user_id} value={m.user_id}>
+                                {m.user_email?.split("@")[0] || "?"}{m.user_id === currentUserId ? " (você)" : ""}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Aviso de bloqueio mútuo */}
+          {expenseType === "monthly" && selectedDestination !== "personal" && groupMembers.length > 0 && paymentMethod === "credit" && parseInt(installments) > 1 && isShared && (
+            <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/30 text-sm text-orange-600 dark:text-orange-400">
+              <AlertTriangle className="h-4 w-4 inline mr-1.5" />
+              Nesta versão, escolha entre despesa compartilhada ou responsáveis por parcela.
+            </div>
+          )}
+
+          {/* Seção de rateio - apenas para grupo e despesa do mês, esconde se per_installment ativo */}
+          {expenseType === "monthly" && selectedDestination !== "personal" && groupMembers.length > 0 && !(paymentMethod === "credit" && parseInt(installments) > 1 && installmentAssignment === "per_installment") && (
             <>
               <ExpenseSplitSection
                 amount={parseFloat(amount || "0")}
@@ -585,6 +691,10 @@ export function UnifiedExpenseFormSheet({
                 <p className="text-xs text-destructive font-medium -mt-2 px-1">{splitError}</p>
               )}
             </>
+          )}
+          {/* Show splitError even when rateio section is hidden */}
+          {splitError && paymentMethod === "credit" && parseInt(installments) > 1 && installmentAssignment === "per_installment" && (
+            <p className="text-xs text-destructive font-medium px-1">{splitError}</p>
           )}
 
           <div data-tour="form-submit">
