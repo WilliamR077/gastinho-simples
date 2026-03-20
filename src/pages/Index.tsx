@@ -1178,6 +1178,13 @@ export default function Index() {
 
   const updateExpense = async (id: string, data: ExpenseFormData) => {
     try {
+      const exp = expenses.find((e) => e.id === id);
+      // Guard: block update of secondary installments
+      if (exp && exp.installment_group_id && (exp.installment_number ?? 1) > 1) {
+        toast({ title: "Ação bloqueada", description: "Use a 1ª parcela para gerenciar esta série.", variant: "destructive" });
+        return;
+      }
+
       const formatDateLocal = (date: Date) => {
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -1188,6 +1195,53 @@ export default function Index() {
       // Buscar dados desnormalizados
       const selectedCategory = data.categoryId ? categories.find((c) => c.id === data.categoryId) : null;
       const selectedCard = data.cardId ? cards.find((c) => c.id === data.cardId) : null;
+
+      // Series batch update
+      if (exp && exp.installment_group_id && (exp.total_installments ?? 1) > 1) {
+        const groupId = exp.installment_group_id;
+        const totalInst = exp.total_installments ?? 1;
+        const { data: siblings } = await supabase
+          .from("expenses")
+          .select("id, installment_number, expense_date, paid_by")
+          .eq("installment_group_id", groupId)
+          .order("installment_number", { ascending: true });
+
+        if (siblings && siblings.length > 0) {
+          const baseDate = data.expenseDate;
+          const baseDesc = data.description.replace(/\s*\(\d+\/\d+\)\s*$/, '');
+
+          for (const sib of siblings) {
+            const instNum = sib.installment_number ?? 1;
+            const newDate = new Date(baseDate);
+            newDate.setMonth(newDate.getMonth() + (instNum - 1));
+
+            await supabase
+              .from("expenses")
+              .update({
+                description: `${baseDesc} (${instNum}/${totalInst})`,
+                amount: data.amount,
+                payment_method: data.paymentMethod,
+                expense_date: formatDateLocal(newDate),
+                ...(data.categoryId && { category_id: data.categoryId }),
+                ...(data.cardId && { card_id: data.cardId }),
+                category_name: selectedCategory?.name || null,
+                category_icon: selectedCategory?.icon || null,
+                card_name: selectedCard?.name || null,
+                card_color: selectedCard?.color || null,
+                // Preserve individual paid_by per installment
+              })
+              .eq("id", sib.id);
+          }
+
+          // Reload to get fresh data with relations
+          await loadExpenses();
+
+          setExpenseDialogOpen(false);
+          setEditingExpense(null);
+          toast({ title: "Série atualizada", description: `As ${totalInst} parcelas foram atualizadas.` });
+          return;
+        }
+      }
 
       const { data: updatedData, error } = await supabase.
       from("expenses").
