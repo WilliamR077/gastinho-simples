@@ -15,7 +15,7 @@ import { ptBR } from "date-fns/locale";
 import { Expense, PaymentMethod, ExpenseFormData } from "@/types/expense";
 import { SplitType, SplitParticipant } from "@/types/expense-split";
 import { SharedGroupMember } from "@/types/shared-group";
-import { cn, parseLocalDate, normalizeToLocalDate } from "@/lib/utils";
+import { cn, parseLocalDate, normalizeToLocalDate, stripInstallmentSuffix } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { Card as CardType } from "@/types/card";
 import { CategorySelector } from "@/components/category-selector";
