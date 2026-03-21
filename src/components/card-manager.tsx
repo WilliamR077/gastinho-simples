@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, CreditCard, Crown, MoreVertical, Pencil, Trash2, Check, CalendarClock, CalendarCheck } from "lucide-react";
+import { Plus, CreditCard, Crown, MoreVertical, Pencil, Trash2, Check, CalendarClock, CalendarCheck, Loader2 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useNavigate } from "react-router-dom";
@@ -22,6 +22,7 @@ export function CardManager() {
   const [showForm, setShowForm] = useState(false);
   const [editingCard, setEditingCard] = useState<Card | null>(null);
   const [deleteCardId, setDeleteCardId] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
   const { canAddCard, features } = useSubscription();
   const { isOpen: isOnboardingOpen, currentStep, notifyEvent } = useOnboardingTour();
@@ -89,6 +90,8 @@ export function CardManager() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (submitting) return;
+
     if (!formData.name.trim()) {
       toast({ title: "Erro", description: "Informe o nome do cartão.", variant: "destructive" });
       return;
@@ -100,6 +103,8 @@ export function CardManager() {
       toast({ title: "Erro", description: "Informe um dia de vencimento válido (1-31).", variant: "destructive" });
       return;
     }
+
+    setSubmitting(true);
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -147,6 +152,8 @@ export function CardManager() {
     } catch (error) {
       console.error("Erro ao salvar cartão:", error);
       toast({ title: "Erro", description: "Não foi possível salvar o cartão.", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -363,7 +370,7 @@ export function CardManager() {
                 </>
               )}
 
-              <div className="space-y-2" data-onboarding="card-optional-section">
+              <div className="space-y-2" data-onboarding="card-limit-input">
                 <Label htmlFor="card_limit">Limite (Opcional)</Label>
                 <Input
                   id="card_limit"
@@ -376,7 +383,7 @@ export function CardManager() {
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2" data-onboarding="card-color-picker">
                 <Label>Cor do Cartão</Label>
                 <div className="flex flex-wrap gap-2">
                   {availableColors.map((color) => (
@@ -401,8 +408,15 @@ export function CardManager() {
               </div>
 
               <div className="flex gap-2">
-                <Button type="submit" data-onboarding="card-submit-btn">
-                  {editingCard ? "Atualizar" : "Adicionar"}
+                <Button type="submit" data-onboarding="card-submit-btn" disabled={submitting}>
+                  {submitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Salvando...
+                    </>
+                  ) : (
+                    editingCard ? "Atualizar" : "Adicionar"
+                  )}
                 </Button>
                 <Button type="button" variant="outline" onClick={resetForm}>Cancelar</Button>
               </div>
@@ -456,9 +470,9 @@ export function CardManager() {
                           <Pencil className="h-4 w-4 mr-2" />
                           Editar
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setDeleteCardId(card.id)} className="text-destructive focus:text-destructive">
+                        <DropdownMenuItem onClick={() => setDeleteCardId(card.id)} className="text-destructive">
                           <Trash2 className="h-4 w-4 mr-2" />
-                          Excluir
+                          Remover
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -471,28 +485,26 @@ export function CardManager() {
       </div>
 
       {cards.length === 0 && !showForm && (
-        <CardUI>
-          <CardContent className="text-center py-8">
-            <CreditCard className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-            <p className="text-muted-foreground">Nenhum cartão cadastrado</p>
-            <p className="text-sm text-muted-foreground mt-2">
-              Clique em "Adicionar Cartão" para começar
-            </p>
-          </CardContent>
-        </CardUI>
+        <div className="text-center py-8 text-muted-foreground">
+          <CreditCard className="h-12 w-12 mx-auto mb-3 opacity-50" />
+          <p>Nenhum cartão cadastrado</p>
+          <p className="text-sm mt-1">Adicione seu primeiro cartão para começar</p>
+        </div>
       )}
 
       <AlertDialog open={!!deleteCardId} onOpenChange={(open) => !open && setDeleteCardId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+            <AlertDialogTitle>Remover cartão?</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja remover este cartão? Esta ação não pode ser desfeita.
+              O cartão será desativado. Despesas já vinculadas a ele continuarão com o registro.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete}>Remover</AlertDialogAction>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Remover
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

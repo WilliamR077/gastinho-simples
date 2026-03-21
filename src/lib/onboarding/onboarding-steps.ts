@@ -5,7 +5,8 @@ export type SubstepActionType =
   | "select"
   | "optional-group"
   | "submit"
-  | "completion";
+  | "completion"
+  | "info";
 
 export interface OnboardingSubstep {
   id: string;
@@ -105,7 +106,6 @@ const CARDS_SUBSTEPS: OnboardingSubstep[] = [
     // Only show for credit/both
     condition: () => {
       const el = document.querySelector('[data-onboarding="card-due-day-input"]');
-      // If the element exists in DOM, the card type is credit/both
       return !!el;
     },
   },
@@ -126,13 +126,23 @@ const CARDS_SUBSTEPS: OnboardingSubstep[] = [
     },
   },
   {
-    id: "optional-limit-color",
+    id: "optional-limit",
     actionType: "optional-group",
-    targetSelector: "card-optional-section",
-    title: "Limite e Cor (Opcional)",
-    description: "Se quiser, defina o limite do cartão e escolha uma cor. Pode pular se preferir.",
-    emoji: "🎨",
+    targetSelector: "card-limit-input",
+    title: "Limite do Cartão (Opcional)",
+    description: "Se quiser, defina o limite do cartão. Pode pular se preferir.",
+    emoji: "💰",
     skipLabel: "Pular",
+    scrollToTarget: true,
+    placement: "below",
+  },
+  {
+    id: "select-card-color",
+    actionType: "optional-group",
+    targetSelector: "card-color-picker",
+    title: "Cor do Cartão",
+    description: "Escolha uma cor para identificar seu cartão visualmente.",
+    emoji: "🎨",
     scrollToTarget: true,
     placement: "below",
   },
@@ -158,6 +168,18 @@ const CARDS_SUBSTEPS: OnboardingSubstep[] = [
   },
 ];
 
+// ─── Step labels for completion dialog ────────────────────────
+export const STEP_LABELS: Record<string, string> = {
+  "add-card": "Cartões configurados",
+  "add-category": "Categorias personalizadas",
+  "add-expense": "Primeira despesa registrada",
+  "add-recurring-expense": "Despesas fixas cadastradas",
+  "add-income": "Primeira receita registrada",
+  "add-budget-goal": "Meta de gastos definida",
+  "setup-security": "Segurança configurada",
+  "import-spreadsheet": "Planilha importada",
+};
+
 // ─── All onboarding steps ─────────────────────────────────────
 export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
   {
@@ -177,14 +199,23 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
     substeps: [
       {
         id: "category-intro",
-        actionType: "navigate",
+        actionType: "info",
         title: "Personalize suas Categorias",
         description:
-          'Adicione categorias personalizadas como "Academia", "Pets" ou "Streaming". Ou pule se preferir usar as padrão.',
+          'Você pode criar categorias personalizadas como "Academia", "Pets" ou "Streaming". Clique em continuar para abrir o gerenciador.',
         emoji: "📦",
-        navigateTo: "/",
         navigateLabel: "Continuar",
-        autoAdvanceOnRoute: "/",
+      },
+      {
+        id: "category-open-manager",
+        actionType: "click",
+        targetSelector: "category-settings-btn",
+        title: "Abra o Gerenciador de Categorias",
+        description: 'Clique em "Gerenciar categorias" para personalizar suas categorias.',
+        emoji: "⚙️",
+        autoAdvanceOnEvent: "category-manager-opened",
+        scrollToTarget: true,
+        placement: "below",
       },
     ],
   },
@@ -196,13 +227,11 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
     substeps: [
       {
         id: "expense-intro",
-        actionType: "navigate",
+        actionType: "info",
         title: "Registre seu Primeiro Gasto",
-        description: 'Agora vamos registrar uma despesa! Toque no botão "+" e preencha os dados.',
+        description: 'Agora vamos registrar uma despesa! Toque no botão "+" na tela principal e preencha os dados.',
         emoji: "💸",
-        navigateTo: "/",
         navigateLabel: "Continuar",
-        autoAdvanceOnRoute: "/",
       },
     ],
   },
@@ -214,13 +243,11 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
     substeps: [
       {
         id: "recurring-intro",
-        actionType: "navigate",
+        actionType: "info",
         title: "Adicione Despesas Fixas",
         description: "Cadastre suas contas mensais fixas (luz, internet, Netflix...). O app vai lançar automaticamente!",
         emoji: "🔄",
-        navigateTo: "/",
         navigateLabel: "Continuar",
-        autoAdvanceOnRoute: "/",
       },
     ],
   },
@@ -232,13 +259,11 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
     substeps: [
       {
         id: "income-intro",
-        actionType: "navigate",
+        actionType: "info",
         title: "Registre sua Primeira Entrada",
         description: "Registre uma receita! Pode ser salário, freelance, venda ou qualquer entrada de dinheiro.",
         emoji: "💰",
-        navigateTo: "/",
         navigateLabel: "Continuar",
-        autoAdvanceOnRoute: "/",
       },
     ],
   },
@@ -250,13 +275,11 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
     substeps: [
       {
         id: "budget-intro",
-        actionType: "navigate",
+        actionType: "info",
         title: "Defina uma Meta de Gastos",
         description: "Estabeleça um limite de gastos para o mês! Isso te ajuda a não estourar o orçamento.",
         emoji: "🎯",
-        navigateTo: "/",
         navigateLabel: "Continuar",
-        autoAdvanceOnRoute: "/",
       },
     ],
   },

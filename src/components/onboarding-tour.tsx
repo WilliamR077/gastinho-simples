@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { useOnboardingTour } from "@/hooks/use-onboarding-tour";
 import { useNavigate } from "react-router-dom";
+import { useSubscription } from "@/hooks/use-subscription";
 import { OnboardingOverlay } from "@/components/onboarding/onboarding-overlay";
 import { OnboardingTooltip } from "@/components/onboarding/onboarding-tooltip";
+import { STEP_LABELS } from "@/lib/onboarding/onboarding-steps";
 import {
   Dialog,
   DialogContent,
@@ -12,7 +14,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Check, Sparkles, Crown, Users, FileText, Download } from "lucide-react";
+import { Check, Sparkles, Crown, Users, FileText, Download, Circle } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+
+// Map step IDs to completion labels
+const ALL_STEP_IDS = [
+  "add-card",
+  "add-category",
+  "add-expense",
+  "add-recurring-expense",
+  "add-income",
+  "add-budget-goal",
+];
 
 export function OnboardingTour() {
   const {
@@ -25,6 +38,7 @@ export function OnboardingTour() {
     totalSubsteps,
     progress,
     showCompletionDialog,
+    completedSteps,
     skipOnboarding,
     skipCurrentStep,
     advanceSubstep,
@@ -35,7 +49,9 @@ export function OnboardingTour() {
   } = useOnboardingTour();
 
   const navigate = useNavigate();
+  const { features } = useSubscription();
   const [validationTick, setValidationTick] = useState(0);
+  const [cardCount, setCardCount] = useState(0);
 
   // Poll validation state for fill/select substeps
   useEffect(() => {
@@ -46,6 +62,22 @@ export function OnboardingTour() {
     return () => clearInterval(interval);
   }, [isOpen, currentSubstep?.id]);
 
+  // Load card count for smart completion message
+  useEffect(() => {
+    if (!isOpen || currentStep?.id !== "add-card") return;
+    const loadCount = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { count } = await supabase
+        .from("cards")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .eq("is_active", true);
+      setCardCount(count || 0);
+    };
+    loadCount();
+  }, [isOpen, currentStep?.id, currentSubstep?.id]);
+
   const isValid = currentSubstep?.requiresValidation
     ? isCurrentTargetValid()
     : true;
@@ -55,12 +87,29 @@ export function OnboardingTour() {
 
     if (currentSubstep.actionType === "navigate" && currentSubstep.navigateTo) {
       navigate(currentSubstep.navigateTo);
-      // The route-based auto-advance in the engine will handle the rest
+      // If has autoAdvanceOnRoute, the engine handles it. Otherwise advance now.
+      if (!currentSubstep.autoAdvanceOnRoute) {
+        advanceSubstep();
+      }
       return;
     }
 
+    // For "info" substeps, just advance
     advanceSubstep();
   }, [currentSubstep, navigate, advanceSubstep]);
+
+  // ─── Dynamic card completion description ──────────────
+  const getCardCompletionDescription = () => {
+    const maxCards = features.cards;
+    const remaining = maxCards - cardCount;
+    if (remaining <= 0) {
+      return `Seu cartão foi adicionado! Você atingiu o limite de ${maxCards} cartões do plano gratuito. Faça upgrade para adicionar mais!`;
+    }
+    if (remaining === 1) {
+      return `Seu cartão foi adicionado! Você ainda pode adicionar mais 1 cartão no plano gratuito.`;
+    }
+    return `Seu cartão foi adicionado com sucesso! Deseja adicionar outro ou prosseguir?`;
+  };
 
   // ─── Completion dialog ──────────────────────────────────
   if (showCompletionDialog) {
@@ -75,20 +124,31 @@ export function OnboardingTour() {
               Parabéns! Você está pronto! 🎉
             </DialogTitle>
             <DialogDescription className="text-base">
-              Você configurou sua conta com sucesso! Agora está tudo pronto para
-              ter controle total das suas finanças.
+              Veja o que você configurou na sua conta:
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3 py-4">
-            {["Cartões configurados", "Primeira despesa registrada", "Metas definidas"].map((text) => (
-              <div key={text} className="flex items-center gap-3 text-sm">
-                <div className="w-6 h-6 rounded-full bg-green-500/20 flex items-center justify-center">
-                  <Check className="w-4 h-4 text-green-500" />
+            {ALL_STEP_IDS.map((id) => {
+              const isCompleted = completedSteps.has(id);
+              const label = STEP_LABELS[id] || id;
+              return (
+                <div key={id} className="flex items-center gap-3 text-sm">
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                    isCompleted ? "bg-green-500/20" : "bg-muted"
+                  }`}>
+                    {isCompleted ? (
+                      <Check className="w-4 h-4 text-green-500" />
+                    ) : (
+                      <Circle className="w-3 h-3 text-muted-foreground" />
+                    )}
+                  </div>
+                  <span className={isCompleted ? "" : "text-muted-foreground"}>
+                    {label}
+                  </span>
                 </div>
-                <span>{text}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="bg-gradient-to-br from-primary/10 to-purple-500/10 rounded-lg p-4 space-y-3">
@@ -141,16 +201,28 @@ export function OnboardingTour() {
   const hasTarget = !!currentSubstep.targetSelector;
   const isNavigateWithoutTarget =
     currentSubstep.actionType === "navigate" && !currentSubstep.targetSelector;
+  const isInfo = currentSubstep.actionType === "info";
   const isCompletion = currentSubstep.actionType === "completion";
 
-  // ─── Navigate / Completion: use centered dialog ───────────
-  if (isNavigateWithoutTarget || isCompletion) {
+  // ─── Override description for card completion ─────────────
+  const effectiveSubstep = { ...currentSubstep };
+  if (isCompletion && currentStep.id === "add-card") {
+    effectiveSubstep.description = getCardCompletionDescription();
+    // Hide "Adicionar outro" if at card limit
+    const maxCards = features.cards;
+    if (cardCount >= maxCards) {
+      effectiveSubstep.repeatLabel = undefined;
+    }
+  }
+
+  // ─── Navigate / Info / Completion: use centered dialog ────
+  if (isNavigateWithoutTarget || isInfo || isCompletion) {
     return (
       <>
-        {/* Light overlay for navigate/completion */}
+        {/* Light overlay for navigate/info/completion */}
         <div className="fixed inset-0 z-[55] bg-black/60" />
         <OnboardingTooltip
-          substep={currentSubstep}
+          substep={effectiveSubstep}
           stepIndex={currentStepIndex}
           totalSteps={totalSteps}
           substepIndex={currentSubstepIndex}
@@ -160,7 +232,7 @@ export function OnboardingTour() {
           onNext={handleNavigateNext}
           onSkipStep={skipCurrentStep}
           onClose={skipOnboarding}
-          onRepeat={isCompletion ? repeatStep : undefined}
+          onRepeat={isCompletion && effectiveSubstep.repeatLabel ? repeatStep : undefined}
           onProceed={isCompletion ? proceedToNextStep : undefined}
         />
       </>
@@ -175,7 +247,7 @@ export function OnboardingTour() {
         isVisible={true}
       />
       <OnboardingTooltip
-        substep={currentSubstep}
+        substep={effectiveSubstep}
         targetSelector={currentSubstep.targetSelector}
         stepIndex={currentStepIndex}
         totalSteps={totalSteps}

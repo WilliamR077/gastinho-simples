@@ -37,6 +37,7 @@ interface OnboardingContextType {
   progress: number;
   isCompleted: boolean;
   showCompletionDialog: boolean;
+  completedSteps: Set<string>;
 
   startOnboarding: () => void;
   skipOnboarding: () => void;
@@ -143,6 +144,21 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
 
     return () => clearTimeout(timer);
   }, [isOpen, currentSubstep?.id]);
+
+  // ─── Listen for custom events (from category-selector etc) ─
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (typeof detail === "string" && currentSubstep?.autoAdvanceOnEvent === detail) {
+        advanceSubstepInternal();
+      }
+    };
+
+    window.addEventListener("gastinho-onboarding-event", handler);
+    return () => window.removeEventListener("gastinho-onboarding-event", handler);
+  }, [isOpen, currentSubstep?.id, currentSubstep?.autoAdvanceOnEvent]);
 
   // ─── Load saved progress ─────────────────────────────────
   useEffect(() => {
@@ -332,6 +348,8 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     );
 
     if (firstPendingIdx === -1) {
+      // All done — show completion with real data
+      setCompletedSteps(preCompleted);
       setShowCompletionDialog(true);
       localStorage.setItem(STORAGE_KEY, "true");
       localStorage.removeItem(PROGRESS_KEY);
@@ -426,15 +444,15 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       existingData = await checkExistingData(user.id);
     }
 
-    const completedSteps = progressSteps.filter((s) => existingData.has(s.id)).map((s) => s.id);
+    const completedIds = progressSteps.filter((s) => existingData.has(s.id)).map((s) => s.id);
     const pendingSteps = progressSteps
       .filter((s) => !existingData.has(s.id))
       .map((s) => ({ id: s.id, label: s.label, emoji: s.emoji }));
 
-    const completed = completedSteps.length;
+    const completed = completedIds.length;
     const percentage = total > 0 ? (completed / total) * 100 : 100;
 
-    return { completed, total, percentage, completedSteps, pendingSteps };
+    return { completed, total, percentage, completedSteps: completedIds, pendingSteps };
   }, [user, availableSteps]);
 
   return (
@@ -450,6 +468,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         progress,
         isCompleted,
         showCompletionDialog,
+        completedSteps,
         startOnboarding,
         skipOnboarding,
         skipCurrentStep,
