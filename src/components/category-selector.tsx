@@ -131,6 +131,7 @@ export function CategorySelector({
               variant="ghost" 
               className="w-full justify-start text-sm h-9"
               onClick={handleOpenManager}
+              data-onboarding="category-settings-btn"
             >
               <Settings className="h-4 w-4 mr-2" />
               Gerenciar categorias...
