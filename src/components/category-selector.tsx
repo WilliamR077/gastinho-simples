@@ -28,7 +28,14 @@ export function CategorySelector({
   const handleOpenManager = () => {
     setIsOpen(false);
     // Pequeno delay para fechar o select antes de abrir o manager
-    setTimeout(() => setShowManager(true), 100);
+    setTimeout(() => {
+      setShowManager(true);
+      // Notify onboarding if active
+      try {
+        const event = new CustomEvent("gastinho-onboarding-event", { detail: "category-manager-opened" });
+        window.dispatchEvent(event);
+      } catch {}
+    }, 100);
   };
 
   // Recarrega categorias quando o manager fecha

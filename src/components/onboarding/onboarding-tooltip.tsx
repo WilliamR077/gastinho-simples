@@ -202,6 +202,13 @@ export function OnboardingTooltip({
         </Button>
       )}
 
+      {substep.actionType === "info" && (
+        <Button size="sm" onClick={onNext} className="w-full mt-2">
+          {substep.navigateLabel || "Continuar"}
+          <ArrowRight className="h-3 w-3 ml-1" />
+        </Button>
+      )}
+
       {substep.actionType === "completion" && (
         <div className="flex flex-col gap-2 mt-2">
           {onRepeat && (
