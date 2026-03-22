@@ -415,7 +415,7 @@ export function ExpenseFormSheet({
             </div>
           )}
 
-          <div data-tour="form-submit">
+          <div data-tour="form-submit" data-onboarding="expense-submit-btn">
             <Button
               type="submit"
               className="w-full bg-gradient-primary"

@@ -697,7 +697,7 @@ export function UnifiedExpenseFormSheet({
             <p className="text-xs text-destructive font-medium px-1">{splitError}</p>
           )}
 
-          <div data-tour="form-submit">
+          <div data-tour="form-submit" data-onboarding="expense-submit-btn">
             <Button
               type="submit"
               className="w-full bg-gradient-primary"
