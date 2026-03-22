@@ -426,7 +426,7 @@ export function UnifiedExpenseFormSheet({
 
           {/* Campo condicional: Data (do mês) ou Dia da Cobrança (fixa) */}
           {expenseType === "monthly" ? (
-            <div className="space-y-2" data-tour="form-date">
+            <div className="space-y-2" data-tour="form-date" data-onboarding="expense-date">
               <Label htmlFor="sheet-expense-date">Data do Gasto</Label>
               <Popover>
                 <PopoverTrigger asChild>
