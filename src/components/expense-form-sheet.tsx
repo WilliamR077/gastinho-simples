@@ -359,7 +359,7 @@ export function ExpenseFormSheet({
             )}
           </div>
 
-          <div className="space-y-2" data-tour="form-payment">
+          <div className="space-y-2" data-tour="form-payment" data-onboarding="expense-payment">
             <Label htmlFor="sheet-payment-method">Forma de Pagamento</Label>
             <Select value={paymentMethod} onValueChange={(value: PaymentMethod) => setPaymentMethod(value)}>
               <SelectTrigger>
