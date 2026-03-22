@@ -278,7 +278,7 @@ export function ExpenseFormSheet({
             />
           </div>
 
-          <div className="space-y-2" data-tour="form-amount">
+          <div className="space-y-2" data-tour="form-amount" data-onboarding="expense-amount">
             <Label htmlFor="sheet-amount">Valor (R$)</Label>
             <Input
               id="sheet-amount"
