@@ -269,7 +269,7 @@ export function ExpenseFormSheet({
             </div>
           )}
 
-          <div className="space-y-2" data-tour="form-description">
+          <div className="space-y-2" data-tour="form-description" data-onboarding="expense-description">
             <Label htmlFor="sheet-description">Descrição</Label>
             <DescriptionAutocomplete
               value={description}
