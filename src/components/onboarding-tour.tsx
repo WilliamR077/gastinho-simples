@@ -20,11 +20,12 @@ import { supabase } from "@/integrations/supabase/client";
 // Map step IDs to completion labels
 const ALL_STEP_IDS = [
   "add-card",
-  "add-category",
   "add-expense",
   "add-recurring-expense",
   "add-income",
   "add-budget-goal",
+  "view-reports",
+  "setup-security",
 ];
 
 export function OnboardingTour() {

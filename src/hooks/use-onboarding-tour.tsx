@@ -325,6 +325,20 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       completed.add("setup-security");
     completed.add("import-spreadsheet");
 
+    // view-reports has no DB table — check localStorage progress or onboarding completed
+    const savedProgress = localStorage.getItem(PROGRESS_KEY);
+    if (savedProgress) {
+      try {
+        const { completed: savedCompleted } = JSON.parse(savedProgress);
+        if (Array.isArray(savedCompleted) && savedCompleted.includes("view-reports")) {
+          completed.add("view-reports");
+        }
+      } catch {}
+    }
+    if (localStorage.getItem(STORAGE_KEY) === "true") {
+      completed.add("view-reports");
+    }
+
     return completed;
   };
 

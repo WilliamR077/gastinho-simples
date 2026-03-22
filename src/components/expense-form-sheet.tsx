@@ -269,7 +269,7 @@ export function ExpenseFormSheet({
             </div>
           )}
 
-          <div className="space-y-2" data-tour="form-description">
+          <div className="space-y-2" data-tour="form-description" data-onboarding="expense-description">
             <Label htmlFor="sheet-description">Descrição</Label>
             <DescriptionAutocomplete
               value={description}
@@ -278,7 +278,7 @@ export function ExpenseFormSheet({
             />
           </div>
 
-          <div className="space-y-2" data-tour="form-amount">
+          <div className="space-y-2" data-tour="form-amount" data-onboarding="expense-amount">
             <Label htmlFor="sheet-amount">Valor (R$)</Label>
             <Input
               id="sheet-amount"
@@ -291,7 +291,7 @@ export function ExpenseFormSheet({
             />
           </div>
 
-          <div className="space-y-2" data-tour="form-date">
+          <div className="space-y-2" data-tour="form-date" data-onboarding="expense-date">
             <Label htmlFor="sheet-expense-date">Data do Gasto</Label>
             <Popover>
               <PopoverTrigger asChild>
@@ -359,7 +359,7 @@ export function ExpenseFormSheet({
             )}
           </div>
 
-          <div className="space-y-2" data-tour="form-payment">
+          <div className="space-y-2" data-tour="form-payment" data-onboarding="expense-payment">
             <Label htmlFor="sheet-payment-method">Forma de Pagamento</Label>
             <Select value={paymentMethod} onValueChange={(value: PaymentMethod) => setPaymentMethod(value)}>
               <SelectTrigger>
@@ -415,7 +415,7 @@ export function ExpenseFormSheet({
             </div>
           )}
 
-          <div data-tour="form-submit">
+          <div data-tour="form-submit" data-onboarding="expense-submit-btn">
             <Button
               type="submit"
               className="w-full bg-gradient-primary"

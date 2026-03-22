@@ -43,6 +43,7 @@ export interface OnboardingStepConfig {
   targetRoute?: string;
   optional?: boolean;
   mobileOnly?: boolean;
+  noDetection?: boolean;
   substeps: OnboardingSubstep[];
 }
 
@@ -103,7 +104,6 @@ const CARDS_SUBSTEPS: OnboardingSubstep[] = [
     focusTarget: true,
     scrollToTarget: true,
     placement: "below",
-    // Only show for credit/both
     condition: () => {
       const el = document.querySelector('[data-onboarding="card-due-day-input"]');
       return !!el;
@@ -168,6 +168,94 @@ const CARDS_SUBSTEPS: OnboardingSubstep[] = [
   },
 ];
 
+// ─── Expense step substeps (field-by-field) ───────────────────
+const EXPENSE_SUBSTEPS: OnboardingSubstep[] = [
+  {
+    id: "expense-intro",
+    actionType: "info",
+    title: "Registre seu Primeiro Gasto",
+    description: 'Qual foi a última coisa que você gastou? Vamos registrar! Toque no "+" para abrir o formulário.',
+    emoji: "💸",
+    navigateLabel: "Continuar",
+  },
+  {
+    id: "expense-description",
+    actionType: "fill",
+    targetSelector: "expense-description",
+    title: "Descrição",
+    description: "O que você comprou? Ex: Almoço, Uber, Mercado...",
+    emoji: "📝",
+    requiresValidation: true,
+    focusTarget: true,
+    scrollToTarget: true,
+    placement: "below",
+  },
+  {
+    id: "expense-amount",
+    actionType: "fill",
+    targetSelector: "expense-amount",
+    title: "Valor",
+    description: "Quanto custou?",
+    emoji: "💵",
+    requiresValidation: true,
+    focusTarget: true,
+    scrollToTarget: true,
+    placement: "below",
+  },
+  {
+    id: "expense-date",
+    actionType: "optional-group",
+    targetSelector: "expense-date",
+    title: "Data do Gasto",
+    description: "Quando foi esse gasto? A data de hoje já vem preenchida.",
+    emoji: "📅",
+    skipLabel: "Manter hoje",
+    scrollToTarget: true,
+    placement: "below",
+  },
+  {
+    id: "expense-category",
+    actionType: "select",
+    targetSelector: "expense-category-field",
+    title: "Escolha a Categoria",
+    description: "Essas são as categorias padrão. Escolha uma ou, se quiser, gerencie suas categorias pelo botão no final da lista.",
+    emoji: "📦",
+    requiresValidation: true,
+    scrollToTarget: true,
+    placement: "below",
+  },
+  {
+    id: "expense-payment",
+    actionType: "select",
+    targetSelector: "expense-payment",
+    title: "Forma de Pagamento",
+    description: "Como você pagou? PIX, débito ou crédito.",
+    emoji: "💳",
+    requiresValidation: true,
+    scrollToTarget: true,
+    placement: "below",
+  },
+  {
+    id: "expense-submit",
+    actionType: "submit",
+    targetSelector: "expense-submit-btn",
+    title: "Salvar Despesa",
+    description: 'Clique em "Adicionar" para salvar.',
+    emoji: "✅",
+    autoAdvanceOnEvent: "expense-submitted",
+    scrollToTarget: true,
+    placement: "above",
+  },
+  {
+    id: "expense-done",
+    actionType: "completion",
+    title: "Despesa Registrada! 🎉",
+    description: "Sua primeira despesa foi cadastrada!",
+    emoji: "🎉",
+    proceedLabel: "Prosseguir",
+  },
+];
+
 // ─── Step labels for completion dialog ────────────────────────
 export const STEP_LABELS: Record<string, string> = {
   "add-card": "Cartões configurados",
@@ -175,12 +263,14 @@ export const STEP_LABELS: Record<string, string> = {
   "add-recurring-expense": "Despesas fixas cadastradas",
   "add-income": "Primeira receita registrada",
   "add-budget-goal": "Meta de gastos definida",
+  "view-reports": "Relatórios conhecidos",
   "setup-security": "Segurança configurada",
   "import-spreadsheet": "Planilha importada",
 };
 
 // ─── All onboarding steps ─────────────────────────────────────
 export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
+  // ── PASSO 1: Cartão ─────────────────────────────────
   {
     id: "add-card",
     label: "Cartões",
@@ -189,33 +279,15 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
     targetRoute: "/cards",
     substeps: CARDS_SUBSTEPS,
   },
+  // ── PASSO 2: Despesa do Mês (com categorias integradas) ──
   {
     id: "add-expense",
     label: "Despesas",
     emoji: "💸",
     detectionTable: "expenses",
-    substeps: [
-      {
-        id: "expense-intro",
-        actionType: "info",
-        title: "Registre seu Primeiro Gasto",
-        description: 'Vamos registrar uma despesa! Toque no botão "+" e preencha os dados. Você também poderá escolher e personalizar suas categorias.',
-        emoji: "💸",
-        navigateLabel: "Continuar",
-      },
-      {
-        id: "expense-select-category",
-        actionType: "select",
-        targetSelector: "expense-category-field",
-        title: "Escolha a Categoria",
-        description: "Selecione a categoria da despesa. Você também pode gerenciar suas categorias a partir deste campo.",
-        emoji: "📦",
-        requiresValidation: true,
-        scrollToTarget: true,
-        placement: "below",
-      },
-    ],
+    substeps: EXPENSE_SUBSTEPS,
   },
+  // ── PASSO 3: Despesa Fixa ───────────────────────────
   {
     id: "add-recurring-expense",
     label: "Despesas Fixas",
@@ -225,29 +297,33 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
       {
         id: "recurring-intro",
         actionType: "info",
-        title: "Adicione Despesas Fixas",
-        description: "Cadastre suas contas mensais fixas (luz, internet, Netflix...). O app vai lançar automaticamente!",
+        title: "Cadastre uma Despesa Fixa",
+        description: "Pense em algo que você paga todo mês: aluguel, academia, internet, streaming... Cadastre para o app lançar automaticamente!",
         emoji: "🔄",
         navigateLabel: "Continuar",
+        skipLabel: "Pular esta etapa",
       },
     ],
   },
+  // ── PASSO 4: Entradas (3 tipos) ─────────────────────
   {
     id: "add-income",
-    label: "Receitas",
+    label: "Entradas",
     emoji: "💰",
     detectionTable: "incomes",
     substeps: [
       {
         id: "income-intro",
         actionType: "info",
-        title: "Registre sua Primeira Entrada",
-        description: "Registre uma receita! Pode ser salário, freelance, venda ou qualquer entrada de dinheiro.",
+        title: "Como você recebe dinheiro?",
+        description: "Você pode registrar 3 tipos de entrada:\n\n💰 Entrada do mês — freelance, venda, bônus\n🔄 Entrada fixa — salário mensal\n📑 Entrada parcelada — projeto/venda parcelada\n\nEscolha o tipo que mais combina com você no formulário.",
         emoji: "💰",
         navigateLabel: "Continuar",
+        skipLabel: "Pular esta etapa",
       },
     ],
   },
+  // ── PASSO 5: Metas ──────────────────────────────────
   {
     id: "add-budget-goal",
     label: "Metas",
@@ -257,13 +333,41 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
       {
         id: "budget-intro",
         actionType: "info",
-        title: "Defina uma Meta de Gastos",
-        description: "Estabeleça um limite de gastos para o mês! Isso te ajuda a não estourar o orçamento.",
+        title: "Controle seus Gastos com Metas",
+        description: "Defina um limite de gastos para o mês! Você pode criar uma meta geral ou por categoria. Recomendamos começar com um limite mensal total.",
         emoji: "🎯",
         navigateLabel: "Continuar",
+        skipLabel: "Pular esta etapa",
       },
     ],
   },
+  // ── PASSO 6: Relatórios (NOVO) ──────────────────────
+  {
+    id: "view-reports",
+    label: "Relatórios",
+    emoji: "📊",
+    noDetection: true,
+    substeps: [
+      {
+        id: "reports-intro",
+        actionType: "info",
+        title: "Conheça seus Relatórios",
+        description: "Aqui você acompanha sua vida financeira com clareza: gastos por categoria, fluxo de caixa, evolução dos gastos e muito mais.",
+        emoji: "📊",
+      },
+      {
+        id: "reports-navigate",
+        actionType: "navigate",
+        title: "Vamos conhecer?",
+        description: "Quer conhecer a página de relatórios ou prefere explorar sozinho depois?",
+        emoji: "📊",
+        navigateTo: "/reports",
+        navigateLabel: "Conhecer Relatórios",
+        skipLabel: "Explorar depois",
+      },
+    ],
+  },
+  // ── PASSO 7: Segurança (mobileOnly) ─────────────────
   {
     id: "setup-security",
     label: "Segurança",
@@ -272,16 +376,25 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
     substeps: [
       {
         id: "security-intro",
+        actionType: "info",
+        title: "Proteja seu App",
+        description: "Recomendamos fortemente ativar a segurança! Configure um PIN de 4 a 6 dígitos ou use biometria para proteger seus dados financeiros.",
+        emoji: "🔐",
+        skipLabel: "Ativar depois",
+      },
+      {
+        id: "security-navigate",
         actionType: "navigate",
-        title: "Configure Segurança com PIN",
-        description: "Proteja seus dados! Configure um PIN para bloquear o app.",
+        title: "Vamos configurar?",
+        description: "Acesse as configurações de segurança para proteger seu app.",
         emoji: "🔐",
         navigateTo: "/settings",
-        navigateLabel: "Ir para Configurações",
+        navigateLabel: "Ir para Segurança",
         autoAdvanceOnRoute: "/settings",
       },
     ],
   },
+  // ── OPCIONAL: Importar Planilha ──────────────────────
   {
     id: "import-spreadsheet",
     label: "Importar",
@@ -290,13 +403,12 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
     substeps: [
       {
         id: "import-intro",
-        actionType: "navigate",
+        actionType: "info",
         title: "Importar Planilha (Opcional)",
-        description: "Se você já tem seus gastos em uma planilha, pode importar aqui!",
+        description: "Você já controla suas finanças em planilha? Podemos importar seus dados automaticamente!",
         emoji: "📊",
-        navigateTo: "/settings",
-        navigateLabel: "Ir para Configurações",
-        autoAdvanceOnRoute: "/settings",
+        navigateLabel: "Importar",
+        skipLabel: "Não tenho planilha",
       },
     ],
   },
