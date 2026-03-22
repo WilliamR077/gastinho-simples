@@ -299,15 +299,9 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   ): Promise<Set<string>> => {
     const completed = new Set<string>();
 
-    const [cards, categories, expenses, recurring, incomes, goals] =
+    const [cards, expenses, recurring, incomes, goals] =
       await Promise.all([
         supabase.from("cards").select("id").eq("user_id", userId).limit(1),
-        supabase
-          .from("user_categories")
-          .select("id")
-          .eq("user_id", userId)
-          .eq("is_default", false)
-          .limit(1),
         supabase.from("expenses").select("id").eq("user_id", userId).limit(1),
         supabase
           .from("recurring_expenses")
@@ -323,7 +317,6 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       ]);
 
     if (cards.data?.length) completed.add("add-card");
-    if (categories.data?.length) completed.add("add-category");
     if (expenses.data?.length) completed.add("add-expense");
     if (recurring.data?.length) completed.add("add-recurring-expense");
     if (incomes.data?.length) completed.add("add-income");

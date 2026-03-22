@@ -321,7 +321,7 @@ export function ExpenseFormSheet({
             </Popover>
           </div>
 
-          <div className="space-y-2" data-tour="form-category">
+          <div className="space-y-2" data-tour="form-category" data-onboarding="expense-category-field">
             <Label htmlFor="sheet-category">Categoria</Label>
             <CategorySelector
               value={category}
