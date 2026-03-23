@@ -1,214 +1,110 @@
 
 
-## Plano: Reorganizar Onboarding em 7 Passos Principais + 2 Opcionais
+## Plano: Corrigir Passo 2 do Onboarding (Despesa do Mês)
 
-### Visão Geral
+### Problema
 
-Reestruturar o onboarding de configuração de conta para seguir 7 passos práticos baseados no uso real, com 2 etapas complementares fora da contagem de progresso.
+O passo 2 atual tem um substep `expense-intro` do tipo `info` que, ao clicar "Continuar", avança direto para `expense-description`. Mas o formulário de despesa ainda não foi aberto, então o `MutationObserver` fica esperando eternamente por `[data-onboarding="expense-description"]` que não existe no DOM.
 
-### Arquitetura dos Passos
-
-```text
-CONTAGEM PRINCIPAL (7 passos):
-1. add-card          → Cartão (já funciona bem)
-2. add-expense       → Despesa do mês (com categorias integradas)
-3. add-recurring-expense → Despesa fixa
-4. add-income        → Entradas (3 tipos: mês, fixa, parcelada)
-5. add-budget-goal   → Metas
-6. view-reports      → Relatórios (NOVO)
-7. setup-security    → Segurança (mobileOnly)
-
-FORA DA CONTAGEM:
-8. import-spreadsheet → Importar planilha (optional)
-9. Completion dialog  → CTA Premium
-```
+Além disso, o FAB (`+`) e o botão "Despesa" no menu do FAB não têm atributos `data-onboarding`, então o spotlight não consegue encontrá-los.
 
 ---
 
-### 1. Passo 1 — Cartão (sem mudanças)
+### Mudanças
 
-Mantém os substeps existentes (navegar, clicar, nome, tipo, vencimento, fechamento, limite, cor, submit, completion). Já funciona.
+#### 1. Adicionar `data-onboarding` no FAB e no botão Despesa
 
-### 2. Passo 2 — Despesa do Mês (expandido)
+**`src/components/floating-action-button.tsx`**
+
+- Botão FAB principal: adicionar `data-onboarding="fab-main-button"`
+- Botão "Despesa" no menu: adicionar `data-onboarding="fab-expense-button"`
+
+#### 2. Reescrever os substeps do `add-expense`
 
 **`src/lib/onboarding/onboarding-steps.ts`**
 
-Expandir `add-expense` com substeps guiados campo a campo:
+Substituir `EXPENSE_SUBSTEPS` por um fluxo stateful com etapas reais:
 
 ```
-substeps: [
-  { id: "expense-intro", actionType: "info", title: "Registre seu Primeiro Gasto",
-    description: 'Qual foi a última coisa que você gastou? Vamos registrar! Toque no "+" para abrir o formulário.',
-    emoji: "💸", navigateLabel: "Continuar" },
-  { id: "expense-description", actionType: "fill", targetSelector: "expense-description",
-    title: "Descrição", description: "O que você comprou? Ex: Almoço, Uber, Mercado...",
-    emoji: "📝", requiresValidation: true, focusTarget: true, scrollToTarget: true },
-  { id: "expense-amount", actionType: "fill", targetSelector: "expense-amount",
-    title: "Valor", description: "Quanto custou?",
-    emoji: "💵", requiresValidation: true, focusTarget: true, scrollToTarget: true },
-  { id: "expense-date", actionType: "optional-group", targetSelector: "expense-date",
-    title: "Data do Gasto", description: "Quando foi esse gasto? A data de hoje já vem preenchida.",
-    emoji: "📅", skipLabel: "Manter hoje", scrollToTarget: true },
-  { id: "expense-category", actionType: "select", targetSelector: "expense-category-field",
-    title: "Escolha a Categoria",
-    description: "Essas são as categorias padrão. Escolha uma ou, se quiser, gerencie suas categorias pelo botão no final da lista.",
-    emoji: "📦", requiresValidation: true, scrollToTarget: true },
-  { id: "expense-payment", actionType: "select", targetSelector: "expense-payment",
-    title: "Forma de Pagamento", description: "Como você pagou? PIX, débito ou crédito.",
-    emoji: "💳", requiresValidation: true, scrollToTarget: true },
-  { id: "expense-submit", actionType: "submit", targetSelector: "expense-submit-btn",
-    title: "Salvar Despesa", description: 'Clique em "Adicionar" para salvar.',
-    emoji: "✅", autoAdvanceOnEvent: "expense-submitted", scrollToTarget: true },
-  { id: "expense-done", actionType: "completion", title: "Despesa Registrada! 🎉",
-    description: "Sua primeira despesa foi cadastrada!",
-    emoji: "🎉", proceedLabel: "Prosseguir" },
-]
+1. expense-intro       → info: "Qual foi a última coisa que você gastou?"
+2. expense-click-fab   → click: targetSelector="fab-main-button", autoAdvanceOnEvent="fab-menu-opened"
+3. expense-click-btn   → click: targetSelector="fab-expense-button", autoAdvanceOnEvent="expense-form-opened"
+4. expense-type-info   → info: "Estamos adicionando uma Despesa do Mês. A Despesa Fixa virá no próximo passo."
+5. expense-description → fill: targetSelector="expense-description", requiresValidation
+6. expense-amount      → fill: targetSelector="expense-amount", requiresValidation
+7. expense-date        → optional-group: targetSelector="expense-date", skipLabel="Manter hoje"
+8. expense-category    → select: targetSelector="expense-category-field", requiresValidation
+9. expense-payment     → select: targetSelector="expense-payment", requiresValidation
+10. expense-card       → select: targetSelector="expense-card-select", requiresValidation, condition: débito/crédito selecionado
+11. expense-installments → select: targetSelector="expense-installments", requiresValidation, condition: crédito selecionado
+12. expense-submit     → submit: targetSelector="expense-submit-btn", autoAdvanceOnEvent="expense-submitted"
+13. expense-done       → completion: "Despesa Registrada!"
 ```
 
-### 3. Passo 3 — Despesa Fixa (expandido)
+As etapas 10 e 11 usam `condition` para verificar se o campo existe no DOM (os campos só renderizam quando débito/crédito é selecionado).
 
-Novo substep flow guiado:
+#### 3. Emitir eventos do FAB
 
-```
-substeps: [
-  { id: "recurring-intro", actionType: "info",
-    title: "Cadastre uma Despesa Fixa",
-    description: "Pense em algo que você paga todo mês: aluguel, academia, internet, streaming...",
-    emoji: "🔄", navigateLabel: "Continuar", skipLabel: "Pular esta etapa" },
-]
+**`src/components/floating-action-button.tsx`**
+
+Quando o menu abrir (`setIsOpen(true)`), disparar:
+```ts
+window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: "fab-menu-opened" }));
 ```
 
-Manter simples por enquanto — um info step que orienta. O step é marcado como concluído ao detectar dados reais via `detectionTable`.
+#### 4. Emitir evento ao abrir formulário de despesa
 
-### 4. Passo 4 — Entradas (com seletor de tipo)
+**`src/pages/Index.tsx`**
 
-**Nova abordagem com substeps:**
-
-```
-substeps: [
-  { id: "income-intro", actionType: "info",
-    title: "Como você recebe dinheiro?",
-    description: "Você pode registrar 3 tipos de entrada:\n\n💰 Entrada do mês — freelance, venda, bônus\n🔄 Entrada fixa — salário mensal\n📑 Entrada parcelada — projeto/venda parcelada\n\nEscolha o tipo que mais combina com você no formulário.",
-    emoji: "💰", navigateLabel: "Continuar", skipLabel: "Pular esta etapa" },
-]
+No callback `onExpenseClick` do FAB, quando `setExpenseSheetOpen(true)` é chamado, disparar:
+```ts
+window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: "expense-form-opened" }));
 ```
 
-### 5. Passo 5 — Metas
+#### 5. Emitir evento ao salvar despesa
 
-```
-substeps: [
-  { id: "budget-intro", actionType: "info",
-    title: "Controle seus Gastos com Metas",
-    description: "Defina um limite de gastos para o mês! Você pode criar uma meta geral ou por categoria. Recomendamos começar com um limite mensal total.",
-    emoji: "🎯", navigateLabel: "Continuar", skipLabel: "Pular esta etapa" },
-]
+**`src/pages/Index.tsx`**
+
+Na função `addExpense`, após inserção com sucesso no Supabase, disparar:
+```ts
+window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: "expense-submitted" }));
 ```
 
-### 6. Passo 6 — Relatórios (NOVO)
+#### 6. Adicionar `data-onboarding` nos campos faltantes
 
-**Novo step `view-reports`:**
+**`src/components/unified-expense-form-sheet.tsx`**
 
-```
-{
-  id: "view-reports",
-  label: "Relatórios",
-  emoji: "📊",
-  substeps: [
-    { id: "reports-intro", actionType: "info",
-      title: "Conheça seus Relatórios",
-      description: "Aqui você acompanha sua vida financeira com clareza: gastos por categoria, fluxo de caixa, evolução dos gastos e muito mais.",
-      emoji: "📊" },
-    { id: "reports-navigate", actionType: "navigate",
-      title: "Vamos conhecer?",
-      description: "Quer conhecer a página de relatórios ou prefere explorar sozinho depois?",
-      emoji: "📊", navigateTo: "/reports", navigateLabel: "Conhecer Relatórios",
-      skipLabel: "Explorar depois" },
-  ],
-}
+- Campo de cartão: adicionar `data-onboarding="expense-card-select"` no div/Select de seleção de cartão
+- Campo de parcelas: adicionar `data-onboarding="expense-installments"` no div/Select de parcelas
+- Tipo de despesa: adicionar `data-onboarding="expense-type-selector"` no RadioGroup
+
+**`src/components/expense-form-sheet.tsx`** (mesmo padrão, para o formulário legado)
+
+#### 7. Conditions para substeps condicionais
+
+As conditions de `expense-card` e `expense-installments` verificam se o elemento existe no DOM:
+
+```ts
+condition: () => !!document.querySelector('[data-onboarding="expense-card-select"]')
 ```
 
-Detecção: sem `detectionTable` — marcado como concluído quando o step completa no onboarding (sem verificação de dados). Adicionar propriedade `noDetection: true` ou simplesmente omitir `detectionTable`.
-
-### 7. Passo 7 — Segurança (mobileOnly, expandido)
-
-```
-substeps: [
-  { id: "security-intro", actionType: "info",
-    title: "Proteja seu App",
-    description: "Recomendamos fortemente ativar a segurança! Configure um PIN de 4 a 6 dígitos ou use biometria para proteger seus dados financeiros.",
-    emoji: "🔐", skipLabel: "Ativar depois" },
-  { id: "security-navigate", actionType: "navigate",
-    title: "Vamos configurar?",
-    description: "Acesse as configurações de segurança para proteger seu app.",
-    emoji: "🔐", navigateTo: "/settings", navigateLabel: "Ir para Segurança",
-    autoAdvanceOnRoute: "/settings" },
-]
+```ts
+condition: () => !!document.querySelector('[data-onboarding="expense-installments"]')
 ```
 
-### 8. Importar Planilha (optional, fora da contagem)
-
-Manter como está, com `optional: true`.
-
-```
-substeps: [
-  { id: "import-intro", actionType: "info",
-    title: "Importar Planilha (Opcional)",
-    description: "Você já controla suas finanças em planilha? Podemos importar seus dados automaticamente!",
-    emoji: "📊", navigateLabel: "Importar", skipLabel: "Não tenho planilha" },
-]
-```
+Isso funciona porque esses campos só são renderizados quando débito/crédito é selecionado.
 
 ---
 
-### Arquivos e Mudanças
-
-**`src/lib/onboarding/onboarding-steps.ts`**
-- Reescrever `ONBOARDING_STEPS` com os 7+1 passos acima
-- Adicionar `view-reports` como novo step
-- Expandir `add-expense` com substeps campo a campo
-- Expandir `setup-security` com intro + navigate
-- Atualizar `STEP_LABELS` para incluir `view-reports`
-
-**`src/components/expense-form-sheet.tsx`** e **`src/components/unified-expense-form-sheet.tsx`**
-- Adicionar `data-onboarding` nos campos: description, amount, date, payment, submit
-- Garantir que cada campo tenha seu seletor para o spotlight funcionar
-
-**`src/components/onboarding-tour.tsx`**
-- Atualizar `ALL_STEP_IDS` para os 7 novos IDs
-- Remover `add-category` de `ALL_STEP_IDS`
-- Adicionar `view-reports` e `setup-security`
-
-**`src/hooks/use-onboarding-tour.tsx`**
-- Em `checkExistingData()`: não verificar `view-reports` (step sem detectionTable)
-- Marcar `view-reports` como concluído apenas via progresso do onboarding (localStorage)
-- Em `getSetupProgress()`: para `view-reports`, verificar localStorage se o onboarding já passou por esse step
-
-**`src/pages/Settings.tsx`**
-- Nenhuma mudança estrutural (já usa `getSetupProgress()`)
-
-**`src/components/setup-progress-banner.tsx`**
-- Nenhuma mudança estrutural (já usa `getSetupProgress()`)
-
----
-
-### Detecção de Progresso para `view-reports`
-
-Como `view-reports` não tem tabela no banco, a detecção será feita assim:
-- Quando o step for completado durante o onboarding, `completedSteps` já inclui `view-reports`
-- Em `checkExistingData()`: verificar se `localStorage.getItem(PROGRESS_KEY)` contém `view-reports` nos completed, OU se `localStorage.getItem(STORAGE_KEY) === "true"` (onboarding completo)
-- Isso garante que ao retomar, o progresso reflita corretamente
-
----
-
-### Resumo de Arquivos
+### Arquivos afetados
 
 | Arquivo | Mudança |
 |---------|---------|
-| `src/lib/onboarding/onboarding-steps.ts` | Reescrever steps: 7 principais + 1 optional |
-| `src/components/expense-form-sheet.tsx` | Adicionar `data-onboarding` nos campos |
-| `src/components/unified-expense-form-sheet.tsx` | Adicionar `data-onboarding` nos campos |
-| `src/components/onboarding-tour.tsx` | Atualizar `ALL_STEP_IDS` |
-| `src/hooks/use-onboarding-tour.tsx` | Ajustar `checkExistingData` para `view-reports` |
+| `src/lib/onboarding/onboarding-steps.ts` | Reescrever `EXPENSE_SUBSTEPS` com 13 substeps |
+| `src/components/floating-action-button.tsx` | Adicionar `data-onboarding` no FAB e botão Despesa, emitir evento |
+| `src/pages/Index.tsx` | Emitir eventos `expense-form-opened` e `expense-submitted` |
+| `src/components/unified-expense-form-sheet.tsx` | Adicionar `data-onboarding` no cartão, parcelas e tipo |
+| `src/components/expense-form-sheet.tsx` | Adicionar `data-onboarding` no cartão e parcelas |
 
-Nenhuma migração SQL.
+Nenhuma migração SQL. Nenhuma mudança nos outros passos do onboarding.
 
