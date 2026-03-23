@@ -70,6 +70,7 @@ export function FloatingActionButton({
             </Button>
 
             <Button
+              data-onboarding="fab-expense-button"
               onClick={() => handleOptionClick(onExpenseClick)}
               className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white shadow-lg rounded-full px-4 py-2 h-auto min-h-[44px] touch-manipulation"
             >
