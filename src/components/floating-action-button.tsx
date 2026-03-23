@@ -92,7 +92,16 @@ export function FloatingActionButton({
         {/* Main FAB Button */}
         <Button
           data-tour="fab-main-button"
-          onClick={() => setIsOpen(!isOpen)}
+          data-onboarding="fab-main-button"
+          onClick={() => {
+            const willOpen = !isOpen;
+            setIsOpen(willOpen);
+            if (willOpen) {
+              setTimeout(() => {
+                window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: "fab-menu-opened" }));
+              }, 100);
+            }
+          }}
           className={cn(
             "h-14 w-14 min-h-[44px] min-w-[44px] rounded-full shadow-xl transition-all duration-300 pointer-events-auto touch-manipulation",
             isOpen
