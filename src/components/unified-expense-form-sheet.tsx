@@ -346,7 +346,7 @@ export function UnifiedExpenseFormSheet({
 
         <form onSubmit={handleSubmit} className="space-y-4 pb-24">
           {/* Tipo de Despesa */}
-          <div className="space-y-3 p-3 rounded-lg bg-muted/50 border border-border">
+          <div className="space-y-3 p-3 rounded-lg bg-muted/50 border border-border" data-onboarding="expense-type-selector">
             <Label className="text-sm font-medium">Tipo de Despesa</Label>
             <RadioGroup
               value={expenseType}
