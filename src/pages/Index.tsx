@@ -2280,7 +2280,12 @@ export default function Index() {
 
         {/* Floating Action Button */}
         <FloatingActionButton
-          onExpenseClick={() => setExpenseSheetOpen(true)}
+          onExpenseClick={() => {
+            setExpenseSheetOpen(true);
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: "expense-form-opened" }));
+            }, 300);
+          }}
           onGoalClick={() => setBudgetGoalSheetOpen(true)}
           onCalculatorClick={() => setCalculatorOpen(true)}
           onIncomeClick={() => setIncomeSheetOpen(true)} />
