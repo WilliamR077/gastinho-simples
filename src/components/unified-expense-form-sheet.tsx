@@ -526,7 +526,7 @@ export function UnifiedExpenseFormSheet({
           </div>
 
           {(paymentMethod === "credit" || paymentMethod === "debit") && (
-            <div className="space-y-2">
+            <div className="space-y-2" data-onboarding="expense-card-select">
               <Label htmlFor="sheet-card">Selecione o Cartão</Label>
               <Select value={cardId} onValueChange={setCardId}>
                 <SelectTrigger>
