@@ -374,7 +374,7 @@ export function ExpenseFormSheet({
           </div>
 
           {(paymentMethod === "credit" || paymentMethod === "debit") && (
-            <div className="space-y-2">
+            <div className="space-y-2" data-onboarding="expense-card-select">
               <Label htmlFor="sheet-card">Selecione o Cartão</Label>
               <Select value={cardId} onValueChange={setCardId}>
                 <SelectTrigger>
@@ -398,7 +398,7 @@ export function ExpenseFormSheet({
           )}
 
           {paymentMethod === "credit" && (
-            <div className="space-y-2">
+            <div className="space-y-2" data-onboarding="expense-installments">
               <Label htmlFor="sheet-installments">Número de Parcelas</Label>
               <Select value={installments} onValueChange={setInstallments}>
                 <SelectTrigger>

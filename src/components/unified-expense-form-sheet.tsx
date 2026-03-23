@@ -346,7 +346,7 @@ export function UnifiedExpenseFormSheet({
 
         <form onSubmit={handleSubmit} className="space-y-4 pb-24">
           {/* Tipo de Despesa */}
-          <div className="space-y-3 p-3 rounded-lg bg-muted/50 border border-border">
+          <div className="space-y-3 p-3 rounded-lg bg-muted/50 border border-border" data-onboarding="expense-type-selector">
             <Label className="text-sm font-medium">Tipo de Despesa</Label>
             <RadioGroup
               value={expenseType}
@@ -526,7 +526,7 @@ export function UnifiedExpenseFormSheet({
           </div>
 
           {(paymentMethod === "credit" || paymentMethod === "debit") && (
-            <div className="space-y-2">
+            <div className="space-y-2" data-onboarding="expense-card-select">
               <Label htmlFor="sheet-card">Selecione o Cartão</Label>
               <Select value={cardId} onValueChange={setCardId}>
                 <SelectTrigger>
@@ -570,7 +570,7 @@ export function UnifiedExpenseFormSheet({
 
           {/* Parcelas - apenas para despesa do mês no crédito */}
           {expenseType === "monthly" && paymentMethod === "credit" && (
-            <div className="space-y-2">
+            <div className="space-y-2" data-onboarding="expense-installments">
               <Label htmlFor="sheet-installments">Número de Parcelas</Label>
               <Select value={installments} onValueChange={setInstallments}>
                 <SelectTrigger>
