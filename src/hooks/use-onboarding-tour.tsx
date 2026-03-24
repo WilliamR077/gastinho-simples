@@ -236,7 +236,26 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     if (!currentSubstep) return;
 
     if (currentSubstep.scrollToTarget) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      // Find the nearest scrollable container (Sheet, dialog, scroll area)
+      const scrollContainer = el.closest(
+        '[data-radix-scroll-area-viewport], [role="dialog"], .overflow-y-auto, .overflow-auto'
+      ) as HTMLElement | null;
+
+      if (scrollContainer) {
+        // Scroll within the container, not the page
+        const containerRect = scrollContainer.getBoundingClientRect();
+        const elRect = el.getBoundingClientRect();
+        const relativeTop = elRect.top - containerRect.top + scrollContainer.scrollTop;
+        const targetScroll = relativeTop - containerRect.height / 3;
+
+        scrollContainer.scrollTo({
+          top: Math.max(0, targetScroll),
+          behavior: "smooth",
+        });
+      } else {
+        // No scrollable container — use scrollIntoView with "nearest" to minimize movement
+        el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
     }
 
     if (currentSubstep.focusTarget) {
