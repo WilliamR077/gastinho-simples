@@ -24,6 +24,7 @@ import { useSharedGroups } from "@/hooks/use-shared-groups";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { CategorySelector } from "@/components/category-selector";
 import { useCategories } from "@/hooks/use-categories";
+import { useOnboardingTour } from "@/hooks/use-onboarding-tour";
 import { DescriptionAutocomplete } from "@/components/description-autocomplete";
 import { calculateBillingPeriod, formatBillingPeriodLabel, CreditCardConfig } from "@/utils/billing-period";
 
@@ -94,6 +95,11 @@ export function UnifiedExpenseFormSheet({
   
   const { activeCategories } = useCategories();
   const { groups, currentContext } = useSharedGroups();
+  const { isOpen: isOnboardingOpen, currentStep, currentSubstep } = useOnboardingTour();
+  const isExpenseTypeLocked =
+    isOnboardingOpen &&
+    currentStep?.id === "add-expense" &&
+    currentSubstep?.id === "expense-type-info";
 
   useEffect(() => {
     if (open) {
@@ -126,6 +132,12 @@ export function UnifiedExpenseFormSheet({
       loadCards();
     }
   }, [open]);
+
+  useEffect(() => {
+    if (isExpenseTypeLocked && expenseType !== "monthly") {
+      setExpenseType("monthly");
+    }
+  }, [expenseType, isExpenseTypeLocked]);
 
   // Notify onboarding that the expense form is mounted and ready
   useEffect(() => {
@@ -363,18 +375,34 @@ export function UnifiedExpenseFormSheet({
             <Label className="text-sm font-medium">Tipo de Despesa</Label>
             <RadioGroup
               value={expenseType}
-              onValueChange={(v) => setExpenseType(v as ExpenseType)}
+              onValueChange={(v) => {
+                if (isExpenseTypeLocked) return;
+                setExpenseType(v as ExpenseType);
+              }}
               className="flex gap-4"
+              aria-disabled={isExpenseTypeLocked}
             >
               <div className="flex items-center space-x-2">
-                <RadioGroupItem value="monthly" id="expense-monthly" />
-                <Label htmlFor="expense-monthly" className="cursor-pointer font-normal">
+                <RadioGroupItem value="monthly" id="expense-monthly" disabled={isExpenseTypeLocked} />
+                <Label
+                  htmlFor="expense-monthly"
+                  className={cn(
+                    "font-normal",
+                    isExpenseTypeLocked ? "cursor-not-allowed opacity-80" : "cursor-pointer"
+                  )}
+                >
                   Despesa do Mês
                 </Label>
               </div>
               <div className="flex items-center space-x-2">
-                <RadioGroupItem value="recurring" id="expense-recurring" />
-                <Label htmlFor="expense-recurring" className="cursor-pointer font-normal">
+                <RadioGroupItem value="recurring" id="expense-recurring" disabled={isExpenseTypeLocked} />
+                <Label
+                  htmlFor="expense-recurring"
+                  className={cn(
+                    "font-normal",
+                    isExpenseTypeLocked ? "cursor-not-allowed opacity-80" : "cursor-pointer"
+                  )}
+                >
                   Despesa Fixa
                 </Label>
               </div>

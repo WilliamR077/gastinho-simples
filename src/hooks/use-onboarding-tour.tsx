@@ -395,9 +395,16 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // Determine if we're in the expense form guided flow
-  // Substeps after "expense-click-btn" (index 2) require the form to be open
-  const EXPENSE_FORM_SUBSTEP_START = 3; // expense-type-info onwards
+  // Determine if we're in the expense form guided flow.
+  // Derive the start from the substep id so copy/order changes don't
+  // accidentally disable preventClose for the expense form.
+  const EXPENSE_FORM_SUBSTEP_START =
+    currentStep?.id === "add-expense"
+      ? Math.max(
+          currentStep.substeps.findIndex((substep) => substep.id === "expense-type-info"),
+          0
+        )
+      : Number.POSITIVE_INFINITY;
   const isExpenseFormGuidedFlow =
     isOpen &&
     currentStep?.id === "add-expense" &&
