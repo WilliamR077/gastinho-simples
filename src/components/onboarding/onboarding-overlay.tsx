@@ -8,7 +8,7 @@ interface TargetRect {
 }
 
 interface OnboardingOverlayProps {
-  targetSelector?: string; // data-onboarding value
+  targetSelector?: string;
   isVisible: boolean;
   padding?: number;
   onTargetRect?: (rect: TargetRect | null) => void;
@@ -22,7 +22,6 @@ export function OnboardingOverlay({
 }: OnboardingOverlayProps) {
   const [targetRect, setTargetRect] = useState<TargetRect | null>(null);
   const rafRef = useRef<number>(0);
-  const prevElRef = useRef<HTMLElement | null>(null);
 
   const updateRect = useCallback(() => {
     if (!targetSelector) {
@@ -45,15 +44,6 @@ export function OnboardingOverlay({
       };
       setTargetRect(newRect);
       onTargetRect?.(newRect);
-
-      // Elevate target above overlay
-      if (prevElRef.current && prevElRef.current !== el) {
-        prevElRef.current.style.position = "";
-        prevElRef.current.style.zIndex = "";
-      }
-      el.style.position = "relative";
-      el.style.zIndex = "60";
-      prevElRef.current = el;
     } else {
       setTargetRect(null);
       onTargetRect?.(null);
@@ -73,12 +63,6 @@ export function OnboardingOverlay({
   // Continuous position tracking via rAF
   useEffect(() => {
     if (!isVisible) {
-      // Cleanup elevated element
-      if (prevElRef.current) {
-        prevElRef.current.style.position = "";
-        prevElRef.current.style.zIndex = "";
-        prevElRef.current = null;
-      }
       setTargetRect(null);
       return;
     }
@@ -94,28 +78,36 @@ export function OnboardingOverlay({
     return () => {
       running = false;
       cancelAnimationFrame(rafRef.current);
-      if (prevElRef.current) {
-        prevElRef.current.style.position = "";
-        prevElRef.current.style.zIndex = "";
-        prevElRef.current = null;
-      }
     };
   }, [isVisible, updateRect]);
 
   if (!isVisible) return null;
 
+  // Spotlight hole coordinates (with padding)
+  const hole = targetRect
+    ? {
+        top: targetRect.top - padding,
+        left: targetRect.left - padding,
+        width: targetRect.width + padding * 2,
+        height: targetRect.height + padding * 2,
+        bottom: targetRect.top + targetRect.height + padding,
+        right: targetRect.left + targetRect.width + padding,
+      }
+    : null;
+
   return (
-    <div className="fixed inset-0 z-[55] pointer-events-auto">
-      <svg className="absolute inset-0 w-full h-full">
+    <div className="fixed inset-0 z-[55] pointer-events-none">
+      {/* Visual dark overlay with SVG mask — no pointer events */}
+      <svg className="absolute inset-0 w-full h-full pointer-events-none">
         <defs>
           <mask id="onboarding-spotlight-mask">
             <rect x="0" y="0" width="100%" height="100%" fill="white" />
-            {targetRect && (
+            {hole && (
               <rect
-                x={targetRect.left - padding}
-                y={targetRect.top - padding}
-                width={targetRect.width + padding * 2}
-                height={targetRect.height + padding * 2}
+                x={hole.left}
+                y={hole.top}
+                width={hole.width}
+                height={hole.height}
                 rx="12"
                 fill="black"
               />
@@ -132,15 +124,52 @@ export function OnboardingOverlay({
         />
       </svg>
 
+      {/* 4 blocking panels around the spotlight hole — these capture clicks outside */}
+      {hole ? (
+        <>
+          {/* Top panel */}
+          <div
+            className="fixed left-0 right-0 top-0 pointer-events-auto"
+            style={{ height: Math.max(0, hole.top) }}
+          />
+          {/* Bottom panel */}
+          <div
+            className="fixed left-0 right-0 bottom-0 pointer-events-auto"
+            style={{ top: hole.bottom }}
+          />
+          {/* Left panel */}
+          <div
+            className="fixed left-0 pointer-events-auto"
+            style={{
+              top: hole.top,
+              width: Math.max(0, hole.left),
+              height: hole.height,
+            }}
+          />
+          {/* Right panel */}
+          <div
+            className="fixed right-0 pointer-events-auto"
+            style={{
+              top: hole.top,
+              left: hole.right,
+              height: hole.height,
+            }}
+          />
+        </>
+      ) : (
+        /* No target — block entire screen */
+        <div className="fixed inset-0 pointer-events-auto" />
+      )}
+
       {/* Highlight border */}
-      {targetRect && (
+      {hole && (
         <div
           className="absolute border-2 border-primary rounded-xl animate-pulse pointer-events-none"
           style={{
-            top: targetRect.top - padding,
-            left: targetRect.left - padding,
-            width: targetRect.width + padding * 2,
-            height: targetRect.height + padding * 2,
+            top: hole.top,
+            left: hole.left,
+            width: hole.width,
+            height: hole.height,
             boxShadow:
               "0 0 0 4px hsl(var(--primary) / 0.3), 0 0 20px hsl(var(--primary) / 0.2)",
           }}
