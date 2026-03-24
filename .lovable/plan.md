@@ -1,84 +1,107 @@
 
+Objetivo: corrigir a causa raiz do PASSO 2 para que o formulário de despesa permaneça aberto e o onboarding só avance quando o próximo campo realmente existir dentro dele.
 
-## Plano: Corrigir Scroll/Travamento do Passo 2 no Formulário de Despesa
+### Diagnóstico real
+A causa principal não está no scroll em si. O problema é de orquestração do estado:
 
-### Causa Raiz
+- o substep `expense-click-btn` avança por timer/evento (`expense-form-opened`) disparado em `Index.tsx` logo após `setExpenseSheetOpen(true)`, antes de garantir que o `Sheet` está montado e estável
+- o `OnboardingTour` trata `info` com target (`expense-type-info`) como passo interativo normal, então ao clicar em “Continuar” ele já tenta avançar
+- o engine não valida se o formulário ainda está aberto antes de migrar para `expense-description`
+- `UnifiedExpenseFormSheet` já tem suporte a `preventClose`, mas `Index.tsx` não está usando isso no passo 2
+- hoje, se o Sheet fechar por clique fora/escape/re-render/transição, o onboarding continua mesmo sem contexto
 
-Dois problemas combinados:
+### Implementação
 
-1. **`scrollIntoView` errado**: O `handleTargetAppeared()` em `use-onboarding-tour.tsx` (linha 239) chama `el.scrollIntoView({ behavior: "smooth", block: "center" })` diretamente no elemento. Quando o alvo está dentro de um Sheet (que é um container `fixed` com scroll próprio), o `scrollIntoView` tenta rolar o **body da página** em vez do container do Sheet, causando o deslocamento caótico.
+#### 1. Travar o formulário em modo guiado durante o passo 2
+**Arquivos:** `src/hooks/use-onboarding-tour.tsx`, `src/pages/Index.tsx`, `src/components/unified-expense-form-sheet.tsx`
 
-2. **`document.body.style.overflow = "hidden"`**: O overlay do onboarding trava o scroll do body (linha 54-60 do `onboarding-overlay.tsx`). Isso conflita com o Sheet que já tem seu próprio mecanismo de scroll. O `scrollIntoView` tenta rolar algo que está travado, gerando comportamento imprevisível.
+Adicionar no hook um estado/derivado público para indicar quando o onboarding está no fluxo guiado da despesa, por exemplo:
+- `isExpenseFormGuidedFlow`
+- verdadeiro quando `isOpen && currentStep?.id === "add-expense"` e o substep já passou da abertura do formulário
 
-### Solução
+Em `Index.tsx`:
+- usar esse estado para passar `preventClose` ao `UnifiedExpenseFormSheet`
+- no `onOpenChange`, se estiver em guided flow e `open === false`, bloquear o fechamento normal
+- só permitir fechar quando:
+  - a despesa for salva com sucesso
+  - o usuário pular/cancelar explicitamente o onboarding
 
-Modificar `handleTargetAppeared()` para fazer scroll **dentro do container scrollável correto** (o Sheet) em vez de usar `scrollIntoView` no body.
+#### 2. Trocar o evento “form opened” precoce por detecção real de formulário montado
+**Arquivos:** `src/pages/Index.tsx`, `src/components/unified-expense-form-sheet.tsx`
 
----
+Hoje o evento `expense-form-opened` é disparado por `setTimeout(300)` no clique do FAB. Isso é frágil.
 
-### Mudança 1 — `src/hooks/use-onboarding-tour.tsx`
+Ajuste:
+- remover o dispatch antecipado em `Index.tsx`
+- disparar `expense-form-opened` dentro de `UnifiedExpenseFormSheet` via `useEffect` quando:
+  - `open === true`
+  - o formulário estiver renderizado
+  - o container com `data-onboarding="expense-type-selector"` existir no DOM
 
-Reescrever `handleTargetAppeared()` (linhas 235-251):
+Assim o onboarding só sai de “Despesas” quando o formulário estiver realmente pronto.
 
-```ts
-function handleTargetAppeared(el: HTMLElement) {
-  if (!currentSubstep) return;
+#### 3. Não avançar para substeps de campo sem contexto válido
+**Arquivo:** `src/hooks/use-onboarding-tour.tsx`
 
-  if (currentSubstep.scrollToTarget) {
-    // Find the scrollable container (Sheet content, dialog, or fallback to viewport)
-    const scrollContainer = el.closest('[data-radix-scroll-area-viewport], [role="dialog"], .overflow-y-auto, .overflow-auto');
-    
-    if (scrollContainer) {
-      // Scroll within the container, not the page
-      const containerRect = scrollContainer.getBoundingClientRect();
-      const elRect = el.getBoundingClientRect();
-      const relativeTop = elRect.top - containerRect.top + scrollContainer.scrollTop;
-      const targetScroll = relativeTop - containerRect.height / 3;
-      
-      scrollContainer.scrollTo({
-        top: Math.max(0, targetScroll),
-        behavior: "smooth",
-      });
-    } else {
-      // No container found — use scrollIntoView but with "nearest" to minimize movement
-      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }
-  }
+Antes de avançar para o próximo substep:
+- verificar se o próximo substep tem `targetSelector`
+- se tiver, confirmar:
+  - que o target existe
+  - que está visível
+  - e, no caso do passo `add-expense`, que o formulário está aberto
 
-  if (currentSubstep.focusTarget) {
-    setTimeout(() => {
-      const input =
-        el.tagName === "INPUT" || el.tagName === "TEXTAREA"
-          ? el
-          : el.querySelector("input, textarea, select");
-      if (input) (input as HTMLElement).focus();
-    }, 400);
-  }
-}
-```
+Se não estiver pronto:
+- não mostrar o próximo tooltip ainda
+- aguardar via observer até o target aparecer
+- se o formulário tiver fechado indevidamente, reabrir ou voltar ao substep anterior de abertura do formulário
 
-### Mudança 2 — `src/components/onboarding/onboarding-overlay.tsx`
+Na prática, `advanceSubstepInternal()` precisa ficar mais defensivo para o passo 2.
 
-Remover o lock de `document.body.style.overflow = "hidden"` (linhas 54-60). O Sheet já gerencia seu próprio scroll, e travar o body causa conflito. O bloqueio de cliques já é feito pelos 4 painéis, então não precisa travar scroll do body separadamente.
+#### 4. Adicionar “guard” explícito de formulário aberto no passo 2
+**Arquivos:** `src/lib/onboarding/onboarding-steps.ts`, `src/hooks/use-onboarding-tour.tsx`
 
-Substituir por: não fazer nada (remover o useEffect inteiro de overflow).
+Adicionar uma condição/contexto para os substeps de formulário (`expense-type-info` em diante), exigindo que o formulário esteja aberto.
 
-### Mudança 3 — Substep `expense-type-info` sem `scrollToTarget`
+Exemplo conceitual:
+- `expense-type-info`, `expense-description`, `expense-amount`, etc. só são válidos se existir `expense-type-selector` no DOM
+- se esse contexto sumir, o onboarding não continua
 
-**`src/lib/onboarding/onboarding-steps.ts`** (linhas 203-211):
+Isso transforma o passo 2 em um guided form flow de verdade, em vez de depender só de sequência linear.
 
-O substep `expense-type-info` é do tipo `info` com `targetSelector` e `scrollToTarget: true`. Ao avançar dele para `expense-description`, o `handleTargetAppeared` tenta fazer scroll para o campo description, mas o Sheet pode não ter estabilizado ainda.
+#### 5. Tratar fechamento acidental de forma robusta
+**Arquivos:** `src/pages/Index.tsx`, `src/hooks/use-onboarding-tour.tsx`
 
-Remover `scrollToTarget: true` do `expense-type-info` (é um info step, não precisa scroll) e adicionar um pequeno delay na transição. Na verdade, manter `scrollToTarget` nos substeps de `fill`/`select` mas garantir que o scroll use o container correto (já resolvido pela Mudança 1).
+Cobrir os cenários:
+- click outside
+- escape
+- mudança de substep
+- re-render/reset que limpe `expenseInitialData` ou `expenseDefaultAmount`
+- qualquer `onOpenChange(false)` durante o guided flow
 
----
+Comportamento:
+- durante o passo 2, click outside e escape já serão bloqueados por `preventClose`
+- se ainda assim o sheet fechar por algum motivo, o hook detecta perda do target do formulário e:
+  - pausa o avanço
+  - restaura o contexto reabrindo o sheet
+  - ou retorna ao substep “Selecione Despesa”
+
+#### 6. Manter o restante do app intacto
+Escopo controlado:
+- nenhuma mudança no passo 1
+- nenhuma mudança estrutural no formulário fora do onboarding
+- o `preventClose` só fica ativo no fluxo guiado da despesa
+- a lógica de scroll container-aware continua útil, mas deixa de ser o mecanismo principal para mascarar perda de contexto
 
 ### Arquivos afetados
+- `src/hooks/use-onboarding-tour.tsx`
+- `src/pages/Index.tsx`
+- `src/components/unified-expense-form-sheet.tsx`
+- `src/lib/onboarding/onboarding-steps.ts`
 
-| Arquivo | Mudança |
-|---------|---------|
-| `src/hooks/use-onboarding-tour.tsx` | Reescrever `handleTargetAppeared` para scroll dentro do container correto |
-| `src/components/onboarding/onboarding-overlay.tsx` | Remover lock de `document.body.style.overflow` |
-
-Nenhuma migração SQL. Nenhuma mudança nos outros passos.
-
+### Resultado esperado
+Depois dessa correção:
+- o formulário abre e entra em modo guiado real
+- continua aberto durante todo o passo 2
+- “Descrição” só aparece quando o campo existir de fato no formulário aberto
+- o onboarding não avança mais para targets inexistentes
+- click outside / escape / fechamento acidental deixam de quebrar o fluxo
