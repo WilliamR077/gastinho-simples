@@ -127,6 +127,19 @@ export function UnifiedExpenseFormSheet({
     }
   }, [open]);
 
+  // Notify onboarding that the expense form is mounted and ready
+  useEffect(() => {
+    if (!open) return;
+    // Wait for the form to render, then check for the type selector
+    const timer = setTimeout(() => {
+      const typeSelector = document.querySelector('[data-onboarding="expense-type-selector"]');
+      if (typeSelector) {
+        window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: "expense-form-opened" }));
+      }
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [open]);
+
   const loadCards = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();

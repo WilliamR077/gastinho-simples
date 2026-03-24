@@ -2305,6 +2305,10 @@ export default function Index() {
         <UnifiedExpenseFormSheet
           open={expenseSheetOpen}
           onOpenChange={(open) => {
+            // Block close during onboarding guided flow
+            if (!open && isExpenseFormGuidedFlow) {
+              return;
+            }
             setExpenseSheetOpen(open);
             if (!open) {
               setExpenseDefaultAmount(undefined);
@@ -2317,6 +2321,7 @@ export default function Index() {
           expenses={expenses}
           recurringExpenses={recurringExpenses}
           defaultAmount={expenseDefaultAmount}
+          preventClose={isExpenseFormGuidedFlow}
           initialData={expenseInitialData}
           groupMembers={groupMembers}
           currentUserId={user?.id || ''} />
