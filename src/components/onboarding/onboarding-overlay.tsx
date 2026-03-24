@@ -50,15 +50,9 @@ export function OnboardingOverlay({
     }
   }, [targetSelector, onTargetRect]);
 
-  // Lock body scroll while overlay is visible
-  useEffect(() => {
-    if (isVisible) {
-      document.body.style.overflow = "hidden";
-    }
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [isVisible]);
+  // Body scroll lock removed — the 4-panel interaction mask already blocks
+  // clicks outside the spotlight, and locking body overflow conflicts with
+  // Sheet/Dialog containers that manage their own scroll.
 
   // Continuous position tracking via rAF
   useEffect(() => {
