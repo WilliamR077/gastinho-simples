@@ -484,7 +484,11 @@ export function UnifiedExpenseFormSheet({
                       : <span>Selecione a data</span>}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start" data-onboarding="expense-date">
+                <PopoverContent
+                  className="w-auto p-0 z-[80]"
+                  align="start"
+                  data-onboarding="expense-date"
+                >
                   <Calendar
                     mode="single"
                     selected={expenseDate}

@@ -226,15 +226,14 @@ const EXPENSE_SUBSTEPS: OnboardingSubstep[] = [
   },
   {
     id: "expense-date",
-    actionType: "optional-group",
+    actionType: "info",
     targetSelector: "expense-date",
     title: "Data do Gasto",
     description:
       "Se essa despesa aconteceu em outro dia, abra o calendário e escolha a data certa. Se foi hoje, pode manter como está.",
     emoji: "📅",
-    skipLabel: "Manter hoje",
     scrollToTarget: true,
-    placement: "below",
+    placement: "above",
   },
   {
     id: "expense-category",
@@ -254,12 +253,15 @@ const EXPENSE_SUBSTEPS: OnboardingSubstep[] = [
     targetSelector: "category-manager-sheet",
     title: "Gerencie suas Categorias",
     description:
-      "Aqui você pode personalizar suas categorias antes de terminar a despesa. O spotlight vai acompanhar esse fluxo.",
+      "Aqui ficam as categorias padrão e as que você criar. Se quiser adaptar o app à sua realidade, este é o lugar certo.",
     emoji: "🛠️",
     scrollToTarget: true,
     placement: "above",
-    condition: () => {
-      return !!document.querySelector('[data-onboarding="category-manager-sheet"]');
+    condition: (ctx) => {
+      return (
+        !!ctx.seenEvents?.has("category-manager-opened") &&
+        !ctx.seenEvents?.has("category-manager-closed")
+      );
     },
   },
   {
@@ -272,8 +274,11 @@ const EXPENSE_SUBSTEPS: OnboardingSubstep[] = [
     emoji: "✏️",
     scrollToTarget: true,
     placement: "above",
-    condition: () => {
-      return !!document.querySelector('[data-onboarding="category-manager-edit-btn"]');
+    condition: (ctx) => {
+      return (
+        !!ctx.seenEvents?.has("category-manager-opened") &&
+        !ctx.seenEvents?.has("category-manager-closed")
+      );
     },
   },
   {
@@ -286,8 +291,11 @@ const EXPENSE_SUBSTEPS: OnboardingSubstep[] = [
     emoji: "👁️",
     scrollToTarget: true,
     placement: "above",
-    condition: () => {
-      return !!document.querySelector('[data-onboarding="category-manager-hide-btn"]');
+    condition: (ctx) => {
+      return (
+        !!ctx.seenEvents?.has("category-manager-opened") &&
+        !ctx.seenEvents?.has("category-manager-closed")
+      );
     },
   },
   {
@@ -300,8 +308,28 @@ const EXPENSE_SUBSTEPS: OnboardingSubstep[] = [
     emoji: "🗑️",
     scrollToTarget: true,
     placement: "above",
-    condition: () => {
-      return !!document.querySelector('[data-onboarding="category-manager-delete-btn"]');
+    condition: (ctx) => {
+      return (
+        !!ctx.seenEvents?.has("category-manager-opened") &&
+        !ctx.seenEvents?.has("category-manager-closed")
+      );
+    },
+  },
+  {
+    id: "expense-category-manager-outros",
+    actionType: "info",
+    targetSelector: "category-manager-outros-row",
+    title: 'Categoria "Outros"',
+    description:
+      'A categoria "Outros" é fixa. Ela não pode ser editada, ocultada ou excluída porque serve de destino seguro para despesas sem categoria.',
+    emoji: "🔒",
+    scrollToTarget: true,
+    placement: "above",
+    condition: (ctx) => {
+      return (
+        !!ctx.seenEvents?.has("category-manager-opened") &&
+        !ctx.seenEvents?.has("category-manager-closed")
+      );
     },
   },
   {
@@ -314,8 +342,11 @@ const EXPENSE_SUBSTEPS: OnboardingSubstep[] = [
     emoji: "➕",
     scrollToTarget: true,
     placement: "above",
-    condition: () => {
-      return !!document.querySelector('[data-onboarding="category-manager-add-btn"]');
+    condition: (ctx) => {
+      return (
+        !!ctx.seenEvents?.has("category-manager-opened") &&
+        !ctx.seenEvents?.has("category-manager-closed")
+      );
     },
   },
   {
@@ -329,8 +360,11 @@ const EXPENSE_SUBSTEPS: OnboardingSubstep[] = [
     autoAdvanceOnEvent: "category-manager-closed",
     scrollToTarget: true,
     placement: "above",
-    condition: () => {
-      return !!document.querySelector('[data-onboarding="category-manager-close-btn"]');
+    condition: (ctx) => {
+      return (
+        !!ctx.seenEvents?.has("category-manager-opened") &&
+        !ctx.seenEvents?.has("category-manager-closed")
+      );
     },
   },
   {
@@ -345,10 +379,7 @@ const EXPENSE_SUBSTEPS: OnboardingSubstep[] = [
     scrollToTarget: true,
     placement: "below",
     condition: (ctx) => {
-      return (
-        !!ctx.seenEvents?.has("category-manager-opened") &&
-        !document.querySelector('[data-onboarding="category-manager-sheet"]')
-      );
+      return !!ctx.seenEvents?.has("category-manager-closed");
     },
   },
   {
@@ -563,3 +594,4 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
     ],
   },
 ];
+

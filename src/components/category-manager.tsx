@@ -179,7 +179,13 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
         className={`flex items-center justify-between rounded-lg p-3 ${
           isHidden ? "bg-muted/30 opacity-60" : "bg-muted/50"
         }`}
-        data-onboarding={isPrimaryEditableCategory && isEditing ? "category-manager-edit-btn" : undefined}
+        data-onboarding={
+          isOutros
+            ? "category-manager-outros-row"
+            : isPrimaryEditableCategory && isEditing
+              ? "category-manager-edit-btn"
+              : undefined
+        }
       >
         {isEditing ? (
           <div className="flex flex-1 items-center gap-2">

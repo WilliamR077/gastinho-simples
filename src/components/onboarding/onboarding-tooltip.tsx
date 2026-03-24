@@ -63,34 +63,50 @@ export function OnboardingTooltip({
 
     const rect = el.getBoundingClientRect();
     const tooltipHeight = tooltipRef.current?.offsetHeight || 180;
+    const tooltipWidth = Math.min(320, window.innerWidth - 32);
     const gap = 16;
     const padding = 8;
-
-    // Determine placement
-    const spaceBelow = window.innerHeight - (rect.bottom + padding + gap);
-    const spaceAbove = rect.top - padding - gap;
-
-    let placement: "above" | "below" = "below";
-    let top: number;
-
-    if (substep.placement === "above" || (substep.placement !== "below" && spaceBelow < tooltipHeight && spaceAbove > spaceBelow)) {
-      placement = "above";
-      top = rect.top - padding - gap - tooltipHeight;
-    } else {
-      placement = "below";
-      top = rect.bottom + padding + gap;
-    }
-
-    // Clamp vertical
-    top = Math.max(8, Math.min(top, window.innerHeight - tooltipHeight - 8));
-
-    // Horizontal: center on target, clamp to viewport
-    const tooltipWidth = Math.min(320, window.innerWidth - 32);
     const centerX = rect.left + rect.width / 2;
     let left = centerX - tooltipWidth / 2;
     left = Math.max(16, Math.min(left, window.innerWidth - tooltipWidth - 16));
 
-    setPos({ top, left, placement });
+    const clampTop = (top: number) =>
+      Math.max(8, Math.min(top, window.innerHeight - tooltipHeight - 8));
+
+    const getOverlapArea = (top: number) => {
+      const tooltipBottom = top + tooltipHeight;
+      const tooltipRight = left + tooltipWidth;
+      const overlapWidth = Math.max(0, Math.min(tooltipRight, rect.right) - Math.max(left, rect.left));
+      const overlapHeight = Math.max(0, Math.min(tooltipBottom, rect.bottom) - Math.max(top, rect.top));
+      return overlapWidth * overlapHeight;
+    };
+
+    const preferredPlacements: Array<"above" | "below"> =
+      substep.placement === "above"
+        ? ["above", "below"]
+        : substep.placement === "below"
+          ? ["below", "above"]
+          : [window.innerHeight - rect.bottom >= rect.top ? "below" : "above", window.innerHeight - rect.bottom >= rect.top ? "above" : "below"];
+
+    const candidates = preferredPlacements.map((placement) => {
+      const initialTop =
+        placement === "above"
+          ? rect.top - padding - gap - tooltipHeight
+          : rect.bottom + padding + gap;
+      const top = clampTop(initialTop);
+
+      return {
+        placement,
+        top,
+        overlapArea: getOverlapArea(top),
+      };
+    });
+
+    const bestCandidate =
+      candidates.find((candidate) => candidate.overlapArea === 0) ??
+      candidates.sort((a, b) => a.overlapArea - b.overlapArea)[0];
+
+    setPos({ top: bestCandidate.top, left, placement: bestCandidate.placement });
   }, [targetSelector, substep.placement]);
 
   useEffect(() => {
