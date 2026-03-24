@@ -57,6 +57,7 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { adMobService } from "@/services/admob-service";
 import { startOfMonth, endOfMonth, format } from "date-fns";
 import { parseLocalDate, cn } from "@/lib/utils";
+import { useOnboardingTour } from "@/hooks/use-onboarding-tour";
 
 export default function Index() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
