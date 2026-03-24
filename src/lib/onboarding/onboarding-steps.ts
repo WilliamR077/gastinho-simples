@@ -206,7 +206,6 @@ const EXPENSE_SUBSTEPS: OnboardingSubstep[] = [
     title: "Tipo de Despesa",
     description: "Estamos adicionando uma Despesa do Mês. No próximo passo você aprenderá sobre Despesas Fixas (recorrentes).",
     emoji: "📋",
-    scrollToTarget: true,
     placement: "below",
   },
   {

@@ -57,6 +57,7 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { adMobService } from "@/services/admob-service";
 import { startOfMonth, endOfMonth, format } from "date-fns";
 import { parseLocalDate, cn } from "@/lib/utils";
+import { useOnboardingTour } from "@/hooks/use-onboarding-tour";
 
 export default function Index() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -127,6 +128,7 @@ export default function Index() {
   const { currentContext, groups, getGroupMembers } = useSharedGroups();
   const { categories } = useCategories();
   const [groupMembers, setGroupMembers] = useState<SharedGroupMember[]>([]);
+  const { isExpenseFormGuidedFlow } = useOnboardingTour();
 
   // Redirect to auth if not logged in
   useEffect(() => {
@@ -2282,9 +2284,6 @@ export default function Index() {
         <FloatingActionButton
           onExpenseClick={() => {
             setExpenseSheetOpen(true);
-            setTimeout(() => {
-              window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: "expense-form-opened" }));
-            }, 300);
           }}
           onGoalClick={() => setBudgetGoalSheetOpen(true)}
           onCalculatorClick={() => setCalculatorOpen(true)}
@@ -2306,6 +2305,10 @@ export default function Index() {
         <UnifiedExpenseFormSheet
           open={expenseSheetOpen}
           onOpenChange={(open) => {
+            // Block close during onboarding guided flow
+            if (!open && isExpenseFormGuidedFlow) {
+              return;
+            }
             setExpenseSheetOpen(open);
             if (!open) {
               setExpenseDefaultAmount(undefined);
@@ -2318,6 +2321,7 @@ export default function Index() {
           expenses={expenses}
           recurringExpenses={recurringExpenses}
           defaultAmount={expenseDefaultAmount}
+          preventClose={isExpenseFormGuidedFlow}
           initialData={expenseInitialData}
           groupMembers={groupMembers}
           currentUserId={user?.id || ''} />

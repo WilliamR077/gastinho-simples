@@ -38,6 +38,7 @@ interface OnboardingContextType {
   isCompleted: boolean;
   showCompletionDialog: boolean;
   completedSteps: Set<string>;
+  isExpenseFormGuidedFlow: boolean;
 
   startOnboarding: () => void;
   skipOnboarding: () => void;
@@ -269,6 +270,14 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  // Determine if we're in the expense form guided flow
+  // Substeps after "expense-click-btn" (index 2) require the form to be open
+  const EXPENSE_FORM_SUBSTEP_START = 3; // expense-type-info onwards
+  const isExpenseFormGuidedFlow =
+    isOpen &&
+    currentStep?.id === "add-expense" &&
+    substepIndex >= EXPENSE_FORM_SUBSTEP_START;
+
   function advanceSubstepInternal() {
     if (!currentStep) return;
 
@@ -285,6 +294,25 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     }
 
     if (nextIdx < currentStep.substeps.length) {
+      const nextSubstep = currentStep.substeps[nextIdx];
+
+      // Guard: if the next substep requires a target inside the expense form,
+      // verify the form context is still present before advancing
+      if (
+        currentStep.id === "add-expense" &&
+        nextIdx >= EXPENSE_FORM_SUBSTEP_START &&
+        nextSubstep.targetSelector
+      ) {
+        const formContext = document.querySelector('[data-onboarding="expense-type-selector"]');
+        if (!formContext) {
+          // Form is not mounted — wait for it via MutationObserver instead of advancing
+          console.warn("[Onboarding] Form context lost, waiting for re-mount...");
+          // Set the index anyway — the MutationObserver effect will handle target appearance
+          setSubstepIndex(nextIdx);
+          return;
+        }
+      }
+
       setSubstepIndex(nextIdx);
     } else {
       // Step complete, go to next step
@@ -495,6 +523,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         isCompleted,
         showCompletionDialog,
         completedSteps,
+        isExpenseFormGuidedFlow,
         startOnboarding,
         skipOnboarding,
         skipCurrentStep,
