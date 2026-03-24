@@ -38,6 +38,7 @@ interface OnboardingContextType {
   isCompleted: boolean;
   showCompletionDialog: boolean;
   completedSteps: Set<string>;
+  isExpenseFormGuidedFlow: boolean;
 
   startOnboarding: () => void;
   skipOnboarding: () => void;
