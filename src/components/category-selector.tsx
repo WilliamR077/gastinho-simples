@@ -13,13 +13,15 @@ interface CategorySelectorProps {
   onValueChange: (value: string) => void;
   className?: string;
   triggerClassName?: string;
+  onboardingTarget?: string;
 }
 
 export function CategorySelector({ 
   value, 
   onValueChange, 
   className,
-  triggerClassName 
+  triggerClassName,
+  onboardingTarget,
 }: CategorySelectorProps) {
   const { activeCategories, loading, refresh } = useCategories();
   const [showManager, setShowManager] = useState(false);
@@ -30,12 +32,21 @@ export function CategorySelector({
     // Pequeno delay para fechar o select antes de abrir o manager
     setTimeout(() => {
       setShowManager(true);
-      // Notify onboarding if active
-      try {
-        const event = new CustomEvent("gastinho-onboarding-event", { detail: "category-manager-opened" });
-        window.dispatchEvent(event);
-      } catch {}
     }, 100);
+  };
+
+  const handleValueChange = (nextValue: string) => {
+    onValueChange(nextValue);
+
+    try {
+      window.dispatchEvent(
+        new CustomEvent("gastinho-onboarding-event", {
+          detail: "expense-category-selected",
+        })
+      );
+    } catch {
+      void 0;
+    }
   };
 
   // Recarrega categorias quando o manager fecha
@@ -98,7 +109,7 @@ export function CategorySelector({
     <>
       <Select 
         value={value} 
-        onValueChange={onValueChange}
+        onValueChange={handleValueChange}
         open={isOpen}
         onOpenChange={setIsOpen}
       >
@@ -107,7 +118,7 @@ export function CategorySelector({
             {getDisplayValue()}
           </SelectValue>
         </SelectTrigger>
-        <SelectContent className="bg-background">
+        <SelectContent className="bg-background" data-onboarding={onboardingTarget}>
           {useStaticCategories ? (
             // Fallback para categorias estáticas
             Object.entries(categoryLabels).map(([key, label]) => (

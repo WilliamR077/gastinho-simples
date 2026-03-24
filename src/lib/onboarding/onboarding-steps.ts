@@ -21,7 +21,7 @@ export interface OnboardingSubstep {
   autoAdvanceOnRoute?: string;
   requiresValidation?: boolean;
   validationSelector?: string; // if different from targetSelector
-  autoAdvanceOnEvent?: string; // advance when notifyEvent(name) is called
+  autoAdvanceOnEvent?: string | string[]; // advance when notifyEvent(name) is called
   skipLabel?: string;
   focusTarget?: boolean;
   scrollToTarget?: boolean;
@@ -32,7 +32,7 @@ export interface OnboardingSubstep {
   repeatLabel?: string;
   proceedLabel?: string;
   // Conditional: skip this substep if condition not met
-  condition?: (ctx: { formElement?: HTMLElement }) => boolean;
+  condition?: (ctx: { formElement?: HTMLElement; seenEvents?: Set<string> }) => boolean;
 }
 
 export interface OnboardingStepConfig {
@@ -47,7 +47,6 @@ export interface OnboardingStepConfig {
   substeps: OnboardingSubstep[];
 }
 
-// ─── Cards step substeps ──────────────────────────────────────
 const CARDS_SUBSTEPS: OnboardingSubstep[] = [
   {
     id: "go-to-cards",
@@ -105,8 +104,7 @@ const CARDS_SUBSTEPS: OnboardingSubstep[] = [
     scrollToTarget: true,
     placement: "below",
     condition: () => {
-      const el = document.querySelector('[data-onboarding="card-due-day-input"]');
-      return !!el;
+      return !!document.querySelector('[data-onboarding="card-due-day-input"]');
     },
   },
   {
@@ -121,8 +119,7 @@ const CARDS_SUBSTEPS: OnboardingSubstep[] = [
     scrollToTarget: true,
     placement: "below",
     condition: () => {
-      const el = document.querySelector('[data-onboarding="card-close-days-input"]');
-      return !!el;
+      return !!document.querySelector('[data-onboarding="card-close-days-input"]');
     },
   },
   {
@@ -168,22 +165,15 @@ const CARDS_SUBSTEPS: OnboardingSubstep[] = [
   },
 ];
 
-// ─── Expense step substeps (field-by-field) ───────────────────
 const EXPENSE_SUBSTEPS: OnboardingSubstep[] = [
-  {
-    id: "expense-intro",
-    actionType: "info",
-    title: "Registre seu Primeiro Gasto",
-    description: "Qual foi a última coisa que você gastou? Vamos registrar sua primeira despesa. Clique no botão \"+\" para começar!",
-    emoji: "💸",
-  },
   {
     id: "expense-click-fab",
     actionType: "click",
     targetSelector: "fab-main-button",
-    title: "Abra o Menu",
-    description: 'Toque no botão "+" para abrir as opções.',
-    emoji: "👆",
+    title: "Registre seu Primeiro Gasto",
+    description:
+      'Qual foi a última coisa que você comprou? Toque no botão "+" para registrar a última despesa que você lembra ter feito.',
+    emoji: "💸",
     autoAdvanceOnEvent: "fab-menu-opened",
     scrollToTarget: true,
     placement: "above",
@@ -204,7 +194,8 @@ const EXPENSE_SUBSTEPS: OnboardingSubstep[] = [
     actionType: "info",
     targetSelector: "expense-type-selector",
     title: "Tipo de Despesa",
-    description: "Estamos adicionando uma Despesa do Mês. No próximo passo você aprenderá sobre Despesas Fixas (recorrentes).",
+    description:
+      "Estamos adicionando uma despesa do mês. No próximo passo você aprenderá sobre despesas fixas (recorrentes).",
     emoji: "📋",
     placement: "below",
   },
@@ -213,7 +204,8 @@ const EXPENSE_SUBSTEPS: OnboardingSubstep[] = [
     actionType: "fill",
     targetSelector: "expense-description",
     title: "Descrição",
-    description: "O que você comprou? Ex: Almoço, Uber, Mercado...",
+    description:
+      "Qual foi a última coisa que você comprou? Digite a última despesa que você lembra ter tido, como almoço, Uber ou mercado.",
     emoji: "📝",
     requiresValidation: true,
     focusTarget: true,
@@ -237,7 +229,8 @@ const EXPENSE_SUBSTEPS: OnboardingSubstep[] = [
     actionType: "optional-group",
     targetSelector: "expense-date",
     title: "Data do Gasto",
-    description: "Selecione a data em que esse gasto aconteceu. A data de hoje já vem preenchida.",
+    description:
+      "Se essa despesa aconteceu em outro dia, abra o calendário e escolha a data certa. Se foi hoje, pode manter como está.",
     emoji: "📅",
     skipLabel: "Manter hoje",
     scrollToTarget: true,
@@ -245,14 +238,118 @@ const EXPENSE_SUBSTEPS: OnboardingSubstep[] = [
   },
   {
     id: "expense-category",
-    actionType: "select",
+    actionType: "click",
     targetSelector: "expense-category-field",
     title: "Escolha a Categoria",
-    description: "Essas são as categorias padrão. Escolha uma ou, se quiser, gerencie suas categorias pelo botão no final da lista.",
+    description:
+      'Abra a lista e escolha uma categoria padrão. Se quiser personalizar, toque em "Gerenciar categorias..." para editar, ocultar, excluir ou criar uma nova.',
     emoji: "📦",
-    requiresValidation: true,
+    autoAdvanceOnEvent: ["expense-category-selected", "category-manager-opened"],
     scrollToTarget: true,
     placement: "below",
+  },
+  {
+    id: "expense-category-manager-intro",
+    actionType: "info",
+    targetSelector: "category-manager-sheet",
+    title: "Gerencie suas Categorias",
+    description:
+      "Aqui você pode personalizar suas categorias antes de terminar a despesa. O spotlight vai acompanhar esse fluxo.",
+    emoji: "🛠️",
+    scrollToTarget: true,
+    placement: "above",
+    condition: () => {
+      return !!document.querySelector('[data-onboarding="category-manager-sheet"]');
+    },
+  },
+  {
+    id: "expense-category-manager-edit",
+    actionType: "info",
+    targetSelector: "category-manager-edit-btn",
+    title: "Editar Categoria",
+    description:
+      'Use este botão para trocar o nome e o ícone de uma categoria. Por exemplo, você pode renomear "Vestuário" para "Roupas".',
+    emoji: "✏️",
+    scrollToTarget: true,
+    placement: "above",
+    condition: () => {
+      return !!document.querySelector('[data-onboarding="category-manager-edit-btn"]');
+    },
+  },
+  {
+    id: "expense-category-manager-hide",
+    actionType: "info",
+    targetSelector: "category-manager-hide-btn",
+    title: "Ocultar Categoria",
+    description:
+      "Se uma categoria não fizer sentido para você agora, este botão a esconde do seletor sem apagar despesas antigas.",
+    emoji: "👁️",
+    scrollToTarget: true,
+    placement: "above",
+    condition: () => {
+      return !!document.querySelector('[data-onboarding="category-manager-hide-btn"]');
+    },
+  },
+  {
+    id: "expense-category-manager-delete",
+    actionType: "info",
+    targetSelector: "category-manager-delete-btn",
+    title: "Excluir Categoria",
+    description:
+      'Use excluir apenas quando quiser remover a categoria de vez. As despesas vinculadas são movidas para "Outros".',
+    emoji: "🗑️",
+    scrollToTarget: true,
+    placement: "above",
+    condition: () => {
+      return !!document.querySelector('[data-onboarding="category-manager-delete-btn"]');
+    },
+  },
+  {
+    id: "expense-category-manager-add",
+    actionType: "info",
+    targetSelector: "category-manager-add-btn",
+    title: "Adicionar Categoria",
+    description:
+      'Se estiver faltando algo como "Viagem", toque aqui para criar uma categoria nova com o nome e ícone que você quiser.',
+    emoji: "➕",
+    scrollToTarget: true,
+    placement: "above",
+    condition: () => {
+      return !!document.querySelector('[data-onboarding="category-manager-add-btn"]');
+    },
+  },
+  {
+    id: "expense-category-manager-close",
+    actionType: "click",
+    targetSelector: "category-manager-close-btn",
+    title: "Volte ao Formulário",
+    description:
+      "Quando terminar de personalizar, toque aqui para voltar ao formulário e escolher a categoria final deste gasto.",
+    emoji: "↩️",
+    autoAdvanceOnEvent: "category-manager-closed",
+    scrollToTarget: true,
+    placement: "above",
+    condition: () => {
+      return !!document.querySelector('[data-onboarding="category-manager-close-btn"]');
+    },
+  },
+  {
+    id: "expense-category-after-manager",
+    actionType: "click",
+    targetSelector: "expense-category-field",
+    title: "Escolha a Categoria do Gasto",
+    description:
+      "Agora escolha a categoria que vai ficar neste lançamento. Pode ser uma categoria padrão ou uma que você acabou de personalizar.",
+    emoji: "📦",
+    autoAdvanceOnEvent: "expense-category-selected",
+    scrollToTarget: true,
+    placement: "below",
+    condition: (ctx) => {
+      return (
+        !!ctx.seenEvents?.has("category-manager-opened") &&
+        !document.querySelector('[data-onboarding="category-manager-sheet"]')
+      );
+    },
   },
   {
     id: "expense-payment",
@@ -314,7 +411,6 @@ const EXPENSE_SUBSTEPS: OnboardingSubstep[] = [
   },
 ];
 
-// ─── Step labels for completion dialog ────────────────────────
 export const STEP_LABELS: Record<string, string> = {
   "add-card": "Cartões configurados",
   "add-expense": "Primeira despesa registrada",
@@ -326,9 +422,7 @@ export const STEP_LABELS: Record<string, string> = {
   "import-spreadsheet": "Planilha importada",
 };
 
-// ─── All onboarding steps ─────────────────────────────────────
 export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
-  // ── PASSO 1: Cartão ─────────────────────────────────
   {
     id: "add-card",
     label: "Cartões",
@@ -337,7 +431,6 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
     targetRoute: "/cards",
     substeps: CARDS_SUBSTEPS,
   },
-  // ── PASSO 2: Despesa do Mês (com categorias integradas) ──
   {
     id: "add-expense",
     label: "Despesas",
@@ -345,7 +438,6 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
     detectionTable: "expenses",
     substeps: EXPENSE_SUBSTEPS,
   },
-  // ── PASSO 3: Despesa Fixa ───────────────────────────
   {
     id: "add-recurring-expense",
     label: "Despesas Fixas",
@@ -356,14 +448,14 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         id: "recurring-intro",
         actionType: "info",
         title: "Cadastre uma Despesa Fixa",
-        description: "Pense em algo que você paga todo mês: aluguel, academia, internet, streaming... Cadastre para o app lançar automaticamente!",
+        description:
+          "Pense em algo que você paga todo mês: aluguel, academia, internet, streaming... Cadastre para o app lançar automaticamente!",
         emoji: "🔄",
         navigateLabel: "Continuar",
         skipLabel: "Pular esta etapa",
       },
     ],
   },
-  // ── PASSO 4: Entradas (3 tipos) ─────────────────────
   {
     id: "add-income",
     label: "Entradas",
@@ -374,14 +466,14 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         id: "income-intro",
         actionType: "info",
         title: "Como você recebe dinheiro?",
-        description: "Você pode registrar 3 tipos de entrada:\n\n💰 Entrada do mês — freelance, venda, bônus\n🔄 Entrada fixa — salário mensal\n📑 Entrada parcelada — projeto/venda parcelada\n\nEscolha o tipo que mais combina com você no formulário.",
+        description:
+          "Você pode registrar 3 tipos de entrada:\n\n💰 Entrada do mês — freelance, venda, bônus\n🔄 Entrada fixa — salário mensal\n📑 Entrada parcelada — projeto/venda parcelada\n\nEscolha o tipo que mais combina com você no formulário.",
         emoji: "💰",
         navigateLabel: "Continuar",
         skipLabel: "Pular esta etapa",
       },
     ],
   },
-  // ── PASSO 5: Metas ──────────────────────────────────
   {
     id: "add-budget-goal",
     label: "Metas",
@@ -392,14 +484,14 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         id: "budget-intro",
         actionType: "info",
         title: "Controle seus Gastos com Metas",
-        description: "Defina um limite de gastos para o mês! Você pode criar uma meta geral ou por categoria. Recomendamos começar com um limite mensal total.",
+        description:
+          "Defina um limite de gastos para o mês! Você pode criar uma meta geral ou por categoria. Recomendamos começar com um limite mensal total.",
         emoji: "🎯",
         navigateLabel: "Continuar",
         skipLabel: "Pular esta etapa",
       },
     ],
   },
-  // ── PASSO 6: Relatórios (NOVO) ──────────────────────
   {
     id: "view-reports",
     label: "Relatórios",
@@ -410,7 +502,8 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         id: "reports-intro",
         actionType: "info",
         title: "Conheça seus Relatórios",
-        description: "Aqui você acompanha sua vida financeira com clareza: gastos por categoria, fluxo de caixa, evolução dos gastos e muito mais.",
+        description:
+          "Aqui você acompanha sua vida financeira com clareza: gastos por categoria, fluxo de caixa, evolução dos gastos e muito mais.",
         emoji: "📊",
       },
       {
@@ -425,7 +518,6 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
       },
     ],
   },
-  // ── PASSO 7: Segurança (mobileOnly) ─────────────────
   {
     id: "setup-security",
     label: "Segurança",
@@ -436,7 +528,8 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         id: "security-intro",
         actionType: "info",
         title: "Proteja seu App",
-        description: "Recomendamos fortemente ativar a segurança! Configure um PIN de 4 a 6 dígitos ou use biometria para proteger seus dados financeiros.",
+        description:
+          "Recomendamos fortemente ativar a segurança! Configure um PIN de 4 a 6 dígitos ou use biometria para proteger seus dados financeiros.",
         emoji: "🔐",
         skipLabel: "Ativar depois",
       },
@@ -452,7 +545,6 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
       },
     ],
   },
-  // ── OPCIONAL: Importar Planilha ──────────────────────
   {
     id: "import-spreadsheet",
     label: "Importar",

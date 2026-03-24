@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { X, ArrowRight, SkipForward, Plus } from "lucide-react";
 import type { OnboardingSubstep } from "@/lib/onboarding/onboarding-steps";
+import { findReadyOnboardingTarget } from "@/lib/onboarding/target-utils";
 
 interface TargetRect {
   top: number;
@@ -54,7 +55,7 @@ export function OnboardingTooltip({
       return;
     }
 
-    const el = document.querySelector(`[data-onboarding="${targetSelector}"]`);
+    const el = findReadyOnboardingTarget(targetSelector);
     if (!el) {
       setPos(null);
       return;

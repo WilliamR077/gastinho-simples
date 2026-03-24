@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import { findReadyOnboardingTarget } from "@/lib/onboarding/target-utils";
 
 interface TargetRect {
   top: number;
@@ -30,9 +31,7 @@ export function OnboardingOverlay({
       return;
     }
 
-    const el = document.querySelector(
-      `[data-onboarding="${targetSelector}"]`
-    ) as HTMLElement | null;
+    const el = findReadyOnboardingTarget(targetSelector);
 
     if (el) {
       const rect = el.getBoundingClientRect();

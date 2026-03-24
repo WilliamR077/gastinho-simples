@@ -1,5 +1,11 @@
-import { useState } from "react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,11 +14,7 @@ import { Separator } from "@/components/ui/separator";
 import { Eye, EyeOff, Pencil, Plus, Check, X, Loader2, Trash2 } from "lucide-react";
 import { UserCategory } from "@/types/user-category";
 import { useCategories } from "@/hooks/use-categories";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,10 +27,42 @@ import {
 } from "@/components/ui/alert-dialog";
 
 const EMOJI_OPTIONS = [
-  "🍔", "🚗", "🎮", "⚕️", "📚", "🏠", "👕", "🔧", "📦",
-  "🐕", "🐱", "✈️", "🎬", "🎵", "💪", "💊", "🛒", "☕",
-  "🍕", "🎁", "💰", "📱", "💻", "🎨", "⚽", "🏋️", "🚌",
-  "🏥", "🎓", "🏪", "🍺", "🎭", "📺", "🎪", "🏖️", "💇"
+  "🍔",
+  "🚗",
+  "🎮",
+  "⚕️",
+  "📚",
+  "🏠",
+  "👕",
+  "🔧",
+  "📦",
+  "🐕",
+  "🐱",
+  "✈️",
+  "🎬",
+  "🎵",
+  "💪",
+  "💊",
+  "🛒",
+  "☕",
+  "🍕",
+  "🎁",
+  "💰",
+  "📱",
+  "💻",
+  "🎨",
+  "⚽",
+  "🏋️",
+  "🚌",
+  "🏥",
+  "🎓",
+  "🏪",
+  "🍺",
+  "🎭",
+  "📺",
+  "🎪",
+  "🏖️",
+  "💇",
 ];
 
 interface CategoryManagerProps {
@@ -42,18 +76,18 @@ interface EditingCategory {
   icon: string;
 }
 
-const isOutrosCategory = (category: UserCategory) => 
+const isOutrosCategory = (category: UserCategory) =>
   category.name.toLowerCase() === "outros";
 
 export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
-  const { 
-    activeCategories, 
-    hiddenCategories, 
+  const {
+    activeCategories,
+    hiddenCategories,
     loading,
-    addCategory, 
-    updateCategory, 
+    addCategory,
+    updateCategory,
     deleteCategory,
-    toggleCategoryVisibility 
+    toggleCategoryVisibility,
   } = useCategories();
 
   const [showAddForm, setShowAddForm] = useState(false);
@@ -62,6 +96,30 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
   const [saving, setSaving] = useState(false);
   const [editingCategory, setEditingCategory] = useState<EditingCategory | null>(null);
   const [deletingCategory, setDeletingCategory] = useState<UserCategory | null>(null);
+  const hasOpenedRef = useRef(false);
+
+  const firstEditableCategoryId = useMemo(
+    () => activeCategories.find((category) => !isOutrosCategory(category))?.id ?? null,
+    [activeCategories]
+  );
+
+  useEffect(() => {
+    if (open) {
+      hasOpenedRef.current = true;
+    } else if (!hasOpenedRef.current) {
+      return;
+    }
+
+    try {
+      window.dispatchEvent(
+        new CustomEvent("gastinho-onboarding-event", {
+          detail: open ? "category-manager-opened" : "category-manager-closed",
+        })
+      );
+    } catch {
+      void 0;
+    }
+  }, [open]);
 
   const handleAdd = async () => {
     if (!newName.trim()) return;
@@ -105,28 +163,40 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
     });
   };
 
-  const CategoryRow = ({ category, isHidden = false }: { category: UserCategory; isHidden?: boolean }) => {
+  const CategoryRow = ({
+    category,
+    isHidden = false,
+  }: {
+    category: UserCategory;
+    isHidden?: boolean;
+  }) => {
     const isEditing = editingCategory?.id === category.id;
     const isOutros = isOutrosCategory(category);
+    const isPrimaryEditableCategory = category.id === firstEditableCategoryId;
 
     return (
-      <div className={`flex items-center justify-between p-3 rounded-lg ${isHidden ? 'bg-muted/30 opacity-60' : 'bg-muted/50'}`}>
+      <div
+        className={`flex items-center justify-between rounded-lg p-3 ${
+          isHidden ? "bg-muted/30 opacity-60" : "bg-muted/50"
+        }`}
+        data-onboarding={isPrimaryEditableCategory && isEditing ? "category-manager-edit-btn" : undefined}
+      >
         {isEditing ? (
-          <div className="flex items-center gap-2 flex-1">
+          <div className="flex flex-1 items-center gap-2">
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="w-10 h-10 text-xl">
+                <Button variant="outline" size="sm" className="h-10 w-10 text-xl">
                   {editingCategory.icon}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-64 p-2 bg-background">
+              <PopoverContent className="w-64 bg-background p-2">
                 <div className="grid grid-cols-6 gap-1">
                   {EMOJI_OPTIONS.map((emoji) => (
                     <Button
                       key={emoji}
                       variant={editingCategory.icon === emoji ? "secondary" : "ghost"}
                       size="sm"
-                      className="w-9 h-9 text-lg"
+                      className="h-9 w-9 text-lg"
                       onClick={() => setEditingCategory({ ...editingCategory, icon: emoji })}
                     >
                       {emoji}
@@ -142,7 +212,11 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
               autoFocus
             />
             <Button size="icon" variant="ghost" onClick={handleSaveEdit} disabled={saving}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4 text-green-500" />}
+              {saving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Check className="h-4 w-4 text-green-500" />
+              )}
             </Button>
             <Button size="icon" variant="ghost" onClick={() => setEditingCategory(null)}>
               <X className="h-4 w-4 text-destructive" />
@@ -152,42 +226,47 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
           <>
             <div className="flex items-center gap-3">
               <span className="text-xl">{category.icon}</span>
-              <span className={isHidden ? "line-through text-muted-foreground" : ""}>{category.name}</span>
+              <span className={isHidden ? "line-through text-muted-foreground" : ""}>
+                {category.name}
+              </span>
               {isOutros ? (
-                <span className="text-xs bg-amber-500/10 text-amber-600 px-2 py-0.5 rounded">🔒 Fixa</span>
-              ) : category.is_default && (
-                <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">Padrão</span>
-              )}
+                <span className="rounded bg-amber-500/10 px-2 py-0.5 text-xs text-amber-600">
+                  🔒 Fixa
+                </span>
+              ) : category.is_default ? (
+                <span className="rounded bg-primary/10 px-2 py-0.5 text-xs text-primary">
+                  Padrão
+                </span>
+              ) : null}
             </div>
             {isOutros ? (
               <span className="text-xs text-muted-foreground">Não editável</span>
             ) : (
               <div className="flex items-center gap-1">
-                <Button 
-                  size="icon" 
-                  variant="ghost" 
+                <Button
+                  size="icon"
+                  variant="ghost"
                   onClick={() => startEditing(category)}
                   className="h-8 w-8"
+                  data-onboarding={isPrimaryEditableCategory ? "category-manager-edit-btn" : undefined}
                 >
                   <Pencil className="h-4 w-4" />
                 </Button>
-                <Button 
-                  size="icon" 
-                  variant="ghost" 
+                <Button
+                  size="icon"
+                  variant="ghost"
                   onClick={() => toggleCategoryVisibility(category.id)}
                   className="h-8 w-8"
+                  data-onboarding={isPrimaryEditableCategory ? "category-manager-hide-btn" : undefined}
                 >
-                  {isHidden ? (
-                    <Eye className="h-4 w-4" />
-                  ) : (
-                    <EyeOff className="h-4 w-4" />
-                  )}
+                  {isHidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
                 </Button>
-                <Button 
-                  size="icon" 
-                  variant="ghost" 
+                <Button
+                  size="icon"
+                  variant="ghost"
                   onClick={() => setDeletingCategory(category)}
                   className="h-8 w-8 text-destructive hover:text-destructive"
+                  data-onboarding={isPrimaryEditableCategory ? "category-manager-delete-btn" : undefined}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -202,26 +281,42 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent side="bottom" className="h-[85vh]">
+        <SheetContent
+          side="bottom"
+          className="h-[85vh]"
+          data-onboarding="category-manager-sheet"
+        >
           <SheetHeader className="text-left">
-            <SheetTitle className="text-primary flex items-center gap-2">
-              ✏️ Gerenciar Categorias
-            </SheetTitle>
-            <SheetDescription>
-              Adicione, edite, oculte ou exclua categorias. A categoria "Outros" não pode ser modificada.
-            </SheetDescription>
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <SheetTitle className="flex items-center gap-2 text-primary">
+                  ✏️ Gerenciar Categorias
+                </SheetTitle>
+                <SheetDescription>
+                  Adicione, edite, oculte ou exclua categorias. A categoria "Outros" não pode
+                  ser modificada.
+                </SheetDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onOpenChange(false)}
+                data-onboarding="category-manager-close-btn"
+              >
+                Voltar ao formulário
+              </Button>
+            </div>
           </SheetHeader>
 
-          <ScrollArea className="h-[calc(100%-120px)] mt-4 pr-4">
+          <ScrollArea className="mt-4 h-[calc(100%-120px)] pr-4">
             {loading ? (
-              <div className="flex items-center justify-center h-32">
+              <div className="flex h-32 items-center justify-center">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
             ) : (
               <div className="space-y-6">
-                {/* Categorias Ativas */}
                 <div className="space-y-3">
-                  <h3 className="font-medium text-sm text-muted-foreground">
+                  <h3 className="text-sm font-medium text-muted-foreground">
                     📌 Categorias Ativas ({activeCategories.length})
                   </h3>
                   <div className="space-y-2">
@@ -231,25 +326,27 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
                   </div>
                 </div>
 
-                {/* Adicionar Nova */}
                 {showAddForm ? (
-                  <div className="border border-dashed rounded-lg p-4 space-y-3">
-                    <h3 className="font-medium text-sm">Nova Categoria</h3>
+                  <div
+                    className="space-y-3 rounded-lg border border-dashed p-4"
+                    data-onboarding="category-manager-add-btn"
+                  >
+                    <h3 className="text-sm font-medium">Nova Categoria</h3>
                     <div className="flex items-center gap-2">
                       <Popover>
                         <PopoverTrigger asChild>
-                          <Button variant="outline" size="sm" className="w-12 h-12 text-2xl">
+                          <Button variant="outline" size="sm" className="h-12 w-12 text-2xl">
                             {newIcon}
                           </Button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-64 p-2 bg-background">
+                        <PopoverContent className="w-64 bg-background p-2">
                           <div className="grid grid-cols-6 gap-1">
                             {EMOJI_OPTIONS.map((emoji) => (
                               <Button
                                 key={emoji}
                                 variant={newIcon === emoji ? "secondary" : "ghost"}
                                 size="sm"
-                                className="w-9 h-9 text-lg"
+                                className="h-9 w-9 text-lg"
                                 onClick={() => setNewIcon(emoji)}
                               >
                                 {emoji}
@@ -269,8 +366,8 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         onClick={() => {
                           setShowAddForm(false);
                           setNewName("");
@@ -280,15 +377,15 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
                       >
                         Cancelar
                       </Button>
-                      <Button 
-                        onClick={handleAdd} 
+                      <Button
+                        onClick={handleAdd}
                         disabled={!newName.trim() || saving}
                         className="flex-1"
                       >
                         {saving ? (
-                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         ) : (
-                          <Plus className="h-4 w-4 mr-2" />
+                          <Plus className="mr-2 h-4 w-4" />
                         )}
                         Adicionar
                       </Button>
@@ -299,22 +396,23 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
                     variant="outline"
                     onClick={() => setShowAddForm(true)}
                     className="w-full border-dashed"
+                    data-onboarding="category-manager-add-btn"
                   >
-                    <Plus className="h-4 w-4 mr-2" />
+                    <Plus className="mr-2 h-4 w-4" />
                     Adicionar Categoria
                   </Button>
                 )}
 
-                {/* Categorias Ocultas */}
                 {hiddenCategories.length > 0 && (
                   <>
                     <Separator />
                     <div className="space-y-3">
-                      <h3 className="font-medium text-sm text-muted-foreground">
-                        👁‍🗨 Categorias Ocultas ({hiddenCategories.length})
+                      <h3 className="text-sm font-medium text-muted-foreground">
+                        👁️‍🗨️ Categorias Ocultas ({hiddenCategories.length})
                       </h3>
                       <p className="text-xs text-muted-foreground">
-                        Essas categorias não aparecem no seletor, mas despesas antigas continuam associadas.
+                        Essas categorias não aparecem no seletor, mas despesas antigas continuam
+                        associadas.
                       </p>
                       <div className="space-y-2">
                         {hiddenCategories.map((category) => (
@@ -330,23 +428,25 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
         </SheetContent>
       </Sheet>
 
-      {/* Diálogo de confirmação de exclusão */}
-      <AlertDialog open={!!deletingCategory} onOpenChange={(open) => !open && setDeletingCategory(null)}>
+      <AlertDialog
+        open={!!deletingCategory}
+        onOpenChange={(nextOpen) => !nextOpen && setDeletingCategory(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir categoria?</AlertDialogTitle>
             <AlertDialogDescription>
-              Se houver despesas nesta categoria, elas serão movidas para "Outros".
-              Esta ação não pode ser desfeita.
+              Se houver despesas nesta categoria, elas serão movidas para "Outros". Esta ação não
+              pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={handleDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Excluir
             </AlertDialogAction>
           </AlertDialogFooter>

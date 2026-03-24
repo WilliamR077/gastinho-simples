@@ -456,7 +456,7 @@ export function UnifiedExpenseFormSheet({
                       : <span>Selecione a data</span>}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
+                <PopoverContent className="w-auto p-0" align="start" data-onboarding="expense-date">
                   <Calendar
                     mode="single"
                     selected={expenseDate}
@@ -491,6 +491,7 @@ export function UnifiedExpenseFormSheet({
             <CategorySelector
               value={category}
               onValueChange={setCategory}
+              onboardingTarget="expense-category-field"
             />
 
             {budgetWarning && (

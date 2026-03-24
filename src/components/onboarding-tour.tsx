@@ -199,10 +199,10 @@ export function OnboardingTour() {
   if (!isOpen || !currentStep || !currentSubstep) return null;
 
   // ─── Determine if this substep uses overlay (has a target) ─
-  const hasTarget = !!currentSubstep.targetSelector;
   const isNavigateWithoutTarget =
     currentSubstep.actionType === "navigate" && !currentSubstep.targetSelector;
-  const isInfo = currentSubstep.actionType === "info";
+  const isInfoWithoutTarget =
+    currentSubstep.actionType === "info" && !currentSubstep.targetSelector;
   const isCompletion = currentSubstep.actionType === "completion";
 
   // ─── Override description for card completion ─────────────
@@ -217,7 +217,7 @@ export function OnboardingTour() {
   }
 
   // ─── Navigate / Info / Completion: use centered dialog ────
-  if (isNavigateWithoutTarget || isInfo || isCompletion) {
+  if (isNavigateWithoutTarget || isInfoWithoutTarget || isCompletion) {
     return (
       <>
         {/* Light overlay for navigate/info/completion */}

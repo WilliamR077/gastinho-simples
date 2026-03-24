@@ -16,6 +16,10 @@ import {
   type OnboardingStepConfig,
   type OnboardingSubstep,
 } from "@/lib/onboarding/onboarding-steps";
+import {
+  findReadyOnboardingTarget,
+  isOnboardingTargetReady,
+} from "@/lib/onboarding/target-utils";
 
 // ─── Context ──────────────────────────────────────────────────
 interface SetupProgressResult {
@@ -75,6 +79,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set());
   const [showCompletionDialog, setShowCompletionDialog] = useState(false);
   const [pendingAdvance, setPendingAdvance] = useState<PendingAdvanceState | null>(null);
+  const seenEventsRef = useRef<Set<string>>(new Set());
 
   // Filter mobile-only steps
   const availableSteps = ONBOARDING_STEPS.filter(
@@ -87,6 +92,23 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   const totalSubsteps = currentStep?.substeps.length || 0;
   const progress = (completedSteps.size / totalSteps) * 100;
   const isCompleted = localStorage.getItem(STORAGE_KEY) === "true";
+
+  const createConditionContext = useCallback(() => {
+    return {
+      formElement: findReadyOnboardingTarget("expense-type-selector") ?? undefined,
+      seenEvents: seenEventsRef.current,
+    };
+  }, []);
+
+  const matchesAutoAdvanceEvent = useCallback(
+    (substep: OnboardingSubstep | null, eventName: string) => {
+      if (!substep?.autoAdvanceOnEvent) return false;
+      return Array.isArray(substep.autoAdvanceOnEvent)
+        ? substep.autoAdvanceOnEvent.includes(eventName)
+        : substep.autoAdvanceOnEvent === eventName;
+    },
+    []
+  );
 
   // Ref to avoid stale closure in notifyEvent
   const stateRef = useRef({ stepIndex, substepIndex, isOpen });
@@ -198,13 +220,13 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
 
     // Small delay to let DOM settle
     const timer = setTimeout(() => {
-      if (currentSubstep.condition && !currentSubstep.condition({})) {
+      if (currentSubstep.condition && !currentSubstep.condition(createConditionContext())) {
         advanceSubstepInternal();
       }
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [isOpen, currentSubstep?.id]);
+  }, [isOpen, currentSubstep?.id, createConditionContext]);
 
   // ─── Listen for custom events (from category-selector etc) ─
   useEffect(() => {
@@ -212,14 +234,27 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
 
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      if (typeof detail === "string" && currentSubstep?.autoAdvanceOnEvent === detail) {
+      if (typeof detail !== "string") return;
+
+      seenEventsRef.current.add(detail);
+
+      if (
+        detail === "category-manager-closed" &&
+        currentStep?.id === "add-expense" &&
+        currentSubstep?.id.startsWith("expense-category-manager-")
+      ) {
+        advanceSubstepInternal();
+        return;
+      }
+
+      if (matchesAutoAdvanceEvent(currentSubstep, detail)) {
         advanceSubstepInternal();
       }
     };
 
     window.addEventListener("gastinho-onboarding-event", handler);
     return () => window.removeEventListener("gastinho-onboarding-event", handler);
-  }, [isOpen, currentSubstep?.id, currentSubstep?.autoAdvanceOnEvent]);
+  }, [isOpen, currentStep?.id, currentSubstep?.id, matchesAutoAdvanceEvent]);
 
   // ─── Load saved progress ─────────────────────────────────
   useEffect(() => {
@@ -230,7 +265,9 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         setStepIndex(stepIdx);
         setSubstepIndex(substepIdx);
         setCompletedSteps(new Set(completed));
-      } catch {}
+      } catch {
+        void 0;
+      }
     }
   }, []);
 
@@ -251,8 +288,13 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isOpen) {
       setPendingAdvance(null);
+      seenEventsRef.current.clear();
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    seenEventsRef.current.clear();
+  }, [stepIndex]);
 
   // ─── Supabase Realtime detection (backup) ─────────────────
   useEffect(() => {
@@ -299,22 +341,8 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
 
   // ─── Helpers ──────────────────────────────────────────────
 
-  function isElementReady(el: HTMLElement | null): el is HTMLElement {
-    if (!el || !el.isConnected) return false;
-    if (el.closest('[data-state="closed"]')) return false;
-
-    const rect = el.getBoundingClientRect();
-    return el.getClientRects().length > 0 && rect.width > 0 && rect.height > 0;
-  }
-
   function getReadyTargetElement(targetSelector?: string): HTMLElement | null {
-    if (!targetSelector) return null;
-
-    const el = document.querySelector(
-      `[data-onboarding="${targetSelector}"]`
-    ) as HTMLElement | null;
-
-    return isElementReady(el) ? el : null;
+    return findReadyOnboardingTarget(targetSelector);
   }
 
   function queuePendingAdvance(nextIdx: number) {
@@ -387,7 +415,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     // Skip substeps whose condition is false
     while (nextIdx < currentStep.substeps.length) {
       const next = currentStep.substeps[nextIdx];
-      if (next.condition && !next.condition({})) {
+      if (next.condition && !next.condition(createConditionContext())) {
         nextIdx++;
       } else {
         break;
@@ -488,7 +516,9 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         if (Array.isArray(savedCompleted) && savedCompleted.includes("view-reports")) {
           completed.add("view-reports");
         }
-      } catch {}
+      } catch {
+        void 0;
+      }
     }
     if (localStorage.getItem(STORAGE_KEY) === "true") {
       completed.add("view-reports");
@@ -520,6 +550,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
 
     setCompletedSteps(preCompleted);
     setPendingAdvance(null);
+    seenEventsRef.current.clear();
     setStepIndex(firstPendingIdx);
     setSubstepIndex(0);
     setIsOpen(true);
@@ -528,6 +559,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
 
   const skipOnboarding = useCallback(() => {
     setPendingAdvance(null);
+    seenEventsRef.current.clear();
     setIsOpen(false);
     localStorage.setItem(STORAGE_KEY, "true");
     localStorage.removeItem(PROGRESS_KEY);
@@ -545,6 +577,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     // Go back to substep 1 (skip navigate)
     if (!currentStep) return;
     setPendingAdvance(null);
+    seenEventsRef.current.clear();
     const clickIdx = currentStep.substeps.findIndex(
       (s) => s.actionType === "click"
     );
@@ -559,11 +592,13 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     (eventName: string) => {
       if (!isOpen || !currentSubstep) return;
 
-      if (currentSubstep.autoAdvanceOnEvent === eventName) {
+      seenEventsRef.current.add(eventName);
+
+      if (matchesAutoAdvanceEvent(currentSubstep, eventName)) {
         advanceSubstepInternal();
       }
     },
-    [isOpen, currentSubstep?.id, currentStep, substepIndex]
+    [isOpen, currentSubstep?.id, currentStep, substepIndex, matchesAutoAdvanceEvent]
   );
 
   const isCurrentTargetValid = useCallback((): boolean => {
@@ -586,7 +621,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     }
 
     if (currentSubstep.actionType === "select") {
-      return isElementReady(el);
+      return isOnboardingTargetReady(el);
     }
 
     return true;
