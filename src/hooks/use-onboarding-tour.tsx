@@ -523,6 +523,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         isCompleted,
         showCompletionDialog,
         completedSteps,
+        isExpenseFormGuidedFlow,
         startOnboarding,
         skipOnboarding,
         skipCurrentStep,
