@@ -26,6 +26,11 @@ interface SetupProgressResult {
   pendingSteps: { id: string; label: string; emoji: string }[];
 }
 
+interface PendingAdvanceState {
+  fromSubstepIndex: number;
+  toSubstepIndex: number;
+}
+
 interface OnboardingContextType {
   isOpen: boolean;
   currentStep: OnboardingStepConfig | null;
@@ -69,6 +74,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   const [substepIndex, setSubstepIndex] = useState(0);
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set());
   const [showCompletionDialog, setShowCompletionDialog] = useState(false);
+  const [pendingAdvance, setPendingAdvance] = useState<PendingAdvanceState | null>(null);
 
   // Filter mobile-only steps
   const availableSteps = ONBOARDING_STEPS.filter(
@@ -101,25 +107,26 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isOpen || !currentSubstep?.targetSelector) return;
 
-    const selector = `[data-onboarding="${currentSubstep.targetSelector}"]`;
-
-    // Check if already in DOM
-    const existing = document.querySelector(selector);
+    const existing = getReadyTargetElement(currentSubstep.targetSelector);
     if (existing) {
-      handleTargetAppeared(existing as HTMLElement);
+      handleTargetAppeared(existing);
       return;
     }
 
-    // Watch for it
     const observer = new MutationObserver(() => {
-      const el = document.querySelector(selector);
+      const el = getReadyTargetElement(currentSubstep.targetSelector);
       if (el) {
         observer.disconnect();
-        handleTargetAppeared(el as HTMLElement);
+        handleTargetAppeared(el);
       }
     });
 
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["class", "style", "hidden", "data-state", "aria-hidden"],
+    });
 
     // Timeout fallback — don't crash if element never appears
     const timeout = setTimeout(() => {
@@ -133,6 +140,59 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   }, [isOpen, currentSubstep?.id, currentSubstep?.targetSelector]);
 
   // ─── Condition check: skip substep if condition fails ─────
+  useEffect(() => {
+    if (!isOpen || !currentStep || !pendingAdvance) return;
+
+    if (substepIndex !== pendingAdvance.fromSubstepIndex) {
+      setPendingAdvance(null);
+      return;
+    }
+
+    const pendingSubstep = currentStep.substeps[pendingAdvance.toSubstepIndex];
+    if (!pendingSubstep) {
+      setPendingAdvance(null);
+      return;
+    }
+
+    if (!pendingSubstep.targetSelector) {
+      setSubstepIndex(pendingAdvance.toSubstepIndex);
+      setPendingAdvance(null);
+      return;
+    }
+
+    const readyTarget = getReadyTargetElement(pendingSubstep.targetSelector);
+    if (readyTarget) {
+      setSubstepIndex(pendingAdvance.toSubstepIndex);
+      setPendingAdvance(null);
+      return;
+    }
+
+    const observer = new MutationObserver(() => {
+      const nextReadyTarget = getReadyTargetElement(pendingSubstep.targetSelector);
+      if (nextReadyTarget) {
+        observer.disconnect();
+        setSubstepIndex(pendingAdvance.toSubstepIndex);
+        setPendingAdvance(null);
+      }
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["class", "style", "hidden", "data-state", "aria-hidden"],
+    });
+
+    const timeout = setTimeout(() => {
+      observer.disconnect();
+    }, 10000);
+
+    return () => {
+      observer.disconnect();
+      clearTimeout(timeout);
+    };
+  }, [isOpen, currentStep, pendingAdvance, substepIndex]);
+
   useEffect(() => {
     if (!isOpen || !currentSubstep?.condition) return;
 
@@ -188,6 +248,12 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     }
   }, [stepIndex, substepIndex, completedSteps, isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) {
+      setPendingAdvance(null);
+    }
+  }, [isOpen]);
+
   // ─── Supabase Realtime detection (backup) ─────────────────
   useEffect(() => {
     if (!user || !isOpen || !currentStep?.detectionTable) return;
@@ -232,6 +298,37 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   }, [isOpen, currentStep?.id]);
 
   // ─── Helpers ──────────────────────────────────────────────
+
+  function isElementReady(el: HTMLElement | null): el is HTMLElement {
+    if (!el || !el.isConnected) return false;
+    if (el.closest('[data-state="closed"]')) return false;
+
+    const rect = el.getBoundingClientRect();
+    return el.getClientRects().length > 0 && rect.width > 0 && rect.height > 0;
+  }
+
+  function getReadyTargetElement(targetSelector?: string): HTMLElement | null {
+    if (!targetSelector) return null;
+
+    const el = document.querySelector(
+      `[data-onboarding="${targetSelector}"]`
+    ) as HTMLElement | null;
+
+    return isElementReady(el) ? el : null;
+  }
+
+  function queuePendingAdvance(nextIdx: number) {
+    setPendingAdvance((prev) => {
+      if (prev?.fromSubstepIndex === substepIndex && prev.toSubstepIndex === nextIdx) {
+        return prev;
+      }
+
+      return {
+        fromSubstepIndex: substepIndex,
+        toSubstepIndex: nextIdx,
+      };
+    });
+  }
 
   function handleTargetAppeared(el: HTMLElement) {
     if (!currentSubstep) return;
@@ -278,6 +375,10 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     currentStep?.id === "add-expense" &&
     substepIndex >= EXPENSE_FORM_SUBSTEP_START;
 
+  function isExpenseFormReady() {
+    return !!getReadyTargetElement("expense-type-selector");
+  }
+
   function advanceSubstepInternal() {
     if (!currentStep) return;
 
@@ -301,21 +402,28 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       if (
         currentStep.id === "add-expense" &&
         nextIdx >= EXPENSE_FORM_SUBSTEP_START &&
-        nextSubstep.targetSelector
+        !isExpenseFormReady()
       ) {
-        const formContext = document.querySelector('[data-onboarding="expense-type-selector"]');
+        const formContext = isExpenseFormReady();
         if (!formContext) {
           // Form is not mounted — wait for it via MutationObserver instead of advancing
-          console.warn("[Onboarding] Form context lost, waiting for re-mount...");
+          console.warn("[Onboarding] Expense form not ready yet, waiting before advancing...");
           // Set the index anyway — the MutationObserver effect will handle target appearance
-          setSubstepIndex(nextIdx);
+          queuePendingAdvance(nextIdx);
           return;
         }
       }
 
+      if (nextSubstep.targetSelector && !getReadyTargetElement(nextSubstep.targetSelector)) {
+        queuePendingAdvance(nextIdx);
+        return;
+      }
+
+      setPendingAdvance(null);
       setSubstepIndex(nextIdx);
     } else {
       // Step complete, go to next step
+      setPendingAdvance(null);
       completeCurrentStep();
     }
   }
@@ -411,6 +519,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     }
 
     setCompletedSteps(preCompleted);
+    setPendingAdvance(null);
     setStepIndex(firstPendingIdx);
     setSubstepIndex(0);
     setIsOpen(true);
@@ -418,6 +527,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   }, [user, availableSteps]);
 
   const skipOnboarding = useCallback(() => {
+    setPendingAdvance(null);
     setIsOpen(false);
     localStorage.setItem(STORAGE_KEY, "true");
     localStorage.removeItem(PROGRESS_KEY);
@@ -434,6 +544,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   const repeatStep = useCallback(() => {
     // Go back to substep 1 (skip navigate)
     if (!currentStep) return;
+    setPendingAdvance(null);
     const clickIdx = currentStep.substeps.findIndex(
       (s) => s.actionType === "click"
     );
@@ -458,9 +569,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   const isCurrentTargetValid = useCallback((): boolean => {
     if (!currentSubstep?.targetSelector) return false;
 
-    const el = document.querySelector(
-      `[data-onboarding="${currentSubstep.targetSelector}"]`
-    ) as HTMLElement | null;
+    const el = getReadyTargetElement(currentSubstep.targetSelector);
 
     if (!el) return false;
 
@@ -468,17 +577,16 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       const input =
         el.tagName === "INPUT"
           ? (el as HTMLInputElement)
-          : el.querySelector("input");
+          : el.querySelector("input, textarea");
       if (input) {
-        const val = (input as HTMLInputElement).value.trim();
+        const val = (input as HTMLInputElement | HTMLTextAreaElement).value.trim();
         return val.length > 0;
       }
       return false;
     }
 
     if (currentSubstep.actionType === "select") {
-      // Select always has a value (default), so always valid
-      return true;
+      return isElementReady(el);
     }
 
     return true;
