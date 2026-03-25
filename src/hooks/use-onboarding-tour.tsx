@@ -395,20 +395,20 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // Determine if we're in the expense form guided flow.
-  // Derive the start from the substep id so copy/order changes don't
-  // accidentally disable preventClose for the expense form.
-  const EXPENSE_FORM_SUBSTEP_START =
-    currentStep?.id === "add-expense"
-      ? Math.max(
-          currentStep.substeps.findIndex((substep) => substep.id === "expense-type-info"),
-          0
-        )
-      : Number.POSITIVE_INFINITY;
+  // Determine if we're in a guided form flow (expense or recurring expense).
+  const FORM_SUBSTEP_START = (() => {
+    if (currentStep?.id === "add-expense") {
+      return Math.max(currentStep.substeps.findIndex((s) => s.id === "expense-type-info"), 0);
+    }
+    if (currentStep?.id === "add-recurring-expense") {
+      return Math.max(currentStep.substeps.findIndex((s) => s.id === "recurring-type-info"), 0);
+    }
+    return Number.POSITIVE_INFINITY;
+  })();
   const isExpenseFormGuidedFlow =
     isOpen &&
-    currentStep?.id === "add-expense" &&
-    substepIndex >= EXPENSE_FORM_SUBSTEP_START;
+    (currentStep?.id === "add-expense" || currentStep?.id === "add-recurring-expense") &&
+    substepIndex >= FORM_SUBSTEP_START;
 
   function isExpenseFormReady() {
     return !!getReadyTargetElement("expense-type-selector");
