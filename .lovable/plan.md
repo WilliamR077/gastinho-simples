@@ -1,107 +1,67 @@
 
-Objetivo: corrigir a causa raiz do PASSO 2 para que o formulário de despesa permaneça aberto e o onboarding só avance quando o próximo campo realmente existir dentro dele.
 
-### Diagnóstico real
-A causa principal não está no scroll em si. O problema é de orquestração do estado:
+## Plano: Implementar Passo 3 Completo — Despesa Fixa
 
-- o substep `expense-click-btn` avança por timer/evento (`expense-form-opened`) disparado em `Index.tsx` logo após `setExpenseSheetOpen(true)`, antes de garantir que o `Sheet` está montado e estável
-- o `OnboardingTour` trata `info` com target (`expense-type-info`) como passo interativo normal, então ao clicar em “Continuar” ele já tenta avançar
-- o engine não valida se o formulário ainda está aberto antes de migrar para `expense-description`
-- `UnifiedExpenseFormSheet` já tem suporte a `preventClose`, mas `Index.tsx` não está usando isso no passo 2
-- hoje, se o Sheet fechar por clique fora/escape/re-render/transição, o onboarding continua mesmo sem contexto
+### Contexto
+O passo 3 (`add-recurring-expense`) atualmente tem apenas 1 substep intro. O formulário unificado (`unified-expense-form-sheet.tsx`) já suporta o tipo "recurring" com campos específicos (Dia da Cobrança em vez de Data, sem parcelas). A infraestrutura de guided flow (preventClose, 4-panel overlay, container-aware scroll, event-driven advancement) já existe do passo 2.
 
-### Implementação
+### Mudanças
 
-#### 1. Travar o formulário em modo guiado durante o passo 2
-**Arquivos:** `src/hooks/use-onboarding-tour.tsx`, `src/pages/Index.tsx`, `src/components/unified-expense-form-sheet.tsx`
+#### 1. `src/lib/onboarding/onboarding-steps.ts`
+Expandir `RECURRING_EXPENSE_SUBSTEPS` com o fluxo completo:
 
-Adicionar no hook um estado/derivado público para indicar quando o onboarding está no fluxo guiado da despesa, por exemplo:
-- `isExpenseFormGuidedFlow`
-- verdadeiro quando `isOpen && currentStep?.id === "add-expense"` e o substep já passou da abertura do formulário
+| Substep | Tipo | Target | Evento/Validação |
+|---------|------|--------|------------------|
+| `recurring-intro` | info (sem target) | — | skipLabel: "Não tenho despesa fixa" |
+| `recurring-click-fab` | click | `fab-main-button` | autoAdvanceOnEvent: `fab-menu-opened` |
+| `recurring-click-btn` | click | `fab-expense-button` | autoAdvanceOnEvent: `expense-form-opened` |
+| `recurring-type-info` | info | `expense-type-selector` | Explica que agora é despesa fixa |
+| `recurring-description` | fill | `expense-description` | requiresValidation |
+| `recurring-amount` | fill | `expense-amount` | requiresValidation |
+| `recurring-day` | select | `expense-day-of-month` (novo) | requiresValidation |
+| `recurring-category` | click | `expense-category-field` | autoAdvanceOnEvent: `expense-category-selected` / `category-manager-opened` |
+| (category manager substeps condicionais — reutilizar os mesmos IDs/conditions do passo 2) |
+| `recurring-category-after-manager` | click | `expense-category-field` | condition: manager closed |
+| `recurring-payment` | select | `expense-payment` | requiresValidation |
+| `recurring-card` | select | `expense-card-select` | condition: card field exists |
+| `recurring-submit` | submit | `expense-submit-btn` | autoAdvanceOnEvent: `expense-submitted` |
+| `recurring-done` | completion | — | proceedLabel: "Prosseguir" |
 
-Em `Index.tsx`:
-- usar esse estado para passar `preventClose` ao `UnifiedExpenseFormSheet`
-- no `onOpenChange`, se estiver em guided flow e `open === false`, bloquear o fechamento normal
-- só permitir fechar quando:
-  - a despesa for salva com sucesso
-  - o usuário pular/cancelar explicitamente o onboarding
+Sem substep de parcelas (despesa fixa não tem).
 
-#### 2. Trocar o evento “form opened” precoce por detecção real de formulário montado
-**Arquivos:** `src/pages/Index.tsx`, `src/components/unified-expense-form-sheet.tsx`
+#### 2. `src/components/unified-expense-form-sheet.tsx`
+- Adicionar `data-onboarding="expense-day-of-month"` ao div do campo "Dia da Cobrança" (linha 504)
+- Expandir `isExpenseTypeLocked` para incluir o passo `add-recurring-expense` com `recurring-type-info`, forçando `expenseType = "recurring"` quando o onboarding estiver no passo 3
+- No useEffect de lock (linha 136-140), tratar ambos os cenários: passo 2 trava em "monthly", passo 3 trava em "recurring"
 
-Hoje o evento `expense-form-opened` é disparado por `setTimeout(300)` no clique do FAB. Isso é frágil.
+#### 3. `src/hooks/use-onboarding-tour.tsx`
+- Expandir `isExpenseFormGuidedFlow` para incluir o passo `add-recurring-expense` (além de `add-expense`)
+- O `EXPENSE_FORM_SUBSTEP_START` precisa funcionar para ambos os passos
+- Renomear/generalizar para cobrir os dois casos: derivar de `currentStep.substeps.findIndex(s => s.id includes "type-info")`
 
-Ajuste:
-- remover o dispatch antecipado em `Index.tsx`
-- disparar `expense-form-opened` dentro de `UnifiedExpenseFormSheet` via `useEffect` quando:
-  - `open === true`
-  - o formulário estiver renderizado
-  - o container com `data-onboarding="expense-type-selector"` existir no DOM
+#### 4. `src/pages/Index.tsx`
+- O `isExpenseFormGuidedFlow` já bloqueia fechamento do Sheet — como agora cobre ambos os passos, nenhuma mudança adicional necessária aqui
 
-Assim o onboarding só sai de “Despesas” quando o formulário estiver realmente pronto.
+#### 5. `src/components/onboarding/onboarding-tooltip.tsx`
+- Adicionar suporte para renderizar `skipLabel` como botão secundário em substeps do tipo `info` (quando `onSkipSubstep` é passado)
+- Isso permite que o intro do passo 3 mostre "Continuar" + "Não tenho despesa fixa"
 
-#### 3. Não avançar para substeps de campo sem contexto válido
-**Arquivo:** `src/hooks/use-onboarding-tour.tsx`
-
-Antes de avançar para o próximo substep:
-- verificar se o próximo substep tem `targetSelector`
-- se tiver, confirmar:
-  - que o target existe
-  - que está visível
-  - e, no caso do passo `add-expense`, que o formulário está aberto
-
-Se não estiver pronto:
-- não mostrar o próximo tooltip ainda
-- aguardar via observer até o target aparecer
-- se o formulário tiver fechado indevidamente, reabrir ou voltar ao substep anterior de abertura do formulário
-
-Na prática, `advanceSubstepInternal()` precisa ficar mais defensivo para o passo 2.
-
-#### 4. Adicionar “guard” explícito de formulário aberto no passo 2
-**Arquivos:** `src/lib/onboarding/onboarding-steps.ts`, `src/hooks/use-onboarding-tour.tsx`
-
-Adicionar uma condição/contexto para os substeps de formulário (`expense-type-info` em diante), exigindo que o formulário esteja aberto.
-
-Exemplo conceitual:
-- `expense-type-info`, `expense-description`, `expense-amount`, etc. só são válidos se existir `expense-type-selector` no DOM
-- se esse contexto sumir, o onboarding não continua
-
-Isso transforma o passo 2 em um guided form flow de verdade, em vez de depender só de sequência linear.
-
-#### 5. Tratar fechamento acidental de forma robusta
-**Arquivos:** `src/pages/Index.tsx`, `src/hooks/use-onboarding-tour.tsx`
-
-Cobrir os cenários:
-- click outside
-- escape
-- mudança de substep
-- re-render/reset que limpe `expenseInitialData` ou `expenseDefaultAmount`
-- qualquer `onOpenChange(false)` durante o guided flow
-
-Comportamento:
-- durante o passo 2, click outside e escape já serão bloqueados por `preventClose`
-- se ainda assim o sheet fechar por algum motivo, o hook detecta perda do target do formulário e:
-  - pausa o avanço
-  - restaura o contexto reabrindo o sheet
-  - ou retorna ao substep “Selecione Despesa”
-
-#### 6. Manter o restante do app intacto
-Escopo controlado:
-- nenhuma mudança no passo 1
-- nenhuma mudança estrutural no formulário fora do onboarding
-- o `preventClose` só fica ativo no fluxo guiado da despesa
-- a lógica de scroll container-aware continua útil, mas deixa de ser o mecanismo principal para mascarar perda de contexto
+#### 6. `src/components/onboarding-tour.tsx`
+- Para substeps `info` sem target, passar `onSkipSubstep` quando `skipLabel` existir (já passa para substeps com target na linha 262, mas não para os centered/sem target na linha 225-238)
+- Quando `onSkipSubstep` é chamado no intro, deve chamar `skipCurrentStep` (pular para passo 4)
 
 ### Arquivos afetados
-- `src/hooks/use-onboarding-tour.tsx`
-- `src/pages/Index.tsx`
-- `src/components/unified-expense-form-sheet.tsx`
-- `src/lib/onboarding/onboarding-steps.ts`
+| Arquivo | Mudança |
+|---------|---------|
+| `src/lib/onboarding/onboarding-steps.ts` | Substeps completos do passo 3 |
+| `src/components/unified-expense-form-sheet.tsx` | `data-onboarding` no Dia da Cobrança + lock de tipo para passo 3 |
+| `src/hooks/use-onboarding-tour.tsx` | Generalizar guided flow para passo 3 |
+| `src/components/onboarding/onboarding-tooltip.tsx` | Botão skip em info substeps |
+| `src/components/onboarding-tour.tsx` | Passar onSkipSubstep para info centered |
 
-### Resultado esperado
-Depois dessa correção:
-- o formulário abre e entra em modo guiado real
-- continua aberto durante todo o passo 2
-- “Descrição” só aparece quando o campo existir de fato no formulário aberto
-- o onboarding não avança mais para targets inexistentes
-- click outside / escape / fechamento acidental deixam de quebrar o fluxo
+### Pontos de atenção
+- Reutilizar os mesmos `data-onboarding` targets do formulário unificado (description, amount, category, payment, card, submit) — são os mesmos campos
+- Os substeps de category manager condicionais podem ser copiados do passo 2 com IDs diferentes (prefixo `recurring-`) para evitar conflito
+- Não há campo de parcelas para recurring — o `condition` existente em `expense-installments` já cobre isso (field não existe no DOM quando type=recurring)
+- O "Dia da Cobrança" é um Select de 1-31, não um calendário — precisa de `data-onboarding` novo e z-index correto no SelectContent
+
