@@ -98,8 +98,8 @@ export function UnifiedExpenseFormSheet({
   const { isOpen: isOnboardingOpen, currentStep, currentSubstep } = useOnboardingTour();
   const isExpenseTypeLocked =
     isOnboardingOpen &&
-    currentStep?.id === "add-expense" &&
-    currentSubstep?.id === "expense-type-info";
+    ((currentStep?.id === "add-expense" && currentSubstep?.id === "expense-type-info") ||
+     (currentStep?.id === "add-recurring-expense" && currentSubstep?.id === "recurring-type-info"));
 
   useEffect(() => {
     if (open) {
