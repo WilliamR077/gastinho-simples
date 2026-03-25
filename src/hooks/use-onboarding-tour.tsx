@@ -240,8 +240,8 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
 
       if (
         detail === "category-manager-closed" &&
-        currentStep?.id === "add-expense" &&
-        currentSubstep?.id.startsWith("expense-category-manager-")
+        (currentStep?.id === "add-expense" || currentStep?.id === "add-recurring-expense") &&
+        (currentSubstep?.id.startsWith("expense-category-manager-") || currentSubstep?.id.startsWith("recurring-category-manager-"))
       ) {
         advanceSubstepInternal();
         return;

@@ -478,12 +478,188 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
       {
         id: "recurring-intro",
         actionType: "info",
-        title: "Cadastre uma Despesa Fixa",
+        title: "Cadastre sua Primeira Despesa Fixa",
         description:
-          "Pense em algo que você paga todo mês: aluguel, academia, internet, streaming... Cadastre para o app lançar automaticamente!",
+          "Agora vamos cadastrar uma despesa fixa, ou seja, algo que você paga todo mês, como academia, aluguel ou internet.",
         emoji: "🔄",
         navigateLabel: "Continuar",
-        skipLabel: "Pular esta etapa",
+        skipLabel: "Não tenho despesa fixa",
+      },
+      {
+        id: "recurring-click-fab",
+        actionType: "click",
+        targetSelector: "fab-main-button",
+        title: "Registre uma Despesa Fixa",
+        description: 'Toque no botão "+" para registrar uma despesa fixa.',
+        emoji: "➕",
+        autoAdvanceOnEvent: "fab-menu-opened",
+        scrollToTarget: true,
+        placement: "above",
+      },
+      {
+        id: "recurring-click-btn",
+        actionType: "click",
+        targetSelector: "fab-expense-button",
+        title: "Selecione Despesa",
+        description: 'Agora toque em "Despesas" para abrir o formulário.',
+        emoji: "📝",
+        autoAdvanceOnEvent: "expense-form-opened",
+        scrollToTarget: true,
+        placement: "above",
+      },
+      {
+        id: "recurring-type-info",
+        actionType: "info",
+        targetSelector: "expense-type-selector",
+        title: "Tipo de Despesa",
+        description:
+          "Estamos adicionando uma despesa fixa, ou seja, uma cobrança recorrente que acontece todo mês.",
+        emoji: "🔄",
+        placement: "below",
+      },
+      {
+        id: "recurring-description",
+        actionType: "fill",
+        targetSelector: "expense-description",
+        title: "Descrição",
+        description:
+          "Qual o nome dessa despesa fixa? Exemplo: academia, aluguel, internet.",
+        emoji: "📝",
+        requiresValidation: true,
+        focusTarget: true,
+        scrollToTarget: true,
+        placement: "below",
+      },
+      {
+        id: "recurring-amount",
+        actionType: "fill",
+        targetSelector: "expense-amount",
+        title: "Valor",
+        description: "Agora informe o valor que você paga todo mês nessa despesa.",
+        emoji: "💵",
+        requiresValidation: true,
+        focusTarget: true,
+        scrollToTarget: true,
+        placement: "below",
+      },
+      {
+        id: "recurring-day",
+        actionType: "select",
+        targetSelector: "expense-day-of-month",
+        title: "Dia da Cobrança",
+        description:
+          "Em que dia do mês essa despesa é cobrada ou costuma ser paga?",
+        emoji: "📅",
+        requiresValidation: true,
+        scrollToTarget: true,
+        placement: "above",
+      },
+      {
+        id: "recurring-category",
+        actionType: "click",
+        targetSelector: "expense-category-field",
+        title: "Escolha a Categoria",
+        description:
+          "Agora escolha a categoria que melhor representa essa despesa.",
+        emoji: "📦",
+        autoAdvanceOnEvent: ["expense-category-selected", "category-manager-opened"],
+        scrollToTarget: true,
+        placement: "below",
+      },
+      {
+        id: "recurring-category-manager-intro",
+        actionType: "info",
+        targetSelector: "category-manager-sheet",
+        title: "Gerencie suas Categorias",
+        description:
+          "Aqui ficam as categorias padrão e as que você criar. Se quiser adaptar o app à sua realidade, este é o lugar certo.",
+        emoji: "🛠️",
+        scrollToTarget: true,
+        placement: "above",
+        condition: (ctx) => {
+          return (
+            !!ctx.seenEvents?.has("category-manager-opened") &&
+            !ctx.seenEvents?.has("category-manager-closed")
+          );
+        },
+      },
+      {
+        id: "recurring-category-manager-close",
+        actionType: "click",
+        targetSelector: "category-manager-close-btn",
+        title: "Volte ao Formulário",
+        description:
+          "Quando terminar de personalizar, toque aqui para voltar ao formulário e escolher a categoria.",
+        emoji: "↩️",
+        autoAdvanceOnEvent: "category-manager-closed",
+        scrollToTarget: true,
+        placement: "above",
+        condition: (ctx) => {
+          return (
+            !!ctx.seenEvents?.has("category-manager-opened") &&
+            !ctx.seenEvents?.has("category-manager-closed")
+          );
+        },
+      },
+      {
+        id: "recurring-category-after-manager",
+        actionType: "click",
+        targetSelector: "expense-category-field",
+        title: "Escolha a Categoria",
+        description:
+          "Agora escolha a categoria que vai ficar nesta despesa fixa.",
+        emoji: "📦",
+        autoAdvanceOnEvent: "expense-category-selected",
+        scrollToTarget: true,
+        placement: "below",
+        condition: (ctx) => {
+          return !!ctx.seenEvents?.has("category-manager-closed");
+        },
+      },
+      {
+        id: "recurring-payment",
+        actionType: "select",
+        targetSelector: "expense-payment",
+        title: "Forma de Pagamento",
+        description: "Agora escolha como essa despesa fixa é paga: Pix, débito ou crédito.",
+        emoji: "💳",
+        requiresValidation: true,
+        scrollToTarget: true,
+        placement: "below",
+      },
+      {
+        id: "recurring-card",
+        actionType: "select",
+        targetSelector: "expense-card-select",
+        title: "Selecione o Cartão",
+        description: "Selecione qual cartão é usado nessa despesa fixa.",
+        emoji: "💳",
+        requiresValidation: true,
+        scrollToTarget: true,
+        placement: "below",
+        condition: () => {
+          return !!document.querySelector('[data-onboarding="expense-card-select"]');
+        },
+      },
+      {
+        id: "recurring-submit",
+        actionType: "submit",
+        targetSelector: "expense-submit-btn",
+        title: "Salvar Despesa Fixa",
+        description:
+          'Perfeito! Agora clique em "Adicionar Despesa" para salvar sua primeira despesa fixa.',
+        emoji: "✅",
+        autoAdvanceOnEvent: "expense-submitted",
+        scrollToTarget: true,
+        placement: "above",
+      },
+      {
+        id: "recurring-done",
+        actionType: "completion",
+        title: "Despesa Fixa Cadastrada! 🎉",
+        description: "Sua primeira despesa fixa foi cadastrada com sucesso!",
+        emoji: "🎉",
+        proceedLabel: "Prosseguir",
       },
     ],
   },

@@ -507,13 +507,13 @@ export function UnifiedExpenseFormSheet({
               </Popover>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2" data-onboarding="expense-day-of-month">
               <Label htmlFor="sheet-day">Dia da Cobrança</Label>
               <Select value={dayOfMonth} onValueChange={setDayOfMonth}>
                 <SelectTrigger id="sheet-day">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="z-[80]">
                   {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
                     <SelectItem key={day} value={day.toString()}>
                       Dia {day}

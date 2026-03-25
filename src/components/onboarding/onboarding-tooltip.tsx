@@ -220,10 +220,17 @@ export function OnboardingTooltip({
       )}
 
       {substep.actionType === "info" && (
-        <Button size="sm" onClick={onNext} className="w-full mt-2">
-          {substep.navigateLabel || "Continuar"}
-          <ArrowRight className="h-3 w-3 ml-1" />
-        </Button>
+        <div className={`flex ${substep.skipLabel && onSkipSubstep ? "gap-2" : ""} mt-2`}>
+          {substep.skipLabel && onSkipSubstep && (
+            <Button size="sm" variant="outline" onClick={onSkipSubstep} className="flex-1">
+              {substep.skipLabel}
+            </Button>
+          )}
+          <Button size="sm" onClick={onNext} className={substep.skipLabel && onSkipSubstep ? "flex-1" : "w-full"}>
+            {substep.navigateLabel || "Continuar"}
+            <ArrowRight className="h-3 w-3 ml-1" />
+          </Button>
+        </div>
       )}
 
       {substep.actionType === "completion" && (
