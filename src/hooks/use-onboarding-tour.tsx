@@ -435,18 +435,13 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       // Guard: if the next substep requires a target inside the expense form,
       // verify the form context is still present before advancing
       if (
-        currentStep.id === "add-expense" &&
-        nextIdx >= EXPENSE_FORM_SUBSTEP_START &&
+        (currentStep.id === "add-expense" || currentStep.id === "add-recurring-expense") &&
+        nextIdx >= FORM_SUBSTEP_START &&
         !isExpenseFormReady()
       ) {
-        const formContext = isExpenseFormReady();
-        if (!formContext) {
-          // Form is not mounted — wait for it via MutationObserver instead of advancing
-          console.warn("[Onboarding] Expense form not ready yet, waiting before advancing...");
-          // Set the index anyway — the MutationObserver effect will handle target appearance
-          queuePendingAdvance(nextIdx);
-          return;
-        }
+        console.warn("[Onboarding] Expense form not ready yet, waiting before advancing...");
+        queuePendingAdvance(nextIdx);
+        return;
       }
 
       if (nextSubstep.targetSelector && !getReadyTargetElement(nextSubstep.targetSelector)) {
