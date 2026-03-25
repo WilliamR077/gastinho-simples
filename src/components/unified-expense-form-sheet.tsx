@@ -98,8 +98,8 @@ export function UnifiedExpenseFormSheet({
   const { isOpen: isOnboardingOpen, currentStep, currentSubstep } = useOnboardingTour();
   const isExpenseTypeLocked =
     isOnboardingOpen &&
-    currentStep?.id === "add-expense" &&
-    currentSubstep?.id === "expense-type-info";
+    ((currentStep?.id === "add-expense" && currentSubstep?.id === "expense-type-info") ||
+     (currentStep?.id === "add-recurring-expense" && currentSubstep?.id === "recurring-type-info"));
 
   useEffect(() => {
     if (open) {
@@ -133,11 +133,17 @@ export function UnifiedExpenseFormSheet({
     }
   }, [open]);
 
+  // Lock expense type based on which onboarding step is active
+  const lockedType: ExpenseType | null =
+    isOnboardingOpen && currentStep?.id === "add-recurring-expense" ? "recurring" :
+    isOnboardingOpen && currentStep?.id === "add-expense" ? "monthly" :
+    null;
+
   useEffect(() => {
-    if (isExpenseTypeLocked && expenseType !== "monthly") {
-      setExpenseType("monthly");
+    if (isExpenseTypeLocked && lockedType && expenseType !== lockedType) {
+      setExpenseType(lockedType);
     }
-  }, [expenseType, isExpenseTypeLocked]);
+  }, [expenseType, isExpenseTypeLocked, lockedType]);
 
   // Notify onboarding that the expense form is mounted and ready
   useEffect(() => {
@@ -501,13 +507,13 @@ export function UnifiedExpenseFormSheet({
               </Popover>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2" data-onboarding="expense-day-of-month">
               <Label htmlFor="sheet-day">Dia da Cobrança</Label>
               <Select value={dayOfMonth} onValueChange={setDayOfMonth}>
                 <SelectTrigger id="sheet-day">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="z-[80]">
                   {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
                     <SelectItem key={day} value={day.toString()}>
                       Dia {day}

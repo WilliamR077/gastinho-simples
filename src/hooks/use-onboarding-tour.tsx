@@ -240,8 +240,8 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
 
       if (
         detail === "category-manager-closed" &&
-        currentStep?.id === "add-expense" &&
-        currentSubstep?.id.startsWith("expense-category-manager-")
+        (currentStep?.id === "add-expense" || currentStep?.id === "add-recurring-expense") &&
+        (currentSubstep?.id.startsWith("expense-category-manager-") || currentSubstep?.id.startsWith("recurring-category-manager-"))
       ) {
         advanceSubstepInternal();
         return;
@@ -395,20 +395,20 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // Determine if we're in the expense form guided flow.
-  // Derive the start from the substep id so copy/order changes don't
-  // accidentally disable preventClose for the expense form.
-  const EXPENSE_FORM_SUBSTEP_START =
-    currentStep?.id === "add-expense"
-      ? Math.max(
-          currentStep.substeps.findIndex((substep) => substep.id === "expense-type-info"),
-          0
-        )
-      : Number.POSITIVE_INFINITY;
+  // Determine if we're in a guided form flow (expense or recurring expense).
+  const FORM_SUBSTEP_START = (() => {
+    if (currentStep?.id === "add-expense") {
+      return Math.max(currentStep.substeps.findIndex((s) => s.id === "expense-type-info"), 0);
+    }
+    if (currentStep?.id === "add-recurring-expense") {
+      return Math.max(currentStep.substeps.findIndex((s) => s.id === "recurring-type-info"), 0);
+    }
+    return Number.POSITIVE_INFINITY;
+  })();
   const isExpenseFormGuidedFlow =
     isOpen &&
-    currentStep?.id === "add-expense" &&
-    substepIndex >= EXPENSE_FORM_SUBSTEP_START;
+    (currentStep?.id === "add-expense" || currentStep?.id === "add-recurring-expense") &&
+    substepIndex >= FORM_SUBSTEP_START;
 
   function isExpenseFormReady() {
     return !!getReadyTargetElement("expense-type-selector");
@@ -435,18 +435,13 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       // Guard: if the next substep requires a target inside the expense form,
       // verify the form context is still present before advancing
       if (
-        currentStep.id === "add-expense" &&
-        nextIdx >= EXPENSE_FORM_SUBSTEP_START &&
+        (currentStep.id === "add-expense" || currentStep.id === "add-recurring-expense") &&
+        nextIdx >= FORM_SUBSTEP_START &&
         !isExpenseFormReady()
       ) {
-        const formContext = isExpenseFormReady();
-        if (!formContext) {
-          // Form is not mounted — wait for it via MutationObserver instead of advancing
-          console.warn("[Onboarding] Expense form not ready yet, waiting before advancing...");
-          // Set the index anyway — the MutationObserver effect will handle target appearance
-          queuePendingAdvance(nextIdx);
-          return;
-        }
+        console.warn("[Onboarding] Expense form not ready yet, waiting before advancing...");
+        queuePendingAdvance(nextIdx);
+        return;
       }
 
       if (nextSubstep.targetSelector && !getReadyTargetElement(nextSubstep.targetSelector)) {
