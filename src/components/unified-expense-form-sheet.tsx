@@ -133,11 +133,17 @@ export function UnifiedExpenseFormSheet({
     }
   }, [open]);
 
+  // Lock expense type based on which onboarding step is active
+  const lockedType: ExpenseType | null =
+    isOnboardingOpen && currentStep?.id === "add-recurring-expense" ? "recurring" :
+    isOnboardingOpen && currentStep?.id === "add-expense" ? "monthly" :
+    null;
+
   useEffect(() => {
-    if (isExpenseTypeLocked && expenseType !== "monthly") {
-      setExpenseType("monthly");
+    if (isExpenseTypeLocked && lockedType && expenseType !== lockedType) {
+      setExpenseType(lockedType);
     }
-  }, [expenseType, isExpenseTypeLocked]);
+  }, [expenseType, isExpenseTypeLocked, lockedType]);
 
   // Notify onboarding that the expense form is mounted and ready
   useEffect(() => {
