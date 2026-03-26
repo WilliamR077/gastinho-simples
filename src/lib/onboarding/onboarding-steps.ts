@@ -653,14 +653,6 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         scrollToTarget: true,
         placement: "above",
       },
-      {
-        id: "recurring-done",
-        actionType: "completion",
-        title: "Despesa Fixa Cadastrada! 🎉",
-        description: "Sua primeira despesa fixa foi cadastrada com sucesso!",
-        emoji: "🎉",
-        proceedLabel: "Prosseguir",
-      },
     ],
   },
   {
@@ -678,6 +670,195 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         emoji: "💰",
         navigateLabel: "Continuar",
         skipLabel: "Pular esta etapa",
+      },
+      {
+        id: "income-click-fab",
+        actionType: "click",
+        targetSelector: "fab-main-button",
+        title: "Registre uma Entrada",
+        description: 'Toque no botão "+" para registrar uma entrada.',
+        emoji: "➕",
+        autoAdvanceOnEvent: "fab-menu-opened",
+        scrollToTarget: true,
+        placement: "above",
+      },
+      {
+        id: "income-click-btn",
+        actionType: "click",
+        targetSelector: "fab-income-button",
+        title: "Selecione Entrada",
+        description: 'Agora toque em "Entrada" para abrir o formulário.',
+        emoji: "💵",
+        autoAdvanceOnEvent: "income-form-opened",
+        scrollToTarget: true,
+        placement: "above",
+      },
+      {
+        id: "income-type-select",
+        actionType: "select",
+        targetSelector: "income-type-selector",
+        title: "Escolha o Tipo de Entrada",
+        description:
+          "Escolha o tipo de entrada que mais combina com a forma como você recebe dinheiro.\n\n💰 Entrada do Mês — para valores pontuais como freelance, venda, bônus\n🔄 Entrada Fixa — para salário ou valor recorrente todo mês\n📑 Entrada Parcelada — para projetos ou vendas recebidos em parcelas",
+        emoji: "💰",
+        requiresValidation: true,
+        scrollToTarget: true,
+        placement: "below",
+      },
+      {
+        id: "income-description",
+        actionType: "fill",
+        targetSelector: "income-description",
+        title: "Descrição",
+        description:
+          "Descreva essa entrada. Exemplo: salário, freelance, venda, projeto.",
+        emoji: "📝",
+        requiresValidation: true,
+        focusTarget: true,
+        scrollToTarget: true,
+        placement: "below",
+      },
+      {
+        id: "income-amount",
+        actionType: "fill",
+        targetSelector: "income-amount",
+        title: "Valor",
+        description: "Agora informe o valor recebido.",
+        emoji: "💵",
+        requiresValidation: true,
+        focusTarget: true,
+        scrollToTarget: true,
+        placement: "below",
+      },
+      {
+        id: "income-category",
+        actionType: "click",
+        targetSelector: "income-category-field",
+        title: "Escolha a Categoria",
+        description:
+          'Abra a lista e escolha uma categoria. Se quiser personalizar, toque em "Gerenciar categorias...".',
+        emoji: "📦",
+        autoAdvanceOnEvent: ["income-category-selected", "income-category-manager-opened"],
+        scrollToTarget: true,
+        placement: "below",
+      },
+      {
+        id: "income-category-manager-intro",
+        actionType: "info",
+        targetSelector: "category-manager-sheet",
+        title: "Gerencie suas Categorias de Entrada",
+        description:
+          "Aqui ficam as categorias de entrada. Personalize conforme sua realidade.",
+        emoji: "🛠️",
+        scrollToTarget: true,
+        placement: "above",
+        condition: (ctx) => {
+          return (
+            !!ctx.seenEvents?.has("income-category-manager-opened") &&
+            !ctx.seenEvents?.has("income-category-manager-closed")
+          );
+        },
+      },
+      {
+        id: "income-category-manager-close",
+        actionType: "click",
+        targetSelector: "category-manager-close-btn",
+        title: "Volte ao Formulário",
+        description:
+          "Quando terminar de personalizar, toque aqui para voltar e escolher a categoria.",
+        emoji: "↩️",
+        autoAdvanceOnEvent: "income-category-manager-closed",
+        scrollToTarget: true,
+        placement: "above",
+        condition: (ctx) => {
+          return (
+            !!ctx.seenEvents?.has("income-category-manager-opened") &&
+            !ctx.seenEvents?.has("income-category-manager-closed")
+          );
+        },
+      },
+      {
+        id: "income-category-after-manager",
+        actionType: "click",
+        targetSelector: "income-category-field",
+        title: "Escolha a Categoria",
+        description:
+          "Agora escolha a categoria para esta entrada.",
+        emoji: "📦",
+        autoAdvanceOnEvent: "income-category-selected",
+        scrollToTarget: true,
+        placement: "below",
+        condition: (ctx) => {
+          return !!ctx.seenEvents?.has("income-category-manager-closed");
+        },
+      },
+      {
+        id: "income-date",
+        actionType: "info",
+        targetSelector: "income-date",
+        title: "Data de Recebimento",
+        description:
+          "Se essa entrada aconteceu em outro dia, abra o calendário e escolha a data certa. Se foi hoje, pode manter como está.",
+        emoji: "📅",
+        scrollToTarget: true,
+        placement: "above",
+        condition: () => {
+          return !!document.querySelector('[data-onboarding="income-date"]');
+        },
+      },
+      {
+        id: "income-day-of-month",
+        actionType: "fill",
+        targetSelector: "income-day-of-month",
+        title: "Dia do Recebimento",
+        description: "Em que dia do mês você costuma receber esse valor?",
+        emoji: "📅",
+        requiresValidation: true,
+        focusTarget: true,
+        scrollToTarget: true,
+        placement: "above",
+        condition: () => {
+          return !!document.querySelector('[data-onboarding="income-day-of-month"]');
+        },
+      },
+      {
+        id: "income-installment-count",
+        actionType: "fill",
+        targetSelector: "income-installment-count",
+        title: "Quantidade de Parcelas",
+        description: "Informe em quantas parcelas você vai receber esse valor.",
+        emoji: "🔢",
+        requiresValidation: true,
+        focusTarget: true,
+        scrollToTarget: true,
+        placement: "below",
+        condition: () => {
+          return !!document.querySelector('[data-onboarding="income-installment-count"]');
+        },
+      },
+      {
+        id: "income-installment-date",
+        actionType: "info",
+        targetSelector: "income-installment-date",
+        title: "Primeira Data de Recebimento",
+        description: "Selecione a data da primeira parcela.",
+        emoji: "📅",
+        scrollToTarget: true,
+        placement: "above",
+        condition: () => {
+          return !!document.querySelector('[data-onboarding="income-installment-date"]');
+        },
+      },
+      {
+        id: "income-submit",
+        actionType: "submit",
+        targetSelector: "income-submit-btn",
+        title: "Salvar Entrada",
+        description: 'Perfeito! Agora clique para salvar sua entrada.',
+        emoji: "✅",
+        autoAdvanceOnEvent: "income-submitted",
+        scrollToTarget: true,
+        placement: "above",
       },
     ],
   },

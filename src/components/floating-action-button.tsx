@@ -62,6 +62,7 @@ export function FloatingActionButton({
             </Button>
 
             <Button
+              data-onboarding="fab-income-button"
               onClick={() => handleOptionClick(onIncomeClick)}
               className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white shadow-lg rounded-full px-4 py-2 h-auto min-h-[44px] touch-manipulation"
             >
