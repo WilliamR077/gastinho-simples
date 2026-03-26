@@ -450,14 +450,14 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     if (nextIdx < currentStep.substeps.length) {
       const nextSubstep = currentStep.substeps[nextIdx];
 
-      // Guard: if the next substep requires a target inside the expense form,
+      // Guard: if the next substep requires a target inside a guided form,
       // verify the form context is still present before advancing
       if (
-        (currentStep.id === "add-expense" || currentStep.id === "add-recurring-expense") &&
+        (currentStep.id === "add-expense" || currentStep.id === "add-recurring-expense" || currentStep.id === "add-income") &&
         nextIdx >= FORM_SUBSTEP_START &&
-        !isExpenseFormReady()
+        !isFormReady()
       ) {
-        console.warn("[Onboarding] Expense form not ready yet, waiting before advancing...");
+        console.warn("[Onboarding] Form not ready yet, waiting before advancing...");
         queuePendingAdvance(nextIdx);
         return;
       }
