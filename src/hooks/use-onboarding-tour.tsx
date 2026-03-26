@@ -96,7 +96,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
 
   const createConditionContext = useCallback(() => {
     return {
-      formElement: findReadyOnboardingTarget("expense-type-selector") ?? undefined,
+      formElement: findReadyOnboardingTarget("expense-type-selector") ?? findReadyOnboardingTarget("income-type-selector") ?? undefined,
       seenEvents: seenEventsRef.current,
     };
   }, []);
