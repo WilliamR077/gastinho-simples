@@ -128,7 +128,7 @@ export default function Index() {
   const { currentContext, groups, getGroupMembers } = useSharedGroups();
   const { categories } = useCategories();
   const [groupMembers, setGroupMembers] = useState<SharedGroupMember[]>([]);
-  const { isExpenseFormGuidedFlow } = useOnboardingTour();
+  const { isExpenseFormGuidedFlow, currentStep } = useOnboardingTour();
 
   // Redirect to auth if not logged in
   useEffect(() => {
