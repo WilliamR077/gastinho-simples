@@ -598,6 +598,18 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const skipCurrentStep = useCallback(() => {
+    if (currentStep) {
+      // Persist skipped step so it won't reappear
+      try {
+        const skipped = JSON.parse(localStorage.getItem(SKIPPED_STEPS_KEY) || "[]");
+        if (!skipped.includes(currentStep.id)) {
+          skipped.push(currentStep.id);
+          localStorage.setItem(SKIPPED_STEPS_KEY, JSON.stringify(skipped));
+        }
+      } catch {
+        void 0;
+      }
+    }
     completeCurrentStep();
   }, [currentStep, stepIndex]);
 
