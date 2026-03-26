@@ -67,6 +67,7 @@ const OnboardingContext = createContext<OnboardingContextType | undefined>(
 
 const STORAGE_KEY = "gastinho_onboarding_completed";
 const PROGRESS_KEY = "gastinho_onboarding_progress";
+const SKIPPED_STEPS_KEY = "gastinho_skipped_steps";
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
