@@ -528,6 +528,18 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       completed.add("setup-security");
     completed.add("import-spreadsheet");
 
+    // Load skipped steps from localStorage
+    try {
+      const skipped = JSON.parse(localStorage.getItem(SKIPPED_STEPS_KEY) || "[]");
+      if (Array.isArray(skipped)) {
+        for (const stepId of skipped) {
+          completed.add(stepId);
+        }
+      }
+    } catch {
+      void 0;
+    }
+
     // view-reports has no DB table — check localStorage progress or onboarding completed
     const savedProgress = localStorage.getItem(PROGRESS_KEY);
     if (savedProgress) {
