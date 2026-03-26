@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -39,21 +39,23 @@ interface UnifiedIncomeFormSheetProps {
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
   initialData?: IncomeInitialData;
+  preventClose?: boolean;
 }
 
-export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialData }: UnifiedIncomeFormSheetProps) {
+export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialData, preventClose }: UnifiedIncomeFormSheetProps) {
   const { user } = useAuth();
   const { currentContext } = useSharedGroups();
   const { activeCategories } = useIncomeCategories();
   const [isLoading, setIsLoading] = useState(false);
   
-  const [incomeType, setIncomeType] = useState<IncomeType>("monthly");
+  const [incomeType, setIncomeType] = useState<IncomeType | "">("");
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [categoryValue, setCategoryValue] = useState("");
   const [incomeDate, setIncomeDate] = useState<Date>(new Date());
   const [dayOfMonth, setDayOfMonth] = useState("5");
   const [installmentCount, setInstallmentCount] = useState("2");
+  const hasEmittedOpenRef = useRef(false);
 
   const isGroupContext = currentContext.type === 'group';
 
@@ -71,11 +73,51 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
         setCategoryValue(initialData.categoryId || (activeCategories.length > 0 ? activeCategories[0].id : ""));
         setIncomeDate(initialData.incomeDate || new Date());
         setDayOfMonth(initialData.dayOfMonth?.toString() || "5");
-      } else {
+      } else if (!preventClose) {
+        // Only set default type when NOT in guided flow
         setIncomeType("monthly");
+      } else {
+        // Guided flow: start with no type selected
+        setIncomeType("");
       }
+      hasEmittedOpenRef.current = false;
     }
-  }, [open, initialData]);
+  }, [open, initialData, preventClose]);
+
+  // Emit income-form-opened when form is open and type selector is mounted
+  useEffect(() => {
+    if (!open || hasEmittedOpenRef.current) return;
+
+    const check = () => {
+      const el = document.querySelector('[data-onboarding="income-type-selector"]');
+      if (el) {
+        hasEmittedOpenRef.current = true;
+        window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: "income-form-opened" }));
+        return true;
+      }
+      return false;
+    };
+
+    if (check()) return;
+
+    const observer = new MutationObserver(() => {
+      if (check()) observer.disconnect();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    const timeout = setTimeout(() => observer.disconnect(), 5000);
+
+    return () => {
+      observer.disconnect();
+      clearTimeout(timeout);
+    };
+  }, [open]);
+
+  // Emit income-type-changed when type changes (for validation)
+  useEffect(() => {
+    if (open && incomeType) {
+      window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: "income-type-changed" }));
+    }
+  }, [incomeType, open]);
 
   const resetForm = () => {
     setIncomeType("monthly");
@@ -87,12 +129,13 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
     setInstallmentCount("2");
   };
 
+  const effectiveType = incomeType || "monthly";
   const parsedAmount = parseFloat(amount.replace(",", "."));
   const parsedInstallments = parseInt(installmentCount);
   const validAmount = !isNaN(parsedAmount) && parsedAmount > 0;
   const validInstallments = !isNaN(parsedInstallments) && parsedInstallments >= 2 && parsedInstallments <= 48;
 
-  const installmentPreview = incomeType === "installment" && validAmount && validInstallments
+  const installmentPreview = effectiveType === "installment" && validAmount && validInstallments
     ? Array.from({ length: parsedInstallments }, (_, i) => ({
         number: i + 1,
         date: addMonths(incomeDate, i),
@@ -108,6 +151,11 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
       return;
     }
 
+    if (!incomeType) {
+      toast.error("Selecione o tipo de entrada");
+      return;
+    }
+
     if (!description.trim()) {
       toast.error("Informe uma descrição");
       return;
@@ -118,7 +166,7 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
       return;
     }
 
-    if (incomeType === "installment") {
+    if (effectiveType === "installment") {
       if (!validInstallments) {
         toast.error("Informe entre 2 e 48 parcelas. Use entrada do mês para um único recebimento.");
         return;
@@ -140,7 +188,7 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
         category_icon: selectedCategory?.icon || null,
       };
 
-      if (incomeType === "monthly") {
+      if (effectiveType === "monthly") {
         const { error } = await supabase.from("incomes").insert({
           ...baseFields,
           description: description.trim(),
@@ -150,7 +198,7 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
 
         if (error) throw error;
         toast.success("Entrada adicionada com sucesso!");
-      } else if (incomeType === "recurring") {
+      } else if (effectiveType === "recurring") {
         const day = parseInt(dayOfMonth);
         if (isNaN(day) || day < 1 || day > 31) {
           toast.error("Informe um dia válido (1-31)");
@@ -167,7 +215,7 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
 
         if (error) throw error;
         toast.success("Entrada fixa adicionada com sucesso!");
-      } else if (incomeType === "installment") {
+      } else if (effectiveType === "installment") {
         const groupId = crypto.randomUUID();
         const records = Array.from({ length: parsedInstallments }, (_, i) => ({
           ...baseFields,
@@ -184,6 +232,9 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
         toast.success(`${parsedInstallments} parcelas criadas com sucesso!`);
       }
 
+      // Dispatch event BEFORE closing for onboarding to catch
+      window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: "income-submitted" }));
+
       resetForm();
       onSuccess();
       onOpenChange(false);
@@ -195,8 +246,13 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
     }
   };
 
+  const handleOpenChange = (newOpen: boolean) => {
+    if (!newOpen && preventClose) return;
+    onOpenChange(newOpen);
+  };
+
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent side="bottom" className="h-[85vh] rounded-t-xl overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
@@ -209,7 +265,7 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
         </SheetHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 mt-6 pb-24">
-          <div className="space-y-3 p-3 rounded-lg bg-muted/50 border border-border">
+          <div data-onboarding="income-type-selector" className="space-y-3 p-3 rounded-lg bg-muted/50 border border-border">
             <Label className="text-sm font-medium">Tipo de Entrada</Label>
             <RadioGroup
               value={incomeType}
@@ -237,13 +293,13 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
             </RadioGroup>
           </div>
 
-          <div className="space-y-2">
+          <div data-onboarding="income-description" className="space-y-2">
             <Label htmlFor="description">Descrição</Label>
             <Input
               id="description"
               placeholder={
-                incomeType === "monthly" ? "Ex: Salário mensal" :
-                incomeType === "recurring" ? "Ex: Salário" :
+                effectiveType === "monthly" ? "Ex: Salário mensal" :
+                effectiveType === "recurring" ? "Ex: Salário" :
                 "Ex: Projeto Site"
               }
               value={description}
@@ -252,9 +308,9 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
             />
           </div>
 
-          <div className="space-y-2">
+          <div data-onboarding="income-amount" className="space-y-2">
             <Label htmlFor="amount">
-              {incomeType === "installment" ? "Valor da parcela (R$)" : "Valor (R$)"}
+              {effectiveType === "installment" ? "Valor da parcela (R$)" : "Valor (R$)"}
             </Label>
             <Input
               id="amount"
@@ -266,13 +322,13 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
             />
           </div>
 
-          <div className="space-y-2">
+          <div data-onboarding="income-category-field" className="space-y-2">
             <Label>Categoria</Label>
             <IncomeCategorySelector value={categoryValue} onValueChange={setCategoryValue} />
           </div>
 
-          {incomeType === "installment" && (
-            <div className="space-y-2">
+          {effectiveType === "installment" && (
+            <div data-onboarding="income-installment-count" className="space-y-2">
               <Label htmlFor="installmentCount">Quantidade de parcelas</Label>
               <Input
                 id="installmentCount"
@@ -289,9 +345,9 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
             </div>
           )}
 
-          {incomeType === "monthly" || incomeType === "installment" ? (
-            <div className="space-y-2">
-              <Label>{incomeType === "installment" ? "Primeira data de recebimento" : "Data"}</Label>
+          {effectiveType === "monthly" || effectiveType === "installment" ? (
+            <div data-onboarding={effectiveType === "installment" ? "income-installment-date" : "income-date"} className="space-y-2">
+              <Label>{effectiveType === "installment" ? "Primeira data de recebimento" : "Data"}</Label>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
@@ -305,7 +361,7 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
                     {incomeDate ? format(incomeDate, "PPP", { locale: ptBR }) : "Selecione uma data"}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
+                <PopoverContent className="w-auto p-0 z-[80]" align="start">
                   <Calendar
                     mode="single"
                     selected={incomeDate}
@@ -316,8 +372,8 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
                 </PopoverContent>
               </Popover>
             </div>
-          ) : incomeType === "recurring" ? (
-            <div className="space-y-2">
+          ) : effectiveType === "recurring" ? (
+            <div data-onboarding="income-day-of-month" className="space-y-2">
               <Label htmlFor="dayOfMonth">Dia do recebimento</Label>
               <Input
                 id="dayOfMonth"
@@ -335,7 +391,7 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
           ) : null}
 
           {/* Preview de parcelas */}
-          {incomeType === "installment" && installmentPreview.length > 0 && (
+          {effectiveType === "installment" && installmentPreview.length > 0 && (
             <div className="space-y-2 p-3 rounded-lg bg-muted/50 border border-border">
               <Label className="text-sm font-medium">Prévia das parcelas</Label>
               <div className="space-y-1.5 max-h-48 overflow-y-auto">
@@ -365,10 +421,10 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
             >
               Cancelar
             </Button>
-            <Button type="submit" className="flex-1" disabled={isLoading}>
+            <Button data-onboarding="income-submit-btn" type="submit" className="flex-1" disabled={isLoading || !incomeType}>
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {incomeType === "monthly" ? "Adicionar Entrada" :
-               incomeType === "recurring" ? "Adicionar Entrada Fixa" :
+              {effectiveType === "monthly" ? "Adicionar Entrada" :
+               effectiveType === "recurring" ? "Adicionar Entrada Fixa" :
                `Criar ${validInstallments ? parsedInstallments : ''} Parcelas`}
             </Button>
           </div>
