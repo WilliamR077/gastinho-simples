@@ -502,7 +502,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   ): Promise<Set<string>> => {
     const completed = new Set<string>();
 
-    const [cards, expenses, recurring, incomes, goals] =
+    const [cards, expenses, recurring, incomes, recurringIncomes, goals] =
       await Promise.all([
         supabase.from("cards").select("id").eq("user_id", userId).limit(1),
         supabase.from("expenses").select("id").eq("user_id", userId).limit(1),
@@ -512,6 +512,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
           .eq("user_id", userId)
           .limit(1),
         supabase.from("incomes").select("id").eq("user_id", userId).limit(1),
+        supabase.from("recurring_incomes").select("id").eq("user_id", userId).limit(1),
         supabase
           .from("budget_goals")
           .select("id")
@@ -522,7 +523,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     if (cards.data?.length) completed.add("add-card");
     if (expenses.data?.length) completed.add("add-expense");
     if (recurring.data?.length) completed.add("add-recurring-expense");
-    if (incomes.data?.length) completed.add("add-income");
+    if (incomes.data?.length || recurringIncomes.data?.length) completed.add("add-income");
     if (goals.data?.length) completed.add("add-budget-goal");
     if (localStorage.getItem("gastinho_app_lock_pin"))
       completed.add("setup-security");
