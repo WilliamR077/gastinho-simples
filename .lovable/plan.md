@@ -1,67 +1,91 @@
 
 
-## Plano: Implementar Passo 3 Completo — Despesa Fixa
+## Plano Revisado: Corrigir Passo 3 + Implementar Passo 4 (Entradas)
 
-### Contexto
-O passo 3 (`add-recurring-expense`) atualmente tem apenas 1 substep intro. O formulário unificado (`unified-expense-form-sheet.tsx`) já suporta o tipo "recurring" com campos específicos (Dia da Cobrança em vez de Data, sem parcelas). A infraestrutura de guided flow (preventClose, 4-panel overlay, container-aware scroll, event-driven advancement) já existe do passo 2.
+### Ajustes solicitados incorporados
 
-### Mudanças
+1. **Passo 3 sem "Prosseguir" extra**: Remover o substep `recurring-done` (completion). Quando `expense-submitted` chegar no `recurring-submit`, o `advanceSubstepInternal` verá que não há mais substeps e chamará `completeCurrentStep()` diretamente, avançando para o passo 4 automaticamente.
+
+2. **Passo 4 — tipo de entrada como escolha real**: O substep `income-type-info` será do tipo `select` (não `info`), com `requiresValidation: true` no target `income-type-selector`. O onboarding só avança quando o usuário realmente selecionar um tipo no RadioGroup. Nenhum tipo é pré-selecionado durante o guided flow.
+
+3. **"Pular esta etapa" persistido**: Criar chave localStorage `gastinho_skipped_steps`. Tanto o passo 3 ("Não tenho despesa fixa") quanto o passo 4 ("Pular esta etapa") salvam o step ID nessa chave. `checkExistingData()` lê essa chave e marca esses steps como concluídos.
+
+---
+
+### Mudanças por arquivo
 
 #### 1. `src/lib/onboarding/onboarding-steps.ts`
-Expandir `RECURRING_EXPENSE_SUBSTEPS` com o fluxo completo:
 
-| Substep | Tipo | Target | Evento/Validação |
-|---------|------|--------|------------------|
-| `recurring-intro` | info (sem target) | — | skipLabel: "Não tenho despesa fixa" |
-| `recurring-click-fab` | click | `fab-main-button` | autoAdvanceOnEvent: `fab-menu-opened` |
-| `recurring-click-btn` | click | `fab-expense-button` | autoAdvanceOnEvent: `expense-form-opened` |
-| `recurring-type-info` | info | `expense-type-selector` | Explica que agora é despesa fixa |
-| `recurring-description` | fill | `expense-description` | requiresValidation |
-| `recurring-amount` | fill | `expense-amount` | requiresValidation |
-| `recurring-day` | select | `expense-day-of-month` (novo) | requiresValidation |
-| `recurring-category` | click | `expense-category-field` | autoAdvanceOnEvent: `expense-category-selected` / `category-manager-opened` |
-| (category manager substeps condicionais — reutilizar os mesmos IDs/conditions do passo 2) |
-| `recurring-category-after-manager` | click | `expense-category-field` | condition: manager closed |
-| `recurring-payment` | select | `expense-payment` | requiresValidation |
-| `recurring-card` | select | `expense-card-select` | condition: card field exists |
-| `recurring-submit` | submit | `expense-submit-btn` | autoAdvanceOnEvent: `expense-submitted` |
-| `recurring-done` | completion | — | proceedLabel: "Prosseguir" |
+**Passo 3** — Remover `recurring-done` (completion substep, linhas 656-663). O último substep fica sendo `recurring-submit`, e quando ele avança, `completeCurrentStep()` é chamado automaticamente.
 
-Sem substep de parcelas (despesa fixa não tem).
+**Passo 4** — Expandir `add-income` de 1 substep para ~15:
 
-#### 2. `src/components/unified-expense-form-sheet.tsx`
-- Adicionar `data-onboarding="expense-day-of-month"` ao div do campo "Dia da Cobrança" (linha 504)
-- Expandir `isExpenseTypeLocked` para incluir o passo `add-recurring-expense` com `recurring-type-info`, forçando `expenseType = "recurring"` quando o onboarding estiver no passo 3
-- No useEffect de lock (linha 136-140), tratar ambos os cenários: passo 2 trava em "monthly", passo 3 trava em "recurring"
+| Substep | Tipo | Target | Notas |
+|---------|------|--------|-------|
+| `income-intro` | info (sem target) | — | skipLabel: "Pular esta etapa" |
+| `income-click-fab` | click | `fab-main-button` | autoAdvanceOnEvent: `fab-menu-opened` |
+| `income-click-btn` | click | `fab-income-button` | autoAdvanceOnEvent: `income-form-opened` |
+| `income-type-select` | select | `income-type-selector` | requiresValidation: true |
+| `income-description` | fill | `income-description` | requiresValidation, focusTarget |
+| `income-amount` | fill | `income-amount` | requiresValidation, focusTarget |
+| `income-category` | click | `income-category-field` | autoAdvanceOnEvent: income-category-selected |
+| `income-date` | info | `income-date` | condition: monthly/installment (DOM check) |
+| `income-day-of-month` | select | `income-day-of-month` | condition: recurring (DOM check) |
+| `income-installment-count` | fill | `income-installment-count` | condition: installment (DOM check) |
+| `income-installment-date` | info | `income-installment-date` | condition: installment (DOM check) |
+| `income-submit` | submit | `income-submit-btn` | autoAdvanceOnEvent: `income-submitted` |
 
-#### 3. `src/hooks/use-onboarding-tour.tsx`
-- Expandir `isExpenseFormGuidedFlow` para incluir o passo `add-recurring-expense` (além de `add-expense`)
-- O `EXPENSE_FORM_SUBSTEP_START` precisa funcionar para ambos os passos
-- Renomear/generalizar para cobrir os dois casos: derivar de `currentStep.substeps.findIndex(s => s.id includes "type-info")`
+Sem substep `completion` — ao salvar, `completeCurrentStep()` avança direto para passo 5.
 
-#### 4. `src/pages/Index.tsx`
-- O `isExpenseFormGuidedFlow` já bloqueia fechamento do Sheet — como agora cobre ambos os passos, nenhuma mudança adicional necessária aqui
+#### 2. `src/hooks/use-onboarding-tour.tsx`
 
-#### 5. `src/components/onboarding/onboarding-tooltip.tsx`
-- Adicionar suporte para renderizar `skipLabel` como botão secundário em substeps do tipo `info` (quando `onSkipSubstep` é passado)
-- Isso permite que o intro do passo 3 mostre "Continuar" + "Não tenho despesa fixa"
+- **Skipped steps persistence**: Nova constante `SKIPPED_STEPS_KEY`. `skipCurrentStep` salva o ID no localStorage antes de chamar `completeCurrentStep()`. `checkExistingData()` lê essa chave e adiciona ao set de completed.
+- **Guided flow expandido**: `isExpenseFormGuidedFlow` renomeado para `isFormGuidedFlow` (ou mantido e expandido) para incluir `add-income`. Novo `isIncomeFormReady()` que checa `income-type-selector`.
+- **`FORM_SUBSTEP_START`**: Expandido para detectar `income-type-select` quando step é `add-income`.
+- **Event listener**: Expandir handler para tratar `income-category-selected`, `category-manager-opened/closed` quando no step `add-income`.
 
-#### 6. `src/components/onboarding-tour.tsx`
-- Para substeps `info` sem target, passar `onSkipSubstep` quando `skipLabel` existir (já passa para substeps com target na linha 262, mas não para os centered/sem target na linha 225-238)
-- Quando `onSkipSubstep` é chamado no intro, deve chamar `skipCurrentStep` (pular para passo 4)
+#### 3. `src/components/unified-income-form-sheet.tsx`
+
+- Aceitar prop `preventClose?: boolean`
+- Adicionar `data-onboarding` em todos os campos:
+  - RadioGroup div: `income-type-selector`
+  - Descrição div: `income-description`
+  - Valor div: `income-amount`
+  - Categoria div: `income-category-field`
+  - Data (Popover div): `income-date`
+  - Dia do recebimento div: `income-day-of-month`
+  - Parcelas div: `income-installment-count`
+  - Primeira data parcela div: `income-installment-date`
+  - Submit button: `income-submit-btn`
+- `useEffect` para disparar `income-form-opened` quando `open === true` e target montado
+- Disparar `income-submitted` no `handleSubmit` antes de fechar
+- Dia do recebimento: se for Input type=number, ok; se virar Select, usar `z-[80]` no SelectContent
+- **Tipo sem default durante onboarding**: Quando o step ativo for `add-income`, iniciar `incomeType` como `""` (nenhum selecionado) para forçar escolha real
+
+#### 4. `src/components/floating-action-button.tsx`
+
+- Adicionar `data-onboarding="fab-income-button"` no botão "Entrada" (linha 64-70)
+
+#### 5. `src/pages/Index.tsx`
+
+- Importar `isFormGuidedFlow` (ou verificar `isExpenseFormGuidedFlow` expandido)
+- Passar `preventClose` ao `UnifiedIncomeFormSheet` quando no guided flow do passo 4
+- Bloquear `onOpenChange(false)` durante guided flow de income (mesmo padrão de expense)
+
+#### 6. `src/components/income-category-selector.tsx`
+
+- Disparar eventos `income-category-selected` e `category-manager-opened`/`category-manager-closed` via `gastinho-onboarding-event` (mesmo padrão do expense category-selector)
 
 ### Arquivos afetados
+
 | Arquivo | Mudança |
 |---------|---------|
-| `src/lib/onboarding/onboarding-steps.ts` | Substeps completos do passo 3 |
-| `src/components/unified-expense-form-sheet.tsx` | `data-onboarding` no Dia da Cobrança + lock de tipo para passo 3 |
-| `src/hooks/use-onboarding-tour.tsx` | Generalizar guided flow para passo 3 |
-| `src/components/onboarding/onboarding-tooltip.tsx` | Botão skip em info substeps |
-| `src/components/onboarding-tour.tsx` | Passar onSkipSubstep para info centered |
+| `src/lib/onboarding/onboarding-steps.ts` | Remover `recurring-done`, expandir `add-income` com ~12 substeps |
+| `src/hooks/use-onboarding-tour.tsx` | Skipped steps persistence, guided flow para income |
+| `src/components/unified-income-form-sheet.tsx` | data-onboarding, preventClose, eventos, tipo sem default |
+| `src/components/floating-action-button.tsx` | `data-onboarding="fab-income-button"` |
+| `src/pages/Index.tsx` | preventClose no income sheet |
+| `src/components/income-category-selector.tsx` | Disparar eventos de onboarding |
 
-### Pontos de atenção
-- Reutilizar os mesmos `data-onboarding` targets do formulário unificado (description, amount, category, payment, card, submit) — são os mesmos campos
-- Os substeps de category manager condicionais podem ser copiados do passo 2 com IDs diferentes (prefixo `recurring-`) para evitar conflito
-- Não há campo de parcelas para recurring — o `condition` existente em `expense-installments` já cobre isso (field não existe no DOM quando type=recurring)
-- O "Dia da Cobrança" é um Select de 1-31, não um calendário — precisa de `data-onboarding` novo e z-index correto no SelectContent
+Nenhuma migração SQL.
 
