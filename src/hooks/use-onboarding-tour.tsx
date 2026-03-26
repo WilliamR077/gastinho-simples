@@ -665,6 +665,15 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     }
 
     if (currentSubstep.actionType === "select") {
+      // For RadioGroup-based selectors, check if a radio is actually selected
+      const checkedRadio = el.querySelector('[data-state="checked"], input[type="radio"]:checked');
+      if (checkedRadio) return true;
+      // For Select components, check if a value is selected
+      const selectTrigger = el.querySelector('[role="combobox"]');
+      if (selectTrigger) {
+        const val = selectTrigger.textContent?.trim();
+        return !!val && val !== "Selecione";
+      }
       return isOnboardingTargetReady(el);
     }
 
