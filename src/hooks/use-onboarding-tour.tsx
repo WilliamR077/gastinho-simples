@@ -248,6 +248,15 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      if (
+        detail === "income-category-manager-closed" &&
+        currentStep?.id === "add-income" &&
+        currentSubstep?.id.startsWith("income-category-manager-")
+      ) {
+        advanceSubstepInternal();
+        return;
+      }
+
       if (matchesAutoAdvanceEvent(currentSubstep, detail)) {
         advanceSubstepInternal();
       }
