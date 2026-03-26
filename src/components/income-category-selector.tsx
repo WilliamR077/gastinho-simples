@@ -27,13 +27,17 @@ export function IncomeCategorySelector({
 
   const handleOpenManager = () => {
     setIsOpen(false);
-    setTimeout(() => setShowManager(true), 100);
+    setTimeout(() => {
+      setShowManager(true);
+      window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: "income-category-manager-opened" }));
+    }, 100);
   };
 
   const handleManagerClose = (open: boolean) => {
     setShowManager(open);
     if (!open) {
       refresh();
+      window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: "income-category-manager-closed" }));
     }
   };
 
@@ -87,7 +91,10 @@ export function IncomeCategorySelector({
     <>
       <Select
         value={value}
-        onValueChange={onValueChange}
+        onValueChange={(v) => {
+          onValueChange(v);
+          window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: "income-category-selected" }));
+        }}
         open={isOpen}
         onOpenChange={setIsOpen}
       >

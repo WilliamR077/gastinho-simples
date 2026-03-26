@@ -128,7 +128,7 @@ export default function Index() {
   const { currentContext, groups, getGroupMembers } = useSharedGroups();
   const { categories } = useCategories();
   const [groupMembers, setGroupMembers] = useState<SharedGroupMember[]>([]);
-  const { isExpenseFormGuidedFlow } = useOnboardingTour();
+  const { isExpenseFormGuidedFlow, currentStep } = useOnboardingTour();
 
   // Redirect to auth if not logged in
   useEffect(() => {
@@ -2338,6 +2338,10 @@ export default function Index() {
         <UnifiedIncomeFormSheet
           open={incomeSheetOpen}
           onOpenChange={(open) => {
+            // Block close during onboarding guided flow
+            if (!open && isExpenseFormGuidedFlow && currentStep?.id === "add-income") {
+              return;
+            }
             setIncomeSheetOpen(open);
             if (!open) setIncomeInitialData(undefined);
           }}
@@ -2345,7 +2349,8 @@ export default function Index() {
             loadIncomes();
             loadRecurringIncomes();
           }}
-          initialData={incomeInitialData} />
+          initialData={incomeInitialData}
+          preventClose={isExpenseFormGuidedFlow && currentStep?.id === "add-income"} />
 
 
         {/* Modais de Edição */}

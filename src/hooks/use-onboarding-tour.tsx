@@ -67,6 +67,7 @@ const OnboardingContext = createContext<OnboardingContextType | undefined>(
 
 const STORAGE_KEY = "gastinho_onboarding_completed";
 const PROGRESS_KEY = "gastinho_onboarding_progress";
+const SKIPPED_STEPS_KEY = "gastinho_skipped_steps";
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -95,7 +96,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
 
   const createConditionContext = useCallback(() => {
     return {
-      formElement: findReadyOnboardingTarget("expense-type-selector") ?? undefined,
+      formElement: findReadyOnboardingTarget("expense-type-selector") ?? findReadyOnboardingTarget("income-type-selector") ?? undefined,
       seenEvents: seenEventsRef.current,
     };
   }, []);
@@ -242,6 +243,15 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         detail === "category-manager-closed" &&
         (currentStep?.id === "add-expense" || currentStep?.id === "add-recurring-expense") &&
         (currentSubstep?.id.startsWith("expense-category-manager-") || currentSubstep?.id.startsWith("recurring-category-manager-"))
+      ) {
+        advanceSubstepInternal();
+        return;
+      }
+
+      if (
+        detail === "income-category-manager-closed" &&
+        currentStep?.id === "add-income" &&
+        currentSubstep?.id.startsWith("income-category-manager-")
       ) {
         advanceSubstepInternal();
         return;
@@ -395,7 +405,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // Determine if we're in a guided form flow (expense or recurring expense).
+  // Determine if we're in a guided form flow (expense, recurring expense, or income).
   const FORM_SUBSTEP_START = (() => {
     if (currentStep?.id === "add-expense") {
       return Math.max(currentStep.substeps.findIndex((s) => s.id === "expense-type-info"), 0);
@@ -403,14 +413,22 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     if (currentStep?.id === "add-recurring-expense") {
       return Math.max(currentStep.substeps.findIndex((s) => s.id === "recurring-type-info"), 0);
     }
+    if (currentStep?.id === "add-income") {
+      return Math.max(currentStep.substeps.findIndex((s) => s.id === "income-type-select"), 0);
+    }
     return Number.POSITIVE_INFINITY;
   })();
-  const isExpenseFormGuidedFlow =
+  const isFormGuidedFlow =
     isOpen &&
-    (currentStep?.id === "add-expense" || currentStep?.id === "add-recurring-expense") &&
+    (currentStep?.id === "add-expense" || currentStep?.id === "add-recurring-expense" || currentStep?.id === "add-income") &&
     substepIndex >= FORM_SUBSTEP_START;
+  // Keep backward compat
+  const isExpenseFormGuidedFlow = isFormGuidedFlow;
 
-  function isExpenseFormReady() {
+  function isFormReady() {
+    if (currentStep?.id === "add-income") {
+      return !!getReadyTargetElement("income-type-selector");
+    }
     return !!getReadyTargetElement("expense-type-selector");
   }
 
@@ -432,14 +450,14 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     if (nextIdx < currentStep.substeps.length) {
       const nextSubstep = currentStep.substeps[nextIdx];
 
-      // Guard: if the next substep requires a target inside the expense form,
+      // Guard: if the next substep requires a target inside a guided form,
       // verify the form context is still present before advancing
       if (
-        (currentStep.id === "add-expense" || currentStep.id === "add-recurring-expense") &&
+        (currentStep.id === "add-expense" || currentStep.id === "add-recurring-expense" || currentStep.id === "add-income") &&
         nextIdx >= FORM_SUBSTEP_START &&
-        !isExpenseFormReady()
+        !isFormReady()
       ) {
-        console.warn("[Onboarding] Expense form not ready yet, waiting before advancing...");
+        console.warn("[Onboarding] Form not ready yet, waiting before advancing...");
         queuePendingAdvance(nextIdx);
         return;
       }
@@ -484,7 +502,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   ): Promise<Set<string>> => {
     const completed = new Set<string>();
 
-    const [cards, expenses, recurring, incomes, goals] =
+    const [cards, expenses, recurring, incomes, recurringIncomes, goals] =
       await Promise.all([
         supabase.from("cards").select("id").eq("user_id", userId).limit(1),
         supabase.from("expenses").select("id").eq("user_id", userId).limit(1),
@@ -494,6 +512,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
           .eq("user_id", userId)
           .limit(1),
         supabase.from("incomes").select("id").eq("user_id", userId).limit(1),
+        supabase.from("recurring_incomes").select("id").eq("user_id", userId).limit(1),
         supabase
           .from("budget_goals")
           .select("id")
@@ -504,11 +523,23 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     if (cards.data?.length) completed.add("add-card");
     if (expenses.data?.length) completed.add("add-expense");
     if (recurring.data?.length) completed.add("add-recurring-expense");
-    if (incomes.data?.length) completed.add("add-income");
+    if (incomes.data?.length || recurringIncomes.data?.length) completed.add("add-income");
     if (goals.data?.length) completed.add("add-budget-goal");
     if (localStorage.getItem("gastinho_app_lock_pin"))
       completed.add("setup-security");
     completed.add("import-spreadsheet");
+
+    // Load skipped steps from localStorage
+    try {
+      const skipped = JSON.parse(localStorage.getItem(SKIPPED_STEPS_KEY) || "[]");
+      if (Array.isArray(skipped)) {
+        for (const stepId of skipped) {
+          completed.add(stepId);
+        }
+      }
+    } catch {
+      void 0;
+    }
 
     // view-reports has no DB table — check localStorage progress or onboarding completed
     const savedProgress = localStorage.getItem(PROGRESS_KEY);
@@ -568,6 +599,18 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const skipCurrentStep = useCallback(() => {
+    if (currentStep) {
+      // Persist skipped step so it won't reappear
+      try {
+        const skipped = JSON.parse(localStorage.getItem(SKIPPED_STEPS_KEY) || "[]");
+        if (!skipped.includes(currentStep.id)) {
+          skipped.push(currentStep.id);
+          localStorage.setItem(SKIPPED_STEPS_KEY, JSON.stringify(skipped));
+        }
+      } catch {
+        void 0;
+      }
+    }
     completeCurrentStep();
   }, [currentStep, stepIndex]);
 
@@ -623,6 +666,15 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     }
 
     if (currentSubstep.actionType === "select") {
+      // For RadioGroup-based selectors, check if a radio is actually selected
+      const checkedRadio = el.querySelector('[data-state="checked"], input[type="radio"]:checked');
+      if (checkedRadio) return true;
+      // For Select components, check if a value is selected
+      const selectTrigger = el.querySelector('[role="combobox"]');
+      if (selectTrigger) {
+        const val = selectTrigger.textContent?.trim();
+        return !!val && val !== "Selecione";
+      }
       return isOnboardingTargetReady(el);
     }
 
