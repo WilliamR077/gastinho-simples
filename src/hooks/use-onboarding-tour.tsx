@@ -405,7 +405,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // Determine if we're in a guided form flow (expense or recurring expense).
+  // Determine if we're in a guided form flow (expense, recurring expense, or income).
   const FORM_SUBSTEP_START = (() => {
     if (currentStep?.id === "add-expense") {
       return Math.max(currentStep.substeps.findIndex((s) => s.id === "expense-type-info"), 0);
@@ -413,14 +413,22 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     if (currentStep?.id === "add-recurring-expense") {
       return Math.max(currentStep.substeps.findIndex((s) => s.id === "recurring-type-info"), 0);
     }
+    if (currentStep?.id === "add-income") {
+      return Math.max(currentStep.substeps.findIndex((s) => s.id === "income-type-select"), 0);
+    }
     return Number.POSITIVE_INFINITY;
   })();
-  const isExpenseFormGuidedFlow =
+  const isFormGuidedFlow =
     isOpen &&
-    (currentStep?.id === "add-expense" || currentStep?.id === "add-recurring-expense") &&
+    (currentStep?.id === "add-expense" || currentStep?.id === "add-recurring-expense" || currentStep?.id === "add-income") &&
     substepIndex >= FORM_SUBSTEP_START;
+  // Keep backward compat
+  const isExpenseFormGuidedFlow = isFormGuidedFlow;
 
-  function isExpenseFormReady() {
+  function isFormReady() {
+    if (currentStep?.id === "add-income") {
+      return !!getReadyTargetElement("income-type-selector");
+    }
     return !!getReadyTargetElement("expense-type-selector");
   }
 
