@@ -91,7 +91,10 @@ export function IncomeCategorySelector({
     <>
       <Select
         value={value}
-        onValueChange={onValueChange}
+        onValueChange={(v) => {
+          onValueChange(v);
+          window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: "income-category-selected" }));
+        }}
         open={isOpen}
         onOpenChange={setIsOpen}
       >
