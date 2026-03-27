@@ -895,7 +895,7 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         description: "Agora toque em 'Meta' para abrir o formulário.",
         emoji: "🎯",
         autoAdvanceOnEvent: "goal-form-opened",
-        placement: "left",
+        placement: "above",
       },
       {
         id: "budget-scope-select",
