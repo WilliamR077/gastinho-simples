@@ -432,6 +432,9 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     if (currentStep?.id === "add-income") {
       return !!getReadyTargetElement("income-type-selector");
     }
+    if (currentStep?.id === "add-budget-goal") {
+      return !!getReadyTargetElement("goal-scope-expense") || !!getReadyTargetElement("goal-type-select") || !!getReadyTargetElement("goal-amount-input");
+    }
     return !!getReadyTargetElement("expense-type-selector");
   }
 
