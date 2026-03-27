@@ -54,6 +54,7 @@ export function FloatingActionButton({
         {isOpen && (
           <div className="flex flex-col gap-2 pointer-events-auto">
             <Button
+              data-onboarding="fab-goal-button"
               onClick={() => handleOptionClick(onGoalClick)}
               className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white shadow-lg rounded-full px-4 py-2 h-auto min-h-[44px] touch-manipulation"
             >
