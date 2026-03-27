@@ -1,14 +1,12 @@
 
 
-## Plano Revisado: Corrigir Passo 3 + Implementar Passo 4 (Entradas)
+## Plano Revisado: Implementar Passo 5 — Metas (com locks em scope e subtipo)
 
-### Ajustes solicitados incorporados
+### Ajustes incorporados
 
-1. **Passo 3 sem "Prosseguir" extra**: Remover o substep `recurring-done` (completion). Quando `expense-submitted` chegar no `recurring-submit`, o `advanceSubstepInternal` verá que não há mais substeps e chamará `completeCurrentStep()` diretamente, avançando para o passo 4 automaticamente.
+1. **Subtipo travado em "Limite mensal total"**: Durante o onboarding, o Select de tipo de meta fica desabilitado/locked com valor `monthly_total`. O usuário não consegue trocar para "Limite por categoria".
 
-2. **Passo 4 — tipo de entrada como escolha real**: O substep `income-type-info` será do tipo `select` (não `info`), com `requiresValidation: true` no target `income-type-selector`. O onboarding só avança quando o usuário realmente selecionar um tipo no RadioGroup. Nenhum tipo é pré-selecionado durante o guided flow.
-
-3. **"Pular esta etapa" persistido**: Criar chave localStorage `gastinho_skipped_steps`. Tanto o passo 3 ("Não tenho despesa fixa") quanto o passo 4 ("Pular esta etapa") salvam o step ID nessa chave. `checkExistingData()` lê essa chave e marca esses steps como concluídos.
+2. **`goal-submitted` só após sucesso real**: O evento é disparado em `Index.tsx` dentro do `addBudgetGoal`, somente após o `insert` retornar sem erro. Não é disparado no componente do formulário.
 
 ---
 
@@ -16,76 +14,65 @@
 
 #### 1. `src/lib/onboarding/onboarding-steps.ts`
 
-**Passo 3** — Remover `recurring-done` (completion substep, linhas 656-663). O último substep fica sendo `recurring-submit`, e quando ele avança, `completeCurrentStep()` é chamado automaticamente.
-
-**Passo 4** — Expandir `add-income` de 1 substep para ~15:
+Expandir `add-budget-goal` de 1 substep para 7:
 
 | Substep | Tipo | Target | Notas |
 |---------|------|--------|-------|
-| `income-intro` | info (sem target) | — | skipLabel: "Pular esta etapa" |
-| `income-click-fab` | click | `fab-main-button` | autoAdvanceOnEvent: `fab-menu-opened` |
-| `income-click-btn` | click | `fab-income-button` | autoAdvanceOnEvent: `income-form-opened` |
-| `income-type-select` | select | `income-type-selector` | requiresValidation: true |
-| `income-description` | fill | `income-description` | requiresValidation, focusTarget |
-| `income-amount` | fill | `income-amount` | requiresValidation, focusTarget |
-| `income-category` | click | `income-category-field` | autoAdvanceOnEvent: income-category-selected |
-| `income-date` | info | `income-date` | condition: monthly/installment (DOM check) |
-| `income-day-of-month` | select | `income-day-of-month` | condition: recurring (DOM check) |
-| `income-installment-count` | fill | `income-installment-count` | condition: installment (DOM check) |
-| `income-installment-date` | info | `income-installment-date` | condition: installment (DOM check) |
-| `income-submit` | submit | `income-submit-btn` | autoAdvanceOnEvent: `income-submitted` |
+| `budget-intro` | info | — | Explica 3 tipos, recomenda Meta de Despesa. Sem skipLabel |
+| `budget-click-fab` | click | `fab-main-button` | autoAdvanceOnEvent: `fab-menu-opened` |
+| `budget-click-btn` | click | `fab-goal-button` | autoAdvanceOnEvent: `goal-form-opened` |
+| `budget-scope-select` | click | `goal-scope-expense` | autoAdvanceOnEvent: `goal-scope-selected` |
+| `budget-type-info` | info | `goal-type-select` | Explica "Limite mensal total" recomendado, tipo travado |
+| `budget-amount` | fill | `goal-amount-input` | requiresValidation, focusTarget |
+| `budget-submit` | submit | `goal-submit-btn` | autoAdvanceOnEvent: `goal-submitted` |
 
-Sem substep `completion` — ao salvar, `completeCurrentStep()` avança direto para passo 5.
+Sem completion substep — ao salvar, `completeCurrentStep()` avança direto para passo 6. Sem `skipLabel`.
 
-#### 2. `src/hooks/use-onboarding-tour.tsx`
+#### 2. `src/components/budget-goal-form-sheet.tsx`
 
-- **Skipped steps persistence**: Nova constante `SKIPPED_STEPS_KEY`. `skipCurrentStep` salva o ID no localStorage antes de chamar `completeCurrentStep()`. `checkExistingData()` lê essa chave e adiciona ao set de completed.
-- **Guided flow expandido**: `isExpenseFormGuidedFlow` renomeado para `isFormGuidedFlow` (ou mantido e expandido) para incluir `add-income`. Novo `isIncomeFormReady()` que checa `income-type-selector`.
-- **`FORM_SUBSTEP_START`**: Expandido para detectar `income-type-select` quando step é `add-income`.
-- **Event listener**: Expandir handler para tratar `income-category-selected`, `category-manager-opened/closed` quando no step `add-income`.
+- Aceitar prop `preventClose?: boolean` — quando true, bloquear `onOpenChange(false)`
+- Aceitar prop `onboardingActive?: boolean` — quando true:
+  - Cards de "Meta de Entrada" e "Meta de Saldo" ficam com `pointer-events-none opacity-50`
+  - Após selecionar scope "expense", o Select de tipo fica `disabled` com valor travado em `monthly_total`
+  - O botão "Voltar" fica desabilitado
+- Adicionar `data-onboarding` nos elementos:
+  - Card "Meta de Despesa": `goal-scope-expense`
+  - Div do Select de tipo: `goal-type-select`
+  - Input do valor: `goal-amount-input`
+  - Botão submit: `goal-submit-btn`
+- Disparar `goal-form-opened` via useEffect quando `open === true` e scope cards montados
+- Disparar `goal-scope-selected` quando `handleScopeSelect("expense")` é chamado
+- **Não** disparar `goal-submitted` aqui — isso será feito no `Index.tsx` após sucesso real
 
-#### 3. `src/components/unified-income-form-sheet.tsx`
+#### 3. `src/components/floating-action-button.tsx`
 
-- Aceitar prop `preventClose?: boolean`
-- Adicionar `data-onboarding` em todos os campos:
-  - RadioGroup div: `income-type-selector`
-  - Descrição div: `income-description`
-  - Valor div: `income-amount`
-  - Categoria div: `income-category-field`
-  - Data (Popover div): `income-date`
-  - Dia do recebimento div: `income-day-of-month`
-  - Parcelas div: `income-installment-count`
-  - Primeira data parcela div: `income-installment-date`
-  - Submit button: `income-submit-btn`
-- `useEffect` para disparar `income-form-opened` quando `open === true` e target montado
-- Disparar `income-submitted` no `handleSubmit` antes de fechar
-- Dia do recebimento: se for Input type=number, ok; se virar Select, usar `z-[80]` no SelectContent
-- **Tipo sem default durante onboarding**: Quando o step ativo for `add-income`, iniciar `incomeType` como `""` (nenhum selecionado) para forçar escolha real
+- Adicionar `data-onboarding="fab-goal-button"` no botão "Meta" (linha 57)
 
-#### 4. `src/components/floating-action-button.tsx`
+#### 4. `src/hooks/use-onboarding-tour.tsx`
 
-- Adicionar `data-onboarding="fab-income-button"` no botão "Entrada" (linha 64-70)
+- Expandir `isFormGuidedFlow` para incluir `add-budget-goal`
+- Expandir `FORM_SUBSTEP_START` para detectar `budget-scope-select` quando step é `add-budget-goal`
+- Expandir `isFormReady` para checar `goal-scope-expense` quando no passo de metas
+- Expandir event listener para tratar `goal-scope-selected`
 
 #### 5. `src/pages/Index.tsx`
 
-- Importar `isFormGuidedFlow` (ou verificar `isExpenseFormGuidedFlow` expandido)
-- Passar `preventClose` ao `UnifiedIncomeFormSheet` quando no guided flow do passo 4
-- Bloquear `onOpenChange(false)` durante guided flow de income (mesmo padrão de expense)
-
-#### 6. `src/components/income-category-selector.tsx`
-
-- Disparar eventos `income-category-selected` e `category-manager-opened`/`category-manager-closed` via `gastinho-onboarding-event` (mesmo padrão do expense category-selector)
+- Passar `preventClose` e `onboardingActive` ao `BudgetGoalFormSheet` quando `isFormGuidedFlow && currentStep?.id === "add-budget-goal"`
+- Bloquear `onOpenChange(false)` para o goal sheet durante guided flow
+- No `addBudgetGoal`, após sucesso do insert (linha ~1130), disparar `goal-submitted`:
+  ```typescript
+  window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: "goal-submitted" }));
+  ```
 
 ### Arquivos afetados
 
 | Arquivo | Mudança |
 |---------|---------|
-| `src/lib/onboarding/onboarding-steps.ts` | Remover `recurring-done`, expandir `add-income` com ~12 substeps |
-| `src/hooks/use-onboarding-tour.tsx` | Skipped steps persistence, guided flow para income |
-| `src/components/unified-income-form-sheet.tsx` | data-onboarding, preventClose, eventos, tipo sem default |
-| `src/components/floating-action-button.tsx` | `data-onboarding="fab-income-button"` |
-| `src/pages/Index.tsx` | preventClose no income sheet |
-| `src/components/income-category-selector.tsx` | Disparar eventos de onboarding |
+| `src/lib/onboarding/onboarding-steps.ts` | Expandir `add-budget-goal` com 7 substeps |
+| `src/components/budget-goal-form-sheet.tsx` | data-onboarding, preventClose, onboardingActive, locks |
+| `src/components/floating-action-button.tsx` | `data-onboarding="fab-goal-button"` |
+| `src/hooks/use-onboarding-tour.tsx` | Guided flow para metas |
+| `src/pages/Index.tsx` | preventClose no goal sheet, disparar goal-submitted após sucesso |
 
 Nenhuma migração SQL.
 
