@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -15,6 +15,7 @@ import { BudgetGoalType } from "@/types/budget-goal";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, TrendingDown, TrendingUp, Scale } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const budgetGoalSchema = z.object({
   type: z.enum(["monthly_total", "category", "income_monthly_total", "income_category", "balance_target"] as const),
@@ -31,6 +32,8 @@ interface BudgetGoalFormSheetProps {
   onOpenChange: (open: boolean) => void;
   onSubmit: (data: { type: BudgetGoalType; category?: ExpenseCategory; limitAmount: number }) => void;
   currentGoalsCount: number;
+  preventClose?: boolean;
+  onboardingActive?: boolean;
 }
 
 export function BudgetGoalFormSheet({
@@ -38,6 +41,8 @@ export function BudgetGoalFormSheet({
   onOpenChange,
   onSubmit,
   currentGoalsCount,
+  preventClose,
+  onboardingActive,
 }: BudgetGoalFormSheetProps) {
   const [goalScope, setGoalScope] = useState<GoalScope>(null);
   const [goalType, setGoalType] = useState<string>("monthly_total");
@@ -60,6 +65,15 @@ export function BudgetGoalFormSheet({
 
   const canAddMore = canAddGoal(currentGoalsCount);
 
+  // Dispatch goal-form-opened when the sheet opens and scope cards are mounted
+  useEffect(() => {
+    if (!open) return;
+    const timer = setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: "goal-form-opened" }));
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [open]);
+
   const handleFormSubmit = (data: BudgetGoalFormData) => {
     onSubmit({
       type: data.type as BudgetGoalType,
@@ -72,13 +86,14 @@ export function BudgetGoalFormSheet({
     onOpenChange(false);
   };
 
-  const handleOpenChange = (open: boolean) => {
-    if (!open) {
+  const handleOpenChange = (newOpen: boolean) => {
+    if (!newOpen && preventClose) return;
+    if (!newOpen) {
       setGoalScope(null);
       setGoalType("monthly_total");
       reset();
     }
-    onOpenChange(open);
+    onOpenChange(newOpen);
   };
 
   const handleScopeSelect = (scope: "expense" | "income" | "balance") => {
@@ -86,6 +101,10 @@ export function BudgetGoalFormSheet({
     const defaultType = scope === "expense" ? "monthly_total" : scope === "balance" ? "balance_target" : "income_monthly_total";
     setGoalType(defaultType);
     setValue("type", defaultType as any);
+
+    if (scope === "expense") {
+      window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: "goal-scope-selected" }));
+    }
   };
 
   return (
@@ -105,6 +124,7 @@ export function BudgetGoalFormSheet({
         {goalScope === null ? (
           <div className="space-y-3 pb-24">
             <Card
+              data-onboarding="goal-scope-expense"
               className="cursor-pointer hover:border-destructive/50 transition-colors"
               onClick={() => handleScopeSelect("expense")}
             >
@@ -122,7 +142,11 @@ export function BudgetGoalFormSheet({
             </Card>
 
             <Card
-              className="cursor-pointer hover:border-green-500/50 transition-colors"
+              data-onboarding="goal-scope-income"
+              className={cn(
+                "cursor-pointer hover:border-green-500/50 transition-colors",
+                onboardingActive && "pointer-events-none opacity-50"
+              )}
               onClick={() => handleScopeSelect("income")}
             >
               <CardContent className="p-4 flex items-start gap-3">
@@ -139,7 +163,11 @@ export function BudgetGoalFormSheet({
             </Card>
 
             <Card
-              className="cursor-pointer hover:border-blue-500/50 transition-colors"
+              data-onboarding="goal-scope-balance"
+              className={cn(
+                "cursor-pointer hover:border-blue-500/50 transition-colors",
+                onboardingActive && "pointer-events-none opacity-50"
+              )}
               onClick={() => handleScopeSelect("balance")}
             >
               <CardContent className="p-4 flex items-start gap-3">
@@ -157,22 +185,24 @@ export function BudgetGoalFormSheet({
           </div>
         ) : (
           <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4 pb-24">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground -ml-2"
-              onClick={() => {
-                setGoalScope(null);
-                reset();
-              }}
-            >
-              <ArrowLeft className="h-4 w-4 mr-1" />
-              Voltar
-            </Button>
+            {!onboardingActive && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground -ml-2"
+                onClick={() => {
+                  setGoalScope(null);
+                  reset();
+                }}
+              >
+                <ArrowLeft className="h-4 w-4 mr-1" />
+                Voltar
+              </Button>
+            )}
 
             {goalScope !== "balance" && (
-              <div className="space-y-2">
+              <div className="space-y-2" data-onboarding="goal-type-select">
                 <Label htmlFor="goal-sheet-type">Tipo de Meta</Label>
                 <Select
                   value={goalType}
@@ -180,6 +210,7 @@ export function BudgetGoalFormSheet({
                     setGoalType(value);
                     setValue("type", value as any);
                   }}
+                  disabled={onboardingActive}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o tipo" />
@@ -230,7 +261,7 @@ export function BudgetGoalFormSheet({
               </div>
             )}
 
-            <div className="space-y-2">
+            <div className="space-y-2" data-onboarding="goal-amount-input">
               <Label htmlFor="goal-sheet-limitAmount">
                 {goalScope === "expense" ? "Limite (R$)" : goalScope === "balance" ? "Saldo Mínimo Desejado (R$)" : "Meta (R$)"}
               </Label>
@@ -266,6 +297,7 @@ export function BudgetGoalFormSheet({
             )}
 
             <Button
+              data-onboarding="goal-submit-btn"
               type="submit"
               className="w-full bg-gradient-primary"
               disabled={!canAddMore}
