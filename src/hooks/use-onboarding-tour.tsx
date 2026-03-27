@@ -416,11 +416,14 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     if (currentStep?.id === "add-income") {
       return Math.max(currentStep.substeps.findIndex((s) => s.id === "income-type-select"), 0);
     }
+    if (currentStep?.id === "add-budget-goal") {
+      return Math.max(currentStep.substeps.findIndex((s) => s.id === "budget-scope-select"), 0);
+    }
     return Number.POSITIVE_INFINITY;
   })();
   const isFormGuidedFlow =
     isOpen &&
-    (currentStep?.id === "add-expense" || currentStep?.id === "add-recurring-expense" || currentStep?.id === "add-income") &&
+    (currentStep?.id === "add-expense" || currentStep?.id === "add-recurring-expense" || currentStep?.id === "add-income" || currentStep?.id === "add-budget-goal") &&
     substepIndex >= FORM_SUBSTEP_START;
   // Keep backward compat
   const isExpenseFormGuidedFlow = isFormGuidedFlow;
