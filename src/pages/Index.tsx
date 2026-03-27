@@ -1129,6 +1129,9 @@ export default function Index() {
 
       setBudgetGoals((prev) => [insertedData, ...prev]);
 
+      // Dispatch goal-submitted event for onboarding AFTER real success
+      window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: "goal-submitted" }));
+
       const contextLabel = currentContext.type === 'group' && currentContext.groupName ?
       ` (${currentContext.groupName})` :
       '';
