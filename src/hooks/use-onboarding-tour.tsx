@@ -416,11 +416,14 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     if (currentStep?.id === "add-income") {
       return Math.max(currentStep.substeps.findIndex((s) => s.id === "income-type-select"), 0);
     }
+    if (currentStep?.id === "add-budget-goal") {
+      return Math.max(currentStep.substeps.findIndex((s) => s.id === "budget-scope-select"), 0);
+    }
     return Number.POSITIVE_INFINITY;
   })();
   const isFormGuidedFlow =
     isOpen &&
-    (currentStep?.id === "add-expense" || currentStep?.id === "add-recurring-expense" || currentStep?.id === "add-income") &&
+    (currentStep?.id === "add-expense" || currentStep?.id === "add-recurring-expense" || currentStep?.id === "add-income" || currentStep?.id === "add-budget-goal") &&
     substepIndex >= FORM_SUBSTEP_START;
   // Keep backward compat
   const isExpenseFormGuidedFlow = isFormGuidedFlow;
@@ -428,6 +431,9 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   function isFormReady() {
     if (currentStep?.id === "add-income") {
       return !!getReadyTargetElement("income-type-selector");
+    }
+    if (currentStep?.id === "add-budget-goal") {
+      return !!getReadyTargetElement("goal-scope-expense") || !!getReadyTargetElement("goal-type-select") || !!getReadyTargetElement("goal-amount-input");
     }
     return !!getReadyTargetElement("expense-type-selector");
   }
@@ -453,7 +459,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       // Guard: if the next substep requires a target inside a guided form,
       // verify the form context is still present before advancing
       if (
-        (currentStep.id === "add-expense" || currentStep.id === "add-recurring-expense" || currentStep.id === "add-income") &&
+        (currentStep.id === "add-expense" || currentStep.id === "add-recurring-expense" || currentStep.id === "add-income" || currentStep.id === "add-budget-goal") &&
         nextIdx >= FORM_SUBSTEP_START &&
         !isFormReady()
       ) {

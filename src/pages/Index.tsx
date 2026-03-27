@@ -1129,6 +1129,9 @@ export default function Index() {
 
       setBudgetGoals((prev) => [insertedData, ...prev]);
 
+      // Dispatch goal-submitted event for onboarding AFTER real success
+      window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: "goal-submitted" }));
+
       const contextLabel = currentContext.type === 'group' && currentContext.groupName ?
       ` (${currentContext.groupName})` :
       '';
@@ -2329,9 +2332,14 @@ export default function Index() {
 
         <BudgetGoalFormSheet
           open={budgetGoalSheetOpen}
-          onOpenChange={setBudgetGoalSheetOpen}
+          onOpenChange={(open) => {
+            if (!open && isExpenseFormGuidedFlow && currentStep?.id === "add-budget-goal") return;
+            setBudgetGoalSheetOpen(open);
+          }}
           onSubmit={addBudgetGoal}
-          currentGoalsCount={budgetGoals.length} />
+          currentGoalsCount={budgetGoals.length}
+          preventClose={isExpenseFormGuidedFlow && currentStep?.id === "add-budget-goal"}
+          onboardingActive={isExpenseFormGuidedFlow && currentStep?.id === "add-budget-goal"} />
 
 
         {/* Sheet de Entrada Unificado */}
