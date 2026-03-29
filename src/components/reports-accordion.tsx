@@ -179,7 +179,7 @@ export function ReportsAccordion({
       )}
 
       {/* === BLOCO 1B: Resumo do Período (1 card, 3 colunas) === */}
-      <div className="p-4 rounded-lg bg-card border border-border">
+      <div className="p-4 rounded-lg bg-card border border-border" data-onboarding="reports-period-summary">
         <div className="grid grid-cols-3 gap-2 text-center">
           <div className="space-y-1">
             <div className="flex items-center justify-center gap-1">
