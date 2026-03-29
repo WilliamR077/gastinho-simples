@@ -371,6 +371,23 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   function handleTargetAppeared(el: HTMLElement) {
     if (!currentSubstep) return;
 
+    // Auto-open AccordionItem if closed
+    if (el.getAttribute("data-state") === "closed") {
+      const trigger = el.querySelector("button[data-radix-collection-item]") as HTMLElement | null;
+      if (trigger) {
+        trigger.click();
+        // Wait for animation then scroll
+        setTimeout(() => doScrollAndFocus(el), 350);
+        return;
+      }
+    }
+
+    doScrollAndFocus(el);
+  }
+
+  function doScrollAndFocus(el: HTMLElement) {
+    if (!currentSubstep) return;
+
     if (currentSubstep.scrollToTarget) {
       // Find the nearest scrollable container (Sheet, dialog, scroll area)
       const scrollContainer = el.closest(
