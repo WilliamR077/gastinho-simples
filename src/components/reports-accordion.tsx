@@ -488,7 +488,7 @@ export function ReportsAccordion({
 
         {/* === BLOCO 4A: Comparação com período anterior === */}
         {previousPeriodDates && (previousTotalExpenses > 0 || previousTotalIncomes > 0) && (
-          <AccordionItem value="comparison" className="border rounded-lg bg-card">
+          <AccordionItem value="comparison" className="border rounded-lg bg-card" data-onboarding="reports-comparison">
             <AccordionTrigger className="px-4 py-3 hover:no-underline">
               <div className="flex items-center gap-3">
                 <Target className="w-5 h-5 text-blue-500" />
