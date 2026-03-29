@@ -234,7 +234,7 @@ export function ReportsAccordion({
 
       <Accordion type="multiple" className="space-y-3" defaultValue={["category", "payment-method"]}>
         {/* === BLOCO 2A: Gastos por Categoria === */}
-        <AccordionItem value="category" className="border rounded-lg bg-card">
+        <AccordionItem value="category" className="border rounded-lg bg-card" data-onboarding="reports-category">
           <AccordionTrigger className="px-4 py-3 hover:no-underline">
             <div className="flex items-center gap-3">
               <BarChart3 className="w-5 h-5 text-orange-500" />
