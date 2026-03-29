@@ -452,7 +452,7 @@ export function ReportsAccordion({
         </AccordionItem>
 
         {/* === BLOCO 4B: Maiores Gastos (Top 10) === */}
-        <AccordionItem value="top-expenses" className="border rounded-lg bg-card">
+        <AccordionItem value="top-expenses" className="border rounded-lg bg-card" data-onboarding="reports-top-expenses">
           <AccordionTrigger className="px-4 py-3 hover:no-underline">
             <div className="flex items-center gap-3">
               <Trophy className="w-5 h-5 text-yellow-500" />
