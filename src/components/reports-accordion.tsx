@@ -533,7 +533,7 @@ export function ReportsAccordion({
 
         {/* === BLOCO 4C: Taxa de Economia === */}
         {totalIncomes > 0 && (
-          <AccordionItem value="savings-rate" className="border rounded-lg bg-card">
+          <AccordionItem value="savings-rate" className="border rounded-lg bg-card" data-onboarding="reports-savings-rate">
             <AccordionTrigger className="px-4 py-3 hover:no-underline">
               <div className="flex items-center gap-3">
                 <DollarSign className="w-5 h-5 text-blue-500" />
