@@ -320,7 +320,7 @@ export function ReportsAccordion({
 
         {/* === BLOCO 2C: Gastos por Cartão === */}
         {cards.length > 0 && cardData.length > 0 && (
-          <AccordionItem value="cards" className="border rounded-lg bg-card">
+          <AccordionItem value="cards" className="border rounded-lg bg-card" data-onboarding="reports-cards">
             <AccordionTrigger className="px-4 py-3 hover:no-underline">
               <div className="flex items-center gap-3">
                 <CreditCard className="w-5 h-5 text-orange-500" />
