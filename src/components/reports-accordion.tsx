@@ -562,7 +562,7 @@ export function ReportsAccordion({
 
         {/* === Gastos por Membro (grupo) === */}
         {isGroupContext && memberData.length > 0 && (
-          <AccordionItem value="members" className="border rounded-lg bg-card">
+          <AccordionItem value="members" className="border rounded-lg bg-card" data-onboarding="reports-members">
             <AccordionTrigger className="px-4 py-3 hover:no-underline">
               <div className="flex items-center gap-3">
                 <Users className="w-5 h-5 text-purple-500" />
