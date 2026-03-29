@@ -150,7 +150,7 @@ export function ReportsAccordion({
     <div className="space-y-4">
       {/* === BLOCO 1A: Resumo Inteligente === */}
       {totalPeriod > 0 && (
-        <div className="p-4 rounded-lg bg-card border border-border">
+        <div className="p-4 rounded-lg bg-card border border-border" data-onboarding="reports-smart-summary">
           <div className="flex items-center gap-2 mb-3">
             <Sparkles className="h-4 w-4 text-yellow-500" />
             <span className="text-sm font-semibold">Resumo Inteligente</span>
