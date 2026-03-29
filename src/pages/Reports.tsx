@@ -280,9 +280,11 @@ const Reports = () => {
         </div>
       </header>
 
-      <ContextSelector />
+      <div data-onboarding="reports-context-selector">
+        <ContextSelector />
+      </div>
 
-      <div className="container mx-auto px-4">
+      <div className="container mx-auto px-4" data-onboarding="reports-period-selector">
         <PeriodSelector onPeriodChange={handlePeriodChange} />
       </div>
 

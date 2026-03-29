@@ -150,7 +150,7 @@ export function ReportsAccordion({
     <div className="space-y-4">
       {/* === BLOCO 1A: Resumo Inteligente === */}
       {totalPeriod > 0 && (
-        <div className="p-4 rounded-lg bg-card border border-border">
+        <div className="p-4 rounded-lg bg-card border border-border" data-onboarding="reports-smart-summary">
           <div className="flex items-center gap-2 mb-3">
             <Sparkles className="h-4 w-4 text-yellow-500" />
             <span className="text-sm font-semibold">Resumo Inteligente</span>
@@ -179,7 +179,7 @@ export function ReportsAccordion({
       )}
 
       {/* === BLOCO 1B: Resumo do Período (1 card, 3 colunas) === */}
-      <div className="p-4 rounded-lg bg-card border border-border">
+      <div className="p-4 rounded-lg bg-card border border-border" data-onboarding="reports-period-summary">
         <div className="grid grid-cols-3 gap-2 text-center">
           <div className="space-y-1">
             <div className="flex items-center justify-center gap-1">
@@ -234,7 +234,7 @@ export function ReportsAccordion({
 
       <Accordion type="multiple" className="space-y-3" defaultValue={["category", "payment-method"]}>
         {/* === BLOCO 2A: Gastos por Categoria === */}
-        <AccordionItem value="category" className="border rounded-lg bg-card">
+        <AccordionItem value="category" className="border rounded-lg bg-card" data-onboarding="reports-category">
           <AccordionTrigger className="px-4 py-3 hover:no-underline">
             <div className="flex items-center gap-3">
               <BarChart3 className="w-5 h-5 text-orange-500" />
@@ -278,7 +278,7 @@ export function ReportsAccordion({
         </AccordionItem>
 
         {/* === BLOCO 2B: Forma de Pagamento === */}
-        <AccordionItem value="payment-method" className="border rounded-lg bg-card">
+        <AccordionItem value="payment-method" className="border rounded-lg bg-card" data-onboarding="reports-payment-method">
           <AccordionTrigger className="px-4 py-3 hover:no-underline">
             <div className="flex items-center gap-3">
               <Wallet className="w-5 h-5 text-blue-500" />
@@ -320,7 +320,7 @@ export function ReportsAccordion({
 
         {/* === BLOCO 2C: Gastos por Cartão === */}
         {cards.length > 0 && cardData.length > 0 && (
-          <AccordionItem value="cards" className="border rounded-lg bg-card">
+          <AccordionItem value="cards" className="border rounded-lg bg-card" data-onboarding="reports-cards">
             <AccordionTrigger className="px-4 py-3 hover:no-underline">
               <div className="flex items-center gap-3">
                 <CreditCard className="w-5 h-5 text-orange-500" />
@@ -359,7 +359,7 @@ export function ReportsAccordion({
         )}
 
         {/* === BLOCO 3A: Fluxo de Caixa === */}
-        <AccordionItem value="cashflow" className="border rounded-lg bg-card">
+        <AccordionItem value="cashflow" className="border rounded-lg bg-card" data-onboarding="reports-cashflow">
           <AccordionTrigger className="px-4 py-3 hover:no-underline">
             <div className="flex items-center gap-3">
               <ArrowUpDown className="w-5 h-5 text-blue-500" />
@@ -402,7 +402,7 @@ export function ReportsAccordion({
         </AccordionItem>
 
         {/* === BLOCO 2D: Evolução dos Gastos === */}
-        <AccordionItem value="evolution" className="border rounded-lg bg-card">
+        <AccordionItem value="evolution" className="border rounded-lg bg-card" data-onboarding="reports-evolution">
           <AccordionTrigger className="px-4 py-3 hover:no-underline">
             <div className="flex items-center gap-3">
               <TrendingUp className="w-5 h-5 text-red-500" />
@@ -452,7 +452,7 @@ export function ReportsAccordion({
         </AccordionItem>
 
         {/* === BLOCO 4B: Maiores Gastos (Top 10) === */}
-        <AccordionItem value="top-expenses" className="border rounded-lg bg-card">
+        <AccordionItem value="top-expenses" className="border rounded-lg bg-card" data-onboarding="reports-top-expenses">
           <AccordionTrigger className="px-4 py-3 hover:no-underline">
             <div className="flex items-center gap-3">
               <Trophy className="w-5 h-5 text-yellow-500" />
@@ -488,7 +488,7 @@ export function ReportsAccordion({
 
         {/* === BLOCO 4A: Comparação com período anterior === */}
         {previousPeriodDates && (previousTotalExpenses > 0 || previousTotalIncomes > 0) && (
-          <AccordionItem value="comparison" className="border rounded-lg bg-card">
+          <AccordionItem value="comparison" className="border rounded-lg bg-card" data-onboarding="reports-comparison">
             <AccordionTrigger className="px-4 py-3 hover:no-underline">
               <div className="flex items-center gap-3">
                 <Target className="w-5 h-5 text-blue-500" />
@@ -533,7 +533,7 @@ export function ReportsAccordion({
 
         {/* === BLOCO 4C: Taxa de Economia === */}
         {totalIncomes > 0 && (
-          <AccordionItem value="savings-rate" className="border rounded-lg bg-card">
+          <AccordionItem value="savings-rate" className="border rounded-lg bg-card" data-onboarding="reports-savings-rate">
             <AccordionTrigger className="px-4 py-3 hover:no-underline">
               <div className="flex items-center gap-3">
                 <DollarSign className="w-5 h-5 text-blue-500" />
@@ -562,7 +562,7 @@ export function ReportsAccordion({
 
         {/* === Gastos por Membro (grupo) === */}
         {isGroupContext && memberData.length > 0 && (
-          <AccordionItem value="members" className="border rounded-lg bg-card">
+          <AccordionItem value="members" className="border rounded-lg bg-card" data-onboarding="reports-members">
             <AccordionTrigger className="px-4 py-3 hover:no-underline">
               <div className="flex items-center gap-3">
                 <Users className="w-5 h-5 text-purple-500" />
@@ -592,7 +592,7 @@ export function ReportsAccordion({
         )}
 
         {/* === BLOCO 5: Despesas Fixas/Recorrentes === */}
-        <AccordionItem value="recurring" className="border rounded-lg bg-card">
+        <AccordionItem value="recurring" className="border rounded-lg bg-card" data-onboarding="reports-recurring">
           <AccordionTrigger className="px-4 py-3 hover:no-underline">
             <div className="flex items-center gap-3">
               <CalendarClock className="w-5 h-5 text-teal-500" />

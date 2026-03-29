@@ -51,6 +51,7 @@ export function AppHeader({ recurringExpenses, onSignOut }: AppHeaderProps) {
                 onClick={() => navigate("/reports")}
                 className="h-11 w-11 touch-manipulation"
                 data-tour="reports-button"
+                data-onboarding="reports-nav-button"
                 aria-label="Relatórios"
               >
                 <BarChart3 className="h-5 w-5" />
