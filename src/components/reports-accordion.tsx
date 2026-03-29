@@ -359,7 +359,7 @@ export function ReportsAccordion({
         )}
 
         {/* === BLOCO 3A: Fluxo de Caixa === */}
-        <AccordionItem value="cashflow" className="border rounded-lg bg-card">
+        <AccordionItem value="cashflow" className="border rounded-lg bg-card" data-onboarding="reports-cashflow">
           <AccordionTrigger className="px-4 py-3 hover:no-underline">
             <div className="flex items-center gap-3">
               <ArrowUpDown className="w-5 h-5 text-blue-500" />
