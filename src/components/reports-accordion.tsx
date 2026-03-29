@@ -402,7 +402,7 @@ export function ReportsAccordion({
         </AccordionItem>
 
         {/* === BLOCO 2D: Evolução dos Gastos === */}
-        <AccordionItem value="evolution" className="border rounded-lg bg-card">
+        <AccordionItem value="evolution" className="border rounded-lg bg-card" data-onboarding="reports-evolution">
           <AccordionTrigger className="px-4 py-3 hover:no-underline">
             <div className="flex items-center gap-3">
               <TrendingUp className="w-5 h-5 text-red-500" />
