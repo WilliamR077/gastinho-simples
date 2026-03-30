@@ -1,93 +1,60 @@
 
 
-## Plano Revisado: Implementar Passo 7 — Relatórios (Completo)
+## Plano Revisado: Corrigir e Refinar Passo de Relatórios
 
 ### Ajustes incorporados
 
-1. **Todos os blocos cobertos**: ContextSelector, Comparação com período anterior e Gastos por Membro agora estão explicitamente incluídos no fluxo (com `condition` para os condicionais).
+1. **Navegação de período**: Novo substep `reports-month-nav` após `reports-period`, destacando o `MonthNavigator` (setas + período atual). O `PeriodSelector` já contém as setas e o label do mês internamente, então o `data-onboarding` será colocado na div que envolve as setas de navegação dentro do `PeriodSelector`. Alternativa mais simples: como o `reports-period-selector` já envolve todo o `PeriodSelector` (incluindo toggle de tipo + setas), podemos separar: o substep `reports-period` explica os tipos (Mês, Ano, Trimestre, Personalizado) e o substep `reports-month-nav` destaca a área de navegação (setas + label). Isso requer adicionar um `data-onboarding="reports-month-nav"` na div de navegação dentro do `PeriodSelector`.
 
-2. **Premium lock explícito**: Fluxo de Caixa e Evolução dos Gastos usam textos diferentes conforme o estado de desbloqueio. O substep terá descrição fixa que cobre ambos os cenários (ex: "Este relatório mostra X. Se estiver bloqueado, ele faz parte do plano Premium."). Como o texto do substep é estático, incluiremos uma nota genérica que funciona para ambos os estados.
-
-3. **Accordion: abrir antes de explicar**: Para cada bloco que é um AccordionItem, o tutorial vai **programaticamente abrir o accordion** antes de destacar o conteúdo. Isso será feito adicionando `onBeforeHighlight` nos substeps que, via DOM, disparam um click no AccordionTrigger caso o item esteja fechado (`data-state="closed"`). Alternativa mais simples: usar `defaultValue` expandido no Accordion quando onboarding estiver ativo, ou destacar o AccordionItem inteiro (trigger + content) usando o `data-onboarding` no `AccordionItem` — o Accordion já tem `type="multiple"` e `defaultValue={["category", "payment-method"]}`, então podemos expandir o `defaultValue` para incluir todos os items durante o onboarding.
-
-**Decisão**: A abordagem mais robusta é colocar o `data-onboarding` no `AccordionItem` e, no substep, antes de posicionar o tooltip, forçar a abertura do item. Faremos isso no `handleTargetAppeared` do engine: se o target é um AccordionItem com `data-state="closed"`, clicar no trigger automaticamente.
+2. **`reports-context` mantido**: Fica na posição atual (após `reports-nav`, antes de `reports-period`) com `condition` de DOM check, como já está implementado.
 
 ---
 
-### Substeps completos do passo `view-reports` (~16 substeps)
+### Sequência final (~18 substeps)
 
-| # | Substep | Tipo | Target | Notas |
-|---|---------|------|--------|-------|
-| 1 | `reports-intro` | info | — | Introdução. Sem skipLabel |
-| 2 | `reports-nav` | click | `reports-nav-button` | autoAdvanceOnRoute: `/reports` |
-| 3 | `reports-context` | info | `reports-context-selector` | Explica seletor de contexto (pessoal vs grupo). condition: DOM check |
-| 4 | `reports-period` | info | `reports-period-selector` | Explica seletor de período |
+| # | ID | Tipo | Target | Notas |
+|---|-----|------|--------|-------|
+| 1 | `reports-nav` | click | `reports-nav-button` | Texto combinado intro + ação. autoAdvanceOnRoute: `/reports`. Sem "Continuar" |
+| 2 | `reports-context` | info | `reports-context-selector` | condition: DOM. Seletor pessoal vs grupo |
+| 3 | `reports-period` | info | `reports-period-selector` | Tipos de período (Mês/Ano/Trimestre/Custom) + menção premium |
+| 4 | `reports-month-nav` | info | `reports-month-nav` | **NOVO**. Setas + período atual. "Aqui você navega entre meses ou períodos. Use as setas para ver períodos anteriores ou futuros." |
 | 5 | `reports-summary` | info | `reports-period-summary` | Resumo Entradas/Saídas/Saldo |
-| 6 | `reports-smart-summary` | info | `reports-smart-summary` | condition: DOM. Resumo inteligente |
-| 7 | `reports-category` | info | `reports-category` | Gastos por categoria. scrollToTarget |
-| 8 | `reports-payment` | info | `reports-payment-method` | Forma de pagamento. scrollToTarget |
-| 9 | `reports-cards` | info | `reports-cards` | condition: DOM. Gastos por cartão |
-| 10 | `reports-cashflow` | info | `reports-cashflow` | Fluxo de caixa. Texto cobre premium lock |
-| 11 | `reports-evolution` | info | `reports-evolution` | Evolução gastos. Texto cobre premium lock |
-| 12 | `reports-top` | info | `reports-top-expenses` | Maiores gastos (Top 10) |
-| 13 | `reports-comparison` | info | `reports-comparison` | condition: DOM. Comparação período anterior |
-| 14 | `reports-savings` | info | `reports-savings-rate` | condition: DOM. Taxa de economia |
-| 15 | `reports-members` | info | `reports-members` | condition: DOM. Gastos por membro (grupo) |
-| 16 | `reports-recurring` | info | `reports-recurring` | Despesas fixas |
-| 17 | `reports-done` | info | — | Mensagem final, completeCurrentStep() |
-
-### Textos para blocos premium-locked
-
-- **Fluxo de Caixa**: "Este relatório compara suas entradas e saídas ao longo do tempo. Com ele, você identifica os dias em que mais gastou ou recebeu. Disponível no plano Premium — mas você já pode ver como ele funciona!"
-- **Evolução dos Gastos**: "Aqui você acompanha a evolução dos seus gastos dia a dia ou semana a semana. Ajuda a identificar padrões e picos. Disponível no plano Premium."
-
-Esses textos funcionam tanto para quem tem premium (verá o gráfico atrás) quanto para quem não tem (verá o lock).
-
-### Accordion: abertura automática
-
-No `handleTargetAppeared` em `use-onboarding-tour.tsx`, adicionar lógica: se o elemento-alvo encontrado tem `data-state="closed"` (é um AccordionItem fechado), clicar no `AccordionTrigger` filho para abri-lo, aguardar 300ms, e só então posicionar o tooltip. Isso garante que o conteúdo do relatório fique visível quando o tooltip aparecer.
-
----
+| 6 | `reports-smart-summary` | info | `reports-smart-summary` | condition: DOM |
+| 7 | `reports-category` | info | `reports-category` | scrollToTarget |
+| 8 | `reports-payment` | info | `reports-payment-method` | scrollToTarget |
+| 9 | `reports-cards` | info | `reports-cards` | condition: DOM. scrollToTarget |
+| 10 | `reports-cashflow` | info | `reports-cashflow` | Premium text. scrollToTarget |
+| 11 | `reports-evolution` | info | `reports-evolution` | Premium text. scrollToTarget |
+| 12 | `reports-top` | info | `reports-top-expenses` | scrollToTarget |
+| 13 | `reports-comparison` | info | `reports-comparison` | condition: DOM. scrollToTarget |
+| 14 | `reports-savings` | info | `reports-savings-rate` | condition: DOM. scrollToTarget |
+| 15 | `reports-members` | info | `reports-members` | condition: DOM. scrollToTarget |
+| 16 | `reports-recurring` | info | `reports-recurring` | scrollToTarget |
+| 17 | `reports-export` | info | `reports-export-btn` | **NOVO**. Botão exportar PDF + menção premium |
+| 18 | `reports-done` | info | — | Conclusão |
 
 ### Mudanças por arquivo
 
 #### 1. `src/lib/onboarding/onboarding-steps.ts`
-Reescrever `view-reports` com ~17 substeps conforme tabela acima. Cada bloco accordion terá `scrollToTarget: true`.
+- Remover `reports-intro` (unificar texto com `reports-nav`)
+- Manter `reports-context` com condition (já existe, posição correta)
+- Adicionar `reports-month-nav` (substep novo entre `reports-period` e `reports-summary`)
+- Adicionar `reports-export` (substep novo antes de `reports-done`)
+- Atualizar textos do `reports-nav` para combinar intro + ação
 
-#### 2. `src/components/app-header.tsx`
-Adicionar `data-onboarding="reports-nav-button"` no botão de relatórios.
+#### 2. `src/components/period-selector.tsx`
+- Adicionar `data-onboarding="reports-month-nav"` na div que contém as setas de navegação e o label do período (linhas ~130-160, a div com `ChevronLeft`, label, `ChevronRight`)
 
-#### 3. `src/components/reports-accordion.tsx`
-Adicionar `data-onboarding` em cada bloco:
-- Resumo Inteligente: `reports-smart-summary`
-- Resumo do Período: `reports-period-summary`
-- AccordionItem category: `reports-category`
-- AccordionItem payment-method: `reports-payment-method`
-- AccordionItem cards: `reports-cards`
-- AccordionItem cashflow: `reports-cashflow`
-- AccordionItem evolution: `reports-evolution`
-- AccordionItem top-expenses: `reports-top-expenses`
-- AccordionItem comparison: `reports-comparison`
-- AccordionItem savings-rate: `reports-savings-rate`
-- AccordionItem members: `reports-members`
-- AccordionItem recurring: `reports-recurring`
-
-#### 4. `src/pages/Reports.tsx`
-- `data-onboarding="reports-period-selector"` no PeriodSelector
-- `data-onboarding="reports-context-selector"` no ContextSelector
-
-#### 5. `src/hooks/use-onboarding-tour.tsx`
-- No `handleTargetAppeared`, adicionar lógica de auto-abertura de AccordionItem fechado (click no trigger se `data-state="closed"`)
+#### 3. `src/pages/Reports.tsx`
+- Adicionar `data-onboarding="reports-export-btn"` no botão de exportar PDF (linha ~264)
 
 ### Arquivos afetados
 
 | Arquivo | Mudança |
 |---------|---------|
-| `src/lib/onboarding/onboarding-steps.ts` | Reescrever `view-reports` com ~17 substeps |
-| `src/components/app-header.tsx` | `data-onboarding="reports-nav-button"` |
-| `src/components/reports-accordion.tsx` | `data-onboarding` em todos os 12 blocos |
-| `src/pages/Reports.tsx` | `data-onboarding` no PeriodSelector e ContextSelector |
-| `src/hooks/use-onboarding-tour.tsx` | Auto-abertura de AccordionItem fechado |
+| `src/lib/onboarding/onboarding-steps.ts` | Reescrever substeps: remover intro, adicionar month-nav e export |
+| `src/components/period-selector.tsx` | `data-onboarding="reports-month-nav"` na área de navegação |
+| `src/pages/Reports.tsx` | `data-onboarding="reports-export-btn"` no botão exportar |
 
 Nenhuma migração SQL.
 
