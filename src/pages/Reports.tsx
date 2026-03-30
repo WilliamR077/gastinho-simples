@@ -266,6 +266,7 @@ const Reports = () => {
               onClick={handleExportPDF}
               disabled={isExporting}
               className="flex items-center gap-1.5 text-xs sm:text-sm shrink-0"
+              data-onboarding="reports-export-btn"
             >
               {isExporting ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
