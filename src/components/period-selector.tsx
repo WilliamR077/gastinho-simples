@@ -158,7 +158,7 @@ export function PeriodSelector({ onPeriodChange }: PeriodSelectorProps) {
 
         {/* Month navigator */}
         {periodType === "month" && (
-          <div className="flex items-center justify-center gap-4">
+          <div className="flex items-center justify-center gap-4" data-onboarding="reports-month-nav">
             <Button variant="ghost" size="icon" onClick={handlePreviousMonth} className="h-10 w-10 rounded-full hover:bg-muted">
               <ChevronLeft className="h-5 w-5" />
             </Button>

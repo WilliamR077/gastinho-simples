@@ -953,19 +953,12 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
     noDetection: true,
     substeps: [
       {
-        id: "reports-intro",
-        actionType: "info",
-        title: "Entenda seus Relatórios",
-        description:
-          "Agora vamos conhecer a página de relatórios. É aqui que você acompanha seus gastos, entradas e evolução financeira com mais clareza.",
-        emoji: "📊",
-      },
-      {
         id: "reports-nav",
         actionType: "click",
         targetSelector: "reports-nav-button",
-        title: "Abra os Relatórios",
-        description: "Toque aqui para abrir a página de relatórios.",
+        title: "Relatórios",
+        description:
+          "Aqui é onde você acompanha seus gastos, entradas e evolução financeira com mais clareza. Toque para abrir seus relatórios.",
         emoji: "📊",
         autoAdvanceOnRoute: "/reports",
         autoAdvanceOnClick: true,
@@ -987,10 +980,21 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         id: "reports-period",
         actionType: "info",
         targetSelector: "reports-period-selector",
-        title: "Período dos Relatórios",
+        title: "Tipo de Período",
         description:
-          "Aqui no topo você define o período que será usado em todos os relatórios abaixo: mês, trimestre, ano ou personalizado.",
+          "Aqui você escolhe como visualizar seus relatórios: por mês, ano, trimestre ou período customizado. No plano gratuito, a visualização mensal fica disponível. As opções avançadas fazem parte do plano Premium.",
         emoji: "📅",
+        scrollToTarget: true,
+        placement: "below",
+      },
+      {
+        id: "reports-month-nav",
+        actionType: "info",
+        targetSelector: "reports-month-nav",
+        title: "Navegação de Período",
+        description:
+          "Aqui você navega entre meses ou períodos anteriores e futuros. Use as setas para ver como foi cada período.",
+        emoji: "🔄",
         scrollToTarget: true,
         placement: "below",
       },
@@ -1000,7 +1004,7 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         targetSelector: "reports-period-summary",
         title: "Resumo do Período",
         description:
-          "Este card mostra suas entradas, saídas e saldo do período selecionado em uma visão rápida. É o ponto de partida para entender sua situação financeira.",
+          "Este card mostra suas entradas, saídas e saldo do período selecionado em uma visão rápida.",
         emoji: "💰",
         scrollToTarget: true,
         placement: "below",
@@ -1011,7 +1015,7 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         targetSelector: "reports-smart-summary",
         title: "Resumo Inteligente",
         description:
-          "Aqui o app destaca automaticamente quanto você gastou, qual foi sua maior categoria e o dia mais caro. É um resumo rápido para você entender o período.",
+          "Este resumo ajuda você a entender rapidamente como foi seu período financeiro: quanto gastou, categoria principal e dia mais caro.",
         emoji: "✨",
         scrollToTarget: true,
         placement: "below",
@@ -1023,7 +1027,7 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         targetSelector: "reports-category",
         title: "Gastos por Categoria",
         description:
-          "Este relatório mostra em quais categorias você mais gastou. Ajuda a identificar onde seu dinheiro está indo e onde é possível economizar.",
+          "Aqui você vê em quais categorias mais gastou no período selecionado.",
         emoji: "📊",
         scrollToTarget: true,
         placement: "below",
@@ -1034,7 +1038,7 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         targetSelector: "reports-payment-method",
         title: "Forma de Pagamento",
         description:
-          "Aqui você vê como seus pagamentos estão distribuídos entre Pix, débito e crédito. Útil para entender seus hábitos de pagamento.",
+          "Aqui você entende como seus gastos foram distribuídos entre Pix, débito e crédito.",
         emoji: "💳",
         scrollToTarget: true,
         placement: "below",
@@ -1045,7 +1049,7 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         targetSelector: "reports-cards",
         title: "Gastos por Cartão",
         description:
-          "Este gráfico mostra quanto você gastou em cada cartão cadastrado. Ajuda a acompanhar o uso de cada cartão individualmente.",
+          "Este gráfico mostra quanto foi gasto em cada cartão.",
         emoji: "💳",
         scrollToTarget: true,
         placement: "below",
@@ -1057,7 +1061,7 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         targetSelector: "reports-cashflow",
         title: "Fluxo de Caixa",
         description:
-          "Este relatório compara suas entradas e saídas ao longo do tempo. Com ele, você identifica os dias em que mais gastou ou recebeu. Disponível no plano Premium — mas você já pode ver como ele funciona!",
+          "Aqui você compara entradas e saídas para entender seu fluxo financeiro. Disponível no plano Premium — mas você já pode ver como ele funciona!",
         emoji: "📈",
         scrollToTarget: true,
         placement: "below",
@@ -1068,7 +1072,7 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         targetSelector: "reports-evolution",
         title: "Evolução dos Gastos",
         description:
-          "Aqui você acompanha a evolução dos seus gastos dia a dia ou semana a semana. Ajuda a identificar padrões e picos de consumo. Disponível no plano Premium.",
+          "Este relatório mostra como seus gastos evoluíram ao longo do tempo. Ajuda a identificar padrões e picos. Disponível no plano Premium.",
         emoji: "📉",
         scrollToTarget: true,
         placement: "below",
@@ -1079,7 +1083,7 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         targetSelector: "reports-top-expenses",
         title: "Maiores Gastos",
         description:
-          "Aqui ficam seus 10 maiores gastos do período. É uma forma rápida de identificar onde foi parar a maior parte do seu dinheiro.",
+          "Aqui aparecem os maiores gastos do período, ajudando você a identificar onde mais pesou no orçamento.",
         emoji: "🏆",
         scrollToTarget: true,
         placement: "below",
@@ -1090,7 +1094,7 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         targetSelector: "reports-comparison",
         title: "Comparação com Período Anterior",
         description:
-          "Este bloco compara suas entradas, saídas e saldo com o período anterior. Assim você sabe se está gastando mais ou menos que antes.",
+          "Este bloco compara seus dados com o período anterior, para você saber se está gastando mais ou menos.",
         emoji: "🔄",
         scrollToTarget: true,
         placement: "below",
@@ -1102,7 +1106,7 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         targetSelector: "reports-savings-rate",
         title: "Taxa de Economia",
         description:
-          "Aqui você vê qual porcentagem da sua renda foi economizada. É um indicador simples e poderoso para medir sua saúde financeira.",
+          "Este indicador mostra quanto você conseguiu economizar no período.",
         emoji: "💰",
         scrollToTarget: true,
         placement: "below",
@@ -1114,7 +1118,7 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         targetSelector: "reports-members",
         title: "Gastos por Membro",
         description:
-          "Em grupos compartilhados, este bloco mostra quanto cada membro gastou. Útil para dividir contas e acompanhar contribuições.",
+          "Em grupos compartilhados, este bloco mostra quanto cada membro gastou.",
         emoji: "👥",
         scrollToTarget: true,
         placement: "below",
@@ -1126,8 +1130,19 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         targetSelector: "reports-recurring",
         title: "Despesas Fixas",
         description:
-          "Aqui ficam todas as suas despesas fixas ativas com status de pagamento. É onde você acompanha o peso das contas recorrentes no seu orçamento.",
+          "Aqui você acompanha suas despesas recorrentes e o impacto delas no mês.",
         emoji: "🔄",
+        scrollToTarget: true,
+        placement: "below",
+      },
+      {
+        id: "reports-export",
+        actionType: "info",
+        targetSelector: "reports-export-btn",
+        title: "Exportar PDF",
+        description:
+          "Aqui você pode exportar seus relatórios em PDF. Esse recurso está disponível no plano Premium.",
+        emoji: "📥",
         scrollToTarget: true,
         placement: "below",
       },
@@ -1136,7 +1151,7 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         actionType: "info",
         title: "Relatórios Prontos! 📊",
         description:
-          "Perfeito! Agora você já sabe onde acompanhar seus relatórios e usar essas informações para tomar decisões melhores no seu controle financeiro.",
+          "Agora você já sabe onde acompanhar seus relatórios e usar essas informações para tomar decisões melhores no seu controle financeiro.",
         emoji: "🎉",
       },
     ],
