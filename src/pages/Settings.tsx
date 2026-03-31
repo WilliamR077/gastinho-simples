@@ -475,7 +475,7 @@ export default function Settings() {
         </Card>
 
         <Separator />
-        <Card>
+        <Card data-onboarding="settings-tutorial-card">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <GraduationCap className="h-5 w-5" />
