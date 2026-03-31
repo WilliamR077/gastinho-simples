@@ -449,8 +449,7 @@ export const STEP_LABELS: Record<string, string> = {
   "add-income": "Primeira receita registrada",
   "add-budget-goal": "Meta de gastos definida",
   "view-reports": "Relatórios conhecidos",
-  "setup-security": "Segurança configurada",
-  "import-spreadsheet": "Planilha importada",
+  "setup-settings": "Configurações finalizadas",
 };
 
 export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
