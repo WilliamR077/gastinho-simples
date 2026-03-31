@@ -559,13 +559,14 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       void 0;
     }
 
-    // view-reports has no DB table — check localStorage progress or onboarding completed
+    // view-reports and setup-settings have no DB table — check localStorage progress or onboarding completed
     const savedProgress = localStorage.getItem(PROGRESS_KEY);
     if (savedProgress) {
       try {
         const { completed: savedCompleted } = JSON.parse(savedProgress);
-        if (Array.isArray(savedCompleted) && savedCompleted.includes("view-reports")) {
-          completed.add("view-reports");
+        if (Array.isArray(savedCompleted)) {
+          if (savedCompleted.includes("view-reports")) completed.add("view-reports");
+          if (savedCompleted.includes("setup-settings")) completed.add("setup-settings");
         }
       } catch {
         void 0;
@@ -573,6 +574,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     }
     if (localStorage.getItem(STORAGE_KEY) === "true") {
       completed.add("view-reports");
+      completed.add("setup-settings");
     }
 
     return completed;
