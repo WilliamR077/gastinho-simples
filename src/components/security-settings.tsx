@@ -186,6 +186,7 @@ export function SecuritySettings() {
               </p>
             </div>
             <Switch
+              data-onboarding="settings-lock-toggle"
               checked={lockEnabled}
               onCheckedChange={handleLockToggle}
             />
