@@ -243,7 +243,7 @@ export function SecuritySettings() {
                     </p>
                   </div>
                 </div>
-                <Select value={lockTimeout} onValueChange={handleTimeoutChange}>
+                <Select data-onboarding="settings-lock-timeout" value={lockTimeout} onValueChange={handleTimeoutChange}>
                   <SelectTrigger className="w-[140px]">
                     <SelectValue />
                   </SelectTrigger>
