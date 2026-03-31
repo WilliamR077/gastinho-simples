@@ -1,12 +1,13 @@
 export function isOnboardingTargetReady(el: HTMLElement | null): el is HTMLElement {
   if (!el || !el.isConnected) return false;
 
-  // Only reject if inside a closed Accordion/Collapsible (not Radix Tooltip which also uses data-state)
+  // Only reject if INSIDE a closed Accordion/Collapsible (descendant of closed content).
+  // Allow the AccordionItem itself (closedAncestor === el) so the auto-open logic can run.
   const closedAncestor = el.closest('[data-state="closed"]');
-  if (closedAncestor) {
+  if (closedAncestor && closedAncestor !== el) {
     const isAccordion = closedAncestor.hasAttribute("data-radix-collapsible") ||
       closedAncestor.getAttribute("role") === "region" ||
-      closedAncestor.tagName === "DIV" && closedAncestor.hasAttribute("data-orientation");
+      (closedAncestor.tagName === "DIV" && closedAncestor.hasAttribute("data-orientation"));
     if (isAccordion) return false;
   }
 

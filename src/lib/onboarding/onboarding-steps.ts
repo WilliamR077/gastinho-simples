@@ -1061,7 +1061,7 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         targetSelector: "reports-cashflow",
         title: "Fluxo de Caixa",
         description:
-          "Aqui você compara entradas e saídas para entender seu fluxo financeiro. Disponível no plano Premium — mas você já pode ver como ele funciona!",
+          "Aqui você compara entradas e saídas ao longo do tempo. Identifique os dias em que mais gastou ou recebeu.",
         emoji: "📈",
         scrollToTarget: true,
         placement: "below",
@@ -1072,7 +1072,7 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         targetSelector: "reports-evolution",
         title: "Evolução dos Gastos",
         description:
-          "Este relatório mostra como seus gastos evoluíram ao longo do tempo. Ajuda a identificar padrões e picos. Disponível no plano Premium.",
+          "Este relatório mostra como seus gastos evoluíram ao longo do tempo. Ajuda a identificar padrões e picos.",
         emoji: "📉",
         scrollToTarget: true,
         placement: "below",

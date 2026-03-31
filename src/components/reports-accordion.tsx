@@ -78,6 +78,8 @@ export function ReportsAccordion({
   viewModel,
 }: ReportsAccordionProps) {
   const { hasAdvancedReports } = useSubscription();
+  const showCashflow = hasAdvancedReports || periodType === "month";
+  const showEvolution = hasAdvancedReports || periodType === "month";
   const navigate = useNavigate();
   const [cashFlowMode, setCashFlowMode] = useState<"daily" | "cumulative">("daily");
   const [evolutionMode, setEvolutionMode] = useState<"daily" | "weekly">("daily");
@@ -366,14 +368,14 @@ export function ReportsAccordion({
               <div className="text-left">
                 <div className="flex items-center gap-2">
                   <span className="font-semibold">Fluxo de Caixa</span>
-                  {!hasAdvancedReports && <Crown className="h-4 w-4 text-yellow-500" />}
+                  {!showCashflow && <Crown className="h-4 w-4 text-yellow-500" />}
                 </div>
                 <span className="text-xs text-muted-foreground">Entradas vs Saídas</span>
               </div>
             </div>
           </AccordionTrigger>
           <AccordionContent className="px-4 pb-4">
-            {hasAdvancedReports ? (
+            {showCashflow ? (
               <>
                 <div className="flex justify-end mb-3">
                   <ToggleGroup type="single" value={cashFlowMode} onValueChange={(v) => v && setCashFlowMode(v as "daily" | "cumulative")} size="sm" className="bg-muted rounded-lg p-0.5">
@@ -409,14 +411,14 @@ export function ReportsAccordion({
               <div className="text-left">
                 <div className="flex items-center gap-2">
                   <span className="font-semibold">Evolução dos Gastos</span>
-                  {!hasAdvancedReports && <Crown className="h-4 w-4 text-yellow-500" />}
+                  {!showEvolution && <Crown className="h-4 w-4 text-yellow-500" />}
                 </div>
                 <span className="text-xs text-muted-foreground">Gastos por {periodType === "month" ? "dia" : "mês"}</span>
               </div>
             </div>
           </AccordionTrigger>
           <AccordionContent className="px-4 pb-4">
-            {hasAdvancedReports ? (
+            {showEvolution ? (
               <>
                 {periodType === "month" && (
                   <div className="flex justify-end mb-3">
