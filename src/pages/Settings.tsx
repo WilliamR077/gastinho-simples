@@ -389,7 +389,7 @@ export default function Settings() {
         <Separator />
 
         {/* Seção: Exportar Dados */}
-        <Card>
+        <Card data-onboarding="settings-export-card">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FileDown className="h-5 w-5" />
