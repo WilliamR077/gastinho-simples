@@ -418,7 +418,7 @@ export function ReportsAccordion({
             </div>
           </AccordionTrigger>
           <AccordionContent className="px-4 pb-4">
-            {hasAdvancedReports ? (
+            {showEvolution ? (
               <>
                 {periodType === "month" && (
                   <div className="flex justify-end mb-3">
