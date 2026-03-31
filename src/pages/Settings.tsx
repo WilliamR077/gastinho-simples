@@ -546,7 +546,9 @@ export default function Settings() {
         <Separator />
 
         {/* Seção: Notificações */}
-        <FirebaseNotificationSettings />
+        <div data-onboarding="settings-notifications-card">
+          <FirebaseNotificationSettings />
+        </div>
       </div>
       
       {/* Import Sheet */}
