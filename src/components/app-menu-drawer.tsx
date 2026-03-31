@@ -32,6 +32,8 @@ export function AppMenuDrawer({ open, onOpenChange, onSignOut, recurringExpenses
   useEffect(() => {
     if (open) {
       adMobService.removeBanner();
+      // Notify onboarding that menu opened
+      window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: "menu-opened" }));
     } else {
       adMobService.showBanner();
     }
