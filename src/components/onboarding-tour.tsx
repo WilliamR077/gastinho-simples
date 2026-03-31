@@ -235,7 +235,7 @@ export function OnboardingTour() {
           onClose={skipOnboarding}
           onRepeat={isCompletion && effectiveSubstep.repeatLabel ? repeatStep : undefined}
           onProceed={isCompletion ? proceedToNextStep : undefined}
-          onSkipSubstep={effectiveSubstep.skipLabel ? skipCurrentStep : undefined}
+          onSkipSubstep={effectiveSubstep.skipLabel ? handleSkipSubstep : undefined}
         />
       </>
     );
