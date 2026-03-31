@@ -338,15 +338,10 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     };
   }, [user, isOpen, currentStep?.id]);
 
-  // ─── PIN detection for security step ──────────────────────
+  // ─── Settings step detection (replaces old PIN check) ─────
   useEffect(() => {
-    if (!isOpen || currentStep?.id !== "setup-security") return;
-    const interval = setInterval(() => {
-      if (localStorage.getItem("gastinho_app_lock_pin")) {
-        completeCurrentStep();
-      }
-    }, 1000);
-    return () => clearInterval(interval);
+    if (!isOpen || currentStep?.id !== "setup-settings") return;
+    // Settings step advances via substeps, no special interval needed
   }, [isOpen, currentStep?.id]);
 
   // ─── Helpers ──────────────────────────────────────────────
