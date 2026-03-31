@@ -368,7 +368,7 @@ export function ReportsAccordion({
               <div className="text-left">
                 <div className="flex items-center gap-2">
                   <span className="font-semibold">Fluxo de Caixa</span>
-                  {!hasAdvancedReports && <Crown className="h-4 w-4 text-yellow-500" />}
+                  {!showCashflow && <Crown className="h-4 w-4 text-yellow-500" />}
                 </div>
                 <span className="text-xs text-muted-foreground">Entradas vs Saídas</span>
               </div>
