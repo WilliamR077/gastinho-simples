@@ -138,6 +138,7 @@ export function AppMenuDrawer({ open, onOpenChange, onSignOut, recurringExpenses
               <button
                 key={item.label}
                 data-tour={item.dataTour}
+                data-onboarding={item.dataOnboarding}
                 onClick={item.onClick}
                 className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-foreground hover:bg-accent transition-colors touch-manipulation relative"
               >
