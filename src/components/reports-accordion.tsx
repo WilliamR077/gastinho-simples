@@ -411,7 +411,7 @@ export function ReportsAccordion({
               <div className="text-left">
                 <div className="flex items-center gap-2">
                   <span className="font-semibold">Evolução dos Gastos</span>
-                  {!hasAdvancedReports && <Crown className="h-4 w-4 text-yellow-500" />}
+                  {!showEvolution && <Crown className="h-4 w-4 text-yellow-500" />}
                 </div>
                 <span className="text-xs text-muted-foreground">Gastos por {periodType === "month" ? "dia" : "mês"}</span>
               </div>
