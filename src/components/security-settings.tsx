@@ -233,7 +233,7 @@ export function SecuritySettings() {
               </div>
 
               {/* Timeout */}
-              <div className="flex items-center justify-between">
+              <div data-onboarding="settings-lock-timeout" className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <Clock className="h-5 w-5 text-primary" />
                   <div className="space-y-0.5">
@@ -243,7 +243,7 @@ export function SecuritySettings() {
                     </p>
                   </div>
                 </div>
-                <Select data-onboarding="settings-lock-timeout" value={lockTimeout} onValueChange={handleTimeoutChange}>
+                <Select value={lockTimeout} onValueChange={handleTimeoutChange}>
                   <SelectTrigger className="w-[140px]">
                     <SelectValue />
                   </SelectTrigger>
