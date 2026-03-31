@@ -209,6 +209,7 @@ export function SecuritySettings() {
                     </div>
                   </div>
                   <Switch
+                    data-onboarding="settings-biometric-toggle"
                     checked={useBiometric}
                     onCheckedChange={handleBiometricToggle}
                   />
