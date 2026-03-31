@@ -101,11 +101,11 @@ export function AppMenuDrawer({ open, onOpenChange, onSignOut, recurringExpenses
   };
 
   const menuItems = [
-    { icon: CreditCard, label: "Cartões", onClick: () => handleNavigate("/cards"), dataTour: "cards-button" },
-    { icon: Settings, label: "Configurações", onClick: () => handleNavigate("/settings"), dataTour: "settings-button" },
-    { icon: User, label: "Conta", onClick: () => handleNavigate("/account") },
+    { icon: CreditCard, label: "Cartões", onClick: () => handleNavigate("/cards"), dataTour: "cards-button", dataOnboarding: undefined as string | undefined },
+    { icon: Settings, label: "Configurações", onClick: () => handleNavigate("/settings"), dataTour: "settings-button", dataOnboarding: "settings-nav-item" },
+    { icon: User, label: "Conta", onClick: () => handleNavigate("/account"), dataOnboarding: undefined as string | undefined },
     ...(user?.email === "gastinhosimples@gmail.com"
-      ? [{ icon: Shield, label: "Admin", onClick: () => handleNavigate("/admin"), dataTour: undefined, badge: undefined }]
+      ? [{ icon: Shield, label: "Admin", onClick: () => handleNavigate("/admin"), dataTour: undefined, badge: undefined, dataOnboarding: undefined as string | undefined }]
       : []),
     {
       icon: Bell,
@@ -113,6 +113,7 @@ export function AppMenuDrawer({ open, onOpenChange, onSignOut, recurringExpenses
       onClick: () => { onOpenChange(false); setRemindersOpen(true); },
       badge: reminderCount > 0 ? reminderCount : undefined,
       dataTour: "reminders-button",
+      dataOnboarding: undefined as string | undefined,
     },
   ];
 
