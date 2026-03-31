@@ -543,8 +543,8 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     if (recurring.data?.length) completed.add("add-recurring-expense");
     if (incomes.data?.length || recurringIncomes.data?.length) completed.add("add-income");
     if (goals.data?.length) completed.add("add-budget-goal");
-    if (localStorage.getItem("gastinho_app_lock_pin"))
-      completed.add("setup-security");
+    // Legacy: mark old steps as completed so they don't block
+    completed.add("setup-security");
     completed.add("import-spreadsheet");
 
     // Load skipped steps from localStorage
