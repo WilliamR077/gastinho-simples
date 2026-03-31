@@ -272,7 +272,7 @@ export function SecuritySettings() {
 
       {/* Dialog para configurar PIN */}
       <Dialog open={showPinDialog} onOpenChange={setShowPinDialog}>
-        <DialogContent>
+        <DialogContent data-onboarding="settings-pin-dialog">
           <DialogHeader>
             <DialogTitle>Configurar PIN</DialogTitle>
             <DialogDescription>
