@@ -99,6 +99,22 @@ export function OnboardingTour() {
     advanceSubstep();
   }, [currentSubstep, navigate, advanceSubstep]);
 
+  // Handle skip for info substeps: advance past (not skip entire step)
+  // and fire a skip event so conditional substeps can be skipped
+  const handleSkipSubstep = useCallback(() => {
+    if (!currentSubstep) return;
+    // Dispatch a skip event based on the substep id (e.g. "settings-import" → "settings-import-skipped")
+    const skipEvent = `${currentSubstep.id}-skipped`;
+    window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: skipEvent }));
+    // For intro substeps that skip the entire step (like recurring-intro, income-intro)
+    // check if this is the first substep — if so, skip the whole step
+    if (currentSubstepIndex === 0) {
+      skipCurrentStep();
+    } else {
+      advanceSubstep();
+    }
+  }, [currentSubstep, currentSubstepIndex, skipCurrentStep, advanceSubstep]);
+
   // ─── Dynamic card completion description ──────────────
   const getCardCompletionDescription = () => {
     const maxCards = features.cards;
