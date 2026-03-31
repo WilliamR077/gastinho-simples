@@ -375,7 +375,7 @@ export function ReportsAccordion({
             </div>
           </AccordionTrigger>
           <AccordionContent className="px-4 pb-4">
-            {hasAdvancedReports ? (
+            {showCashflow ? (
               <>
                 <div className="flex justify-end mb-3">
                   <ToggleGroup type="single" value={cashFlowMode} onValueChange={(v) => v && setCashFlowMode(v as "daily" | "cumulative")} size="sm" className="bg-muted rounded-lg p-0.5">
