@@ -25,7 +25,7 @@ const ALL_STEP_IDS = [
   "add-income",
   "add-budget-goal",
   "view-reports",
-  "setup-security",
+  "setup-settings",
 ];
 
 export function OnboardingTour() {
