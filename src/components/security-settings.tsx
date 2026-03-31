@@ -125,6 +125,10 @@ export function SecuritySettings() {
       appLockService.setLockEnabled(true);
     }
 
+    // Notify onboarding
+    window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: "security-pin-saved" }));
+    window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: "security-lock-toggled" }));
+
     toast({
       title: "PIN configurado",
       description: "Seu PIN foi salvo com sucesso",
