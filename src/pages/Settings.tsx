@@ -382,7 +382,9 @@ export default function Settings() {
         </div>
 
         {/* Seção: Segurança */}
-        <SecuritySettings />
+        <div data-onboarding="settings-security-card">
+          <SecuritySettings />
+        </div>
 
         <Separator />
 
