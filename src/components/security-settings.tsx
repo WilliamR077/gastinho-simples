@@ -48,6 +48,9 @@ export function SecuritySettings() {
     setLockEnabled(enabled);
     appLockService.setLockEnabled(enabled);
     
+    // Notify onboarding
+    window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: "security-lock-toggled" }));
+    
     if (enabled) {
       toast({
         title: "Bloqueio ativado",
