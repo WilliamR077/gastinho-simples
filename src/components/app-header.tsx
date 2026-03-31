@@ -85,6 +85,7 @@ export function AppHeader({ recurringExpenses, onSignOut }: AppHeaderProps) {
                 className="h-11 w-11 touch-manipulation"
                 aria-label="Menu"
                 data-tour="menu-button"
+                data-onboarding="settings-menu-button"
               >
                 <Menu className="h-5 w-5" />
               </Button>

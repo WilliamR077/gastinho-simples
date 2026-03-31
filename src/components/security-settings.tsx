@@ -48,6 +48,9 @@ export function SecuritySettings() {
     setLockEnabled(enabled);
     appLockService.setLockEnabled(enabled);
     
+    // Notify onboarding
+    window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: "security-lock-toggled" }));
+    
     if (enabled) {
       toast({
         title: "Bloqueio ativado",
@@ -122,6 +125,10 @@ export function SecuritySettings() {
       appLockService.setLockEnabled(true);
     }
 
+    // Notify onboarding
+    window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: "security-pin-saved" }));
+    window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: "security-lock-toggled" }));
+
     toast({
       title: "PIN configurado",
       description: "Seu PIN foi salvo com sucesso",
@@ -179,6 +186,7 @@ export function SecuritySettings() {
               </p>
             </div>
             <Switch
+              data-onboarding="settings-lock-toggle"
               checked={lockEnabled}
               onCheckedChange={handleLockToggle}
             />
@@ -201,6 +209,7 @@ export function SecuritySettings() {
                     </div>
                   </div>
                   <Switch
+                    data-onboarding="settings-biometric-toggle"
                     checked={useBiometric}
                     onCheckedChange={handleBiometricToggle}
                   />
@@ -224,7 +233,7 @@ export function SecuritySettings() {
               </div>
 
               {/* Timeout */}
-              <div className="flex items-center justify-between">
+              <div data-onboarding="settings-lock-timeout" className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <Clock className="h-5 w-5 text-primary" />
                   <div className="space-y-0.5">
@@ -263,7 +272,7 @@ export function SecuritySettings() {
 
       {/* Dialog para configurar PIN */}
       <Dialog open={showPinDialog} onOpenChange={setShowPinDialog}>
-        <DialogContent>
+        <DialogContent data-onboarding="settings-pin-dialog">
           <DialogHeader>
             <DialogTitle>Configurar PIN</DialogTitle>
             <DialogDescription>

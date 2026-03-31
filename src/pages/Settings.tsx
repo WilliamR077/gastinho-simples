@@ -382,12 +382,14 @@ export default function Settings() {
         </div>
 
         {/* Seção: Segurança */}
-        <SecuritySettings />
+        <div data-onboarding="settings-security-card">
+          <SecuritySettings />
+        </div>
 
         <Separator />
 
         {/* Seção: Exportar Dados */}
-        <Card>
+        <Card data-onboarding="settings-export-card">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FileDown className="h-5 w-5" />
@@ -443,7 +445,7 @@ export default function Settings() {
         <Separator />
 
         {/* Seção: Importar Planilha */}
-        <Card>
+        <Card data-onboarding="settings-import-card">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Upload className="h-5 w-5" />
@@ -455,7 +457,11 @@ export default function Settings() {
           </CardHeader>
           <CardContent className="space-y-4">
             <Button 
-              onClick={() => setImportSheetOpen(true)} 
+              data-onboarding="settings-import-btn"
+              onClick={() => {
+                setImportSheetOpen(true);
+                window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: "import-sheet-opened" }));
+              }} 
               variant="outline"
               className="w-full gap-2"
             >
@@ -469,7 +475,7 @@ export default function Settings() {
         </Card>
 
         <Separator />
-        <Card>
+        <Card data-onboarding="settings-tutorial-card">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <GraduationCap className="h-5 w-5" />
@@ -540,7 +546,9 @@ export default function Settings() {
         <Separator />
 
         {/* Seção: Notificações */}
-        <FirebaseNotificationSettings />
+        <div data-onboarding="settings-notifications-card">
+          <FirebaseNotificationSettings />
+        </div>
       </div>
       
       {/* Import Sheet */}

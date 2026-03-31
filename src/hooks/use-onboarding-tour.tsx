@@ -338,15 +338,10 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     };
   }, [user, isOpen, currentStep?.id]);
 
-  // ─── PIN detection for security step ──────────────────────
+  // ─── Settings step detection (replaces old PIN check) ─────
   useEffect(() => {
-    if (!isOpen || currentStep?.id !== "setup-security") return;
-    const interval = setInterval(() => {
-      if (localStorage.getItem("gastinho_app_lock_pin")) {
-        completeCurrentStep();
-      }
-    }, 1000);
-    return () => clearInterval(interval);
+    if (!isOpen || currentStep?.id !== "setup-settings") return;
+    // Settings step advances via substeps, no special interval needed
   }, [isOpen, currentStep?.id]);
 
   // ─── Helpers ──────────────────────────────────────────────
@@ -548,8 +543,8 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     if (recurring.data?.length) completed.add("add-recurring-expense");
     if (incomes.data?.length || recurringIncomes.data?.length) completed.add("add-income");
     if (goals.data?.length) completed.add("add-budget-goal");
-    if (localStorage.getItem("gastinho_app_lock_pin"))
-      completed.add("setup-security");
+    // Legacy: mark old steps as completed so they don't block
+    completed.add("setup-security");
     completed.add("import-spreadsheet");
 
     // Load skipped steps from localStorage
@@ -564,13 +559,14 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       void 0;
     }
 
-    // view-reports has no DB table — check localStorage progress or onboarding completed
+    // view-reports and setup-settings have no DB table — check localStorage progress or onboarding completed
     const savedProgress = localStorage.getItem(PROGRESS_KEY);
     if (savedProgress) {
       try {
         const { completed: savedCompleted } = JSON.parse(savedProgress);
-        if (Array.isArray(savedCompleted) && savedCompleted.includes("view-reports")) {
-          completed.add("view-reports");
+        if (Array.isArray(savedCompleted)) {
+          if (savedCompleted.includes("view-reports")) completed.add("view-reports");
+          if (savedCompleted.includes("setup-settings")) completed.add("setup-settings");
         }
       } catch {
         void 0;
@@ -578,6 +574,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     }
     if (localStorage.getItem(STORAGE_KEY) === "true") {
       completed.add("view-reports");
+      completed.add("setup-settings");
     }
 
     return completed;
