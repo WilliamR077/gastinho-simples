@@ -78,6 +78,8 @@ export function ReportsAccordion({
   viewModel,
 }: ReportsAccordionProps) {
   const { hasAdvancedReports } = useSubscription();
+  const showCashflow = hasAdvancedReports || periodType === "month";
+  const showEvolution = hasAdvancedReports || periodType === "month";
   const navigate = useNavigate();
   const [cashFlowMode, setCashFlowMode] = useState<"daily" | "cumulative">("daily");
   const [evolutionMode, setEvolutionMode] = useState<"daily" | "weekly">("daily");
