@@ -1163,32 +1163,14 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
     substeps: [
       {
         id: "settings-intro",
-        actionType: "info",
+        actionType: "navigate",
         title: "Vamos Finalizar sua Configuração",
         description:
           "Agora vamos concluir a configuração da sua conta na página de Configurações, incluindo segurança do app, importação de planilha e outros recursos importantes.",
         emoji: "⚙️",
         navigateLabel: "Continuar",
-      },
-      {
-        id: "settings-open-menu",
-        actionType: "click",
-        targetSelector: "settings-menu-button",
-        title: "Abra o Menu",
-        description: "Toque no menu para acessar as opções do app.",
-        emoji: "☰",
-        autoAdvanceOnEvent: "menu-opened",
-        placement: "below",
-      },
-      {
-        id: "settings-nav",
-        actionType: "click",
-        targetSelector: "settings-nav-item",
-        title: "Configurações",
-        description: "Toque aqui para abrir as Configurações do app.",
-        emoji: "⚙️",
+        navigateTo: "/settings",
         autoAdvanceOnRoute: "/settings",
-        placement: "below",
       },
       {
         id: "settings-security-section",
