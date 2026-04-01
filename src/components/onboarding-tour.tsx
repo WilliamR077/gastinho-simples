@@ -276,7 +276,7 @@ export function OnboardingTour() {
         onNext={advanceSubstep}
         onSkipStep={skipCurrentStep}
         onClose={skipOnboarding}
-        onSkipSubstep={currentSubstep.skipLabel ? advanceSubstep : undefined}
+        onSkipSubstep={currentSubstep.skipLabel ? handleSkipSubstep : undefined}
       />
     </>
   );
