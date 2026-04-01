@@ -1252,8 +1252,8 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         emoji: "📊",
         scrollToTarget: true,
         placement: "below",
-        navigateLabel: "Tenho planilha e quero importar",
-        skipLabel: "Não tenho planilha",
+        navigateLabel: "Quero importar",
+        skipLabel: "Não tenho",
       },
       {
         id: "settings-import-open",

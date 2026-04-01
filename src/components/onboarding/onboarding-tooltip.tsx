@@ -220,7 +220,7 @@ export function OnboardingTooltip({
       )}
 
       {substep.actionType === "info" && (
-        <div className={`flex ${substep.skipLabel && onSkipSubstep ? "gap-2" : ""} mt-2`}>
+        <div className={`flex ${substep.skipLabel && onSkipSubstep ? "flex-col sm:flex-row gap-2" : ""} mt-2`}>
           {substep.skipLabel && onSkipSubstep && (
             <Button size="sm" variant="outline" onClick={onSkipSubstep} className="flex-1">
               {substep.skipLabel}
