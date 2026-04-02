@@ -656,6 +656,27 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     completeCurrentStep();
   }, [currentStep, stepIndex]);
 
+  // P1: Go back to previous substep within guided form flows
+  const canGoBack = isFormGuidedFlow && substepIndex > FORM_SUBSTEP_START;
+
+  const goBackSubstep = useCallback(() => {
+    if (!currentStep || !canGoBack) return;
+    let prevIdx = substepIndex - 1;
+    // Skip substeps whose condition is false (searching backwards)
+    while (prevIdx >= FORM_SUBSTEP_START) {
+      const prev = currentStep.substeps[prevIdx];
+      if (prev.condition && !prev.condition(createConditionContext())) {
+        prevIdx--;
+      } else {
+        break;
+      }
+    }
+    if (prevIdx >= FORM_SUBSTEP_START) {
+      setPendingAdvance(null);
+      setSubstepIndex(prevIdx);
+    }
+  }, [currentStep, substepIndex, canGoBack, FORM_SUBSTEP_START, createConditionContext]);
+
   const notifyEvent = useCallback(
     (eventName: string) => {
       if (!isOpen || !currentSubstep) return;
