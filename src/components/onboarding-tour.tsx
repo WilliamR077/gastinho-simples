@@ -254,9 +254,9 @@ export function OnboardingTour() {
           onRepeat={isCompletion && effectiveSubstep.repeatLabel ? repeatStep : undefined}
           onProceed={isCompletion ? proceedToNextStep : undefined}
           onSkipSubstep={effectiveSubstep.skipLabel ? handleSkipSubstep : undefined}
+          onBack={canGoBack ? goBackSubstep : undefined}
         />
       </>
-    );
   }
 
   // ─── Interactive substep with target: overlay + tooltip ───
