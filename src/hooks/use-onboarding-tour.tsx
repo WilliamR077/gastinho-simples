@@ -48,11 +48,14 @@ interface OnboardingContextType {
   showCompletionDialog: boolean;
   completedSteps: Set<string>;
   isExpenseFormGuidedFlow: boolean;
+  // P1: back navigation in form guided flows
+  canGoBack: boolean;
 
   startOnboarding: () => void;
   skipOnboarding: () => void;
   skipCurrentStep: () => void;
   advanceSubstep: () => void;
+  goBackSubstep: () => void;
   repeatStep: () => void;
   proceedToNextStep: () => void;
   notifyEvent: (eventName: string) => void;
