@@ -27,6 +27,8 @@ interface OnboardingTooltipProps {
   onRepeat?: () => void;
   onProceed?: () => void;
   onSkipSubstep?: () => void;
+  // P1: back button for guided form flows
+  onBack?: () => void;
 }
 
 export function OnboardingTooltip({
