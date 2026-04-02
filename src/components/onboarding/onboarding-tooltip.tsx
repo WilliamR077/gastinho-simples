@@ -46,6 +46,7 @@ export function OnboardingTooltip({
   onRepeat,
   onProceed,
   onSkipSubstep,
+  onBack,
 }: OnboardingTooltipProps) {
   const [pos, setPos] = useState<{ top: number; left: number; placement: "above" | "below" } | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
