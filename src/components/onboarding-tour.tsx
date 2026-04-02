@@ -279,7 +279,7 @@ export function OnboardingTour() {
         onSkipStep={skipCurrentStep}
         onClose={skipOnboarding}
         onSkipSubstep={currentSubstep.skipLabel ? handleSkipSubstep : undefined}
+        onBack={canGoBack ? goBackSubstep : undefined}
       />
     </>
-  );
 }
