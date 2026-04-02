@@ -283,4 +283,5 @@ export function OnboardingTour() {
         onBack={canGoBack ? goBackSubstep : undefined}
       />
     </>
+  );
 }
