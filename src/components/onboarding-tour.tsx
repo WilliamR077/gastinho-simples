@@ -43,6 +43,8 @@ export function OnboardingTour() {
     skipOnboarding,
     skipCurrentStep,
     advanceSubstep,
+    goBackSubstep,
+    canGoBack,
     repeatStep,
     proceedToNextStep,
     closeCompletionDialog,
