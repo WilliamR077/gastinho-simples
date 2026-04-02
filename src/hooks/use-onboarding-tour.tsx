@@ -48,11 +48,14 @@ interface OnboardingContextType {
   showCompletionDialog: boolean;
   completedSteps: Set<string>;
   isExpenseFormGuidedFlow: boolean;
+  // P1: back navigation in form guided flows
+  canGoBack: boolean;
 
   startOnboarding: () => void;
   skipOnboarding: () => void;
   skipCurrentStep: () => void;
   advanceSubstep: () => void;
+  goBackSubstep: () => void;
   repeatStep: () => void;
   proceedToNextStep: () => void;
   notifyEvent: (eventName: string) => void;
@@ -653,6 +656,27 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     completeCurrentStep();
   }, [currentStep, stepIndex]);
 
+  // P1: Go back to previous substep within guided form flows
+  const canGoBack = isFormGuidedFlow && substepIndex > FORM_SUBSTEP_START;
+
+  const goBackSubstep = useCallback(() => {
+    if (!currentStep || !canGoBack) return;
+    let prevIdx = substepIndex - 1;
+    // Skip substeps whose condition is false (searching backwards)
+    while (prevIdx >= FORM_SUBSTEP_START) {
+      const prev = currentStep.substeps[prevIdx];
+      if (prev.condition && !prev.condition(createConditionContext())) {
+        prevIdx--;
+      } else {
+        break;
+      }
+    }
+    if (prevIdx >= FORM_SUBSTEP_START) {
+      setPendingAdvance(null);
+      setSubstepIndex(prevIdx);
+    }
+  }, [currentStep, substepIndex, canGoBack, FORM_SUBSTEP_START, createConditionContext]);
+
   const notifyEvent = useCallback(
     (eventName: string) => {
       if (!isOpen || !currentSubstep) return;
@@ -692,8 +716,9 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       // For Select components, check if a value is selected
       const selectTrigger = el.querySelector('[role="combobox"]');
       if (selectTrigger) {
+        // P0 fix: check startsWith("Selecione") to catch placeholders like "Selecione a forma de pagamento"
         const val = selectTrigger.textContent?.trim();
-        return !!val && val !== "Selecione";
+        return !!val && !val.startsWith("Selecione");
       }
       return isOnboardingTargetReady(el);
     }
@@ -741,10 +766,12 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         showCompletionDialog,
         completedSteps,
         isExpenseFormGuidedFlow,
+        canGoBack,
         startOnboarding,
         skipOnboarding,
         skipCurrentStep,
         advanceSubstep,
+        goBackSubstep,
         repeatStep,
         proceedToNextStep,
         notifyEvent,

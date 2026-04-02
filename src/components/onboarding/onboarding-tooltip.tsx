@@ -27,6 +27,8 @@ interface OnboardingTooltipProps {
   onRepeat?: () => void;
   onProceed?: () => void;
   onSkipSubstep?: () => void;
+  // P1: back button for guided form flows
+  onBack?: () => void;
 }
 
 export function OnboardingTooltip({
@@ -44,6 +46,7 @@ export function OnboardingTooltip({
   onRepeat,
   onProceed,
   onSkipSubstep,
+  onBack,
 }: OnboardingTooltipProps) {
   const [pos, setPos] = useState<{ top: number; left: number; placement: "above" | "below" } | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
@@ -172,31 +175,51 @@ export function OnboardingTooltip({
 
       {/* Action buttons based on type */}
       {substep.actionType === "fill" && substep.requiresValidation && (
-        <Button
-          size="sm"
-          onClick={onNext}
-          disabled={!isValid}
-          className="w-full mt-2"
-        >
-          Próximo
-          <ArrowRight className="h-3 w-3 ml-1" />
-        </Button>
+        <div className="flex gap-2 mt-2">
+          {/* P1: Back button in guided form flows */}
+          {onBack && (
+            <Button size="sm" variant="outline" onClick={onBack} className="px-3">
+              Voltar
+            </Button>
+          )}
+          <Button
+            size="sm"
+            onClick={onNext}
+            disabled={!isValid}
+            className="flex-1"
+          >
+            Próximo
+            <ArrowRight className="h-3 w-3 ml-1" />
+          </Button>
+        </div>
       )}
 
       {substep.actionType === "select" && substep.requiresValidation && (
-        <Button
-          size="sm"
-          onClick={onNext}
-          disabled={!isValid}
-          className="w-full mt-2"
-        >
-          Próximo
-          <ArrowRight className="h-3 w-3 ml-1" />
-        </Button>
+        <div className="flex gap-2 mt-2">
+          {onBack && (
+            <Button size="sm" variant="outline" onClick={onBack} className="px-3">
+              Voltar
+            </Button>
+          )}
+          <Button
+            size="sm"
+            onClick={onNext}
+            disabled={!isValid}
+            className="flex-1"
+          >
+            Próximo
+            <ArrowRight className="h-3 w-3 ml-1" />
+          </Button>
+        </div>
       )}
 
       {substep.actionType === "optional-group" && (
         <div className="flex gap-2 mt-2">
+          {onBack && (
+            <Button size="sm" variant="outline" onClick={onBack} className="px-3">
+              Voltar
+            </Button>
+          )}
           <Button
             size="sm"
             variant="outline"
@@ -221,12 +244,17 @@ export function OnboardingTooltip({
 
       {substep.actionType === "info" && (
         <div className={`flex ${substep.skipLabel && onSkipSubstep ? "flex-col sm:flex-row gap-2" : ""} mt-2`}>
+          {onBack && !substep.skipLabel && (
+            <Button size="sm" variant="outline" onClick={onBack} className="px-3">
+              Voltar
+            </Button>
+          )}
           {substep.skipLabel && onSkipSubstep && (
             <Button size="sm" variant="outline" onClick={onSkipSubstep} className="flex-1">
               {substep.skipLabel}
             </Button>
           )}
-          <Button size="sm" onClick={onNext} className={substep.skipLabel && onSkipSubstep ? "flex-1" : "w-full"}>
+          <Button size="sm" onClick={onNext} className={substep.skipLabel && onSkipSubstep ? "flex-1" : onBack ? "flex-1" : "w-full"}>
             {substep.navigateLabel || "Continuar"}
             <ArrowRight className="h-3 w-3 ml-1" />
           </Button>

@@ -43,6 +43,8 @@ export function OnboardingTour() {
     skipOnboarding,
     skipCurrentStep,
     advanceSubstep,
+    goBackSubstep,
+    canGoBack,
     repeatStep,
     proceedToNextStep,
     closeCompletionDialog,
@@ -252,6 +254,7 @@ export function OnboardingTour() {
           onRepeat={isCompletion && effectiveSubstep.repeatLabel ? repeatStep : undefined}
           onProceed={isCompletion ? proceedToNextStep : undefined}
           onSkipSubstep={effectiveSubstep.skipLabel ? handleSkipSubstep : undefined}
+          onBack={canGoBack ? goBackSubstep : undefined}
         />
       </>
     );
@@ -277,6 +280,7 @@ export function OnboardingTour() {
         onSkipStep={skipCurrentStep}
         onClose={skipOnboarding}
         onSkipSubstep={currentSubstep.skipLabel ? handleSkipSubstep : undefined}
+        onBack={canGoBack ? goBackSubstep : undefined}
       />
     </>
   );
