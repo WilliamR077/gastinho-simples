@@ -215,6 +215,11 @@ export function OnboardingTooltip({
 
       {substep.actionType === "optional-group" && (
         <div className="flex gap-2 mt-2">
+          {onBack && (
+            <Button size="sm" variant="outline" onClick={onBack} className="px-3">
+              Voltar
+            </Button>
+          )}
           <Button
             size="sm"
             variant="outline"
