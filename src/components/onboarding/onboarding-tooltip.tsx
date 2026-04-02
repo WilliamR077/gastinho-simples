@@ -175,27 +175,42 @@ export function OnboardingTooltip({
 
       {/* Action buttons based on type */}
       {substep.actionType === "fill" && substep.requiresValidation && (
-        <Button
-          size="sm"
-          onClick={onNext}
-          disabled={!isValid}
-          className="w-full mt-2"
-        >
-          Próximo
-          <ArrowRight className="h-3 w-3 ml-1" />
-        </Button>
+        <div className="flex gap-2 mt-2">
+          {/* P1: Back button in guided form flows */}
+          {onBack && (
+            <Button size="sm" variant="outline" onClick={onBack} className="px-3">
+              Voltar
+            </Button>
+          )}
+          <Button
+            size="sm"
+            onClick={onNext}
+            disabled={!isValid}
+            className="flex-1"
+          >
+            Próximo
+            <ArrowRight className="h-3 w-3 ml-1" />
+          </Button>
+        </div>
       )}
 
       {substep.actionType === "select" && substep.requiresValidation && (
-        <Button
-          size="sm"
-          onClick={onNext}
-          disabled={!isValid}
-          className="w-full mt-2"
-        >
-          Próximo
-          <ArrowRight className="h-3 w-3 ml-1" />
-        </Button>
+        <div className="flex gap-2 mt-2">
+          {onBack && (
+            <Button size="sm" variant="outline" onClick={onBack} className="px-3">
+              Voltar
+            </Button>
+          )}
+          <Button
+            size="sm"
+            onClick={onNext}
+            disabled={!isValid}
+            className="flex-1"
+          >
+            Próximo
+            <ArrowRight className="h-3 w-3 ml-1" />
+          </Button>
+        </div>
       )}
 
       {substep.actionType === "optional-group" && (
