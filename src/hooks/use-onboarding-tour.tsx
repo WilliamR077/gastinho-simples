@@ -692,8 +692,9 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       // For Select components, check if a value is selected
       const selectTrigger = el.querySelector('[role="combobox"]');
       if (selectTrigger) {
+        // P0 fix: check startsWith("Selecione") to catch placeholders like "Selecione a forma de pagamento"
         const val = selectTrigger.textContent?.trim();
-        return !!val && val !== "Selecione";
+        return !!val && !val.startsWith("Selecione");
       }
       return isOnboardingTargetReady(el);
     }

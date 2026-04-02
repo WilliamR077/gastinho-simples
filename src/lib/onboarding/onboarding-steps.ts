@@ -466,6 +466,8 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
     label: "Despesas",
     emoji: "💸",
     detectionTable: "expenses",
+    // P0 fix: navigate to home before starting expense step so FAB is available
+    targetRoute: "/",
     substeps: EXPENSE_SUBSTEPS,
   },
   {

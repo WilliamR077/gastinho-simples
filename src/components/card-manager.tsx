@@ -46,6 +46,7 @@ export function CardManager() {
     color: "#FFA500",
   });
 
+  // P2: Expanded color palette with visually distinct, dark-mode-friendly colors
   const availableColors = [
     { name: "Amarelo", value: "#FFA500" },
     { name: "Roxo", value: "#9333EA" },
@@ -55,6 +56,14 @@ export function CardManager() {
     { name: "Laranja", value: "#F97316" },
     { name: "Rosa", value: "#EC4899" },
     { name: "Índigo", value: "#6366F1" },
+    { name: "Ciano", value: "#06B6D4" },
+    { name: "Lima", value: "#84CC16" },
+    { name: "Amber", value: "#F59E0B" },
+    { name: "Teal", value: "#14B8A6" },
+    { name: "Fúcsia", value: "#D946EF" },
+    { name: "Slate", value: "#64748B" },
+    { name: "Sky", value: "#0EA5E9" },
+    { name: "Esmeralda", value: "#059669" },
   ];
 
   useEffect(() => {
