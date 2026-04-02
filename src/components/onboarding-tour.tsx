@@ -257,6 +257,7 @@ export function OnboardingTour() {
           onBack={canGoBack ? goBackSubstep : undefined}
         />
       </>
+    );
   }
 
   // ─── Interactive substep with target: overlay + tooltip ───
