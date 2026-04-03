@@ -166,6 +166,17 @@ const CARDS_SUBSTEPS: OnboardingSubstep[] = [
 ];
 
 const EXPENSE_SUBSTEPS: OnboardingSubstep[] = [
+  // P0 fix: navigate to home first so FAB is available before highlighting
+  {
+    id: "expense-go-home",
+    actionType: "navigate",
+    title: "Registre seu Primeiro Gasto",
+    description: "Vamos voltar para a tela inicial para registrar sua primeira despesa.",
+    emoji: "💸",
+    navigateTo: "/",
+    autoAdvanceOnRoute: "/",
+    navigateLabel: "Ir para início",
+  },
   {
     id: "expense-click-fab",
     actionType: "click",
