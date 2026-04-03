@@ -1003,6 +1003,9 @@ export default function Index() {
       if (error) throw error;
       setRecurringExpenses((prev) => [...prev, insertedData].sort((a, b) => a.day_of_month - b.day_of_month));
 
+      // [Onboarding] Notificar que despesa fixa foi salva com sucesso
+      window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: "expense-submitted" }));
+
       // Agendar notificações para a nova despesa
       await NotificationService.scheduleNotificationsForExpense(insertedData, notificationSettings);
 
