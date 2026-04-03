@@ -59,8 +59,9 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
 
   const isGroupContext = currentContext.type === 'group';
 
-  // Set default category
-  if (!categoryValue && activeCategories.length > 0) {
+  // [Onboarding fix] Não pré-selecionar categoria quando preventClose está ativo (onboarding),
+  // para forçar o usuário a escolher manualmente e o tutorial detectar a mudança
+  if (!categoryValue && activeCategories.length > 0 && !preventClose) {
     setCategoryValue(activeCategories[0].id);
   }
 
