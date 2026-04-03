@@ -124,7 +124,7 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
     setIncomeType("monthly");
     setDescription("");
     setAmount("");
-    setCategoryValue(activeCategories.length > 0 ? activeCategories[0].id : "");
+    setCategoryValue(preventClose ? "" : (activeCategories.length > 0 ? activeCategories[0].id : ""));
     setIncomeDate(new Date());
     setDayOfMonth("5");
     setInstallmentCount("2");
