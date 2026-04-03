@@ -59,11 +59,13 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
 
   const isGroupContext = currentContext.type === 'group';
 
-  // [Onboarding fix] Não pré-selecionar categoria quando preventClose está ativo (onboarding),
-  // para forçar o usuário a escolher manualmente e o tutorial detectar a mudança
-  if (!categoryValue && activeCategories.length > 0 && !preventClose) {
-    setCategoryValue(activeCategories[0].id);
-  }
+  // [Onboarding fix] Evitar setState durante o render e só aplicar categoria padrão
+  // fora do fluxo guiado. Isso impede o valor "Salário" de vazar para o tutorial.
+  useEffect(() => {
+    if (!open && !preventClose && !initialData && !categoryValue && activeCategories.length > 0) {
+      setCategoryValue(activeCategories[0].id);
+    }
+  }, [open, preventClose, initialData, categoryValue, activeCategories]);
 
   useEffect(() => {
     if (open) {
@@ -71,19 +73,21 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
         setIncomeType(initialData.incomeType);
         setDescription(initialData.description);
         setAmount(initialData.amount.toString());
-        setCategoryValue(initialData.categoryId || (activeCategories.length > 0 ? activeCategories[0].id : ""));
+        setCategoryValue(initialData.categoryId || (preventClose ? "" : (activeCategories.length > 0 ? activeCategories[0].id : "")));
         setIncomeDate(initialData.incomeDate || new Date());
         setDayOfMonth(initialData.dayOfMonth?.toString() || "5");
       } else if (!preventClose) {
-        // Only set default type when NOT in guided flow
+        // Only set default type/category when NOT in guided flow
         setIncomeType("monthly");
+        setCategoryValue(activeCategories.length > 0 ? activeCategories[0].id : "");
       } else {
-        // Guided flow: start with no type selected
+        // [Onboarding fix] Guided flow: começar sem tipo e sem categoria pré-selecionada
         setIncomeType("");
+        setCategoryValue("");
       }
       hasEmittedOpenRef.current = false;
     }
-  }, [open, initialData, preventClose]);
+  }, [open, initialData, preventClose, activeCategories]);
 
   // Emit income-form-opened when form is open and type selector is mounted
   useEffect(() => {
