@@ -1869,8 +1869,6 @@ export default function Index() {
 
   return (
     <div className="min-h-screen bg-background pb-24">
-      {/* Product Tour */}
-      <ProductTour />
 
       {/* App Header */}
       <AppHeader
