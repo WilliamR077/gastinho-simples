@@ -486,35 +486,25 @@ export default function Settings() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Botão único: reinicia o onboarding de configuração */}
             <Button
               onClick={() => {
-                localStorage.removeItem(TOUR_STORAGE_KEY);
+                // Resetar progresso do onboarding e reiniciar
+                localStorage.removeItem("gastinho_onboarding_completed");
+                localStorage.removeItem("gastinho_onboarding_progress");
+                localStorage.removeItem("gastinho_skipped_steps");
                 navigate("/");
+                setTimeout(() => startOnboarding(), 500);
                 toast({
                   title: "Tutorial reiniciado",
-                  description: "Volte para a tela inicial para ver o tutorial novamente.",
+                  description: "O tutorial de configuração vai começar novamente.",
                 });
               }}
               variant="outline"
               className="w-full gap-2"
             >
               <GraduationCap className="h-4 w-4" />
-              Ver tutorial novamente
-            </Button>
-
-            <Separator />
-
-            {/* Setup progress + button */}
-            <Button
-              onClick={() => {
-                startOnboarding();
-                navigate("/");
-              }}
-              variant="outline"
-              className="w-full gap-2"
-            >
-              <Sparkles className="h-4 w-4" />
-              Me ajude a configurar minha conta
+              Refazer tutorial de configuração
             </Button>
 
             {setupProgress && (
