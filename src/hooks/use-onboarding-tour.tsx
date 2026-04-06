@@ -71,6 +71,7 @@ const OnboardingContext = createContext<OnboardingContextType | undefined>(
 const STORAGE_KEY = "gastinho_onboarding_completed";
 const PROGRESS_KEY = "gastinho_onboarding_progress";
 const SKIPPED_STEPS_KEY = "gastinho_skipped_steps";
+const TOUR_STORAGE_KEY = "gastinho_tour_completed";
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -284,7 +285,13 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // ─── Save progress ───────────────────────────────────────
+  // ─── Auto-start for new users ────────────────────────────
+  // Replaces the old Product Tour: if the user hasn't completed onboarding,
+  // automatically start it after a short delay on first load.
+  const autoStartFiredRef = useRef(false);
+  const startOnboardingRef = useRef<(() => void) | null>(null);
+
+
   useEffect(() => {
     if (isOpen) {
       localStorage.setItem(
@@ -612,6 +619,26 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     setIsOpen(true);
     localStorage.removeItem(PROGRESS_KEY);
   }, [user, availableSteps]);
+
+  // ─── Auto-start effect (must be after startOnboarding is defined) ──
+  startOnboardingRef.current = startOnboarding;
+  useEffect(() => {
+    if (autoStartFiredRef.current) return;
+    if (!user || isOpen) return;
+    const alreadyCompleted = localStorage.getItem(STORAGE_KEY) === "true";
+    if (alreadyCompleted) {
+      localStorage.setItem(TOUR_STORAGE_KEY, "true");
+      return;
+    }
+    if (location.pathname !== "/") return;
+    autoStartFiredRef.current = true;
+    const timer = setTimeout(() => {
+      localStorage.setItem(TOUR_STORAGE_KEY, "true");
+      startOnboardingRef.current?.();
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [user, isOpen, location.pathname]);
+
 
   const skipOnboarding = useCallback(() => {
     setPendingAdvance(null);

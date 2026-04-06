@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, Settings as SettingsIcon, FileDown, FileSpreadsheet, Crown, Lock, GraduationCap, Upload, Sparkles, Check } from "lucide-react";
+import { ArrowLeft, Settings as SettingsIcon, FileDown, FileSpreadsheet, Crown, Lock, GraduationCap, Upload, Check } from "lucide-react";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useState, useEffect } from "react";
 import { SpreadsheetImportSheet } from "@/components/spreadsheet-import-sheet";
@@ -25,7 +25,7 @@ import { Filesystem, Directory } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
 import { Footer } from "@/components/footer";
 
-const TOUR_STORAGE_KEY = "gastinho_tour_completed";
+
 
 // Helper para detectar se está no app nativo
 const isNativeApp = () => Capacitor.isNativePlatform();
@@ -486,35 +486,25 @@ export default function Settings() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Botão único: reinicia o onboarding de configuração */}
             <Button
               onClick={() => {
-                localStorage.removeItem(TOUR_STORAGE_KEY);
+                // Resetar progresso do onboarding e reiniciar
+                localStorage.removeItem("gastinho_onboarding_completed");
+                localStorage.removeItem("gastinho_onboarding_progress");
+                localStorage.removeItem("gastinho_skipped_steps");
                 navigate("/");
+                setTimeout(() => startOnboarding(), 500);
                 toast({
                   title: "Tutorial reiniciado",
-                  description: "Volte para a tela inicial para ver o tutorial novamente.",
+                  description: "O tutorial de configuração vai começar novamente.",
                 });
               }}
               variant="outline"
               className="w-full gap-2"
             >
               <GraduationCap className="h-4 w-4" />
-              Ver tutorial novamente
-            </Button>
-
-            <Separator />
-
-            {/* Setup progress + button */}
-            <Button
-              onClick={() => {
-                startOnboarding();
-                navigate("/");
-              }}
-              variant="outline"
-              className="w-full gap-2"
-            >
-              <Sparkles className="h-4 w-4" />
-              Me ajude a configurar minha conta
+              Refazer tutorial de configuração
             </Button>
 
             {setupProgress && (
