@@ -21,7 +21,7 @@ import { BudgetGoalFormSheet } from "@/components/budget-goal-form-sheet";
 import { ContextSelector } from "@/components/context-selector";
 import { useSharedGroups } from "@/hooks/use-shared-groups";
 import { useCategories } from "@/hooks/use-categories";
-import { ProductTour } from "@/components/product-tour";
+
 import { BalanceSummary } from "@/components/balance-summary";
 import { UpsellBanner } from "@/components/upsell-banner";
 import { SetupProgressBanner } from "@/components/setup-progress-banner";
