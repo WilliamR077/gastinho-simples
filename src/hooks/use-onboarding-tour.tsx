@@ -620,7 +620,26 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(PROGRESS_KEY);
   }, [user, availableSteps]);
 
-  const skipOnboarding = useCallback(() => {
+  // ─── Auto-start effect (must be after startOnboarding is defined) ──
+  startOnboardingRef.current = startOnboarding;
+  useEffect(() => {
+    if (autoStartFiredRef.current) return;
+    if (!user || isOpen) return;
+    const alreadyCompleted = localStorage.getItem(STORAGE_KEY) === "true";
+    if (alreadyCompleted) {
+      localStorage.setItem(TOUR_STORAGE_KEY, "true");
+      return;
+    }
+    if (location.pathname !== "/") return;
+    autoStartFiredRef.current = true;
+    const timer = setTimeout(() => {
+      localStorage.setItem(TOUR_STORAGE_KEY, "true");
+      startOnboardingRef.current?.();
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [user, isOpen, location.pathname]);
+
+
     setPendingAdvance(null);
     seenEventsRef.current.clear();
     setIsOpen(false);
