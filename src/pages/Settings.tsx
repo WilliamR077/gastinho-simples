@@ -25,7 +25,7 @@ import { Filesystem, Directory } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
 import { Footer } from "@/components/footer";
 
-const TOUR_STORAGE_KEY = "gastinho_tour_completed";
+
 
 // Helper para detectar se está no app nativo
 const isNativeApp = () => Capacitor.isNativePlatform();
