@@ -640,6 +640,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   }, [user, isOpen, location.pathname]);
 
 
+  const skipOnboarding = useCallback(() => {
     setPendingAdvance(null);
     seenEventsRef.current.clear();
     setIsOpen(false);
