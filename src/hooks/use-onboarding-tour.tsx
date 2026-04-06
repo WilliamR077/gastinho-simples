@@ -285,7 +285,31 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // ─── Save progress ───────────────────────────────────────
+  // ─── Auto-start for new users ────────────────────────────
+  // Replaces the old Product Tour: if the user hasn't completed onboarding,
+  // automatically start it after a short delay on first load.
+  const autoStartFiredRef = useRef(false);
+  useEffect(() => {
+    if (autoStartFiredRef.current) return;
+    if (!user || isOpen) return;
+    const alreadyCompleted = localStorage.getItem(STORAGE_KEY) === "true";
+    if (alreadyCompleted) {
+      // Also mark old tour key so legacy code never triggers
+      localStorage.setItem(TOUR_STORAGE_KEY, "true");
+      return;
+    }
+    // Only auto-start on the main page
+    if (location.pathname !== "/") return;
+    autoStartFiredRef.current = true;
+    const timer = setTimeout(() => {
+      // Mark old product tour as completed so it never fires
+      localStorage.setItem(TOUR_STORAGE_KEY, "true");
+      startOnboarding();
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [user, isOpen, location.pathname, startOnboarding]);
+
+
   useEffect(() => {
     if (isOpen) {
       localStorage.setItem(
