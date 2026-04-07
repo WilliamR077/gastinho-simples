@@ -23,8 +23,6 @@ import { useSharedGroups } from "@/hooks/use-shared-groups";
 import { useCategories } from "@/hooks/use-categories";
 
 import { BalanceSummary } from "@/components/balance-summary";
-import { UpsellBanner } from "@/components/upsell-banner";
-import { SetupProgressBanner } from "@/components/setup-progress-banner";
 import { GroupMemberSummary } from "@/components/group-member-summary";
 import { GroupBalanceSummary } from "@/components/group-balance-summary";
 import { UnifiedIncomeFormSheet } from "@/components/unified-income-form-sheet";
@@ -1953,11 +1951,6 @@ export default function Index() {
             totalExpense={monthlyTotals.totalExpense} />
         </div>
 
-        {/* Setup Progress Banner */}
-        <SetupProgressBanner />
-
-        {/* Upsell Banner */}
-        <UpsellBanner expenseCount={expenses.length} />
 
         {/* Group Member Summary - only in group context */}
         {currentContext.type === 'group' &&
