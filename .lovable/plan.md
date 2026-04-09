@@ -1,37 +1,50 @@
 
 
-## Plano: Layout adaptativo no Resumo do Mês para nunca truncar valores
+## Plano: Auto-avanço em selects do tutorial
 
 ### Problema
-Com `grid-cols-3` fixo, quando o usuário tem zoom alto ou fonte grande no celular (ou tela muito estreita como Galaxy Z Fold dobrado), os valores monetários ficam com "..." porque o grid força 3 colunas independentemente do espaço disponível. O `break-all` ajuda mas não resolve quando o container inteiro é estreito demais.
+Nos passos com campo select (tipo do cartão, forma de pagamento, selecionar cartão), o usuário precisa selecionar a opção **e depois** clicar "Próximo". São cliques desnecessários que tornam o tutorial arrastado.
 
 ### Solução
-Trocar o `grid grid-cols-3` por `flex flex-wrap` com largura mínima por card. Assim:
-- Em telas normais: os 3 cards ficam lado a lado (comportamento atual)
-- Em telas muito estreitas ou com zoom: Entradas e Saídas ficam na primeira linha, Saldo desce para uma segunda linha centralizada
-- Os valores nunca são truncados
+Adicionar uma nova propriedade `autoAdvanceOnSelect` nos substeps de tipo `select`. Quando ativa, o sistema detecta a mudança de valor no select e avança automaticamente após um breve delay (400ms para não parecer brusco), **sem mostrar botão "Próximo"**.
 
-### Mudança em `src/components/balance-summary.tsx`
+### Substeps afetados
 
-Substituir:
-```
-<div className="grid grid-cols-3 gap-2 sm:gap-3">
-```
+| Passo | Substep ID | Campo |
+|---|---|---|
+| 1 — Cartão | `select-card-type` | Tipo do cartão |
+| 2 — Despesa | `expense-payment` | Forma de pagamento |
+| 2 — Despesa | `expense-card` | Selecionar cartão |
+| 3 — Despesa Fixa | `recurring-payment` | Forma de pagamento |
+| 3 — Despesa Fixa | `recurring-card` | Selecionar cartão |
 
-Por:
-```
-<div className="flex flex-wrap justify-center gap-2 sm:gap-3">
-```
+**Não afetados**: `expense-installments` (parcelas), `recurring-day` (dia da cobrança) — mantêm botão "Próximo".
 
-E em cada card filho, adicionar `flex-1 min-w-[90px]` para que:
-- `flex-1` permite crescer e ocupar espaço igual quando cabem 3
-- `min-w-[90px]` garante largura mínima — se não couber 3 cards com 90px cada, o terceiro desce automaticamente
+### Lógica de auto-avanço
 
-Também remover `overflow-hidden` e qualquer `truncate` residual dos valores, garantindo que o texto sempre quebre em vez de ser cortado.
+1. Adicionar `autoAdvanceOnSelect?: boolean` na interface `OnboardingSubstep`
+2. No `use-onboarding-tour.tsx`, criar um `MutationObserver` que observa o elemento target do substep atual quando `autoAdvanceOnSelect === true`
+3. O observer monitora mudanças no texto do `[role="combobox"]` (trigger do Radix Select) — quando o texto muda de placeholder ("Selecione...") para um valor real, dispara `advanceSubstep()` após 400ms de delay
+4. O delay evita avanço brusco e dá tempo para a animação de fechamento do dropdown
 
-### Arquivo afetado
+### Mudanças no tooltip
+
+No `onboarding-tooltip.tsx`, quando o substep tem `autoAdvanceOnSelect: true`, **não renderizar** o bloco de botões "Próximo". O tooltip mostra apenas título + descrição, sem botão de ação — a seleção no dropdown é a ação.
+
+### Garantia de não-regressão
+
+- A propriedade é opt-in (`autoAdvanceOnSelect`), então substeps que não a definem continuam com botão "Próximo"
+- O observer é limpo via cleanup do `useEffect`, evitando memory leaks
+- A validação `isCurrentTargetValid` continua existindo para os substeps sem auto-avanço
+- Substeps de `fill`, `click`, `submit`, `info`, `completion` não são afetados
+
+### Arquivos afetados
 
 | Arquivo | Mudança |
 |---|---|
-| `src/components/balance-summary.tsx` | `grid-cols-3` → `flex flex-wrap` com `min-w-[90px]` nos cards |
+| `src/lib/onboarding/onboarding-steps.ts` | Adicionar `autoAdvanceOnSelect: true` nos 5 substeps listados + interface |
+| `src/hooks/use-onboarding-tour.tsx` | MutationObserver para auto-avanço em selects com delay de 400ms |
+| `src/components/onboarding/onboarding-tooltip.tsx` | Ocultar botão "Próximo" quando `autoAdvanceOnSelect` está ativo |
+
+Nenhuma migração SQL.
 
