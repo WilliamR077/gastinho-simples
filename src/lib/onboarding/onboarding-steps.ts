@@ -22,6 +22,9 @@ export interface OnboardingSubstep {
   requiresValidation?: boolean;
   validationSelector?: string; // if different from targetSelector
   autoAdvanceOnEvent?: string | string[]; // advance when notifyEvent(name) is called
+  // Auto-advance: when true, selecting a value in the target select/combobox
+  // automatically advances to the next substep after a short delay (no "Próximo" button shown)
+  autoAdvanceOnSelect?: boolean;
   skipLabel?: string;
   focusTarget?: boolean;
   scrollToTarget?: boolean;
@@ -89,6 +92,8 @@ const CARDS_SUBSTEPS: OnboardingSubstep[] = [
     description: "Escolha se o cartão é de crédito, débito ou ambos.",
     emoji: "💳",
     requiresValidation: true,
+    // Auto-advance: ao selecionar o tipo, avança automaticamente sem botão "Próximo"
+    autoAdvanceOnSelect: true,
     scrollToTarget: true,
     placement: "below",
   },
@@ -401,6 +406,8 @@ const EXPENSE_SUBSTEPS: OnboardingSubstep[] = [
     description: "Agora escolha como esse gasto foi pago: PIX, débito ou crédito.",
     emoji: "💳",
     requiresValidation: true,
+    // Auto-advance: ao selecionar a forma de pagamento, avança automaticamente
+    autoAdvanceOnSelect: true,
     scrollToTarget: true,
     placement: "below",
   },
@@ -412,6 +419,8 @@ const EXPENSE_SUBSTEPS: OnboardingSubstep[] = [
     description: "Escolha qual cartão você usou para esse gasto.",
     emoji: "💳",
     requiresValidation: true,
+    // Auto-advance: ao selecionar o cartão, avança automaticamente
+    autoAdvanceOnSelect: true,
     scrollToTarget: true,
     placement: "below",
     condition: () => {
@@ -636,6 +645,8 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         description: "Agora escolha como essa despesa fixa é paga: Pix, débito ou crédito.",
         emoji: "💳",
         requiresValidation: true,
+        // Auto-advance: ao selecionar a forma de pagamento, avança automaticamente
+        autoAdvanceOnSelect: true,
         scrollToTarget: true,
         placement: "below",
       },
@@ -647,6 +658,8 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         description: "Selecione qual cartão é usado nessa despesa fixa.",
         emoji: "💳",
         requiresValidation: true,
+        // Auto-advance: ao selecionar o cartão, avança automaticamente
+        autoAdvanceOnSelect: true,
         scrollToTarget: true,
         placement: "below",
         condition: () => {
