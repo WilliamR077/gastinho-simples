@@ -233,6 +233,47 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(timer);
   }, [isOpen, currentSubstep?.id, createConditionContext]);
 
+  // ─── Auto-advance on select: MutationObserver watches combobox text ──
+  // When autoAdvanceOnSelect is true, selecting a value in the dropdown
+  // triggers advanceSubstep() after 400ms delay for smooth UX
+  useEffect(() => {
+    if (!isOpen || !currentSubstep?.autoAdvanceOnSelect || !currentSubstep?.targetSelector) return;
+
+    const target = findReadyOnboardingTarget(currentSubstep.targetSelector);
+    if (!target) return;
+
+    const combobox = target.querySelector('[role="combobox"]') as HTMLElement | null;
+    if (!combobox) return;
+
+    // Capture initial text to detect real changes
+    const initialText = combobox.textContent?.trim() || "";
+    let advanced = false;
+
+    const observer = new MutationObserver(() => {
+      if (advanced) return;
+      const currentText = combobox.textContent?.trim() || "";
+      // Only advance if text changed from initial AND is not a placeholder
+      if (currentText !== initialText && currentText.length > 0 && !currentText.startsWith("Selecione")) {
+        advanced = true;
+        observer.disconnect();
+        // 400ms delay for dropdown close animation before advancing
+        setTimeout(() => {
+          advanceSubstepInternal();
+        }, 400);
+      }
+    });
+
+    observer.observe(combobox, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [isOpen, currentSubstep?.id, currentSubstep?.autoAdvanceOnSelect, currentSubstep?.targetSelector]);
+
   // ─── Listen for custom events (from category-selector etc) ─
   useEffect(() => {
     if (!isOpen) return;
