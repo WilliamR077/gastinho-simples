@@ -194,7 +194,8 @@ export function OnboardingTooltip({
         </div>
       )}
 
-      {substep.actionType === "select" && substep.requiresValidation && (
+      {/* Auto-advance selects: no "Próximo" button, user just selects and it advances */}
+      {substep.actionType === "select" && substep.requiresValidation && !substep.autoAdvanceOnSelect && (
         <div className="flex gap-2 mt-2">
           {onBack && (
             <Button size="sm" variant="outline" onClick={onBack} className="px-3">
