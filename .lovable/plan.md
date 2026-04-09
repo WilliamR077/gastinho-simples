@@ -1,55 +1,37 @@
 
 
-## Plano: Dashboard mais limpo com indicador de configuração no header
+## Plano: Layout adaptativo no Resumo do Mês para nunca truncar valores
 
-### Resumo
-Remover os dois banners (SetupProgressBanner e UpsellBanner) da home e criar um indicador compacto no header que, ao ser tocado, abre um painel dropdown/popover com o progresso de configuração da conta.
+### Problema
+Com `grid-cols-3` fixo, quando o usuário tem zoom alto ou fonte grande no celular (ou tela muito estreita como Galaxy Z Fold dobrado), os valores monetários ficam com "..." porque o grid força 3 colunas independentemente do espaço disponível. O `break-all` ajuda mas não resolve quando o container inteiro é estreito demais.
 
-### Mudanças
+### Solução
+Trocar o `grid grid-cols-3` por `flex flex-wrap` com largura mínima por card. Assim:
+- Em telas normais: os 3 cards ficam lado a lado (comportamento atual)
+- Em telas muito estreitas ou com zoom: Entradas e Saídas ficam na primeira linha, Saldo desce para uma segunda linha centralizada
+- Os valores nunca são truncados
 
-#### 1. `src/pages/Index.tsx`
-- Remover imports de `SetupProgressBanner` e `UpsellBanner`
-- Remover os dois componentes `<SetupProgressBanner />` e `<UpsellBanner />` do JSX (linhas ~1957-1960)
+### Mudança em `src/components/balance-summary.tsx`
 
-#### 2. `src/components/app-header.tsx` — Indicador de configuração
-- Importar `useOnboardingTour` e `useAuth`
-- Adicionar estado para controlar abertura do painel (`popoverOpen`)
-- Entre o logo e os botões da direita (ou junto aos botões da direita, antes do botão de relatórios), renderizar condicionalmente um botão-ícone compacto:
-  - Ícone: `Sparkles` (consistente com o onboarding existente) com um pequeno dot/badge verde pulsante
-  - Aparece apenas quando `progress.percentage < 100`
-  - Ao atingir 100%, desaparece silenciosamente
-- Usar `Popover` (do shadcn/ui) como container do painel — abre abaixo do botão, alinhado à direita
-- O `PopoverContent` contém:
-  - Título "Configure sua conta"
-  - Barra de progresso (`Progress`) com percentual
-  - Lista de pendências (emoji + label) — máximo 4 itens
-  - Botão CTA "Continuar configuração" que chama `startOnboarding()` e fecha o popover
-- Estilo: `bg-card border border-border rounded-xl shadow-lg`, sem cores gritantes, tom neutro/verde sutil
+Substituir:
+```
+<div className="grid grid-cols-3 gap-2 sm:gap-3">
+```
 
-#### 3. Estilo do indicador no header
-- Botão ghost com `relative` para posicionar o dot
-- Dot: `absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-primary animate-pulse`
-- Quando popover está aberto: highlight sutil no botão (`bg-primary/10`)
-- Touch area mínima de 44x44px (mesmo padrão dos outros botões)
+Por:
+```
+<div className="flex flex-wrap justify-center gap-2 sm:gap-3">
+```
 
-#### 4. Comportamento
-- O `getSetupProgress()` é chamado uma vez ao montar o header (com cache via `useEffect`)
-- Se progresso = 100% → botão não renderiza (cleanup visual completo)
-- Se onboarding está ativo (`isOpen`) → botão não renderiza (evitar conflito)
-- Ao clicar "Continuar configuração" → fecha popover, chama `startOnboarding()`
+E em cada card filho, adicionar `flex-1 min-w-[90px]` para que:
+- `flex-1` permite crescer e ocupar espaço igual quando cabem 3
+- `min-w-[90px]` garante largura mínima — se não couber 3 cards com 90px cada, o terceiro desce automaticamente
 
-#### 5. Arquivos que podem ser removidos (dead code)
-- `src/components/setup-progress-banner.tsx` — não é mais usado em lugar nenhum
-- `src/components/upsell-banner.tsx` — não é mais usado em lugar nenhum
+Também remover `overflow-hidden` e qualquer `truncate` residual dos valores, garantindo que o texto sempre quebre em vez de ser cortado.
 
-### Arquivos afetados
+### Arquivo afetado
 
 | Arquivo | Mudança |
-|---------|---------|
-| `src/pages/Index.tsx` | Remover imports e uso dos 2 banners |
-| `src/components/app-header.tsx` | Adicionar indicador + popover de progresso |
-| `src/components/setup-progress-banner.tsx` | Remover arquivo |
-| `src/components/upsell-banner.tsx` | Remover arquivo |
-
-Nenhuma migração SQL.
+|---|---|
+| `src/components/balance-summary.tsx` | `grid-cols-3` → `flex flex-wrap` com `min-w-[90px]` nos cards |
 
