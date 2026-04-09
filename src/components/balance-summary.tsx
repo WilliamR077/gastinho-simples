@@ -36,7 +36,7 @@ export function BalanceSummary({ totalIncome, totalExpense }: BalanceSummaryProp
         </div>
 
         {/* Saídas */}
-        <div className="text-center bg-red-950 border-2 border-[#370606] border-solid shadow-sm rounded-xl p-1.5 sm:p-2 min-w-0">
+        <div className="text-center bg-red-950 border-2 border-[#370606] border-solid shadow-sm rounded-xl p-1.5 sm:p-2 flex-1 min-w-[90px]">
           <div className="flex items-center justify-center gap-1 text-red-600 dark:text-red-400 mb-1">
             <TrendingDown className="h-3.5 w-3.5 flex-shrink-0" />
             <span className="text-xs font-medium">Saídas</span>
