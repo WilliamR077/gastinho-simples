@@ -1,4 +1,5 @@
 import { useState, useEffect, type CSSProperties, type ReactNode } from "react";
+import { adMobService } from "@/services/admob-service";
 import { Expense, categoryLabels, categoryIcons, ExpenseCategory } from "@/types/expense";
 import { Income, incomeCategoryLabels, incomeCategoryIcons } from "@/types/income";
 import { RecurringExpense } from "@/types/recurring-expense";
@@ -91,6 +92,15 @@ export function TransactionDetailSheet({
   const [siblingExpenseInstallments, setSiblingExpenseInstallments] = useState<{ id: string; installment_number: number; total_installments: number; expense_date: string; amount: number; description: string; paid_by: string | null }[]>([]);
   const { categories } = useCategories();
   const { categories: incomeCats } = useIncomeCategories();
+
+  // Esconder banner do AdMob quando o modal abre, reexibir ao fechar
+  useEffect(() => {
+    if (open) {
+      adMobService.removeBanner();
+    } else {
+      adMobService.showBanner();
+    }
+  }, [open]);
 
   useEffect(() => {
     if (user && open) {
