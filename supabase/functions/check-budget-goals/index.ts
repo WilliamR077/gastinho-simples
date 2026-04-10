@@ -79,11 +79,46 @@ serve(async (req) => {
 
     let alertsSent = 0;
 
+    // Agrupar metas por user_id para buscar notification_settings uma vez por usuário
+    const userSettingsCache: Record<string, any> = {};
+
     for (const goal of goals || []) {
       console.log(`Processing goal ${goal.id} for user ${goal.user_id}`);
 
       const isIncomeGoal = goal.type.startsWith("income_");
       const isBalanceGoal = goal.type === "balance_target";
+
+      // Buscar notification_settings do usuário (com cache)
+      if (!(goal.user_id in userSettingsCache)) {
+        const { data: settings } = await supabase
+          .from("notification_settings")
+          .select("is_enabled, notify_expense_goals, notify_income_goals, notify_balance_goals")
+          .eq("user_id", goal.user_id)
+          .single();
+        userSettingsCache[goal.user_id] = settings;
+      }
+
+      const userSettings = userSettingsCache[goal.user_id];
+
+      // Respeitar toggles de notificação do usuário
+      if (userSettings) {
+        if (!userSettings.is_enabled) {
+          console.log(`Notifications disabled globally for user ${goal.user_id}, skipping`);
+          continue;
+        }
+        if (isBalanceGoal && userSettings.notify_balance_goals === false) {
+          console.log(`Balance goal notifications disabled for user ${goal.user_id}, skipping`);
+          continue;
+        }
+        if (isIncomeGoal && userSettings.notify_income_goals === false) {
+          console.log(`Income goal notifications disabled for user ${goal.user_id}, skipping`);
+          continue;
+        }
+        if (!isIncomeGoal && !isBalanceGoal && userSettings.notify_expense_goals === false) {
+          console.log(`Expense goal notifications disabled for user ${goal.user_id}, skipping`);
+          continue;
+        }
+      }
       let totalValue = 0;
 
       if (isBalanceGoal) {
