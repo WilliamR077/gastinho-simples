@@ -93,6 +93,15 @@ export function TransactionDetailSheet({
   const { categories } = useCategories();
   const { categories: incomeCats } = useIncomeCategories();
 
+  // Esconder banner do AdMob quando o modal abre, reexibir ao fechar
+  useEffect(() => {
+    if (open) {
+      adMobService.removeBanner();
+    } else {
+      adMobService.showBanner();
+    }
+  }, [open]);
+
   useEffect(() => {
     if (user && open) {
       supabase
