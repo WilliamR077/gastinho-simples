@@ -1,4 +1,5 @@
 import { useState, useEffect, type CSSProperties, type ReactNode } from "react";
+import { adMobService } from "@/services/admob-service";
 import { Expense, categoryLabels, categoryIcons, ExpenseCategory } from "@/types/expense";
 import { Income, incomeCategoryLabels, incomeCategoryIcons } from "@/types/income";
 import { RecurringExpense } from "@/types/recurring-expense";
