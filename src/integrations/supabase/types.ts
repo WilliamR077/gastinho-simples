@@ -442,6 +442,9 @@ export type Database = {
           is_enabled: boolean
           notify_1_day_before: boolean
           notify_3_days_before: boolean
+          notify_balance_goals: boolean
+          notify_expense_goals: boolean
+          notify_income_goals: boolean
           notify_on_day: boolean
           updated_at: string
           user_id: string
@@ -452,6 +455,9 @@ export type Database = {
           is_enabled?: boolean
           notify_1_day_before?: boolean
           notify_3_days_before?: boolean
+          notify_balance_goals?: boolean
+          notify_expense_goals?: boolean
+          notify_income_goals?: boolean
           notify_on_day?: boolean
           updated_at?: string
           user_id: string
@@ -462,6 +468,9 @@ export type Database = {
           is_enabled?: boolean
           notify_1_day_before?: boolean
           notify_3_days_before?: boolean
+          notify_balance_goals?: boolean
+          notify_expense_goals?: boolean
+          notify_income_goals?: boolean
           notify_on_day?: boolean
           updated_at?: string
           user_id?: string
