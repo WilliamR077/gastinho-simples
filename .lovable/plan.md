@@ -1,50 +1,36 @@
 
 
-## Plano: Auto-avanço em selects do tutorial
+## Plano: Corrigir notificações repetidas de metas (deploy da lógica de cruzamento de faixa)
 
 ### Problema
-Nos passos com campo select (tipo do cartão, forma de pagamento, selecionar cartão), o usuário precisa selecionar a opção **e depois** clicar "Próximo". São cliques desnecessários que tornam o tutorial arrastado.
+A deduplicação atual na linha 239 usa `.eq("alert_date", today)` — ou seja, verifica apenas se já enviou **hoje**. Como o cron roda todo dia, se a meta continua em 100%, o usuário recebe a mesma notificação **todo dia**, indefinidamente. É exatamente o que mostra o print.
 
 ### Solução
-Adicionar uma nova propriedade `autoAdvanceOnSelect` nos substeps de tipo `select`. Quando ativa, o sistema detecta a mudança de valor no select e avança automaticamente após um breve delay (400ms para não parecer brusco), **sem mostrar botão "Próximo"**.
+Trocar a deduplicação de "por dia" para "por mês/ciclo". Dentro de um mesmo mês, cada nível (80%, 95%, 100%) só é enviado **uma vez**. Só reseta no próximo mês.
 
-### Substeps afetados
+### Mudança no `supabase/functions/check-budget-goals/index.ts`
 
-| Passo | Substep ID | Campo |
-|---|---|---|
-| 1 — Cartão | `select-card-type` | Tipo do cartão |
-| 2 — Despesa | `expense-payment` | Forma de pagamento |
-| 2 — Despesa | `expense-card` | Selecionar cartão |
-| 3 — Despesa Fixa | `recurring-payment` | Forma de pagamento |
-| 3 — Despesa Fixa | `recurring-card` | Selecionar cartão |
+**Antes (linha 234-239):**
+```ts
+.eq("alert_date", today)
+```
 
-**Não afetados**: `expense-installments` (parcelas), `recurring-day` (dia da cobrança) — mantêm botão "Próximo".
+**Depois:**
+```ts
+.gte("alert_date", monthStart)
+```
 
-### Lógica de auto-avanço
+Isso garante que, se já existe um alerta de nível 100 para aquele goal_id em qualquer dia do mês atual, não envia de novo. Só vai enviar novamente no próximo mês quando `monthStart` mudar.
 
-1. Adicionar `autoAdvanceOnSelect?: boolean` na interface `OnboardingSubstep`
-2. No `use-onboarding-tour.tsx`, criar um `MutationObserver` que observa o elemento target do substep atual quando `autoAdvanceOnSelect === true`
-3. O observer monitora mudanças no texto do `[role="combobox"]` (trigger do Radix Select) — quando o texto muda de placeholder ("Selecione...") para um valor real, dispara `advanceSubstep()` após 400ms de delay
-4. O delay evita avanço brusco e dá tempo para a animação de fechamento do dropdown
+### Também: respeitar toggles de notificação
 
-### Mudanças no tooltip
+Consultar `notification_settings` do usuário antes de enviar, verificando os toggles `notify_expense_goals`, `notify_income_goals` e `notify_balance_goals` (criados na migration anterior). Se o toggle estiver desligado, pula o envio.
 
-No `onboarding-tooltip.tsx`, quando o substep tem `autoAdvanceOnSelect: true`, **não renderizar** o bloco de botões "Próximo". O tooltip mostra apenas título + descrição, sem botão de ação — a seleção no dropdown é a ação.
-
-### Garantia de não-regressão
-
-- A propriedade é opt-in (`autoAdvanceOnSelect`), então substeps que não a definem continuam com botão "Próximo"
-- O observer é limpo via cleanup do `useEffect`, evitando memory leaks
-- A validação `isCurrentTargetValid` continua existindo para os substeps sem auto-avanço
-- Substeps de `fill`, `click`, `submit`, `info`, `completion` não são afetados
-
-### Arquivos afetados
+### Arquivo afetado
 
 | Arquivo | Mudança |
 |---|---|
-| `src/lib/onboarding/onboarding-steps.ts` | Adicionar `autoAdvanceOnSelect: true` nos 5 substeps listados + interface |
-| `src/hooks/use-onboarding-tour.tsx` | MutationObserver para auto-avanço em selects com delay de 400ms |
-| `src/components/onboarding/onboarding-tooltip.tsx` | Ocultar botão "Próximo" quando `autoAdvanceOnSelect` está ativo |
+| `supabase/functions/check-budget-goals/index.ts` | `.eq("alert_date", today)` → `.gte("alert_date", monthStart)` + consultar `notification_settings` |
 
-Nenhuma migração SQL.
+Após editar, fazer deploy da edge function.
 
