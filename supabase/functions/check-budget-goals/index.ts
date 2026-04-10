@@ -271,7 +271,7 @@ serve(async (req) => {
           .select("id")
           .eq("goal_id", goal.id)
           .eq("alert_level", alertLevel)
-          .eq("alert_date", today)
+          .gte("alert_date", monthStart)
           .single();
 
         if (!existingAlert) {
