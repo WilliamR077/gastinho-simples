@@ -361,7 +361,7 @@ export function CardManager() {
     return "bg-red-500";
   };
 
-
+  if (loading) {
     return <div className="text-center py-4">Carregando...</div>;
   }
 
