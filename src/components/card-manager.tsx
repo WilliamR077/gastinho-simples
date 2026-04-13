@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardFormData, CardType, cardTypeLabels } from "@/types/card";
 import { useToast } from "@/hooks/use-toast";
@@ -10,11 +10,29 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, CreditCard, Crown, MoreVertical, Pencil, Trash2, Check, CalendarClock, CalendarCheck, Loader2 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Plus, CreditCard, Crown, MoreVertical, Pencil, Trash2, Check, CalendarClock, CalendarCheck, Loader2, AlertTriangle } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useNavigate } from "react-router-dom";
-import { getNextBillingDates, getClosingDateForBillingMonth } from "@/utils/billing-period";
+import { getNextBillingDates, getClosingDateForBillingMonth, calculateBillingPeriod } from "@/utils/billing-period";
+import { formatCurrencyLocaleWithVisibility } from "@/lib/utils";
+
+interface CardExpense {
+  amount: number;
+  expense_date: string;
+  card_id: string;
+  installment_group_id: string | null;
+  installment_number: number | null;
+  total_installments: number | null;
+}
+
+interface CardLimitInfo {
+  currentInvoice: number;
+  committedLimit: number;
+  available: number;
+  percentage: number;
+}
 
 export function CardManager() {
   const [cards, setCards] = useState<Card[]>([]);
