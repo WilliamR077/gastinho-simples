@@ -288,7 +288,80 @@ export function CardManager() {
     return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}`;
   };
 
-  if (loading) {
+  const getCardLimitInfo = useMemo(() => {
+    const infoMap = new Map<string, CardLimitInfo>();
+
+    cards.forEach(card => {
+      const limit = Number(card.card_limit);
+      if (!limit || limit <= 0) return;
+
+      const isCreditCard = card.card_type === "credit" || card.card_type === "both";
+      if (!isCreditCard) return;
+
+      const config = {
+        opening_day: card.opening_day || 1,
+        closing_day: card.closing_day || 15,
+        due_day: (card as any).due_day,
+        days_before_due: (card as any).days_before_due,
+      };
+
+      // Get current billing month
+      const billing = getNextBillingDates(config, new Date());
+      const currentBillingMonth = billing.billingMonth;
+
+      const myExpenses = cardExpenses.filter(e => e.card_id === card.id);
+
+      // 1. Current invoice: expenses that fall in the current billing period
+      let currentInvoice = 0;
+      myExpenses.forEach(exp => {
+        const expDate = new Date(exp.expense_date);
+        const period = calculateBillingPeriod(expDate, config);
+        if (period === currentBillingMonth) {
+          currentInvoice += Number(exp.amount);
+        }
+      });
+
+      // 2. Future installment balance: for each installment_group_id,
+      // find the latest installment and calculate remaining future amount
+      let futureInstallments = 0;
+      const groupMap = new Map<string, CardExpense>();
+
+      myExpenses.forEach(exp => {
+        if (!exp.installment_group_id || !exp.total_installments || exp.total_installments <= 1) return;
+
+        const existing = groupMap.get(exp.installment_group_id);
+        if (!existing || (exp.installment_number || 1) > (existing.installment_number || 1)) {
+          groupMap.set(exp.installment_group_id, exp);
+        }
+      });
+
+      groupMap.forEach(exp => {
+        const num = exp.installment_number || 1;
+        const total = exp.total_installments || 1;
+        const remaining = total - num; // future installments after the latest one
+        if (remaining > 0) {
+          futureInstallments += Number(exp.amount) * remaining;
+        }
+      });
+
+      const committedLimit = currentInvoice + futureInstallments;
+      const available = Math.max(0, limit - committedLimit);
+      const percentage = Math.min(100, (committedLimit / limit) * 100);
+
+      infoMap.set(card.id, { currentInvoice, committedLimit, available, percentage });
+    });
+
+    return infoMap;
+  }, [cards, cardExpenses]);
+
+  const getLimitBarColor = (pct: number): string => {
+    if (pct < 70) return "bg-emerald-500";
+    if (pct < 85) return "bg-yellow-500";
+    if (pct < 95) return "bg-orange-500";
+    return "bg-red-500";
+  };
+
+
     return <div className="text-center py-4">Carregando...</div>;
   }
 
