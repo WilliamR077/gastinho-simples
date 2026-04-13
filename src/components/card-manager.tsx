@@ -36,6 +36,7 @@ interface CardLimitInfo {
 
 export function CardManager() {
   const [cards, setCards] = useState<Card[]>([]);
+  const [cardExpenses, setCardExpenses] = useState<CardExpense[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingCard, setEditingCard] = useState<Card | null>(null);
