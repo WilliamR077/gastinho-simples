@@ -545,6 +545,7 @@ export function CardManager() {
       <div className="space-y-3">
         {cards.map((card) => {
           const billing = getCardBillingInfo(card);
+          const limitInfo = getCardLimitInfo.get(card.id);
           return (
             <CardUI key={card.id} className="overflow-hidden">
               <div className="flex">
@@ -558,11 +559,6 @@ export function CardManager() {
                           {cardTypeLabels[card.card_type as CardType] || card.card_type}
                         </Badge>
                       </div>
-                      {card.card_limit && (
-                        <p className="text-sm text-muted-foreground">
-                          Limite: R$ {Number(card.card_limit).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </p>
-                      )}
                       {billing && (
                         <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-xs text-muted-foreground">
                           <span className="flex items-center gap-1">
@@ -594,6 +590,56 @@ export function CardManager() {
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
+
+                  {/* Limit usage bar */}
+                  {limitInfo && (
+                    <div className="mt-3 space-y-2 border-t pt-3">
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>Limite comprometido</span>
+                        <span className="font-medium">{Math.round(limitInfo.percentage)}%</span>
+                      </div>
+                      <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-secondary">
+                        <div
+                          className={`h-full rounded-full transition-all ${getLimitBarColor(limitInfo.percentage)}`}
+                          style={{ width: `${Math.min(100, limitInfo.percentage)}%` }}
+                        />
+                      </div>
+                      <div className="space-y-0.5 text-xs">
+                        <p className="text-foreground">
+                          <span className="text-muted-foreground">Comprometido:</span>{" "}
+                          <span className="font-medium">
+                            {formatCurrencyLocaleWithVisibility(limitInfo.committedLimit, false)}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {" "}de {formatCurrencyLocaleWithVisibility(Number(card.card_limit), false)}
+                          </span>
+                        </p>
+                        <p className="text-foreground">
+                          <span className="text-muted-foreground">Disponível estimado:</span>{" "}
+                          <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                            {formatCurrencyLocaleWithVisibility(limitInfo.available, false)}
+                          </span>
+                        </p>
+                        <p className="text-foreground">
+                          <span className="text-muted-foreground">Fatura atual:</span>{" "}
+                          <span className="font-medium">
+                            {formatCurrencyLocaleWithVisibility(limitInfo.currentInvoice, false)}
+                          </span>
+                        </p>
+                      </div>
+                      <p className="flex items-center gap-1 text-[10px] text-muted-foreground mt-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        Estimativa — não reflete pagamentos já realizados
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Static limit (debit cards or cards without expenses) */}
+                  {!limitInfo && card.card_limit && Number(card.card_limit) > 0 && (
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Limite: {formatCurrencyLocaleWithVisibility(Number(card.card_limit), false)}
+                    </p>
+                  )}
                 </div>
               </div>
             </CardUI>
