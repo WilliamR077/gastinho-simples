@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardFormData, CardType, cardTypeLabels } from "@/types/card";
 import { useToast } from "@/hooks/use-toast";
@@ -10,14 +10,33 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, CreditCard, Crown, MoreVertical, Pencil, Trash2, Check, CalendarClock, CalendarCheck, Loader2 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Plus, CreditCard, Crown, MoreVertical, Pencil, Trash2, Check, CalendarClock, CalendarCheck, Loader2, AlertTriangle } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useNavigate } from "react-router-dom";
-import { getNextBillingDates, getClosingDateForBillingMonth } from "@/utils/billing-period";
+import { getNextBillingDates, getClosingDateForBillingMonth, calculateBillingPeriod } from "@/utils/billing-period";
+import { formatCurrencyLocaleWithVisibility } from "@/lib/utils";
+
+interface CardExpense {
+  amount: number;
+  expense_date: string;
+  card_id: string;
+  installment_group_id: string | null;
+  installment_number: number | null;
+  total_installments: number | null;
+}
+
+interface CardLimitInfo {
+  currentInvoice: number;
+  committedLimit: number;
+  available: number;
+  percentage: number;
+}
 
 export function CardManager() {
   const [cards, setCards] = useState<Card[]>([]);
+  const [cardExpenses, setCardExpenses] = useState<CardExpense[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingCard, setEditingCard] = useState<Card | null>(null);
@@ -83,7 +102,23 @@ export function CardManager() {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      setCards(data || []);
+      const loadedCards = data || [];
+      setCards(loadedCards);
+
+      // Fetch expenses for cards with limits
+      const cardsWithLimit = loadedCards.filter(c => c.card_limit && Number(c.card_limit) > 0);
+      if (cardsWithLimit.length > 0) {
+        const cardIds = cardsWithLimit.map(c => c.id);
+        const { data: expData } = await supabase
+          .from("expenses")
+          .select("amount, expense_date, card_id, installment_group_id, installment_number, total_installments")
+          .eq("user_id", user.id)
+          .eq("payment_method", "credit")
+          .in("card_id", cardIds);
+        setCardExpenses(expData || []);
+      } else {
+        setCardExpenses([]);
+      }
     } catch (error) {
       console.error("Erro ao carregar cartões:", error);
       toast({
@@ -251,6 +286,79 @@ export function CardManager() {
 
   const formatDateShort = (date: Date) => {
     return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}`;
+  };
+
+  const getCardLimitInfo = useMemo(() => {
+    const infoMap = new Map<string, CardLimitInfo>();
+
+    cards.forEach(card => {
+      const limit = Number(card.card_limit);
+      if (!limit || limit <= 0) return;
+
+      const isCreditCard = card.card_type === "credit" || card.card_type === "both";
+      if (!isCreditCard) return;
+
+      const config = {
+        opening_day: card.opening_day || 1,
+        closing_day: card.closing_day || 15,
+        due_day: (card as any).due_day,
+        days_before_due: (card as any).days_before_due,
+      };
+
+      // Get current billing month
+      const billing = getNextBillingDates(config, new Date());
+      const currentBillingMonth = billing.billingMonth;
+
+      const myExpenses = cardExpenses.filter(e => e.card_id === card.id);
+
+      // 1. Current invoice: expenses that fall in the current billing period
+      let currentInvoice = 0;
+      myExpenses.forEach(exp => {
+        const expDate = new Date(exp.expense_date);
+        const period = calculateBillingPeriod(expDate, config);
+        if (period === currentBillingMonth) {
+          currentInvoice += Number(exp.amount);
+        }
+      });
+
+      // 2. Future installment balance: for each installment_group_id,
+      // find the latest installment and calculate remaining future amount
+      let futureInstallments = 0;
+      const groupMap = new Map<string, CardExpense>();
+
+      myExpenses.forEach(exp => {
+        if (!exp.installment_group_id || !exp.total_installments || exp.total_installments <= 1) return;
+
+        const existing = groupMap.get(exp.installment_group_id);
+        if (!existing || (exp.installment_number || 1) > (existing.installment_number || 1)) {
+          groupMap.set(exp.installment_group_id, exp);
+        }
+      });
+
+      groupMap.forEach(exp => {
+        const num = exp.installment_number || 1;
+        const total = exp.total_installments || 1;
+        const remaining = total - num; // future installments after the latest one
+        if (remaining > 0) {
+          futureInstallments += Number(exp.amount) * remaining;
+        }
+      });
+
+      const committedLimit = currentInvoice + futureInstallments;
+      const available = Math.max(0, limit - committedLimit);
+      const percentage = Math.min(100, (committedLimit / limit) * 100);
+
+      infoMap.set(card.id, { currentInvoice, committedLimit, available, percentage });
+    });
+
+    return infoMap;
+  }, [cards, cardExpenses]);
+
+  const getLimitBarColor = (pct: number): string => {
+    if (pct < 70) return "bg-emerald-500";
+    if (pct < 85) return "bg-yellow-500";
+    if (pct < 95) return "bg-orange-500";
+    return "bg-red-500";
   };
 
   if (loading) {
@@ -437,6 +545,7 @@ export function CardManager() {
       <div className="space-y-3">
         {cards.map((card) => {
           const billing = getCardBillingInfo(card);
+          const limitInfo = getCardLimitInfo.get(card.id);
           return (
             <CardUI key={card.id} className="overflow-hidden">
               <div className="flex">
@@ -450,11 +559,6 @@ export function CardManager() {
                           {cardTypeLabels[card.card_type as CardType] || card.card_type}
                         </Badge>
                       </div>
-                      {card.card_limit && (
-                        <p className="text-sm text-muted-foreground">
-                          Limite: R$ {Number(card.card_limit).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </p>
-                      )}
                       {billing && (
                         <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-xs text-muted-foreground">
                           <span className="flex items-center gap-1">
@@ -486,6 +590,56 @@ export function CardManager() {
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
+
+                  {/* Limit usage bar */}
+                  {limitInfo && (
+                    <div className="mt-3 space-y-2 border-t pt-3">
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>Limite comprometido</span>
+                        <span className="font-medium">{Math.round(limitInfo.percentage)}%</span>
+                      </div>
+                      <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-secondary">
+                        <div
+                          className={`h-full rounded-full transition-all ${getLimitBarColor(limitInfo.percentage)}`}
+                          style={{ width: `${Math.min(100, limitInfo.percentage)}%` }}
+                        />
+                      </div>
+                      <div className="space-y-0.5 text-xs">
+                        <p className="text-foreground">
+                          <span className="text-muted-foreground">Comprometido:</span>{" "}
+                          <span className="font-medium">
+                            {formatCurrencyLocaleWithVisibility(limitInfo.committedLimit, false)}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {" "}de {formatCurrencyLocaleWithVisibility(Number(card.card_limit), false)}
+                          </span>
+                        </p>
+                        <p className="text-foreground">
+                          <span className="text-muted-foreground">Disponível estimado:</span>{" "}
+                          <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                            {formatCurrencyLocaleWithVisibility(limitInfo.available, false)}
+                          </span>
+                        </p>
+                        <p className="text-foreground">
+                          <span className="text-muted-foreground">Fatura atual:</span>{" "}
+                          <span className="font-medium">
+                            {formatCurrencyLocaleWithVisibility(limitInfo.currentInvoice, false)}
+                          </span>
+                        </p>
+                      </div>
+                      <p className="flex items-center gap-1 text-[10px] text-muted-foreground mt-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        Estimativa — não reflete pagamentos já realizados
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Static limit (debit cards or cards without expenses) */}
+                  {!limitInfo && card.card_limit && Number(card.card_limit) > 0 && (
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Limite: {formatCurrencyLocaleWithVisibility(Number(card.card_limit), false)}
+                    </p>
+                  )}
                 </div>
               </div>
             </CardUI>
