@@ -1,36 +1,52 @@
 
 
-## Plano: Corrigir notificações repetidas de metas (deploy da lógica de cruzamento de faixa)
+## Plano: Barra de uso do limite com separação fatura atual vs. limite comprometido
 
-### Problema
-A deduplicação atual na linha 239 usa `.eq("alert_date", today)` — ou seja, verifica apenas se já enviou **hoje**. Como o cron roda todo dia, se a meta continua em 100%, o usuário recebe a mesma notificação **todo dia**, indefinidamente. É exatamente o que mostra o print.
+### Objetivo
+Mostrar em cada card de cartão (quando `card_limit` estiver preenchido) três informações distintas:
+- **Limite comprometido** (barra de progresso): inclui fatura atual + saldo restante de parcelas futuras
+- **Fatura atual**: valor que cai na fatura aberta do mês
+- **Disponível estimado**: `card_limit - limite comprometido`
 
-### Solução
-Trocar a deduplicação de "por dia" para "por mês/ciclo". Dentro de um mesmo mês, cada nível (80%, 95%, 100%) só é enviado **uma vez**. Só reseta no próximo mês.
+### Lógica de cálculo
 
-### Mudança no `supabase/functions/check-budget-goals/index.ts`
+**Fatura atual (R$ W):**
+- Despesas com `payment_method = 'credit'` e `card_id = X` cuja `expense_date` cai no período da fatura aberta (calculado via `calculateBillingPeriod` comparando com o `billingMonth` atual do cartão)
+- Inclui parcelas cujo `installment_number` corresponde ao mês atual
 
-**Antes (linha 234-239):**
-```ts
-.eq("alert_date", today)
+**Limite comprometido (R$ X):**
+- Fatura atual (R$ W) +
+- Saldo restante de parcelas futuras: para cada `installment_group_id` distinto que aparece nas despesas do cartão, calcular `amount × (total_installments - installment_number)` usando apenas a parcela de maior `installment_number` (a mais recente), para obter quanto ainda vai cair nas faturas seguintes
+- Recorrentes: **não** soma o template recorrente; só conta as despesas reais já geradas que caem na fatura atual (já estão contadas em "fatura atual")
+
+**Disponível estimado (R$ Z):**
+- `card_limit - limite comprometido`
+
+### Exibição no card
+
+Abaixo das datas de fechamento/vencimento, quando `card_limit` > 0:
+
+```text
+[===████████████░░░░░░] 72%
+Limite comprometido: R$ 3.600 de R$ 5.000
+Disponível estimado: R$ 1.400
+Fatura atual: R$ 1.800
+⚠️ Estimativa — não reflete pagamentos já realizados
 ```
 
-**Depois:**
-```ts
-.gte("alert_date", monthStart)
-```
+Cores da barra: verde (<70%), amarelo (70-85%), laranja (85-95%), vermelho (>95%)
 
-Isso garante que, se já existe um alerta de nível 100 para aquele goal_id em qualquer dia do mês atual, não envia de novo. Só vai enviar novamente no próximo mês quando `monthStart` mudar.
+### Implementação
 
-### Também: respeitar toggles de notificação
+Ao carregar os cartões, buscar também as despesas de crédito de cada cartão que tenha limite. Agrupar os cálculos em uma função auxiliar dentro do componente.
 
-Consultar `notification_settings` do usuário antes de enviar, verificando os toggles `notify_expense_goals`, `notify_income_goals` e `notify_balance_goals` (criados na migration anterior). Se o toggle estiver desligado, pula o envio.
+**Query:** Uma única query buscando todas as despesas de crédito dos cartões com limite (filtrando por `card_id in (...)`, `payment_method = 'credit'`). Campos necessários: `amount`, `expense_date`, `card_id`, `installment_group_id`, `installment_number`, `total_installments`.
 
 ### Arquivo afetado
 
 | Arquivo | Mudança |
 |---|---|
-| `supabase/functions/check-budget-goals/index.ts` | `.eq("alert_date", today)` → `.gte("alert_date", monthStart)` + consultar `notification_settings` |
+| `src/components/card-manager.tsx` | Buscar despesas de crédito, calcular fatura atual + limite comprometido, renderizar barra + textos |
 
-Após editar, fazer deploy da edge function.
+Nenhuma migração SQL necessária.
 
