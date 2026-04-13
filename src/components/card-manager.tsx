@@ -102,7 +102,23 @@ export function CardManager() {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      setCards(data || []);
+      const loadedCards = data || [];
+      setCards(loadedCards);
+
+      // Fetch expenses for cards with limits
+      const cardsWithLimit = loadedCards.filter(c => c.card_limit && Number(c.card_limit) > 0);
+      if (cardsWithLimit.length > 0) {
+        const cardIds = cardsWithLimit.map(c => c.id);
+        const { data: expData } = await supabase
+          .from("expenses")
+          .select("amount, expense_date, card_id, installment_group_id, installment_number, total_installments")
+          .eq("user_id", user.id)
+          .eq("payment_method", "credit")
+          .in("card_id", cardIds);
+        setCardExpenses(expData || []);
+      } else {
+        setCardExpenses([]);
+      }
     } catch (error) {
       console.error("Erro ao carregar cartões:", error);
       toast({
