@@ -551,7 +551,13 @@ export function CardManager() {
                       </div>
                       <div className="space-y-0.5 text-xs">
                         <p className="text-foreground">
-                          <span className="text-muted-foreground">Comprometido:</span>{" "}
+                          <span className="text-muted-foreground">Fatura aberta projetada:</span>{" "}
+                          <span className="font-medium">
+                            {formatCurrencyLocaleWithVisibility(limitInfo.currentInvoice, false)}
+                          </span>
+                        </p>
+                        <p className="text-foreground">
+                          <span className="text-muted-foreground">Limite comprometido:</span>{" "}
                           <span className="font-medium">
                             {formatCurrencyLocaleWithVisibility(limitInfo.committedLimit, false)}
                           </span>
@@ -565,16 +571,10 @@ export function CardManager() {
                             {formatCurrencyLocaleWithVisibility(limitInfo.available, false)}
                           </span>
                         </p>
-                        <p className="text-foreground">
-                          <span className="text-muted-foreground">Fatura atual:</span>{" "}
-                          <span className="font-medium">
-                            {formatCurrencyLocaleWithVisibility(limitInfo.currentInvoice, false)}
-                          </span>
-                        </p>
                       </div>
                       <p className="flex items-center gap-1 text-[10px] text-muted-foreground mt-1">
                         <AlertTriangle className="h-3 w-3" />
-                        Estimativa — não reflete pagamentos já realizados
+                        Inclui parcelas previstas na fatura e saldo futuro comprometido
                       </p>
                     </div>
                   )}
