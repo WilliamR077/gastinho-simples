@@ -1,52 +1,64 @@
 
 
-## Plano: Barra de uso do limite com separação fatura atual vs. limite comprometido
+## Plano: Corrigir cálculo de limite e ajustar rótulos do card
 
-### Objetivo
-Mostrar em cada card de cartão (quando `card_limit` estiver preenchido) três informações distintas:
-- **Limite comprometido** (barra de progresso): inclui fatura atual + saldo restante de parcelas futuras
-- **Fatura atual**: valor que cai na fatura aberta do mês
-- **Disponível estimado**: `card_limit - limite comprometido`
+### Decisão de produto oficializada
 
-### Lógica de cálculo
+- **Home** = gasto lançado no mês (despesas reais + fixas geradas, modo calendário ou fatura)
+- **Card do cartão** = fatura aberta projetada completa (todas as despesas cujo billing period = fatura atual, incluindo parcelas previstas)
+- **Limite comprometido** = fatura aberta projetada + saldo futuro de parcelas ainda comprometidas
+- Divergência entre home e card é comportamento esperado
 
-**Fatura atual (R$ W):**
-- Despesas com `payment_method = 'credit'` e `card_id = X` cuja `expense_date` cai no período da fatura aberta (calculado via `calculateBillingPeriod` comparando com o `billingMonth` atual do cartão)
-- Inclui parcelas cujo `installment_number` corresponde ao mês atual
+### Sobre o R$ 32,09
 
-**Limite comprometido (R$ X):**
-- Fatura atual (R$ W) +
-- Saldo restante de parcelas futuras: para cada `installment_group_id` distinto que aparece nas despesas do cartão, calcular `amount × (total_installments - installment_number)` usando apenas a parcela de maior `installment_number` (a mais recente), para obter quanto ainda vai cair nas faturas seguintes
-- Recorrentes: **não** soma o template recorrente; só conta as despesas reais já geradas que caem na fatura atual (já estão contadas em "fatura atual")
+Não reproduzível com dados e código atuais. Diagnóstico final: estado anterior ou transitório dos dados. A nova função recalcula do zero sem depender de estado prévio — o problema não se repete.
 
-**Disponível estimado (R$ Z):**
-- `card_limit - limite comprometido`
+### Mudanças
 
-### Exibição no card
+**1. Novo arquivo: `src/utils/card-limit-calculator.ts`**
 
-Abaixo das datas de fechamento/vencimento, quando `card_limit` > 0:
+Função pura `calculateCardLimitBreakdown(expenses, cardId, config)` retornando `{ currentInvoice, futureInstallments, committedLimit, available, percentage }`.
 
-```text
-[===████████████░░░░░░] 72%
-Limite comprometido: R$ 3.600 de R$ 5.000
-Disponível estimado: R$ 1.400
-Fatura atual: R$ 1.800
-⚠️ Estimativa — não reflete pagamentos já realizados
+Regras:
+- Usa `parseLocalDate()` para todas as datas
+- Fatura atual: despesas cujo `calculateBillingPeriod() === currentBillingMonth`
+- Para cada `installment_group_id`, encontra a parcela que cai na fatura atual (N/T), calcula `futureInstallments += amount × (T - N)`. Se o grupo não tem parcela na fatura atual, ignora
+- Não inclui templates de `recurring_expenses`
+
+**2. Arquivo: `src/components/card-manager.tsx`**
+
+- Remover lógica inline de cálculo (linhas 291-355)
+- Importar e usar `calculateCardLimitBreakdown`
+- Trocar `new Date(exp.expense_date)` por `parseLocalDate()` (já feito na nova função)
+
+**3. Ajuste de rótulos na UI** (linhas 596-634)
+
+Antes:
+```
+Limite comprometido ... X%
+Comprometido: R$ X de R$ Y
+Disponível estimado: R$ Z
+Fatura atual: R$ W
+Estimativa — não reflete pagamentos já realizados
 ```
 
-Cores da barra: verde (<70%), amarelo (70-85%), laranja (85-95%), vermelho (>95%)
+Depois:
+```
+Limite comprometido ... X%
+Fatura aberta projetada: R$ W
+Limite comprometido: R$ X de R$ Y
+Disponível estimado: R$ Z
+Inclui parcelas previstas na fatura e saldo futuro comprometido
+```
 
-### Implementação
+Ordem: fatura primeiro (mais concreto), comprometido depois (fatura + futuro), disponível por último. Aviso reescrito para ser descritivo em vez de apenas "estimativa".
 
-Ao carregar os cartões, buscar também as despesas de crédito de cada cartão que tenha limite. Agrupar os cálculos em uma função auxiliar dentro do componente.
-
-**Query:** Uma única query buscando todas as despesas de crédito dos cartões com limite (filtrando por `card_id in (...)`, `payment_method = 'credit'`). Campos necessários: `amount`, `expense_date`, `card_id`, `installment_group_id`, `installment_number`, `total_installments`.
-
-### Arquivo afetado
+### Arquivos afetados
 
 | Arquivo | Mudança |
 |---|---|
-| `src/components/card-manager.tsx` | Buscar despesas de crédito, calcular fatura atual + limite comprometido, renderizar barra + textos |
+| `src/utils/card-limit-calculator.ts` | NOVO — função pura de cálculo |
+| `src/components/card-manager.tsx` | Usar nova função + rótulos atualizados |
 
 Nenhuma migração SQL necessária.
 
