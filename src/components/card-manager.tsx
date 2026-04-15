@@ -311,12 +311,19 @@ export function CardManager() {
         days_before_due: (card as any).days_before_due,
       };
 
-      const breakdown = calculateCardLimitBreakdown(cardExpenses, card.id, config, limit);
+      // Source of truth compartilhada: gasto atual = mesma lógica da home
+      const currentSpend = calculateCreditCardSpendById(
+        cardFullExpenses,
+        cardRecurringExpenses,
+        card.id
+      );
+
+      const breakdown = calculateCardLimitBreakdown(currentSpend, cardExpenses, card.id, config, limit);
       infoMap.set(card.id, breakdown);
     });
 
     return infoMap;
-  }, [cards, cardExpenses]);
+  }, [cards, cardExpenses, cardFullExpenses, cardRecurringExpenses]);
 
   const getLimitBarColor = (pct: number): string => {
     if (pct < 70) return "bg-emerald-500";
@@ -570,11 +577,19 @@ export function CardManager() {
                       </div>
                       <div className="space-y-0.5 text-xs">
                         <p className="text-foreground">
-                          <span className="text-muted-foreground">Fatura aberta projetada:</span>{" "}
+                          <span className="text-muted-foreground">Gasto atual do cartão:</span>{" "}
                           <span className="font-medium">
-                            {formatCurrencyLocaleWithVisibility(limitInfo.currentInvoice, false)}
+                            {formatCurrencyLocaleWithVisibility(limitInfo.currentSpend, false)}
                           </span>
                         </p>
+                        {limitInfo.futureInstallments > 0 && (
+                          <p className="text-foreground">
+                            <span className="text-muted-foreground">Comprometido futuro (parceladas):</span>{" "}
+                            <span className="font-medium">
+                              {formatCurrencyLocaleWithVisibility(limitInfo.futureInstallments, false)}
+                            </span>
+                          </p>
+                        )}
                         <p className="text-foreground">
                           <span className="text-muted-foreground">Limite comprometido:</span>{" "}
                           <span className="font-medium">
@@ -586,14 +601,20 @@ export function CardManager() {
                         </p>
                         <p className="text-foreground">
                           <span className="text-muted-foreground">Disponível estimado:</span>{" "}
-                          <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                            {formatCurrencyLocaleWithVisibility(limitInfo.available, false)}
-                          </span>
+                          {limitInfo.exceeded > 0 ? (
+                            <span className="font-medium text-destructive">
+                              Ultrapassado em {formatCurrencyLocaleWithVisibility(limitInfo.exceeded, false)}
+                            </span>
+                          ) : (
+                            <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                              {formatCurrencyLocaleWithVisibility(limitInfo.available, false)}
+                            </span>
+                          )}
                         </p>
                       </div>
                       <p className="flex items-center gap-1 text-[10px] text-muted-foreground mt-1">
                         <AlertTriangle className="h-3 w-3" />
-                        Inclui parcelas previstas na fatura e saldo futuro comprometido
+                        Inclui despesas do mês e saldo futuro de parceladas
                       </p>
                     </div>
                   )}
