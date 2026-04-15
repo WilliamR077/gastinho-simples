@@ -20,8 +20,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useNavigate } from "react-router-dom";
 import { getNextBillingDates, getClosingDateForBillingMonth } from "@/utils/billing-period";
 import { formatCurrencyLocaleWithVisibility, parseLocalDate } from "@/lib/utils";
-import { calculateCardLimitBreakdown, type CardExpenseRecord, type CardLimitBreakdown } from "@/utils/card-limit-calculator";
-import { calculateCreditCardSpend } from "@/utils/credit-card-spend";
+import { type CardExpenseRecord } from "@/utils/card-limit-calculator";
+import { buildCardLimitSummaryMap, getCardLimitBarClass } from "@/utils/card-limit-view-model";
 
 export function CardManager() {
   const [cards, setCards] = useState<Card[]>([]);
@@ -328,44 +328,15 @@ export function CardManager() {
   };
 
   const getCardLimitInfo = useMemo(() => {
-    const infoMap = new Map<string, CardLimitBreakdown>();
-    const creditCardSpend = calculateCreditCardSpend(
-      cardCurrentExpenses,
-      cardRecurringExpenses,
-      currentMonthPeriod.startDate,
-      currentMonthPeriod.endDate
-    );
-
-    cards.forEach(card => {
-      const limit = Number(card.card_limit);
-      if (!limit || limit <= 0) return;
-
-      const isCreditCard = card.card_type === "credit" || card.card_type === "both";
-      if (!isCreditCard) return;
-
-      const config = {
-        opening_day: card.opening_day || 1,
-        closing_day: card.closing_day || 15,
-        due_day: (card as any).due_day,
-        days_before_due: (card as any).days_before_due,
-      };
-
-      // Source of truth compartilhada: gasto atual = mesma lógica da home
-      const currentSpend = creditCardSpend.byCardId[card.id]?.total || 0;
-
-      const breakdown = calculateCardLimitBreakdown(currentSpend, cardExpenses, card.id, config, limit);
-      infoMap.set(card.id, breakdown);
+    return buildCardLimitSummaryMap({
+      cards,
+      currentExpenses: cardCurrentExpenses,
+      recurringExpenses: cardRecurringExpenses,
+      installmentExpenses: cardExpenses,
+      startDate: currentMonthPeriod.startDate,
+      endDate: currentMonthPeriod.endDate,
     });
-
-    return infoMap;
   }, [cards, cardExpenses, cardCurrentExpenses, cardRecurringExpenses, currentMonthPeriod]);
-
-  const getLimitBarColor = (pct: number): string => {
-    if (pct < 70) return "bg-emerald-500";
-    if (pct < 85) return "bg-yellow-500";
-    if (pct < 95) return "bg-orange-500";
-    return "bg-red-500";
-  };
 
   if (loading) {
     return <div className="text-center py-4">Carregando...</div>;
@@ -606,7 +577,7 @@ export function CardManager() {
                       </div>
                       <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-secondary">
                         <div
-                          className={`h-full rounded-full transition-all ${getLimitBarColor(limitInfo.percentage)}`}
+                          className={`h-full rounded-full transition-all ${getCardLimitBarClass(limitInfo.status)}`}
                           style={{ width: `${Math.min(100, limitInfo.percentage)}%` }}
                         />
                       </div>

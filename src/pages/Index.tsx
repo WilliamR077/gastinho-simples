@@ -56,6 +56,7 @@ import { adMobService } from "@/services/admob-service";
 import { startOfMonth, endOfMonth, format } from "date-fns";
 import { parseLocalDate, cn } from "@/lib/utils";
 import { useOnboardingTour } from "@/hooks/use-onboarding-tour";
+import { buildCardLimitSummaryMap } from "@/utils/card-limit-view-model";
 
 export default function Index() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -1683,6 +1684,20 @@ export default function Index() {
     return result;
   }, [filteredRecurringExpenses, activeCategoryFilter, activeCardFilter]);
 
+  const cardLimitSummaries = useMemo(() => {
+    const startDate = filters.startDate || startOfMonth(currentMonth);
+    const endDate = filters.endDate || endOfMonth(currentMonth);
+
+    return buildCardLimitSummaryMap({
+      cards,
+      currentExpenses: displayedExpenses,
+      recurringExpenses: displayedRecurringExpenses,
+      installmentExpenses: expenses,
+      startDate,
+      endDate,
+    });
+  }, [cards, displayedExpenses, displayedRecurringExpenses, expenses, filters.startDate, filters.endDate, currentMonth]);
+
   // Verificar se há filtros ativos
   const hasActiveFilters = useMemo(() => {
     return !!(
@@ -1983,7 +1998,9 @@ export default function Index() {
             budgetGoals={budgetGoals.filter((g) => g.type === "monthly_total" || g.type === "category")}
             onNavigateToGoals={() => setActiveTab("goals")}
             onCardClick={handleCardFilter}
-            activeCardName={activeCardFilter?.cardName} />
+            activeCardName={activeCardFilter?.cardName}
+            cardLimitSummaries={cardLimitSummaries}
+            onCardLimitDetailsClick={() => navigate("/cards")} />
 
         </div>
 
@@ -2321,7 +2338,8 @@ export default function Index() {
           preventClose={isExpenseFormGuidedFlow}
           initialData={expenseInitialData}
           groupMembers={groupMembers}
-          currentUserId={user?.id || ''} />
+          currentUserId={user?.id || ''}
+          cardLimitSummaries={cardLimitSummaries} />
 
 
         <BudgetGoalFormSheet

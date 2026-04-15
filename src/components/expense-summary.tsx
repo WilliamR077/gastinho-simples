@@ -7,6 +7,8 @@ import { useMemo } from "react";
 import { useValuesVisibility } from "@/hooks/use-values-visibility";
 import { useCategories } from "@/hooks/use-categories";
 import { calculateCreditCardSpend } from "@/utils/credit-card-spend";
+import { CardLimitSummary } from "@/components/card-limit-summary";
+import { type CardLimitSummary as CardLimitSummaryData } from "@/utils/card-limit-view-model";
 
 interface ExpenseSummaryProps {
   expenses: Expense[];
@@ -21,6 +23,8 @@ interface ExpenseSummaryProps {
   onNavigateToGoals?: () => void;
   onCardClick?: (cardName: string, method: PaymentMethod) => void;
   activeCardName?: string;
+  cardLimitSummaries?: Map<string, CardLimitSummaryData>;
+  onCardLimitDetailsClick?: () => void;
 }
 
 export function ExpenseSummary({
@@ -35,7 +39,9 @@ export function ExpenseSummary({
   budgetGoals = [],
   onNavigateToGoals,
   onCardClick,
-  activeCardName
+  activeCardName,
+  cardLimitSummaries,
+  onCardLimitDetailsClick
 }: ExpenseSummaryProps) {
   const totals = expenses.reduce(
     (acc, expense) => {
@@ -198,7 +204,7 @@ export function ExpenseSummary({
     activeRecurringExpenses.filter((e) => e.payment_method === method).length;
   };
 
-  const paymentMethods: {key: PaymentMethod;label: string;icon: React.ReactNode;colorClass: string;cardTotals: Record<string, {total: number;color: string;}>;}[] = [
+  const paymentMethods: {key: PaymentMethod;label: string;icon: React.ReactNode;colorClass: string;cardTotals: Record<string, {total: number;color: string;cardId?: string | null;}>;}[] = [
   {
     key: 'pix',
     label: 'PIX',
@@ -263,22 +269,33 @@ export function ExpenseSummary({
 
             {/* Card details */}
             {hasCardDetails && (
-              <div className="pl-8 pb-2 flex flex-wrap gap-x-4 gap-y-1 px-0">
+              <div className="pl-8 pb-2 flex flex-wrap gap-x-4 gap-y-2 px-0">
                 {Object.entries(cardTotals).map(([cardName, data]) => {
                   const isCardActive = activeCardName === cardName;
+                  const limitSummary = key === "credit" && data.cardId
+                    ? cardLimitSummaries?.get(data.cardId)
+                    : undefined;
                   return (
-                    <div
-                      key={cardName}
-                      onClick={(e) => { e.stopPropagation(); onCardClick?.(cardName, key); }}
-                      className={`flex items-center gap-1.5 text-xs cursor-pointer transition-colors rounded-md px-1.5 py-0.5 ${
-                        isCardActive ? 'bg-muted/80 text-foreground' : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
+                    <div key={cardName} className="min-w-[170px] max-w-[240px]">
                       <div
-                        style={{ backgroundColor: data.color }}
-                        className="w-2 h-2 rounded-full flex-shrink-0"
-                      />
-                      <span>{cardName}: {formatCurrency(data.total)}</span>
+                        onClick={(e) => { e.stopPropagation(); onCardClick?.(cardName, key); }}
+                        className={`inline-flex items-center gap-1.5 text-xs cursor-pointer transition-colors rounded-md px-1.5 py-0.5 ${
+                          isCardActive ? 'bg-muted/80 text-foreground' : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        <div
+                          style={{ backgroundColor: data.color }}
+                          className="w-2 h-2 rounded-full flex-shrink-0"
+                        />
+                        <span>{cardName}: {formatCurrency(data.total)}</span>
+                      </div>
+                      {limitSummary && (
+                        <CardLimitSummary
+                          summary={limitSummary}
+                          variant="home"
+                          onDetailsClick={onCardLimitDetailsClick}
+                        />
+                      )}
                     </div>
                   );
                 })}

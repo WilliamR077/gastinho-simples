@@ -27,6 +27,8 @@ import { useCategories } from "@/hooks/use-categories";
 import { useOnboardingTour } from "@/hooks/use-onboarding-tour";
 import { DescriptionAutocomplete } from "@/components/description-autocomplete";
 import { calculateBillingPeriod, formatBillingPeriodLabel, CreditCardConfig } from "@/utils/billing-period";
+import { CardLimitSummary } from "@/components/card-limit-summary";
+import { type CardLimitSummary as CardLimitSummaryData } from "@/utils/card-limit-view-model";
 
 type ExpenseType = "monthly" | "recurring";
 
@@ -56,6 +58,7 @@ interface UnifiedExpenseFormSheetProps {
   initialData?: ExpenseInitialData;
   groupMembers?: SharedGroupMember[];
   currentUserId?: string;
+  cardLimitSummaries?: Map<string, CardLimitSummaryData>;
 }
 
 export function UnifiedExpenseFormSheet({
@@ -71,6 +74,7 @@ export function UnifiedExpenseFormSheet({
   initialData,
   groupMembers = [],
   currentUserId = '',
+  cardLimitSummaries,
 }: UnifiedExpenseFormSheetProps) {
   const [expenseType, setExpenseType] = useState<ExpenseType>("monthly");
   const [description, setDescription] = useState("");
@@ -96,6 +100,9 @@ export function UnifiedExpenseFormSheet({
   const { activeCategories } = useCategories();
   const { groups, currentContext } = useSharedGroups();
   const { isOpen: isOnboardingOpen, currentStep, currentSubstep } = useOnboardingTour();
+  const selectedCardLimitSummary = paymentMethod === "credit" && cardId
+    ? cardLimitSummaries?.get(cardId)
+    : undefined;
   const isExpenseTypeLocked =
     isOnboardingOpen &&
     ((currentStep?.id === "add-expense" && currentSubstep?.id === "expense-type-info") ||
@@ -618,6 +625,10 @@ export function UnifiedExpenseFormSheet({
               </div>
             );
           })()}
+
+          {selectedCardLimitSummary && (
+            <CardLimitSummary summary={selectedCardLimitSummary} variant="form" />
+          )}
 
 
           {/* Parcelas - apenas para despesa do mês no crédito */}

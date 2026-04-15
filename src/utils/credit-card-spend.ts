@@ -4,6 +4,7 @@ import { RecurringExpense } from "@/types/recurring-expense";
 export interface CreditCardSpendTotal {
   total: number;
   color: string;
+  cardId?: string | null;
 }
 
 export interface CreditCardSpendByIdTotal extends CreditCardSpendTotal {
@@ -43,7 +44,10 @@ export function calculateCreditCardSpend(
     const color = cardColor || "#FFA500";
 
     if (!byName[name]) {
-      byName[name] = { total: 0, color };
+      byName[name] = { total: 0, color, cardId: cardId || null };
+    }
+    if (cardId && !byName[name].cardId) {
+      byName[name].cardId = cardId;
     }
     byName[name].total += amount;
 
