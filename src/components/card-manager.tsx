@@ -101,13 +101,29 @@ export function CardManager() {
         const cardIds = cardsWithLimit.map(c => c.id);
         const { data: expData } = await supabase
           .from("expenses")
-          .select("amount, expense_date, card_id, installment_group_id, installment_number, total_installments")
+          .select("amount, expense_date, card_id, installment_group_id, installment_number, total_installments, payment_method, card_name, card_color")
           .eq("user_id", user.id)
           .eq("payment_method", "credit")
           .in("card_id", cardIds);
-        setCardExpenses(expData || []);
+        
+        const expRecords = expData || [];
+        setCardExpenses(expRecords as CardExpenseRecord[]);
+        // Also keep full expense records for the shared spend function
+        setCardFullExpenses(expRecords as unknown as Expense[]);
+
+        // Fetch recurring expenses for these cards
+        const { data: recurData } = await supabase
+          .from("recurring_expenses")
+          .select("*, card:cards(id, name, color, card_type)")
+          .eq("user_id", user.id)
+          .eq("is_active", true)
+          .eq("payment_method", "credit")
+          .in("card_id", cardIds);
+        setCardRecurringExpenses((recurData || []) as RecurringExpense[]);
       } else {
         setCardExpenses([]);
+        setCardFullExpenses([]);
+        setCardRecurringExpenses([]);
       }
     } catch (error) {
       console.error("Erro ao carregar cartões:", error);
