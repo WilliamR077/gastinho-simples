@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardFormData, CardType, cardTypeLabels } from "@/types/card";
+import { Expense } from "@/types/expense";
+import { RecurringExpense } from "@/types/recurring-expense";
 import { useToast } from "@/hooks/use-toast";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useOnboardingTour } from "@/hooks/use-onboarding-tour";
@@ -18,12 +20,13 @@ import { useNavigate } from "react-router-dom";
 import { getNextBillingDates, getClosingDateForBillingMonth } from "@/utils/billing-period";
 import { formatCurrencyLocaleWithVisibility } from "@/lib/utils";
 import { calculateCardLimitBreakdown, type CardExpenseRecord, type CardLimitBreakdown } from "@/utils/card-limit-calculator";
-
-// Types imported from card-limit-calculator
+import { calculateCreditCardSpendById } from "@/utils/credit-card-spend";
 
 export function CardManager() {
   const [cards, setCards] = useState<Card[]>([]);
   const [cardExpenses, setCardExpenses] = useState<CardExpenseRecord[]>([]);
+  const [cardFullExpenses, setCardFullExpenses] = useState<Expense[]>([]);
+  const [cardRecurringExpenses, setCardRecurringExpenses] = useState<RecurringExpense[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingCard, setEditingCard] = useState<Card | null>(null);
@@ -98,13 +101,29 @@ export function CardManager() {
         const cardIds = cardsWithLimit.map(c => c.id);
         const { data: expData } = await supabase
           .from("expenses")
-          .select("amount, expense_date, card_id, installment_group_id, installment_number, total_installments")
+          .select("amount, expense_date, card_id, installment_group_id, installment_number, total_installments, payment_method, card_name, card_color")
           .eq("user_id", user.id)
           .eq("payment_method", "credit")
           .in("card_id", cardIds);
-        setCardExpenses(expData || []);
+        
+        const expRecords = expData || [];
+        setCardExpenses(expRecords as CardExpenseRecord[]);
+        // Also keep full expense records for the shared spend function
+        setCardFullExpenses(expRecords as unknown as Expense[]);
+
+        // Fetch recurring expenses for these cards
+        const { data: recurData } = await supabase
+          .from("recurring_expenses")
+          .select("*, card:cards(id, name, color, card_type)")
+          .eq("user_id", user.id)
+          .eq("is_active", true)
+          .eq("payment_method", "credit")
+          .in("card_id", cardIds);
+        setCardRecurringExpenses((recurData || []) as RecurringExpense[]);
       } else {
         setCardExpenses([]);
+        setCardFullExpenses([]);
+        setCardRecurringExpenses([]);
       }
     } catch (error) {
       console.error("Erro ao carregar cartões:", error);
@@ -292,12 +311,19 @@ export function CardManager() {
         days_before_due: (card as any).days_before_due,
       };
 
-      const breakdown = calculateCardLimitBreakdown(cardExpenses, card.id, config, limit);
+      // Source of truth compartilhada: gasto atual = mesma lógica da home
+      const currentSpend = calculateCreditCardSpendById(
+        cardFullExpenses,
+        cardRecurringExpenses,
+        card.id
+      );
+
+      const breakdown = calculateCardLimitBreakdown(currentSpend, cardExpenses, card.id, config, limit);
       infoMap.set(card.id, breakdown);
     });
 
     return infoMap;
-  }, [cards, cardExpenses]);
+  }, [cards, cardExpenses, cardFullExpenses, cardRecurringExpenses]);
 
   const getLimitBarColor = (pct: number): string => {
     if (pct < 70) return "bg-emerald-500";
@@ -551,11 +577,19 @@ export function CardManager() {
                       </div>
                       <div className="space-y-0.5 text-xs">
                         <p className="text-foreground">
-                          <span className="text-muted-foreground">Fatura aberta projetada:</span>{" "}
+                          <span className="text-muted-foreground">Gasto atual do cartão:</span>{" "}
                           <span className="font-medium">
-                            {formatCurrencyLocaleWithVisibility(limitInfo.currentInvoice, false)}
+                            {formatCurrencyLocaleWithVisibility(limitInfo.currentSpend, false)}
                           </span>
                         </p>
+                        {limitInfo.futureInstallments > 0 && (
+                          <p className="text-foreground">
+                            <span className="text-muted-foreground">Comprometido futuro (parceladas):</span>{" "}
+                            <span className="font-medium">
+                              {formatCurrencyLocaleWithVisibility(limitInfo.futureInstallments, false)}
+                            </span>
+                          </p>
+                        )}
                         <p className="text-foreground">
                           <span className="text-muted-foreground">Limite comprometido:</span>{" "}
                           <span className="font-medium">
@@ -567,14 +601,20 @@ export function CardManager() {
                         </p>
                         <p className="text-foreground">
                           <span className="text-muted-foreground">Disponível estimado:</span>{" "}
-                          <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                            {formatCurrencyLocaleWithVisibility(limitInfo.available, false)}
-                          </span>
+                          {limitInfo.exceeded > 0 ? (
+                            <span className="font-medium text-destructive">
+                              Ultrapassado em {formatCurrencyLocaleWithVisibility(limitInfo.exceeded, false)}
+                            </span>
+                          ) : (
+                            <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                              {formatCurrencyLocaleWithVisibility(limitInfo.available, false)}
+                            </span>
+                          )}
                         </p>
                       </div>
                       <p className="flex items-center gap-1 text-[10px] text-muted-foreground mt-1">
                         <AlertTriangle className="h-3 w-3" />
-                        Inclui parcelas previstas na fatura e saldo futuro comprometido
+                        Inclui despesas do mês e saldo futuro de parceladas
                       </p>
                     </div>
                   )}

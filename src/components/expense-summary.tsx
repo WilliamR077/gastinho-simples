@@ -6,6 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { useMemo } from "react";
 import { useValuesVisibility } from "@/hooks/use-values-visibility";
 import { useCategories } from "@/hooks/use-categories";
+import { calculateCreditCardSpend } from "@/utils/credit-card-spend";
 
 interface ExpenseSummaryProps {
   expenses: Expense[];
@@ -99,30 +100,13 @@ export function ExpenseSummary({
     totals.total += expense.amount;
   });
 
-  // Calcular totais por cartão para crédito
-  const creditCardTotals = expenses.
-  filter((e) => e.payment_method === 'credit').
-  reduce((acc, expense) => {
-    const cardName = expense.card?.name || expense.card_name || 'Sem cartão';
-    const cardColor = expense.card?.color || expense.card_color || '#FFA500';
-    if (!acc[cardName]) {
-      acc[cardName] = { total: 0, color: cardColor };
-    }
-    acc[cardName].total += expense.amount;
-    return acc;
-  }, {} as Record<string, {total: number;color: string;}>);
-
-  // Adicionar despesas fixas ativas de crédito aos totais por cartão
-  activeRecurringExpenses.
-  filter((e) => e.payment_method === 'credit').
-  forEach((expense) => {
-    const cardName = expense.card?.name || expense.card_name || 'Sem cartão';
-    const cardColor = expense.card?.color || expense.card_color || '#FFA500';
-    if (!creditCardTotals[cardName]) {
-      creditCardTotals[cardName] = { total: 0, color: cardColor };
-    }
-    creditCardTotals[cardName].total += expense.amount;
-  });
+  // Calcular totais por cartão para crédito — usando source of truth compartilhada
+  const creditCardTotals = calculateCreditCardSpend(
+    expenses,
+    activeRecurringExpenses as RecurringExpense[],
+    startDate || new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+    endDate || new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0)
+  );
 
   // Calcular totais por cartão para débito
   const debitCardTotals = expenses.
