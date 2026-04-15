@@ -11,32 +11,33 @@ export interface CardExpenseRecord {
 }
 
 export interface CardLimitBreakdown {
-  currentInvoice: number;
+  currentSpend: number;
   futureInstallments: number;
   committedLimit: number;
   available: number;
+  exceeded: number;
   percentage: number;
-  currentBillingMonth: string;
 }
 
 /**
  * Calcula o breakdown de uso do limite de um cartão de crédito.
  *
- * - currentInvoice: soma das despesas na fatura aberta projetada
- * - futureInstallments: saldo comprometido de parcelas futuras (após a fatura atual)
- * - committedLimit: currentInvoice + futureInstallments
- * - available: max(0, cardLimit - committedLimit)
+ * - currentSpend: gasto atual do cartão (= mesma lógica da home, recebido como parâmetro)
+ * - futureInstallments: saldo comprometido de parcelas futuras (após a parcela da fatura atual)
+ * - committedLimit: currentSpend + futureInstallments
+ * - available: cardLimit - committedLimit (pode ser negativo)
+ * - exceeded: max(0, committedLimit - cardLimit)
  * - percentage: min(100, committedLimit / cardLimit * 100)
  *
- * Regras:
+ * Regras para futureInstallments:
  * 1. Usa parseLocalDate() para todas as datas (fix timezone)
- * 2. Fatura atual = despesas cujo calculateBillingPeriod === currentBillingMonth
- * 3. Para cada installment_group_id, encontra a parcela que cai na fatura atual (N/T),
- *    calcula futureInstallments += amount × (T - N). Se o grupo não tem parcela na
- *    fatura atual, ignora.
+ * 2. Para cada installment_group_id, encontra a parcela que cai no billing period atual
+ *    (via calculateBillingPeriod), calcula amount × (T - N)
+ * 3. Se o grupo não tem parcela na fatura atual, ignora
  * 4. NÃO inclui templates de recurring_expenses (apenas lançamentos reais em expenses)
  */
 export function calculateCardLimitBreakdown(
+  currentCardSpend: number,
   allExpenses: CardExpenseRecord[],
   cardId: string,
   config: CreditCardConfig,
@@ -47,27 +48,22 @@ export function calculateCardLimitBreakdown(
 
   const cardExpenses = allExpenses.filter(e => e.card_id === cardId);
 
-  // 1. Fatura aberta projetada: despesas cujo billing period = mês atual
-  let currentInvoice = 0;
-  // Track which installment groups have a parcel in the current invoice
+  // Encontrar parcelas que caem no billing period atual
   const currentMonthInstallments = new Map<string, CardExpenseRecord>();
 
   cardExpenses.forEach(exp => {
+    if (!exp.installment_group_id || !exp.total_installments || exp.total_installments <= 1) return;
+
     const expDate = parseLocalDate(exp.expense_date);
     const period = calculateBillingPeriod(expDate, config);
 
     if (period === currentBillingMonth) {
-      currentInvoice += Number(exp.amount);
-
-      // Se é parcelada, registra a parcela do mês atual
-      if (exp.installment_group_id && exp.total_installments && exp.total_installments > 1) {
-        currentMonthInstallments.set(exp.installment_group_id, exp);
-      }
+      currentMonthInstallments.set(exp.installment_group_id, exp);
     }
   });
 
-  // 2. Saldo futuro comprometido: para cada grupo parcelado que tem parcela na fatura atual,
-  //    calcular amount × (total - parcela_atual)
+  // Saldo futuro comprometido: para cada grupo parcelado com parcela na fatura atual,
+  // calcular amount × (total - parcela_atual)
   let futureInstallments = 0;
 
   currentMonthInstallments.forEach(exp => {
@@ -79,16 +75,18 @@ export function calculateCardLimitBreakdown(
     }
   });
 
-  const committedLimit = currentInvoice + futureInstallments;
-  const available = Math.max(0, cardLimit - committedLimit);
+  const currentSpend = currentCardSpend;
+  const committedLimit = currentSpend + futureInstallments;
+  const available = cardLimit - committedLimit;
+  const exceeded = Math.max(0, -available);
   const percentage = cardLimit > 0 ? Math.min(100, (committedLimit / cardLimit) * 100) : 0;
 
   return {
-    currentInvoice,
+    currentSpend,
     futureInstallments,
     committedLimit,
     available,
+    exceeded,
     percentage,
-    currentBillingMonth,
   };
 }
