@@ -1,104 +1,87 @@
 import { Expense } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
 
+export interface CreditCardSpendTotal {
+  total: number;
+  color: string;
+}
+
+export interface CreditCardSpendByIdTotal extends CreditCardSpendTotal {
+  name: string;
+}
+
+export interface CreditCardSpendResult {
+  byName: Record<string, CreditCardSpendTotal>;
+  byCardId: Record<string, CreditCardSpendByIdTotal>;
+}
+
 /**
- * Source of truth compartilhada para calcular o gasto atual de crédito por cartão.
- * 
- * Usada tanto pela home (ExpenseSummary) quanto pelo card-manager.
- * 
- * Lógica:
- * - Filtra expenses por payment_method === 'credit', agrupa por card name, soma amount
- * - Filtra recurringExpenses ativas de crédito cujo day_of_month cai no período
- * - Retorna Record<cardName, { total, color }>
- * 
- * IMPORTANTE: expenses e recurringExpenses já devem vir filtrados pelo mês calendário
- * (a função NÃO aplica filtro de data nas expenses — isso é responsabilidade do caller).
- * Para recurringExpenses, a função filtra por is_active, payment_method e day_of_month no período.
+ * Source of truth compartilhada para calcular o gasto atual de credito por cartao.
+ *
+ * O caller decide o escopo visivel (contexto, mes, filtros de tela) e passa as
+ * expenses ja filtradas. A funcao agrega uma unica vez e retorna os mesmos
+ * totais em dois formatos:
+ * - byName: usado pela home para exibir "Banco do Brasil: R$ X"
+ * - byCardId: usado pelo CardManager para casar com o limite do cartao
  */
 export function calculateCreditCardSpend(
   expenses: Expense[],
   recurringExpenses: RecurringExpense[],
   startDate: Date,
   endDate: Date
-): Record<string, { total: number; color: string }> {
-  const creditCardTotals: Record<string, { total: number; color: string }> = {};
+): CreditCardSpendResult {
+  const byName: Record<string, CreditCardSpendTotal> = {};
+  const byCardId: Record<string, CreditCardSpendByIdTotal> = {};
 
-  // 1. Despesas avulsas de crédito (já filtradas pelo mês calendário pelo caller)
+  const addCardSpend = (
+    cardId: string | null | undefined,
+    cardName: string | null | undefined,
+    cardColor: string | null | undefined,
+    amount: number
+  ) => {
+    const name = cardName || "Sem cartão";
+    const color = cardColor || "#FFA500";
+
+    if (!byName[name]) {
+      byName[name] = { total: 0, color };
+    }
+    byName[name].total += amount;
+
+    if (!cardId) return;
+
+    if (!byCardId[cardId]) {
+      byCardId[cardId] = { total: 0, color, name };
+    }
+    byCardId[cardId].total += amount;
+  };
+
   expenses
-    .filter((e) => e.payment_method === 'credit')
+    .filter((e) => e.payment_method === "credit")
     .forEach((expense) => {
-      const cardName = expense.card?.name || expense.card_name || 'Sem cartão';
-      const cardColor = expense.card?.color || expense.card_color || '#FFA500';
-      if (!creditCardTotals[cardName]) {
-        creditCardTotals[cardName] = { total: 0, color: cardColor };
-      }
-      creditCardTotals[cardName].total += Number(expense.amount);
+      addCardSpend(
+        expense.card?.id || expense.card_id,
+        expense.card?.name || expense.card_name,
+        expense.card?.color || expense.card_color,
+        Number(expense.amount)
+      );
     });
 
-  // 2. Despesas fixas ativas de crédito cujo day_of_month cai no período
   recurringExpenses
-    .filter((e) => e.is_active && e.payment_method === 'credit')
+    .filter((e) => e.is_active && e.payment_method === "credit")
     .filter((e) => {
       const day = e.day_of_month;
       const startDay = startDate.getDate();
       const endDay = endDate.getDate();
-      // Período simples dentro do mesmo mês
       return day >= startDay && day <= endDay;
     })
     .forEach((expense) => {
-      const cardName = expense.card?.name || expense.card_name || 'Sem cartão';
-      const cardColor = expense.card?.color || expense.card_color || '#FFA500';
-      if (!creditCardTotals[cardName]) {
-        creditCardTotals[cardName] = { total: 0, color: cardColor };
-      }
-      creditCardTotals[cardName].total += Number(expense.amount);
+      addCardSpend(
+        expense.card?.id || expense.card_id,
+        expense.card?.name || expense.card_name,
+        expense.card?.color || expense.card_color,
+        Number(expense.amount)
+      );
     });
 
-  return creditCardTotals;
-}
-
-/**
- * Calcula o gasto atual de crédito para um cartão específico (por card_id),
- * usado pelo card-manager onde precisamos mapear por ID e não por nome.
- */
-export function calculateCreditCardSpendById(
-  expenses: Expense[],
-  recurringExpenses: RecurringExpense[],
-  cardId: string,
-  referenceDate: Date = new Date()
-): number {
-  const year = referenceDate.getFullYear();
-  const month = referenceDate.getMonth();
-  const startDate = new Date(year, month, 1);
-  const endDate = new Date(year, month + 1, 0); // último dia do mês
-
-  // Despesas avulsas de crédito deste cartão no mês calendário
-  let total = 0;
-
-  expenses
-    .filter((e) => e.payment_method === 'credit' && e.card_id === cardId)
-    .filter((e) => {
-      // Filtro por mês calendário usando parseLocalDate seria ideal,
-      // mas como expenses já vem com expense_date como string YYYY-MM-DD,
-      // podemos comparar diretamente
-      const [y, m] = e.expense_date.split('-').map(Number);
-      return y === year && m === month + 1;
-    })
-    .forEach((e) => {
-      total += Number(e.amount);
-    });
-
-  // Despesas fixas ativas de crédito deste cartão
-  recurringExpenses
-    .filter((e) => e.is_active && e.payment_method === 'credit')
-    .filter((e) => e.card_id === cardId || e.card?.id === cardId)
-    .filter((e) => {
-      const day = e.day_of_month;
-      return day >= 1 && day <= endDate.getDate();
-    })
-    .forEach((e) => {
-      total += Number(e.amount);
-    });
-
-  return total;
+  return { byName, byCardId };
 }

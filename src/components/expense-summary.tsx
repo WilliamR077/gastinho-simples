@@ -101,12 +101,13 @@ export function ExpenseSummary({
   });
 
   // Calcular totais por cartão para crédito — usando source of truth compartilhada
-  const creditCardTotals = calculateCreditCardSpend(
+  const creditCardSpend = calculateCreditCardSpend(
     expenses,
     activeRecurringExpenses as RecurringExpense[],
     startDate || new Date(new Date().getFullYear(), new Date().getMonth(), 1),
     endDate || new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0)
   );
+  const creditCardTotals = creditCardSpend.byName;
 
   // Calcular totais por cartão para débito
   const debitCardTotals = expenses.

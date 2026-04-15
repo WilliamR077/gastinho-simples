@@ -6,6 +6,7 @@ import { RecurringExpense } from "@/types/recurring-expense";
 import { useToast } from "@/hooks/use-toast";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useOnboardingTour } from "@/hooks/use-onboarding-tour";
+import { useSharedGroups } from "@/hooks/use-shared-groups";
 import { Button } from "@/components/ui/button";
 import { Card as CardUI, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,14 +19,14 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useNavigate } from "react-router-dom";
 import { getNextBillingDates, getClosingDateForBillingMonth } from "@/utils/billing-period";
-import { formatCurrencyLocaleWithVisibility } from "@/lib/utils";
+import { formatCurrencyLocaleWithVisibility, parseLocalDate } from "@/lib/utils";
 import { calculateCardLimitBreakdown, type CardExpenseRecord, type CardLimitBreakdown } from "@/utils/card-limit-calculator";
-import { calculateCreditCardSpendById } from "@/utils/credit-card-spend";
+import { calculateCreditCardSpend } from "@/utils/credit-card-spend";
 
 export function CardManager() {
   const [cards, setCards] = useState<Card[]>([]);
   const [cardExpenses, setCardExpenses] = useState<CardExpenseRecord[]>([]);
-  const [cardFullExpenses, setCardFullExpenses] = useState<Expense[]>([]);
+  const [cardCurrentExpenses, setCardCurrentExpenses] = useState<Expense[]>([]);
   const [cardRecurringExpenses, setCardRecurringExpenses] = useState<RecurringExpense[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -35,6 +36,7 @@ export function CardManager() {
   const { toast } = useToast();
   const { canAddCard, features } = useSubscription();
   const { isOpen: isOnboardingOpen, currentStep, notifyEvent } = useOnboardingTour();
+  const { currentContext } = useSharedGroups();
   const navigate = useNavigate();
 
   // Notify onboarding when form opens
@@ -75,12 +77,21 @@ export function CardManager() {
     { name: "Esmeralda", value: "#059669" },
   ];
 
+  const currentMonthPeriod = useMemo(() => {
+    const now = new Date();
+    return {
+      startDate: new Date(now.getFullYear(), now.getMonth(), 1),
+      endDate: new Date(now.getFullYear(), now.getMonth() + 1, 0),
+    };
+  }, []);
+
   useEffect(() => {
     loadCards();
-  }, []);
+  }, [currentContext.type, currentContext.groupId]);
 
   const loadCards = async () => {
     try {
+      setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
@@ -99,30 +110,52 @@ export function CardManager() {
       const cardsWithLimit = loadedCards.filter(c => c.card_limit && Number(c.card_limit) > 0);
       if (cardsWithLimit.length > 0) {
         const cardIds = cardsWithLimit.map(c => c.id);
-        const { data: expData } = await supabase
+        let expensesQuery = supabase
           .from("expenses")
-          .select("amount, expense_date, card_id, installment_group_id, installment_number, total_installments, payment_method, card_name, card_color")
+          .select("amount, expense_date, card_id, installment_group_id, installment_number, total_installments, payment_method, card_name, card_color, shared_group_id")
           .eq("user_id", user.id)
           .eq("payment_method", "credit")
           .in("card_id", cardIds);
+
+        if (currentContext.type === "personal") {
+          expensesQuery = expensesQuery.is("shared_group_id", null);
+        } else if (currentContext.type === "group" && currentContext.groupId) {
+          expensesQuery = expensesQuery.eq("shared_group_id", currentContext.groupId);
+        }
+
+        const { data: expData, error: expError } = await expensesQuery;
+        if (expError) throw expError;
         
         const expRecords = expData || [];
         setCardExpenses(expRecords as CardExpenseRecord[]);
-        // Also keep full expense records for the shared spend function
-        setCardFullExpenses(expRecords as unknown as Expense[]);
+
+        const currentMonthExpenses = expRecords.filter((expense) => {
+          const expenseDate = parseLocalDate(expense.expense_date);
+          return expenseDate >= currentMonthPeriod.startDate && expenseDate <= currentMonthPeriod.endDate;
+        });
+        setCardCurrentExpenses(currentMonthExpenses as unknown as Expense[]);
 
         // Fetch recurring expenses for these cards
-        const { data: recurData } = await supabase
+        let recurringQuery = supabase
           .from("recurring_expenses")
           .select("*, card:cards(id, name, color, card_type)")
           .eq("user_id", user.id)
           .eq("is_active", true)
           .eq("payment_method", "credit")
           .in("card_id", cardIds);
+
+        if (currentContext.type === "personal") {
+          recurringQuery = recurringQuery.is("shared_group_id", null);
+        } else if (currentContext.type === "group" && currentContext.groupId) {
+          recurringQuery = recurringQuery.eq("shared_group_id", currentContext.groupId);
+        }
+
+        const { data: recurData, error: recurError } = await recurringQuery;
+        if (recurError) throw recurError;
         setCardRecurringExpenses((recurData || []) as RecurringExpense[]);
       } else {
         setCardExpenses([]);
-        setCardFullExpenses([]);
+        setCardCurrentExpenses([]);
         setCardRecurringExpenses([]);
       }
     } catch (error) {
@@ -296,6 +329,12 @@ export function CardManager() {
 
   const getCardLimitInfo = useMemo(() => {
     const infoMap = new Map<string, CardLimitBreakdown>();
+    const creditCardSpend = calculateCreditCardSpend(
+      cardCurrentExpenses,
+      cardRecurringExpenses,
+      currentMonthPeriod.startDate,
+      currentMonthPeriod.endDate
+    );
 
     cards.forEach(card => {
       const limit = Number(card.card_limit);
@@ -312,18 +351,14 @@ export function CardManager() {
       };
 
       // Source of truth compartilhada: gasto atual = mesma lógica da home
-      const currentSpend = calculateCreditCardSpendById(
-        cardFullExpenses,
-        cardRecurringExpenses,
-        card.id
-      );
+      const currentSpend = creditCardSpend.byCardId[card.id]?.total || 0;
 
       const breakdown = calculateCardLimitBreakdown(currentSpend, cardExpenses, card.id, config, limit);
       infoMap.set(card.id, breakdown);
     });
 
     return infoMap;
-  }, [cards, cardExpenses, cardFullExpenses, cardRecurringExpenses]);
+  }, [cards, cardExpenses, cardCurrentExpenses, cardRecurringExpenses, currentMonthPeriod]);
 
   const getLimitBarColor = (pct: number): string => {
     if (pct < 70) return "bg-emerald-500";
