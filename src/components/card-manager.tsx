@@ -25,6 +25,8 @@ import { calculateCreditCardSpendById } from "@/utils/credit-card-spend";
 export function CardManager() {
   const [cards, setCards] = useState<Card[]>([]);
   const [cardExpenses, setCardExpenses] = useState<CardExpenseRecord[]>([]);
+  const [cardFullExpenses, setCardFullExpenses] = useState<Expense[]>([]);
+  const [cardRecurringExpenses, setCardRecurringExpenses] = useState<RecurringExpense[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingCard, setEditingCard] = useState<Card | null>(null);
