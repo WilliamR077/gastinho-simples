@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardFormData, CardType, cardTypeLabels } from "@/types/card";
+import { Expense } from "@/types/expense";
+import { RecurringExpense } from "@/types/recurring-expense";
 import { useToast } from "@/hooks/use-toast";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useOnboardingTour } from "@/hooks/use-onboarding-tour";
@@ -18,8 +20,7 @@ import { useNavigate } from "react-router-dom";
 import { getNextBillingDates, getClosingDateForBillingMonth } from "@/utils/billing-period";
 import { formatCurrencyLocaleWithVisibility } from "@/lib/utils";
 import { calculateCardLimitBreakdown, type CardExpenseRecord, type CardLimitBreakdown } from "@/utils/card-limit-calculator";
-
-// Types imported from card-limit-calculator
+import { calculateCreditCardSpendById } from "@/utils/credit-card-spend";
 
 export function CardManager() {
   const [cards, setCards] = useState<Card[]>([]);
