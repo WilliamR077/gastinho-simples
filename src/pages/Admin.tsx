@@ -243,7 +243,11 @@ interface UserListItem {
 
 interface UserDetail {
   user_id: string; email: string; created_at: string;
-  subscription: { tier: string; platform: string | null; is_active: boolean; expires_at: string | null } | null;
+  subscription: {
+    tier: string; platform: string | null; is_active: boolean; expires_at: string | null;
+    granted_by_email?: string | null; granted_at?: string | null; status?: string;
+    started_at?: string;
+  } | null;
   stats: { expenses: number; incomes: number; cards: number; groups: number };
   recent_expenses: { description: string; amount: number; expense_date: string; category_name: string | null }[];
   recent_incomes: { description: string; amount: number; income_date: string; category_name: string | null }[];
