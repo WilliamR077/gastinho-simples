@@ -43,11 +43,24 @@ function TierBadge({ tier, platform }: { tier?: string; platform?: string | null
   if (!tier || tier === "free") return <Badge variant="secondary">Gratuito</Badge>;
   const label = tier === "premium" ? "Premium ⭐" : tier === "no_ads" ? "Sem Anúncios" : tier;
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 flex-wrap">
       <Badge className="bg-primary text-primary-foreground">{label}</Badge>
       {platform === "manual" && <Badge variant="outline">Manual</Badge>}
+      {platform === "google_play" && <Badge variant="outline">Google Play</Badge>}
     </div>
   );
+}
+
+function StatusBadge({ status }: { status?: string }) {
+  if (!status) return null;
+  const map: Record<string, { label: string; className: string }> = {
+    active: { label: "Ativo", className: "bg-green-500/15 text-green-600 dark:text-green-400 border-green-500/30" },
+    lifetime: { label: "Vitalício", className: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30" },
+    expired: { label: "Expirado", className: "bg-muted text-muted-foreground border-border" },
+    revoked: { label: "Revogado", className: "bg-destructive/15 text-destructive border-destructive/30" },
+  };
+  const m = map[status] || map.revoked;
+  return <Badge variant="outline" className={m.className}>{m.label}</Badge>;
 }
 
 function KpiCard({ title, value, icon: Icon, subtitle, color = "text-primary" }: {
@@ -230,7 +243,11 @@ interface UserListItem {
 
 interface UserDetail {
   user_id: string; email: string; created_at: string;
-  subscription: { tier: string; platform: string | null; is_active: boolean; expires_at: string | null } | null;
+  subscription: {
+    tier: string; platform: string | null; is_active: boolean; expires_at: string | null;
+    granted_by_email?: string | null; granted_at?: string | null; status?: string;
+    started_at?: string;
+  } | null;
   stats: { expenses: number; incomes: number; cards: number; groups: number };
   recent_expenses: { description: string; amount: number; expense_date: string; category_name: string | null }[];
   recent_incomes: { description: string; amount: number; income_date: string; category_name: string | null }[];
@@ -255,6 +272,7 @@ function UsersTab({ allEmails, onSubscriptionChange }: {
   const [detailLoading, setDetailLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [selectedTier, setSelectedTier] = useState("premium");
+  const [selectedDuration, setSelectedDuration] = useState<"1m" | "3m" | "6m" | "1y" | "lifetime">("lifetime");
   const [actionLoading, setActionLoading] = useState(false);
   const [showSubForm, setShowSubForm] = useState(false);
   const [page, setPage] = useState(0);
@@ -305,10 +323,34 @@ function UsersTab({ allEmails, onSubscriptionChange }: {
     setShowSubForm(false);
     try {
       const headers = await getAuthHeaders();
-      const res = await fetch(`${DASH_API}?email=${encodeURIComponent(user.email)}`, { headers });
-      const data = await res.json();
-      if (res.ok) setDetail(data);
-      else toast({ title: "Erro", description: data.error, variant: "destructive" });
+      // Fetch dashboard detail + subscription detail (with manual fields) in parallel
+      const [resDash, resSub] = await Promise.all([
+        fetch(`${DASH_API}?email=${encodeURIComponent(user.email)}`, { headers }),
+        fetch(`${SUBS_API}?email=${encodeURIComponent(user.email)}`, { headers }),
+      ]);
+      const dataDash = await resDash.json();
+      const dataSub = resSub.ok ? await resSub.json() : null;
+      if (resDash.ok) {
+        // Merge: prefer subs API for subscription details (has granted_by_email, status, etc.)
+        const merged: UserDetail = {
+          ...dataDash,
+          subscription: dataSub?.subscription
+            ? {
+                tier: dataSub.subscription.tier,
+                platform: dataSub.subscription.platform,
+                is_active: dataSub.subscription.is_active,
+                expires_at: dataSub.subscription.expires_at,
+                granted_by_email: dataSub.subscription.granted_by_email,
+                granted_at: dataSub.subscription.granted_at,
+                status: dataSub.subscription.status,
+                started_at: dataSub.subscription.started_at,
+              }
+            : dataDash.subscription,
+        };
+        setDetail(merged);
+      } else {
+        toast({ title: "Erro", description: dataDash.error, variant: "destructive" });
+      }
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
     } finally {
@@ -350,7 +392,11 @@ function UsersTab({ allEmails, onSubscriptionChange }: {
       const res = await fetch(SUBS_API, {
         method: action === "grant" ? "POST" : "DELETE",
         headers,
-        body: JSON.stringify(action === "grant" ? { email: selectedUser.email, tier: selectedTier } : { email: selectedUser.email }),
+        body: JSON.stringify(
+          action === "grant"
+            ? { email: selectedUser.email, tier: selectedTier, duration: selectedDuration }
+            : { email: selectedUser.email }
+        ),
       });
       const data = await res.json();
       if (!res.ok) toast({ title: "Erro", description: data.error, variant: "destructive" });
@@ -458,11 +504,45 @@ function UsersTab({ allEmails, onSubscriptionChange }: {
                 <div><p className="text-xs text-muted-foreground">Email</p><p className="text-sm font-medium text-foreground truncate">{detail.email}</p></div>
                 <div><p className="text-xs text-muted-foreground">Cadastro</p><p className="text-sm text-foreground">{new Date(detail.created_at).toLocaleDateString("pt-BR")}</p></div>
                 <div><p className="text-xs text-muted-foreground">Plano</p><TierBadge tier={detail.subscription?.tier} platform={detail.subscription?.platform} /></div>
-                <div><p className="text-xs text-muted-foreground">Status</p><Badge variant={detail.subscription?.is_active ? "default" : "secondary"}>{detail.subscription?.is_active ? "Ativo" : "Inativo"}</Badge></div>
+                <div><p className="text-xs text-muted-foreground">Status efetivo</p><StatusBadge status={detail.subscription?.status} /></div>
               </div>
 
-              {detail.subscription?.expires_at && (
-                <div><p className="text-xs text-muted-foreground">Expira em</p><p className="text-sm text-foreground">{new Date(detail.subscription.expires_at).toLocaleDateString("pt-BR")}</p></div>
+              {/* Subscription extra info (only for paid plans) */}
+              {detail.subscription && detail.subscription.tier !== "free" && (
+                <div className="grid grid-cols-2 gap-3 bg-muted/30 rounded-lg p-3">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Expira em</p>
+                    <p className="text-sm text-foreground">
+                      {detail.subscription.expires_at
+                        ? new Date(detail.subscription.expires_at).toLocaleDateString("pt-BR")
+                        : "—  (vitalício)"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Origem</p>
+                    <p className="text-sm text-foreground capitalize">
+                      {detail.subscription.platform === "manual" ? "Manual"
+                        : detail.subscription.platform === "google_play" ? "Google Play"
+                        : (detail.subscription.platform || "—")}
+                    </p>
+                  </div>
+                  {detail.subscription.platform === "manual" && (
+                    <>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Concedido por</p>
+                        <p className="text-sm text-foreground truncate">{detail.subscription.granted_by_email || "—"}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Concedido em</p>
+                        <p className="text-sm text-foreground">
+                          {detail.subscription.granted_at
+                            ? new Date(detail.subscription.granted_at).toLocaleDateString("pt-BR")
+                            : "—"}
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
 
               {/* Stats */}
@@ -541,31 +621,78 @@ function UsersTab({ allEmails, onSubscriptionChange }: {
                     </AlertDialog>
                   </div>
                 ) : (
-                  <div className="space-y-2 bg-muted/30 rounded-lg p-3">
-                    <p className="text-xs font-medium text-foreground">Gerenciar Assinatura</p>
-                    <div className="flex gap-2 items-end">
-                      <div className="flex-1 space-y-1">
+                  <div className="space-y-3 bg-muted/30 rounded-lg p-3">
+                    <p className="text-xs font-medium text-foreground">Conceder acesso manual</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-[11px] text-muted-foreground">Plano</label>
                         <Select value={selectedTier} onValueChange={setSelectedTier}>
                           <SelectTrigger><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="premium">Premium ⭐</SelectItem>
                             <SelectItem value="no_ads">Sem Anúncios</SelectItem>
-                            <SelectItem value="free">Gratuito (Revogar)</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
-                      <Button
-                        onClick={() => selectedTier === "free" ? handleSubAction("revoke") : handleSubAction("grant")}
-                        disabled={actionLoading}
-                        variant={selectedTier === "free" ? "destructive" : "default"}
-                        size="sm"
-                        className="gap-1"
-                      >
-                        {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : selectedTier === "free" ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
-                        {selectedTier === "free" ? "Revogar" : "Conceder"}
-                      </Button>
+                      <div className="space-y-1">
+                        <label className="text-[11px] text-muted-foreground">Duração</label>
+                        <Select value={selectedDuration} onValueChange={(v) => setSelectedDuration(v as any)}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="1m">1 mês</SelectItem>
+                            <SelectItem value="3m">3 meses</SelectItem>
+                            <SelectItem value="6m">6 meses</SelectItem>
+                            <SelectItem value="1y">1 ano</SelectItem>
+                            <SelectItem value="lifetime">Vitalício</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
-                    <Button variant="ghost" size="sm" className="text-xs" onClick={() => setShowSubForm(false)}>Cancelar</Button>
+                    <Button
+                      onClick={() => handleSubAction("grant")}
+                      disabled={actionLoading}
+                      size="sm"
+                      className="w-full gap-1"
+                    >
+                      {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCheck className="h-4 w-4" />}
+                      Conceder
+                    </Button>
+
+                    <p className="text-[11px] text-muted-foreground leading-snug">
+                      ℹ️ Concessão manual é perdida se o usuário assinar via Google Play depois.
+                      Oriente o usuário a não assinar enquanto tiver acesso manual.
+                    </p>
+
+                    {/* Botão de revogar manual explícito (só aparece se já tem plano manual ativo) */}
+                    {detail.subscription?.platform === "manual" && detail.subscription.tier !== "free" && (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="destructive" size="sm" className="w-full gap-1">
+                            <UserX className="h-4 w-4" /> Revogar acesso manual
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Revogar acesso manual?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              O plano de <strong>{selectedUser?.email}</strong> voltará para <strong>Gratuito</strong> imediatamente.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => handleSubAction("revoke")}
+                              disabled={actionLoading}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Revogar"}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    )}
+
+                    <Button variant="ghost" size="sm" className="text-xs w-full" onClick={() => setShowSubForm(false)}>Fechar</Button>
                   </div>
                 )}
               </div>

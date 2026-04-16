@@ -954,7 +954,7 @@ class BillingService {
       // Buscar assinatura atual no banco
       const { data: subscription } = await supabase
         .from('subscriptions')
-        .select('tier, expires_at, is_active, updated_at, purchase_token')
+        .select('tier, expires_at, is_active, updated_at, purchase_token, platform')
         .eq('user_id', user.id)
         .single();
 
@@ -1003,7 +1003,8 @@ class BillingService {
 
       // Lógica para tier pago: verificar propriedade do token
       // Se o purchase_token foi limpo (NULL), significa que a assinatura não pertence a este usuário
-      if (!subscription?.purchase_token) {
+      // EXCEÇÃO: concessões manuais (platform='manual') não têm purchase_token e devem ser preservadas
+      if (!subscription?.purchase_token && subscription?.platform !== 'manual') {
         console.log('⚠️ Tier pago mas sem purchase_token - resetando para free...');
         
         const { error } = await supabase
@@ -1021,6 +1022,18 @@ class BillingService {
           console.log('✅ Assinatura resetada para free - token não pertence a este usuário');
         } else {
           console.error('❌ Erro ao resetar assinatura:', error);
+        }
+        return;
+      }
+
+      // Concessão manual: preserva e não tenta sincronizar com a loja
+      // A expiração natural é tratada pela RPC get_user_subscription_tier (expires_at < now())
+      if (subscription?.platform === 'manual') {
+        if (expiresAt) {
+          const days = (expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+          console.log(`✅ Plano manual ativo. Expira em ${days.toFixed(0)} dias.`);
+        } else {
+          console.log('✅ Plano manual vitalício ativo.');
         }
         return;
       }

@@ -9,6 +9,27 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
 };
 
+type Duration = "1m" | "3m" | "6m" | "1y" | "lifetime";
+
+function calcExpiresAt(duration: Duration): string | null {
+  if (duration === "lifetime") return null;
+  const d = new Date();
+  switch (duration) {
+    case "1m": d.setMonth(d.getMonth() + 1); break;
+    case "3m": d.setMonth(d.getMonth() + 3); break;
+    case "6m": d.setMonth(d.getMonth() + 6); break;
+    case "1y": d.setFullYear(d.getFullYear() + 1); break;
+  }
+  return d.toISOString();
+}
+
+function effectiveStatus(sub: any): "active" | "expired" | "lifetime" | "revoked" {
+  if (!sub) return "revoked";
+  if (sub.tier === "free" || !sub.is_active) return "revoked";
+  if (!sub.expires_at) return "lifetime";
+  return new Date(sub.expires_at) > new Date() ? "active" : "expired";
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -39,7 +60,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    const callerEmail = claimsData.claims.email;
+    const callerEmail = claimsData.claims.email as string | undefined;
+    const callerId = claimsData.claims.sub as string | undefined;
     if (callerEmail !== ADMIN_EMAIL) {
       return new Response(JSON.stringify({ error: "Acesso negado" }), {
         status: 403,
@@ -56,25 +78,35 @@ Deno.serve(async (req) => {
     if (req.method === "GET") {
       const url = new URL(req.url);
       const email = url.searchParams.get("email");
+      const filter = url.searchParams.get("filter"); // active | expired | lifetime | all
 
-      // If no email, return all active subscribers
+      // List all subscribers (no email)
       if (!email) {
-        const { data: activeSubs } = await adminClient
+        const { data: allSubs } = await adminClient
           .from("subscriptions")
           .select("*")
-          .eq("is_active", true)
           .neq("tier", "free");
 
         const { data: { users } } = await adminClient.auth.admin.listUsers();
         const userMap = new Map((users || []).map((u) => [u.id, u.email]));
 
-        const subscribers = (activeSubs || []).map((sub) => ({
-          email: userMap.get(sub.user_id) || "desconhecido",
-          tier: sub.tier,
-          platform: sub.platform,
-          started_at: sub.started_at,
-          expires_at: sub.expires_at,
-        }));
+        let subscribers = (allSubs || []).map((sub) => {
+          const status = effectiveStatus(sub);
+          return {
+            email: userMap.get(sub.user_id) || "desconhecido",
+            tier: sub.tier,
+            platform: sub.platform,
+            started_at: sub.started_at,
+            expires_at: sub.expires_at,
+            granted_by_email: sub.granted_by ? (userMap.get(sub.granted_by) || null) : null,
+            granted_at: sub.platform === "manual" ? sub.started_at : null,
+            status,
+          };
+        });
+
+        if (filter && filter !== "all") {
+          subscribers = subscribers.filter((s) => s.status === filter);
+        }
 
         return new Response(JSON.stringify({ subscribers }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -100,24 +132,42 @@ Deno.serve(async (req) => {
         .eq("is_active", true)
         .maybeSingle();
 
+      const granted_by_email = sub?.granted_by
+        ? (users?.find((u) => u.id === sub.granted_by)?.email || null)
+        : null;
+
       return new Response(
         JSON.stringify({
           user_id: targetUser.id,
           email: targetUser.email,
-          subscription: sub || null,
+          subscription: sub
+            ? {
+                ...sub,
+                granted_by_email,
+                granted_at: sub.platform === "manual" ? sub.started_at : null,
+                status: effectiveStatus(sub),
+              }
+            : null,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     if (req.method === "POST") {
-      const { email, tier } = await req.json();
+      const body = await req.json();
+      const { email, tier, duration } = body as {
+        email?: string; tier?: string; duration?: Duration;
+      };
+
       if (!email || !tier || !["premium", "no_ads"].includes(tier)) {
         return new Response(
           JSON.stringify({ error: "Email e tier (premium/no_ads) são obrigatórios" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+
+      const validDurations: Duration[] = ["1m", "3m", "6m", "1y", "lifetime"];
+      const dur: Duration = (duration && validDurations.includes(duration)) ? duration : "lifetime";
 
       const { data: { users } } = await adminClient.auth.admin.listUsers();
       const targetUser = users?.find((u) => u.email === email);
@@ -128,12 +178,30 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Upsert subscription - first check if exists
+      // Check existing subscription — block if Google Play active
       const { data: existing } = await adminClient
         .from("subscriptions")
-        .select("id")
+        .select("id, platform, expires_at, tier, purchase_token")
         .eq("user_id", targetUser.id)
         .maybeSingle();
+
+      if (existing && existing.purchase_token && existing.platform && existing.platform !== "manual") {
+        const stillValid = !existing.expires_at || new Date(existing.expires_at) > new Date();
+        if (stillValid && existing.tier !== "free") {
+          const platformLabel = existing.platform === "android" || existing.platform === "google_play"
+            ? "Google Play"
+            : existing.platform === "ios" ? "App Store" : existing.platform;
+          return new Response(
+            JSON.stringify({
+              error: `Usuário tem assinatura ativa via ${platformLabel}. Aguarde expiração ou peça para o usuário cancelar antes de conceder manualmente.`,
+            }),
+            { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+
+      const expires_at = calcExpiresAt(dur);
+      const nowIso = new Date().toISOString();
 
       if (existing) {
         const { error } = await adminClient
@@ -142,8 +210,12 @@ Deno.serve(async (req) => {
             tier,
             is_active: true,
             platform: "manual",
-            expires_at: null,
-            updated_at: new Date().toISOString(),
+            purchase_token: null,
+            product_id: null,
+            expires_at,
+            started_at: nowIso,
+            granted_by: callerId || null,
+            updated_at: nowIso,
           })
           .eq("id", existing.id);
 
@@ -154,14 +226,25 @@ Deno.serve(async (req) => {
           tier,
           is_active: true,
           platform: "manual",
-          started_at: new Date().toISOString(),
-          expires_at: null,
+          started_at: nowIso,
+          expires_at,
+          granted_by: callerId || null,
         });
         if (error) throw error;
       }
 
+      const durLabel = dur === "lifetime" ? "vitalício"
+        : dur === "1m" ? "1 mês"
+        : dur === "3m" ? "3 meses"
+        : dur === "6m" ? "6 meses"
+        : "1 ano";
+
       return new Response(
-        JSON.stringify({ success: true, message: `Plano ${tier} concedido para ${email}` }),
+        JSON.stringify({
+          success: true,
+          message: `Plano ${tier} (${durLabel}) concedido para ${email}`,
+          expires_at,
+        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -184,7 +267,7 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Reset subscription to free for ANY platform (not just manual)
+      // Reset subscription to free
       const { error } = await adminClient
         .from("subscriptions")
         .update({
@@ -194,6 +277,7 @@ Deno.serve(async (req) => {
           product_id: null,
           expires_at: null,
           platform: "manual",
+          granted_by: callerId || null,
           updated_at: new Date().toISOString(),
         })
         .eq("user_id", targetUser.id);
@@ -201,7 +285,7 @@ Deno.serve(async (req) => {
       if (error) throw error;
 
       return new Response(
-        JSON.stringify({ success: true, message: `Plano revogado para ${email} (resetado para gratuito)` }),
+        JSON.stringify({ success: true, message: `Acesso revogado para ${email} (resetado para gratuito)` }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
