@@ -1,106 +1,94 @@
 
 
-## Plano: Source of truth compartilhada para gasto de crédito por cartão
+## Plano: Concessões manuais com duração configurável, revogação explícita e regra de prioridade
 
-### Resumo
+### 1. Causa raiz do bug
 
-Extrair a lógica de "gasto atual de crédito por cartão" em uma função utilitária compartilhada, usada tanto pela home (ExpenseSummary) quanto pelo card-manager. O comprometido futuro continua como cálculo separado no card-manager.
+`billing-service.ts` (linhas ~1004-1026) reseta para `free` qualquer assinatura paga sem `purchase_token`. Concessões manuais nascem sem token → são derrubadas no próximo sync.
 
-### Mudanças
+### 2. Regra de prioridade entre manual e Google Play (decisão)
 
-**1. Novo utilitário: `src/utils/credit-card-spend.ts`**
+**Google Play sempre prevalece sobre manual quando ativa**, com as seguintes nuances:
 
-Função pura `calculateCreditCardSpend`:
+| Cenário | Regra |
+|---|---|
+| Manual ativo → usuário assina Google Play | Google Play sobrescreve. `platform='google_play'`, `purchase_token` setado, `expires_at` = data do Google. Concessão manual é perdida (loja é fonte de verdade enquanto ativa). |
+| Google Play ativo → admin concede manual | **Bloqueado pelo edge function**: retorna erro "Usuário tem assinatura ativa via Google Play. Aguarde expiração ou revogue antes de conceder manualmente." Evita inconsistência silenciosa. |
+| Google Play **expira/cancela** + manual existente | Sync detecta cancelamento → resetaria para free, MAS se houver registro histórico de concessão manual válida (`platform='manual'` em row separada ou flag), restaura manual. **Implementação simples:** mantemos apenas 1 row em `subscriptions` por usuário, então Google Play sobrescreve mesmo. Para suportar restauração, precisaríamos histórico — fora de escopo. **Decisão pragmática:** documentar que Google Play sobrescreve manual definitivamente. |
+| Tiers diferentes (manual=premium, loja=no_ads) | Loja prevalece quando ativa, mesmo que tier menor. Fonte de verdade = pagamento real. |
 
-```text
-calculateCreditCardSpend(
-  expenses: Expense[],           // despesas já filtradas pelo mês calendário
-  recurringExpenses: RecurringExpense[],  // fixas ativas
-  startDate: Date,               // início do período (ex: Apr 1)
-  endDate: Date                  // fim do período (ex: Apr 30)
-) → Record<string, { total: number; color: string }>
-```
+**Resumo curto exibido ao admin:** "Concessão manual é perdida se o usuário assinar via Google Play depois. Para garantir, oriente o usuário a não assinar enquanto tiver acesso manual."
 
-Lógica (extraída da ExpenseSummary linhas 103-125):
-- Filtra `expenses` por `payment_method === 'credit'`, agrupa por `card.name`/`card_name`, soma `amount`
-- Filtra `recurringExpenses` por `is_active && payment_method === 'credit'` e `day_of_month` dentro do período
-- Soma as fixas aos totais por cartão
-- Retorna o mesmo `Record<string, { total, color }>` que hoje o ExpenseSummary calcula inline
+### 3. Mudanças
 
-**2. `src/components/expense-summary.tsx`**
+#### `supabase/functions/admin-subscriptions/index.ts`
+- POST aceita `duration: "1m" | "3m" | "6m" | "1y" | "lifetime"`
+- Calcular `expires_at` por calendário usando `new Date()` + `setMonth()` / `setFullYear()` (não +N dias)
+- **Bloquear concessão se usuário já tem `platform='google_play'` ativa e não expirada** → retorna 409 com mensagem clara
+- GET retorna campos extras: `granted_by_email` (admin), `granted_at` (= `started_at` quando platform=manual), status efetivo calculado
+- Novo endpoint/method para listar com filtros (status: ativo/expirado/vitalício)
 
-- Importar `calculateCreditCardSpend`
-- Substituir o cálculo inline de `creditCardTotals` (linhas 103-125) pela chamada à função compartilhada
-- Comportamento idêntico, zero mudança visual
+#### Migration SQL
+- Adicionar coluna `granted_by` (uuid, nullable) em `subscriptions` para registrar admin que concedeu
+- Não precisa trigger; preenchida pelo edge function
 
-**3. `src/utils/card-limit-calculator.ts`** — Refatorar
+#### `src/services/billing-service.ts` — `checkAndSyncSubscription`
+- Adicionar `platform` ao SELECT
+- No bloco que reseta para free quando tier pago não tem purchase_token:
+  ```
+  if (tier !== 'free' && !purchase_token && platform !== 'manual') {
+    // resetar para free
+  }
+  // se platform === 'manual': pular APENAS este bloco, continuar resto da função
+  ```
+- **Não usar early return** — restante da lógica (verificação de expires_at, etc.) continua executando normalmente
+- Lógica natural de `expires_at < now()` já cuida da expiração (via `get_user_subscription_tier` RPC)
 
-Nova interface:
-```text
-CardLimitBreakdown {
-  currentSpend: number;          // gasto atual (= home)
-  futureInstallments: number;    // saldo comprometido futuro
-  committedLimit: number;        // currentSpend + futureInstallments
-  available: number;             // limit - committedLimit (pode ser negativo)
-  exceeded: number;              // max(0, committedLimit - limit)
-  percentage: number;
-}
-```
+#### `src/pages/Admin.tsx` — Painel
+- Form de concessão: adicionar Select de duração (1 mês / 3 meses / 6 meses / 1 ano / Vitalício), default Vitalício
+- Tabela/lista de assinantes com colunas:
+  - Email
+  - Tier
+  - **Status efetivo**: badge colorido (Ativo verde / Expirado cinza / Vitalício roxo / Revogado vermelho)
+  - **Origem**: badge (manual / google_play)
+  - **Expira em**: data formatada ou "—" para vitalício
+  - **Concedido por**: email do admin (quando manual)
+  - **Concedido em**: data
+- **Botão "Revogar acesso manual"** explícito (vermelho, com confirmação) — separado do select de tier. Só aparece quando `platform=manual`
+- Filtros: Todos / Ativos / Expirados / Vitalícios
 
-Nova assinatura:
-```text
-calculateCardLimitBreakdown(
-  currentCardSpend: number,      // resultado da função compartilhada para este cartão
-  allExpenses: CardExpenseRecord[],
-  cardId: string,
-  config: CreditCardConfig,
-  cardLimit: number
-) → CardLimitBreakdown
-```
+### 4. Testes a executar (após implementação)
 
-Lógica:
-- `currentSpend` = parâmetro recebido (já calculado pela source of truth)
-- `futureInstallments`: para cada `installment_group_id` com parcela no billing period atual (via `calculateBillingPeriod`), calcular `amount × (total - N)`
-- `committedLimit = currentSpend + futureInstallments`
-- `available = cardLimit - committedLimit`
-- `exceeded = Math.max(0, -available)`
+| # | Teste | Como validar | Resultado esperado |
+|---|---|---|---|
+| 1 | Conceder premium manual 1 mês | Conceder via admin, chamar `checkAndSyncSubscription` 5x simulado | tier permanece `premium`, `expires_at` ≈ hoje+1mês |
+| 2 | Expiração natural | Atualizar `expires_at` para `now() - 1 day` via SQL, chamar `get_user_subscription_tier` | retorna `free` |
+| 3 | Vitalício | Conceder lifetime, chamar sync repetido | tier permanece `premium`, `expires_at` = NULL |
+| 4 | Revogação manual | Clicar "Revogar acesso manual" | tier vira `free` imediatamente, `platform='manual'`, `expires_at=null` |
+| 5 | Conflito Google Play ativo + tentativa manual | Setar manualmente `platform='google_play'`, `expires_at=futuro`, tentar conceder via admin | edge function retorna 409 com mensagem clara |
+| 6 | Manual + sync Google Play sobrescreve | Manual ativo, simular validate-purchase com purchase_token | `platform='google_play'`, `purchase_token` setado, manual perdido |
 
-**4. `src/components/card-manager.tsx`**
+Testes 1, 3, 4: via UI do admin + leitura SQL.  
+Testes 2, 5, 6: via SQL direto + chamada de função.
 
-- Importar `calculateCreditCardSpend`
-- Buscar `recurring_expenses` ativas de crédito vinculadas aos cartões com limite
-- Chamar `calculateCreditCardSpend` para obter o gasto atual por cartão (by card name → precisa mapear para card id)
-- Passar o `currentSpend` do cartão para `calculateCardLimitBreakdown`
-- Atualizar rótulos na UI:
+### 5. Entregáveis após implementação
 
-```text
-Gasto atual do cartão: R$ X
-Comprometido futuro (parceladas): R$ Y
-Limite comprometido: R$ Z de R$ Limite
-Disponível estimado: R$ W        (ou "Ultrapassado em R$ X" em vermelho)
-Inclui despesas do mês e saldo futuro de parceladas
-```
+1. **Arquivos alterados**:
+   - `supabase/functions/admin-subscriptions/index.ts`
+   - `src/services/billing-service.ts`
+   - `src/pages/Admin.tsx`
+   - Migration: adicionar coluna `granted_by` em `subscriptions`
 
-- Quando `available < 0`: texto em vermelho "Ultrapassado em R$ |valor|"
-- Quando `futureInstallments === 0`: omitir a linha "Comprometido futuro"
+2. **Regra de prioridade documentada** (acima na seção 2)
 
-### Breakdown esperado (BB, abril 2026)
-
-```text
-currentSpend = R$ 201,41  (5 avulsos + 3 fixas, = home)
-futureInstallments = Notebook (400×1) + Máquina (500×1) = R$ 900,00
-committedLimit = R$ 1.101,41
-available = R$ 1.198,00 - R$ 1.101,41 = R$ 96,59
-```
+3. **Resumo dos 6 testes** com resultado de cada um
 
 ### Arquivos afetados
 
 | Arquivo | Mudança |
 |---|---|
-| `src/utils/credit-card-spend.ts` | NOVO — source of truth compartilhada |
-| `src/utils/card-limit-calculator.ts` | Refatorar para receber currentSpend como parâmetro |
-| `src/components/expense-summary.tsx` | Usar função compartilhada |
-| `src/components/card-manager.tsx` | Usar função compartilhada + rótulos novos + ultrapassagem |
-
-Nenhuma migração SQL necessária.
+| `supabase/functions/admin-subscriptions/index.ts` | duration calendário, bloquear conflito Google Play, retornar campos extras |
+| `src/services/billing-service.ts` | proteger platform=manual sem early return |
+| `src/pages/Admin.tsx` | Select duração, tabela rica, botão revogar explícito, filtros |
+| Migration SQL | coluna `granted_by` em `subscriptions` |
 
