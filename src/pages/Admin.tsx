@@ -392,7 +392,11 @@ function UsersTab({ allEmails, onSubscriptionChange }: {
       const res = await fetch(SUBS_API, {
         method: action === "grant" ? "POST" : "DELETE",
         headers,
-        body: JSON.stringify(action === "grant" ? { email: selectedUser.email, tier: selectedTier } : { email: selectedUser.email }),
+        body: JSON.stringify(
+          action === "grant"
+            ? { email: selectedUser.email, tier: selectedTier, duration: selectedDuration }
+            : { email: selectedUser.email }
+        ),
       });
       const data = await res.json();
       if (!res.ok) toast({ title: "Erro", description: data.error, variant: "destructive" });
@@ -500,11 +504,45 @@ function UsersTab({ allEmails, onSubscriptionChange }: {
                 <div><p className="text-xs text-muted-foreground">Email</p><p className="text-sm font-medium text-foreground truncate">{detail.email}</p></div>
                 <div><p className="text-xs text-muted-foreground">Cadastro</p><p className="text-sm text-foreground">{new Date(detail.created_at).toLocaleDateString("pt-BR")}</p></div>
                 <div><p className="text-xs text-muted-foreground">Plano</p><TierBadge tier={detail.subscription?.tier} platform={detail.subscription?.platform} /></div>
-                <div><p className="text-xs text-muted-foreground">Status</p><Badge variant={detail.subscription?.is_active ? "default" : "secondary"}>{detail.subscription?.is_active ? "Ativo" : "Inativo"}</Badge></div>
+                <div><p className="text-xs text-muted-foreground">Status efetivo</p><StatusBadge status={detail.subscription?.status} /></div>
               </div>
 
-              {detail.subscription?.expires_at && (
-                <div><p className="text-xs text-muted-foreground">Expira em</p><p className="text-sm text-foreground">{new Date(detail.subscription.expires_at).toLocaleDateString("pt-BR")}</p></div>
+              {/* Subscription extra info (only for paid plans) */}
+              {detail.subscription && detail.subscription.tier !== "free" && (
+                <div className="grid grid-cols-2 gap-3 bg-muted/30 rounded-lg p-3">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Expira em</p>
+                    <p className="text-sm text-foreground">
+                      {detail.subscription.expires_at
+                        ? new Date(detail.subscription.expires_at).toLocaleDateString("pt-BR")
+                        : "—  (vitalício)"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Origem</p>
+                    <p className="text-sm text-foreground capitalize">
+                      {detail.subscription.platform === "manual" ? "Manual"
+                        : detail.subscription.platform === "google_play" ? "Google Play"
+                        : (detail.subscription.platform || "—")}
+                    </p>
+                  </div>
+                  {detail.subscription.platform === "manual" && (
+                    <>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Concedido por</p>
+                        <p className="text-sm text-foreground truncate">{detail.subscription.granted_by_email || "—"}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Concedido em</p>
+                        <p className="text-sm text-foreground">
+                          {detail.subscription.granted_at
+                            ? new Date(detail.subscription.granted_at).toLocaleDateString("pt-BR")
+                            : "—"}
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
 
               {/* Stats */}
