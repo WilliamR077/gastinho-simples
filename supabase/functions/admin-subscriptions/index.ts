@@ -185,12 +185,15 @@ Deno.serve(async (req) => {
         .eq("user_id", targetUser.id)
         .maybeSingle();
 
-      if (existing && existing.platform === "google_play" && existing.purchase_token) {
+      if (existing && existing.purchase_token && existing.platform && existing.platform !== "manual") {
         const stillValid = !existing.expires_at || new Date(existing.expires_at) > new Date();
         if (stillValid && existing.tier !== "free") {
+          const platformLabel = existing.platform === "android" || existing.platform === "google_play"
+            ? "Google Play"
+            : existing.platform === "ios" ? "App Store" : existing.platform;
           return new Response(
             JSON.stringify({
-              error: "Usuário tem assinatura ativa via Google Play. Aguarde expiração ou peça para o usuário cancelar antes de conceder manualmente.",
+              error: `Usuário tem assinatura ativa via ${platformLabel}. Aguarde expiração ou peça para o usuário cancelar antes de conceder manualmente.`,
             }),
             { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
