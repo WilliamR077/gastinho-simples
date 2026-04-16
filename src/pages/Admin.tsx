@@ -43,11 +43,24 @@ function TierBadge({ tier, platform }: { tier?: string; platform?: string | null
   if (!tier || tier === "free") return <Badge variant="secondary">Gratuito</Badge>;
   const label = tier === "premium" ? "Premium ⭐" : tier === "no_ads" ? "Sem Anúncios" : tier;
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 flex-wrap">
       <Badge className="bg-primary text-primary-foreground">{label}</Badge>
       {platform === "manual" && <Badge variant="outline">Manual</Badge>}
+      {platform === "google_play" && <Badge variant="outline">Google Play</Badge>}
     </div>
   );
+}
+
+function StatusBadge({ status }: { status?: string }) {
+  if (!status) return null;
+  const map: Record<string, { label: string; className: string }> = {
+    active: { label: "Ativo", className: "bg-green-500/15 text-green-600 dark:text-green-400 border-green-500/30" },
+    lifetime: { label: "Vitalício", className: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30" },
+    expired: { label: "Expirado", className: "bg-muted text-muted-foreground border-border" },
+    revoked: { label: "Revogado", className: "bg-destructive/15 text-destructive border-destructive/30" },
+  };
+  const m = map[status] || map.revoked;
+  return <Badge variant="outline" className={m.className}>{m.label}</Badge>;
 }
 
 function KpiCard({ title, value, icon: Icon, subtitle, color = "text-primary" }: {
