@@ -621,31 +621,78 @@ function UsersTab({ allEmails, onSubscriptionChange }: {
                     </AlertDialog>
                   </div>
                 ) : (
-                  <div className="space-y-2 bg-muted/30 rounded-lg p-3">
-                    <p className="text-xs font-medium text-foreground">Gerenciar Assinatura</p>
-                    <div className="flex gap-2 items-end">
-                      <div className="flex-1 space-y-1">
+                  <div className="space-y-3 bg-muted/30 rounded-lg p-3">
+                    <p className="text-xs font-medium text-foreground">Conceder acesso manual</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-[11px] text-muted-foreground">Plano</label>
                         <Select value={selectedTier} onValueChange={setSelectedTier}>
                           <SelectTrigger><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="premium">Premium ⭐</SelectItem>
                             <SelectItem value="no_ads">Sem Anúncios</SelectItem>
-                            <SelectItem value="free">Gratuito (Revogar)</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
-                      <Button
-                        onClick={() => selectedTier === "free" ? handleSubAction("revoke") : handleSubAction("grant")}
-                        disabled={actionLoading}
-                        variant={selectedTier === "free" ? "destructive" : "default"}
-                        size="sm"
-                        className="gap-1"
-                      >
-                        {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : selectedTier === "free" ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
-                        {selectedTier === "free" ? "Revogar" : "Conceder"}
-                      </Button>
+                      <div className="space-y-1">
+                        <label className="text-[11px] text-muted-foreground">Duração</label>
+                        <Select value={selectedDuration} onValueChange={(v) => setSelectedDuration(v as any)}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="1m">1 mês</SelectItem>
+                            <SelectItem value="3m">3 meses</SelectItem>
+                            <SelectItem value="6m">6 meses</SelectItem>
+                            <SelectItem value="1y">1 ano</SelectItem>
+                            <SelectItem value="lifetime">Vitalício</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
-                    <Button variant="ghost" size="sm" className="text-xs" onClick={() => setShowSubForm(false)}>Cancelar</Button>
+                    <Button
+                      onClick={() => handleSubAction("grant")}
+                      disabled={actionLoading}
+                      size="sm"
+                      className="w-full gap-1"
+                    >
+                      {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCheck className="h-4 w-4" />}
+                      Conceder
+                    </Button>
+
+                    <p className="text-[11px] text-muted-foreground leading-snug">
+                      ℹ️ Concessão manual é perdida se o usuário assinar via Google Play depois.
+                      Oriente o usuário a não assinar enquanto tiver acesso manual.
+                    </p>
+
+                    {/* Botão de revogar manual explícito (só aparece se já tem plano manual ativo) */}
+                    {detail.subscription?.platform === "manual" && detail.subscription.tier !== "free" && (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="destructive" size="sm" className="w-full gap-1">
+                            <UserX className="h-4 w-4" /> Revogar acesso manual
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Revogar acesso manual?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              O plano de <strong>{selectedUser?.email}</strong> voltará para <strong>Gratuito</strong> imediatamente.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => handleSubAction("revoke")}
+                              disabled={actionLoading}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Revogar"}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    )}
+
+                    <Button variant="ghost" size="sm" className="text-xs w-full" onClick={() => setShowSubForm(false)}>Fechar</Button>
                   </div>
                 )}
               </div>
