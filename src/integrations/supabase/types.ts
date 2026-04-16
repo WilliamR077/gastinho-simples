@@ -709,6 +709,7 @@ export type Database = {
         Row: {
           created_at: string
           expires_at: string | null
+          granted_by: string | null
           id: string
           is_active: boolean
           platform: string | null
@@ -722,6 +723,7 @@ export type Database = {
         Insert: {
           created_at?: string
           expires_at?: string | null
+          granted_by?: string | null
           id?: string
           is_active?: boolean
           platform?: string | null
@@ -735,6 +737,7 @@ export type Database = {
         Update: {
           created_at?: string
           expires_at?: string | null
+          granted_by?: string | null
           id?: string
           is_active?: boolean
           platform?: string | null
