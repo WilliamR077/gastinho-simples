@@ -272,6 +272,7 @@ function UsersTab({ allEmails, onSubscriptionChange }: {
   const [detailLoading, setDetailLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [selectedTier, setSelectedTier] = useState("premium");
+  const [selectedDuration, setSelectedDuration] = useState<"1m" | "3m" | "6m" | "1y" | "lifetime">("lifetime");
   const [actionLoading, setActionLoading] = useState(false);
   const [showSubForm, setShowSubForm] = useState(false);
   const [page, setPage] = useState(0);
@@ -322,10 +323,34 @@ function UsersTab({ allEmails, onSubscriptionChange }: {
     setShowSubForm(false);
     try {
       const headers = await getAuthHeaders();
-      const res = await fetch(`${DASH_API}?email=${encodeURIComponent(user.email)}`, { headers });
-      const data = await res.json();
-      if (res.ok) setDetail(data);
-      else toast({ title: "Erro", description: data.error, variant: "destructive" });
+      // Fetch dashboard detail + subscription detail (with manual fields) in parallel
+      const [resDash, resSub] = await Promise.all([
+        fetch(`${DASH_API}?email=${encodeURIComponent(user.email)}`, { headers }),
+        fetch(`${SUBS_API}?email=${encodeURIComponent(user.email)}`, { headers }),
+      ]);
+      const dataDash = await resDash.json();
+      const dataSub = resSub.ok ? await resSub.json() : null;
+      if (resDash.ok) {
+        // Merge: prefer subs API for subscription details (has granted_by_email, status, etc.)
+        const merged: UserDetail = {
+          ...dataDash,
+          subscription: dataSub?.subscription
+            ? {
+                tier: dataSub.subscription.tier,
+                platform: dataSub.subscription.platform,
+                is_active: dataSub.subscription.is_active,
+                expires_at: dataSub.subscription.expires_at,
+                granted_by_email: dataSub.subscription.granted_by_email,
+                granted_at: dataSub.subscription.granted_at,
+                status: dataSub.subscription.status,
+                started_at: dataSub.subscription.started_at,
+              }
+            : dataDash.subscription,
+        };
+        setDetail(merged);
+      } else {
+        toast({ title: "Erro", description: dataDash.error, variant: "destructive" });
+      }
     } catch (err: any) {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
     } finally {
