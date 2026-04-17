@@ -29,6 +29,12 @@ interface OnboardingTooltipProps {
   onSkipSubstep?: () => void;
   // P1: back button for guided form flows
   onBack?: () => void;
+  /**
+   * Compact mode: smaller card, smaller text, hides "Pular etapa" — used when
+   * the tooltip is rendered inside a sheet (e.g. category manager) so it
+   * doesn't overlap the highlighted area.
+   */
+  compact?: boolean;
 }
 
 export function OnboardingTooltip({
@@ -47,10 +53,13 @@ export function OnboardingTooltip({
   onProceed,
   onSkipSubstep,
   onBack,
+  compact = false,
 }: OnboardingTooltipProps) {
   const [pos, setPos] = useState<{ top: number; left: number; placement: "above" | "below" } | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number>(0);
+
+  const maxTooltipWidth = compact ? 280 : 320;
 
   const updatePosition = useCallback(() => {
     if (!targetSelector) {
@@ -66,7 +75,7 @@ export function OnboardingTooltip({
 
     const rect = el.getBoundingClientRect();
     const tooltipHeight = tooltipRef.current?.offsetHeight || 180;
-    const tooltipWidth = Math.min(320, window.innerWidth - 32);
+    const tooltipWidth = Math.min(maxTooltipWidth, window.innerWidth - 32);
     const gap = 16;
     const padding = 8;
     const centerX = rect.left + rect.width / 2;
@@ -110,7 +119,7 @@ export function OnboardingTooltip({
       candidates.sort((a, b) => a.overlapArea - b.overlapArea)[0];
 
     setPos({ top: bestCandidate.top, left, placement: bestCandidate.placement });
-  }, [targetSelector, substep.placement]);
+  }, [targetSelector, substep.placement, maxTooltipWidth]);
 
   useEffect(() => {
     if (!targetSelector) {
@@ -135,30 +144,42 @@ export function OnboardingTooltip({
   // For navigate/completion: center in screen
   const isCentered = !targetSelector;
 
+  // Mobile-friendly button defaults: stacked, ample touch area, safe area aware.
+  const PRIMARY_BTN_CLS = compact
+    ? "w-full h-10 text-sm font-medium"
+    : "w-full h-12 text-base font-medium";
+  const SECONDARY_BTN_CLS = PRIMARY_BTN_CLS;
+  const ACTION_STACK_CLS = compact ? "flex flex-col gap-2 mt-3" : "flex flex-col gap-3 mt-3";
+
   const tooltipContent = (
     <div
       ref={tooltipRef}
-      className="bg-card border border-border rounded-xl shadow-2xl p-4"
-      style={{ maxWidth: "min(320px, calc(100vw - 32px))" }}
+      className={`bg-card border border-border rounded-xl shadow-2xl ${compact ? "p-3" : "p-4"}`}
+      style={{
+        maxWidth: `min(${maxTooltipWidth}px, calc(100vw - 32px))`,
+        paddingBottom: `calc(${compact ? "0.75rem" : "1rem"} + env(safe-area-inset-bottom))`,
+      }}
     >
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <span className="text-2xl">{substep.emoji}</span>
+          <span className={compact ? "text-xl" : "text-2xl"}>{substep.emoji}</span>
           <span className="text-xs text-muted-foreground font-medium">
             Passo {stepIndex + 1} de {totalSteps}
           </span>
         </div>
         <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onSkipStep}
-            className="text-xs h-7 px-2"
-          >
-            <SkipForward className="h-3 w-3 mr-1" />
-            Pular etapa
-          </Button>
+          {!compact && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onSkipStep}
+              className="text-xs h-7 px-2"
+            >
+              <SkipForward className="h-3 w-3 mr-1" />
+              Pular etapa
+            </Button>
+          )}
           <Button variant="ghost" size="icon" onClick={onClose} className="h-7 w-7">
             <X className="h-4 w-4" />
           </Button>
@@ -167,113 +188,115 @@ export function OnboardingTooltip({
 
       {/* Content */}
       <div className="space-y-1 mb-3">
-        <h3 className="font-semibold text-sm">{substep.title}</h3>
-        <p className="text-xs text-muted-foreground leading-relaxed">
+        <h3 className={compact ? "font-semibold text-sm" : "font-semibold text-base"}>
+          {substep.title}
+        </h3>
+        <p
+          className={`${compact ? "text-xs" : "text-sm"} text-muted-foreground leading-relaxed whitespace-pre-line`}
+        >
           {substep.description}
         </p>
       </div>
 
       {/* Action buttons based on type */}
       {substep.actionType === "fill" && substep.requiresValidation && (
-        <div className="flex gap-2 mt-2">
-          {/* P1: Back button in guided form flows */}
+        <div className={ACTION_STACK_CLS}>
+          <Button
+            onClick={onNext}
+            disabled={!isValid}
+            className={PRIMARY_BTN_CLS}
+          >
+            Próximo
+            <ArrowRight className="h-4 w-4 ml-1" />
+          </Button>
           {onBack && (
-            <Button size="sm" variant="outline" onClick={onBack} className="px-3">
+            <Button variant="outline" onClick={onBack} className={SECONDARY_BTN_CLS}>
               Voltar
             </Button>
           )}
-          <Button
-            size="sm"
-            onClick={onNext}
-            disabled={!isValid}
-            className="flex-1"
-          >
-            Próximo
-            <ArrowRight className="h-3 w-3 ml-1" />
-          </Button>
         </div>
       )}
 
       {/* Auto-advance selects: no "Próximo" button, user just selects and it advances */}
       {substep.actionType === "select" && substep.requiresValidation && !substep.autoAdvanceOnSelect && (
-        <div className="flex gap-2 mt-2">
+        <div className={ACTION_STACK_CLS}>
+          <Button
+            onClick={onNext}
+            disabled={!isValid}
+            className={PRIMARY_BTN_CLS}
+          >
+            Próximo
+            <ArrowRight className="h-4 w-4 ml-1" />
+          </Button>
           {onBack && (
-            <Button size="sm" variant="outline" onClick={onBack} className="px-3">
+            <Button variant="outline" onClick={onBack} className={SECONDARY_BTN_CLS}>
               Voltar
             </Button>
           )}
-          <Button
-            size="sm"
-            onClick={onNext}
-            disabled={!isValid}
-            className="flex-1"
-          >
-            Próximo
-            <ArrowRight className="h-3 w-3 ml-1" />
-          </Button>
         </div>
       )}
 
       {substep.actionType === "optional-group" && (
-        <div className="flex gap-2 mt-2">
-          {onBack && (
-            <Button size="sm" variant="outline" onClick={onBack} className="px-3">
-              Voltar
-            </Button>
-          )}
+        <div className={ACTION_STACK_CLS}>
+          <Button onClick={onNext} className={PRIMARY_BTN_CLS}>
+            Continuar
+            <ArrowRight className="h-4 w-4 ml-1" />
+          </Button>
           <Button
-            size="sm"
             variant="outline"
             onClick={onSkipSubstep || onNext}
-            className="flex-1"
+            className={SECONDARY_BTN_CLS}
           >
             {substep.skipLabel || "Pular"}
           </Button>
-          <Button size="sm" onClick={onNext} className="flex-1">
-            Continuar
-            <ArrowRight className="h-3 w-3 ml-1" />
-          </Button>
+          {onBack && (
+            <Button variant="outline" onClick={onBack} className={SECONDARY_BTN_CLS}>
+              Voltar
+            </Button>
+          )}
         </div>
       )}
 
       {substep.actionType === "navigate" && substep.navigateLabel && (
-        <Button size="sm" onClick={onNext} className="w-full mt-2">
-          {substep.navigateLabel}
-          <ArrowRight className="h-3 w-3 ml-1" />
-        </Button>
-      )}
-
-      {substep.actionType === "info" && (
-        <div className={`flex ${substep.skipLabel && onSkipSubstep ? "flex-col sm:flex-row gap-2" : ""} mt-2`}>
-          {onBack && !substep.skipLabel && (
-            <Button size="sm" variant="outline" onClick={onBack} className="px-3">
-              Voltar
-            </Button>
-          )}
-          {substep.skipLabel && onSkipSubstep && (
-            <Button size="sm" variant="outline" onClick={onSkipSubstep} className="flex-1">
-              {substep.skipLabel}
-            </Button>
-          )}
-          <Button size="sm" onClick={onNext} className={substep.skipLabel && onSkipSubstep ? "flex-1" : onBack ? "flex-1" : "w-full"}>
-            {substep.navigateLabel || "Continuar"}
-            <ArrowRight className="h-3 w-3 ml-1" />
+        <div className={ACTION_STACK_CLS}>
+          <Button onClick={onNext} className={PRIMARY_BTN_CLS}>
+            {substep.navigateLabel}
+            <ArrowRight className="h-4 w-4 ml-1" />
           </Button>
         </div>
       )}
 
-      {substep.actionType === "completion" && (
-        <div className="flex flex-col gap-2 mt-2">
-          {onRepeat && (
-            <Button size="sm" variant="outline" onClick={onRepeat} className="w-full">
-              <Plus className="h-3 w-3 mr-1" />
-              {substep.repeatLabel || "Adicionar outro"}
+      {substep.actionType === "info" && (
+        <div className={ACTION_STACK_CLS}>
+          <Button onClick={onNext} className={PRIMARY_BTN_CLS}>
+            {substep.navigateLabel || "Continuar"}
+            <ArrowRight className="h-4 w-4 ml-1" />
+          </Button>
+          {substep.skipLabel && onSkipSubstep && (
+            <Button variant="outline" onClick={onSkipSubstep} className={SECONDARY_BTN_CLS}>
+              {substep.skipLabel}
             </Button>
           )}
+          {onBack && !substep.skipLabel && (
+            <Button variant="outline" onClick={onBack} className={SECONDARY_BTN_CLS}>
+              Voltar
+            </Button>
+          )}
+        </div>
+      )}
+
+      {substep.actionType === "completion" && (
+        <div className={ACTION_STACK_CLS}>
           {onProceed && (
-            <Button size="sm" onClick={onProceed} className="w-full">
-              <ArrowRight className="h-3 w-3 mr-1" />
+            <Button onClick={onProceed} className={PRIMARY_BTN_CLS}>
+              <ArrowRight className="h-4 w-4 mr-1" />
               {substep.proceedLabel || "Prosseguir"}
+            </Button>
+          )}
+          {onRepeat && (
+            <Button variant="outline" onClick={onRepeat} className={SECONDARY_BTN_CLS}>
+              <Plus className="h-4 w-4 mr-1" />
+              {substep.repeatLabel || "Adicionar outro"}
             </Button>
           )}
         </div>
@@ -307,10 +330,9 @@ export function OnboardingTooltip({
       style={{
         top: pos.top,
         left: pos.left,
-        width: Math.min(320, window.innerWidth - 32),
+        width: Math.min(maxTooltipWidth, window.innerWidth - 32),
       }}
     >
-      {/* Arrow */}
       <div className="pointer-events-auto relative">
         {tooltipContent}
       </div>
