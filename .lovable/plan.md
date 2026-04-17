@@ -1,94 +1,151 @@
 
 
-## Plano: Concessões manuais com duração configurável, revogação explícita e regra de prioridade
+## Plano: Refinamento UX/UI do Tutorial Guiado (v3)
 
-### 1. Causa raiz do bug
+Versão final com as 2 garantias de segurança de implementação adicionadas.
 
-`billing-service.ts` (linhas ~1004-1026) reseta para `free` qualquer assinatura paga sem `purchase_token`. Concessões manuais nascem sem token → são derrubadas no próximo sync.
+---
 
-### 2. Regra de prioridade entre manual e Google Play (decisão)
+### 1. Botões padronizados (passos 3, 4, 7)
 
-**Google Play sempre prevalece sobre manual quando ativa**, com as seguintes nuances:
+**`src/components/onboarding/onboarding-tooltip.tsx`**
+- Layout sempre `flex-col gap-3`, botões `h-12 text-base font-medium`.
+- Hierarquia: principal `default`, secundário `outline`.
+- `pb-[env(safe-area-inset-bottom)]` no wrapper.
+- Aplicado a `info`, `optional-group`, `completion`, `navigate`.
 
-| Cenário | Regra |
-|---|---|
-| Manual ativo → usuário assina Google Play | Google Play sobrescreve. `platform='google_play'`, `purchase_token` setado, `expires_at` = data do Google. Concessão manual é perdida (loja é fonte de verdade enquanto ativa). |
-| Google Play ativo → admin concede manual | **Bloqueado pelo edge function**: retorna erro "Usuário tem assinatura ativa via Google Play. Aguarde expiração ou revogue antes de conceder manualmente." Evita inconsistência silenciosa. |
-| Google Play **expira/cancela** + manual existente | Sync detecta cancelamento → resetaria para free, MAS se houver registro histórico de concessão manual válida (`platform='manual'` em row separada ou flag), restaura manual. **Implementação simples:** mantemos apenas 1 row em `subscriptions` por usuário, então Google Play sobrescreve mesmo. Para suportar restauração, precisaríamos histórico — fora de escopo. **Decisão pragmática:** documentar que Google Play sobrescreve manual definitivamente. |
-| Tiers diferentes (manual=premium, loja=no_ads) | Loja prevalece quando ativa, mesmo que tier menor. Fonte de verdade = pagamento real. |
+---
 
-**Resumo curto exibido ao admin:** "Concessão manual é perdida se o usuário assinar via Google Play depois. Para garantir, oriente o usuário a não assinar enquanto tiver acesso manual."
+### 2. Copy do passo 4 (`income-intro`)
 
-### 3. Mudanças
+**`src/lib/onboarding/onboarding-steps.ts`**
 
-#### `supabase/functions/admin-subscriptions/index.ts`
-- POST aceita `duration: "1m" | "3m" | "6m" | "1y" | "lifetime"`
-- Calcular `expires_at` por calendário usando `new Date()` + `setMonth()` / `setFullYear()` (não +N dias)
-- **Bloquear concessão se usuário já tem `platform='google_play'` ativa e não expirada** → retorna 409 com mensagem clara
-- GET retorna campos extras: `granted_by_email` (admin), `granted_at` (= `started_at` quando platform=manual), status efetivo calculado
-- Novo endpoint/method para listar com filtros (status: ativo/expirado/vitalício)
+```text
+Você pode registrar 3 tipos de entrada:
 
-#### Migration SQL
-- Adicionar coluna `granted_by` (uuid, nullable) em `subscriptions` para registrar admin que concedeu
-- Não precisa trigger; preenchida pelo edge function
+💰 Entrada do mês — freelance, venda ou bônus
+🔄 Entrada fixa — salário ou valor recorrente
+📑 Entrada parcelada — projetos/vendas em parcelas
 
-#### `src/services/billing-service.ts` — `checkAndSyncSubscription`
-- Adicionar `platform` ao SELECT
-- No bloco que reseta para free quando tier pago não tem purchase_token:
-  ```
-  if (tier !== 'free' && !purchase_token && platform !== 'manual') {
-    // resetar para free
-  }
-  // se platform === 'manual': pular APENAS este bloco, continuar resto da função
-  ```
-- **Não usar early return** — restante da lógica (verificação de expires_at, etc.) continua executando normalmente
-- Lógica natural de `expires_at < now()` já cuida da expiração (via `get_user_subscription_tier` RPC)
+Escolha no formulário a opção que combina com esta entrada.
+```
 
-#### `src/pages/Admin.tsx` — Painel
-- Form de concessão: adicionar Select de duração (1 mês / 3 meses / 6 meses / 1 ano / Vitalício), default Vitalício
-- Tabela/lista de assinantes com colunas:
-  - Email
-  - Tier
-  - **Status efetivo**: badge colorido (Ativo verde / Expirado cinza / Vitalício roxo / Revogado vermelho)
-  - **Origem**: badge (manual / google_play)
-  - **Expira em**: data formatada ou "—" para vitalício
-  - **Concedido por**: email do admin (quando manual)
-  - **Concedido em**: data
-- **Botão "Revogar acesso manual"** explícito (vermelho, com confirmação) — separado do select de tier. Só aparece quando `platform=manual`
-- Filtros: Todos / Ativos / Expirados / Vitalícios
+`whitespace-pre-line` no `<p>` da descrição.
 
-### 4. Testes a executar (após implementação)
+---
 
-| # | Teste | Como validar | Resultado esperado |
-|---|---|---|---|
-| 1 | Conceder premium manual 1 mês | Conceder via admin, chamar `checkAndSyncSubscription` 5x simulado | tier permanece `premium`, `expires_at` ≈ hoje+1mês |
-| 2 | Expiração natural | Atualizar `expires_at` para `now() - 1 day` via SQL, chamar `get_user_subscription_tier` | retorna `free` |
-| 3 | Vitalício | Conceder lifetime, chamar sync repetido | tier permanece `premium`, `expires_at` = NULL |
-| 4 | Revogação manual | Clicar "Revogar acesso manual" | tier vira `free` imediatamente, `platform='manual'`, `expires_at=null` |
-| 5 | Conflito Google Play ativo + tentativa manual | Setar manualmente `platform='google_play'`, `expires_at=futuro`, tentar conceder via admin | edge function retorna 409 com mensagem clara |
-| 6 | Manual + sync Google Play sobrescreve | Manual ativo, simular validate-purchase com purchase_token | `platform='google_play'`, `purchase_token` setado, manual perdido |
+### 3. Subetapas progressivas no Tipo de Entrada — **Garantia 1 (lockTarget)**
 
-Testes 1, 3, 4: via UI do admin + leitura SQL.  
-Testes 2, 5, 6: via SQL direto + chamada de função.
+**Arquivos:**
+- `unified-income-form-sheet.tsx`: `data-onboarding` em cada `RadioGroupItem` (`income-type-monthly|recurring|installment`).
+- `onboarding-steps.ts`: substituir 1 substep por 4 (3 `info` com `lockTarget: true`, 1 `select` final).
+- `onboarding-overlay.tsx`: nova prop `lockTarget` renderiza camada `pointer-events: auto` sobre o recorte do alvo.
 
-### 5. Entregáveis após implementação
+**Garantia adicional — recálculo da camada bloqueadora:**
+- A camada bloqueadora usa as mesmas coordenadas do `targetRect` que já é atualizado via `requestAnimationFrame` loop existente (linhas 60-78 do overlay).
+- Como o overlay já roda rAF contínuo enquanto visível, scroll/resize/reflow são cobertos automaticamente.
+- Adicionar listeners explícitos `window.addEventListener("scroll", ..., { passive: true, capture: true })` e `window.addEventListener("resize", ...)` para forçar `updateRect()` imediato em eventos discretos (complemento ao rAF, garante resposta instantânea).
+- Cleanup: remover ambos os listeners no `return` do `useEffect`.
 
-1. **Arquivos alterados**:
-   - `supabase/functions/admin-subscriptions/index.ts`
-   - `src/services/billing-service.ts`
-   - `src/pages/Admin.tsx`
-   - Migration: adicionar coluna `granted_by` em `subscriptions`
+---
 
-2. **Regra de prioridade documentada** (acima na seção 2)
+### 4. Conclusão em 2 fases (sucesso → Premium)
 
-3. **Resumo dos 6 testes** com resultado de cada um
+**`onboarding-tour.tsx`**
+- State `completionPhase: "success" | "premium"`.
+- Tela 1: parabéns + lista, botão `h-12` "Continuar".
+- Tela 2: benefícios + 2 botões `h-12` empilhados ("Conhecer Premium" / "Talvez depois").
+- `pb-[env(safe-area-inset-bottom)]` no `DialogFooter`.
+- Banner via `useAdBannerLock("onboarding-completion", showCompletionDialog)`.
+
+---
+
+### 5. Gerenciar Categorias — layout + tooltip compact
+
+**`category-manager.tsx`**
+- Linha de ações: `flex items-center gap-0.5 shrink-0`, row pai `min-w-0`, `pl-3 pr-1`.
+- `ScrollArea pr-2`, sheet content `px-4`.
+- `useAdBannerLock("category-sheet", isOpen)`.
+
+**`onboarding-tooltip.tsx`** — modo `compact`:
+- `maxWidth: 280px`, `p-3`, descrição `text-xs`, esconde "Pular etapa".
+- Ativado quando `currentSubstep.id` começa com `expense-category-manager-`, `recurring-category-manager-` ou `income-category-manager-`.
+
+---
+
+### 6. Reset ao reabrir Gerenciar Categorias — **Garantia 2 (3 contextos)**
+
+**`use-onboarding-tour.tsx`**
+
+Mapa evento → substep de retomada:
+```text
+category-manager-opened           → expense-category-manager-intro
+recurring-category-manager-opened → recurring-category-manager-intro
+income-category-manager-opened    → income-category-manager-intro
+```
+
+Ao receber qualquer evento `*-opened` quando o respectivo `*-closed` já está em `seenEventsRef`:
+1. Remove o `*-closed`.
+2. Localiza índice do `*-intro` no `currentStep.substeps` (verifica `currentStep.id` para escolher o intro correto entre os 3).
+3. `setSubstepIndex(intoIndex)` para rebobinar.
+
+Cobre primeira abertura, reaberturas e os 3 fluxos.
+
+---
+
+### 7. Coordenador AdMob — **Garantia 3 + segurança de cleanup**
+
+**Arquivo novo:** `src/services/admob-visibility-coordinator.ts`
+
+```text
+class AdBannerCoordinator {
+  private reasons = new Set<string>();
+  requestHide(reason: string)   // adiciona ao set + hideBanner()
+  releaseHide(reason: string)   // remove; se set.size === 0 → showBanner()
+  forceRelease(reasonPrefix?)   // limpa razões correspondentes (cleanup defensivo)
+}
+```
+
+**Hook:** `useAdBannerLock(reason: string, active: boolean)`
+
+**Garantias de cleanup:**
+- `useEffect` chama `requestHide` quando `active === true`, `releaseHide` na cleanup function.
+- A cleanup roda em: (a) `active` mudar para `false`, (b) `reason` mudar (libera a antiga, registra a nova), (c) **unmount do componente**, (d) **mudança de rota** (componente desmonta naturalmente; React garante cleanup).
+- Garantia extra contra leak: usar `useRef` para guardar a `reason` realmente registrada e liberar exatamente ela na cleanup, mesmo se a prop `reason` mudar entre renders.
+- Safety net global em `App.tsx`: `useEffect` que escuta `location.pathname` e, em cada navegação, chama `coordinator.forceRelease()` apenas para razões com prefixo `"route-scoped:"` (opcional, evita travas se algum lock esquecer cleanup). Locks de tutorial/sheet usam nomes neutros e não são afetados.
+
+**Uso:**
+- `category-manager.tsx`: `useAdBannerLock("category-sheet", isOpen)`.
+- `onboarding-tour.tsx`: `useAdBannerLock("onboarding-completion", showCompletionDialog)`.
+- `use-onboarding-tour.tsx`: `useAdBannerLock("onboarding-active", isActive && currentSubstepRequiresHidden)` — segunda camada quando substeps marcam `requiresBannerHidden: true`.
+
+Banner só reaparece quando `reasons.size === 0`. Substituir todas as chamadas diretas a `adMobService.hideBanner/showBanner` na camada de UI por `useAdBannerLock`.
+
+---
 
 ### Arquivos afetados
 
 | Arquivo | Mudança |
 |---|---|
-| `supabase/functions/admin-subscriptions/index.ts` | duration calendário, bloquear conflito Google Play, retornar campos extras |
-| `src/services/billing-service.ts` | proteger platform=manual sem early return |
-| `src/pages/Admin.tsx` | Select duração, tabela rica, botão revogar explícito, filtros |
-| Migration SQL | coluna `granted_by` em `subscriptions` |
+| `src/components/onboarding/onboarding-tooltip.tsx` | Botões h-12 empilhados, modo `compact`, `whitespace-pre-line` |
+| `src/components/onboarding/onboarding-overlay.tsx` | `lockTarget` + listeners de scroll/resize com cleanup |
+| `src/lib/onboarding/onboarding-steps.ts` | Copy do `income-intro`, 4 substeps de tipo de entrada |
+| `src/components/unified-income-form-sheet.tsx` | `data-onboarding` em cada radio |
+| `src/components/onboarding-tour.tsx` | Dialog em 2 fases, `useAdBannerLock` |
+| `src/components/category-manager.tsx` | Layout responsivo, `useAdBannerLock` |
+| `src/hooks/use-onboarding-tour.tsx` | Reset generalizado para os 3 contextos, `useAdBannerLock` |
+| `src/services/admob-visibility-coordinator.ts` | **NOVO** — coordenador + hook com cleanup robusto |
+
+Sem migração SQL, sem mudanças em edge functions.
+
+---
+
+### Critérios de aceite
+
+1. Passos 3/4/7: botões grandes empilhados, sem toque acidental.
+2. Passo 4: copy curto e escaneável.
+3. Tipo de entrada: 3 highlights bloqueados (clique no radio inativo) + 4º substep libera seleção; bloqueio acompanha scroll/resize.
+4. Conclusão: sucesso → Premium opcional, sem ad em ambas.
+5. Gerenciar categorias (3 contextos): ícones visíveis, "Adicionar" sem ad cobrindo, tooltip compacto, reabertura volta para o intro correto em despesa/fixa/entrada.
+6. Banner nunca reaparece com sheet/dialog/tutorial ativo; nenhum lock fica preso após unmount ou navegação.
 
