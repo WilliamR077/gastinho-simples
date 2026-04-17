@@ -242,32 +242,51 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     const target = findReadyOnboardingTarget(currentSubstep.targetSelector);
     if (!target) return;
 
-    const combobox = target.querySelector('[role="combobox"]') as HTMLElement | null;
-    if (!combobox) return;
-
-    // Capture initial text to detect real changes
-    const initialText = combobox.textContent?.trim() || "";
     let advanced = false;
+    const triggerAdvance = (delay = 400) => {
+      if (advanced) return;
+      advanced = true;
+      setTimeout(() => advanceSubstepInternal(), delay);
+    };
+
+    // Path 1: Select/Combobox — watch text changes inside [role="combobox"]
+    const combobox = target.querySelector('[role="combobox"]') as HTMLElement | null;
+    // Path 2: RadioGroup — watch [data-state="checked"] appearing on items
+    const radioGroup = target.getAttribute("role") === "radiogroup"
+      ? target
+      : (target.querySelector('[role="radiogroup"]') as HTMLElement | null);
+
+    const initialText = combobox?.textContent?.trim() || "";
 
     const observer = new MutationObserver(() => {
       if (advanced) return;
-      const currentText = combobox.textContent?.trim() || "";
-      // Only advance if text changed from initial AND is not a placeholder
-      if (currentText !== initialText && currentText.length > 0 && !currentText.startsWith("Selecione")) {
-        advanced = true;
-        observer.disconnect();
-        // 400ms delay for dropdown close animation before advancing
-        setTimeout(() => {
-          advanceSubstepInternal();
-        }, 400);
+      if (combobox) {
+        const currentText = combobox.textContent?.trim() || "";
+        if (currentText !== initialText && currentText.length > 0 && !currentText.startsWith("Selecione")) {
+          observer.disconnect();
+          triggerAdvance(400);
+          return;
+        }
+      }
+      if (radioGroup) {
+        const checked = radioGroup.querySelector('[data-state="checked"]');
+        if (checked) {
+          observer.disconnect();
+          triggerAdvance(300);
+        }
       }
     });
 
-    observer.observe(combobox, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-    });
+    if (combobox) {
+      observer.observe(combobox, { childList: true, subtree: true, characterData: true });
+    }
+    if (radioGroup) {
+      observer.observe(radioGroup, {
+        attributes: true,
+        subtree: true,
+        attributeFilter: ["data-state", "aria-checked"],
+      });
+    }
 
     return () => {
       observer.disconnect();
@@ -278,9 +297,49 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isOpen) return;
 
+    // Map "*-opened" event → intro substep id to rewind to when re-opening
+    // the category manager during the 3 contexts (expense, recurring, income).
+    const REOPEN_MAP: Record<string, { closedEvent: string; introId: string; stepIds: string[] }> = {
+      "category-manager-opened": {
+        closedEvent: "category-manager-closed",
+        // expense + recurring share the "category-manager-opened" event but
+        // each step has its own intro id. We resolve the right one by
+        // checking currentStep?.id below.
+        introId: "expense-category-manager-intro",
+        stepIds: ["add-expense", "add-recurring-expense"],
+      },
+      "income-category-manager-opened": {
+        closedEvent: "income-category-manager-closed",
+        introId: "income-category-manager-intro",
+        stepIds: ["add-income"],
+      },
+    };
+
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (typeof detail !== "string") return;
+
+      // ─── Reset on re-open of any category manager ──────────
+      const reopenInfo = REOPEN_MAP[detail];
+      if (reopenInfo && currentStep && reopenInfo.stepIds.includes(currentStep.id)) {
+        // Only rewind if we already saw the matching close event (i.e. user
+        // already went through the manager once and came back).
+        if (seenEventsRef.current.has(reopenInfo.closedEvent)) {
+          seenEventsRef.current.delete(reopenInfo.closedEvent);
+          // Pick the right intro id for the active step
+          const introId =
+            currentStep.id === "add-recurring-expense"
+              ? "recurring-category-manager-intro"
+              : reopenInfo.introId;
+          const introIdx = currentStep.substeps.findIndex((s) => s.id === introId);
+          if (introIdx >= 0) {
+            setPendingAdvance(null);
+            setSubstepIndex(introIdx);
+            seenEventsRef.current.add(detail);
+            return;
+          }
+        }
+      }
 
       seenEventsRef.current.add(detail);
 

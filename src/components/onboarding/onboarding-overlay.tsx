@@ -12,6 +12,13 @@ interface OnboardingOverlayProps {
   targetSelector?: string;
   isVisible: boolean;
   padding?: number;
+  /**
+   * When true, renders a transparent click-blocking layer over the highlighted
+   * target. The target is visually highlighted but cannot be interacted with.
+   * Used in informational substeps that describe an option without allowing
+   * the user to select it yet.
+   */
+  lockTarget?: boolean;
   onTargetRect?: (rect: TargetRect | null) => void;
 }
 
@@ -19,6 +26,7 @@ export function OnboardingOverlay({
   targetSelector,
   isVisible,
   padding = 8,
+  lockTarget = false,
   onTargetRect,
 }: OnboardingOverlayProps) {
   const [targetRect, setTargetRect] = useState<TargetRect | null>(null);
@@ -49,11 +57,8 @@ export function OnboardingOverlay({
     }
   }, [targetSelector, onTargetRect]);
 
-  // Body scroll lock removed — the 4-panel interaction mask already blocks
-  // clicks outside the spotlight, and locking body overflow conflicts with
-  // Sheet/Dialog containers that manage their own scroll.
-
-  // Continuous position tracking via rAF
+  // Continuous position tracking via rAF + explicit listeners for instant
+  // response to scroll/resize/reflow events.
   useEffect(() => {
     if (!isVisible) {
       setTargetRect(null);
@@ -68,9 +73,18 @@ export function OnboardingOverlay({
     };
     loop();
 
+    // Capture-phase scroll listener catches scroll inside any nested container
+    // (Sheets, dialogs, scroll areas), not just window scroll.
+    const handleScroll = () => updateRect();
+    const handleResize = () => updateRect();
+    window.addEventListener("scroll", handleScroll, { passive: true, capture: true });
+    window.addEventListener("resize", handleResize);
+
     return () => {
       running = false;
       cancelAnimationFrame(rafRef.current);
+      window.removeEventListener("scroll", handleScroll, { capture: true } as EventListenerOptions);
+      window.removeEventListener("resize", handleResize);
     };
   }, [isVisible, updateRect]);
 
@@ -152,6 +166,22 @@ export function OnboardingOverlay({
       ) : (
         /* No target — block entire screen */
         <div className="fixed inset-0 pointer-events-auto" />
+      )}
+
+      {/* Lock layer over the target (when lockTarget=true) — blocks clicks
+          on the highlighted element while keeping the highlight visible.
+          Recalculated continuously via the rAF loop above. */}
+      {lockTarget && hole && (
+        <div
+          className="fixed pointer-events-auto"
+          style={{
+            top: hole.top,
+            left: hole.left,
+            width: hole.width,
+            height: hole.height,
+          }}
+          aria-hidden="true"
+        />
       )}
 
       {/* Highlight border */}

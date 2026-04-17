@@ -25,6 +25,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useAdBannerLock } from "@/services/admob-visibility-coordinator";
 
 // P2: Expanded emoji list for personal finance categories
 const EMOJI_OPTIONS = [
@@ -77,6 +78,11 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
     () => activeCategories.find((category) => !isOutrosCategory(category))?.id ?? null,
     [activeCategories]
   );
+
+  // Hide AdMob banner while sheet is open so the "Add category" button and
+  // action icons aren't covered. Released automatically on close/unmount via
+  // the coordinator's reference-counted lock.
+  useAdBannerLock("category-sheet", open);
 
   useEffect(() => {
     if (open) {
@@ -151,7 +157,7 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
 
     return (
       <div
-        className={`flex items-center justify-between rounded-lg p-3 ${
+        className={`flex items-center justify-between gap-2 rounded-lg p-3 min-w-0 ${
           isHidden ? "bg-muted/30 opacity-60" : "bg-muted/50"
         }`}
         data-onboarding={
@@ -163,10 +169,10 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
         }
       >
         {isEditing ? (
-          <div className="flex flex-1 items-center gap-2">
+          <div className="flex flex-1 items-center gap-2 min-w-0">
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="h-10 w-10 text-xl">
+                <Button variant="outline" size="sm" className="h-10 w-10 shrink-0 text-xl">
                   {editingCategory.icon}
                 </Button>
               </PopoverTrigger>
@@ -189,47 +195,48 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
             <Input
               value={editingCategory.name}
               onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
-              className="flex-1"
+              className="flex-1 min-w-0"
               autoFocus
             />
-            <Button size="icon" variant="ghost" onClick={handleSaveEdit} disabled={saving}>
+            <Button size="icon" variant="ghost" onClick={handleSaveEdit} disabled={saving} className="shrink-0">
               {saving ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Check className="h-4 w-4 text-green-500" />
               )}
             </Button>
-            <Button size="icon" variant="ghost" onClick={() => setEditingCategory(null)}>
+            <Button size="icon" variant="ghost" onClick={() => setEditingCategory(null)} className="shrink-0">
               <X className="h-4 w-4 text-destructive" />
             </Button>
           </div>
         ) : (
           <>
-            <div className="flex items-center gap-3">
-              <span className="text-xl">{category.icon}</span>
-              <span className={isHidden ? "line-through text-muted-foreground" : ""}>
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <span className="text-xl shrink-0">{category.icon}</span>
+              <span className={`truncate ${isHidden ? "line-through text-muted-foreground" : ""}`}>
                 {category.name}
               </span>
               {isOutros ? (
-                <span className="rounded bg-amber-500/10 px-2 py-0.5 text-xs text-amber-600">
+                <span className="rounded bg-amber-500/10 px-2 py-0.5 text-xs text-amber-600 shrink-0">
                   🔒 Fixa
                 </span>
               ) : category.is_default ? (
-                <span className="rounded bg-primary/10 px-2 py-0.5 text-xs text-primary">
+                <span className="rounded bg-primary/10 px-2 py-0.5 text-xs text-primary shrink-0">
                   Padrão
                 </span>
               ) : null}
             </div>
             {isOutros ? (
-              <span className="text-xs text-muted-foreground">Não editável</span>
+              <span className="text-xs text-muted-foreground shrink-0">Fixa</span>
             ) : (
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-0.5 shrink-0">
                 <Button
                   size="icon"
                   variant="ghost"
                   onClick={() => startEditing(category)}
-                  className="h-8 w-8"
+                  className="h-9 w-9"
                   data-onboarding={isPrimaryEditableCategory ? "category-manager-edit-btn" : undefined}
+                  aria-label="Editar"
                 >
                   <Pencil className="h-4 w-4" />
                 </Button>
@@ -237,8 +244,9 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
                   size="icon"
                   variant="ghost"
                   onClick={() => toggleCategoryVisibility(category.id)}
-                  className="h-8 w-8"
+                  className="h-9 w-9"
                   data-onboarding={isPrimaryEditableCategory ? "category-manager-hide-btn" : undefined}
+                  aria-label={isHidden ? "Mostrar" : "Ocultar"}
                 >
                   {isHidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
                 </Button>
@@ -246,8 +254,9 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
                   size="icon"
                   variant="ghost"
                   onClick={() => setDeletingCategory(category)}
-                  className="h-8 w-8 text-destructive hover:text-destructive"
+                  className="h-9 w-9 text-destructive hover:text-destructive"
                   data-onboarding={isPrimaryEditableCategory ? "category-manager-delete-btn" : undefined}
+                  aria-label="Excluir"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>

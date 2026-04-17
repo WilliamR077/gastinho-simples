@@ -277,19 +277,19 @@ export function UnifiedIncomeFormSheet({ open, onOpenChange, onSuccess, initialD
               onValueChange={(v) => setIncomeType(v as IncomeType)}
               className="flex flex-wrap gap-x-4 gap-y-2"
             >
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-2" data-onboarding="income-type-monthly">
                 <RadioGroupItem value="monthly" id="income-monthly" />
                 <Label htmlFor="income-monthly" className="cursor-pointer font-normal">
                   Entrada do Mês
                 </Label>
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-2" data-onboarding="income-type-recurring">
                 <RadioGroupItem value="recurring" id="income-recurring" />
                 <Label htmlFor="income-recurring" className="cursor-pointer font-normal">
                   Entrada Fixa
                 </Label>
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-2" data-onboarding="income-type-installment">
                 <RadioGroupItem value="installment" id="income-installment" />
                 <Label htmlFor="income-installment" className="cursor-pointer font-normal">
                   Entrada Parcelada

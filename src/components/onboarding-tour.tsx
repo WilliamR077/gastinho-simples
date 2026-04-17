@@ -14,8 +14,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Check, Sparkles, Crown, Users, FileText, Download, Circle } from "lucide-react";
+import { Check, Sparkles, Crown, Users, FileText, Download, Circle, ArrowRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAdBannerLock } from "@/services/admob-visibility-coordinator";
 
 // Map step IDs to completion labels
 const ALL_STEP_IDS = [
@@ -26,6 +27,16 @@ const ALL_STEP_IDS = [
   "add-budget-goal",
   "view-reports",
   "setup-settings",
+];
+
+type CompletionPhase = "success" | "premium";
+
+// IDs whose tooltip should render in compact mode (when shown inside the
+// category manager sheet so it doesn't dominate the screen).
+const COMPACT_SUBSTEP_PREFIXES = [
+  "expense-category-manager-",
+  "recurring-category-manager-",
+  "income-category-manager-",
 ];
 
 export function OnboardingTour() {
@@ -55,6 +66,15 @@ export function OnboardingTour() {
   const { features } = useSubscription();
   const [validationTick, setValidationTick] = useState(0);
   const [cardCount, setCardCount] = useState(0);
+  const [completionPhase, setCompletionPhase] = useState<CompletionPhase>("success");
+
+  // Reset completion phase whenever the dialog opens fresh.
+  useEffect(() => {
+    if (showCompletionDialog) setCompletionPhase("success");
+  }, [showCompletionDialog]);
+
+  // Hide AdMob banner while completion dialog is open so nothing covers buttons.
+  useAdBannerLock("onboarding-completion", showCompletionDialog);
 
   // Poll validation state for fill/select substeps
   useEffect(() => {
@@ -105,11 +125,8 @@ export function OnboardingTour() {
   // and fire a skip event so conditional substeps can be skipped
   const handleSkipSubstep = useCallback(() => {
     if (!currentSubstep) return;
-    // Dispatch a skip event based on the substep id (e.g. "settings-import" → "settings-import-skipped")
     const skipEvent = `${currentSubstep.id}-skipped`;
     window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: skipEvent }));
-    // For intro substeps that skip the entire step (like recurring-intro, income-intro)
-    // check if this is the first substep — if so, skip the whole step
     if (currentSubstepIndex === 0) {
       skipCurrentStep();
     } else {
@@ -130,85 +147,120 @@ export function OnboardingTour() {
     return `Seu cartão foi adicionado com sucesso! Deseja adicionar outro ou prosseguir?`;
   };
 
-  // ─── Completion dialog ──────────────────────────────────
+  // ─── Completion dialog (2 phases: success → premium) ──────
   if (showCompletionDialog) {
     return (
       <Dialog open onOpenChange={closeCompletionDialog}>
         <DialogContent className="max-w-md">
-          <DialogHeader className="text-center space-y-4">
-            <div className="mx-auto w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center">
-              <Check className="w-8 h-8 text-white" />
-            </div>
-            <DialogTitle className="text-2xl">
-              Parabéns! Você está pronto! 🎉
-            </DialogTitle>
-            <DialogDescription className="text-base">
-              Veja o que você configurou na sua conta:
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3 py-4">
-            {ALL_STEP_IDS.map((id) => {
-              const isCompleted = completedSteps.has(id);
-              const label = STEP_LABELS[id] || id;
-              return (
-                <div key={id} className="flex items-center gap-3 text-sm">
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                    isCompleted ? "bg-green-500/20" : "bg-muted"
-                  }`}>
-                    {isCompleted ? (
-                      <Check className="w-4 h-4 text-green-500" />
-                    ) : (
-                      <Circle className="w-3 h-3 text-muted-foreground" />
-                    )}
-                  </div>
-                  <span className={isCompleted ? "" : "text-muted-foreground"}>
-                    {label}
-                  </span>
+          {completionPhase === "success" ? (
+            <>
+              <DialogHeader className="text-center space-y-4">
+                <div className="mx-auto w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center">
+                  <Check className="w-8 h-8 text-white" />
                 </div>
-              );
-            })}
-          </div>
+                <DialogTitle className="text-2xl">
+                  Parabéns! Você está pronto! 🎉
+                </DialogTitle>
+                <DialogDescription className="text-base">
+                  Veja o que você configurou na sua conta:
+                </DialogDescription>
+              </DialogHeader>
 
-          <div className="bg-gradient-to-br from-primary/10 to-purple-500/10 rounded-lg p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <Crown className="w-5 h-5 text-primary" />
-              <h3 className="font-semibold">Quer ainda mais recursos?</h3>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Com o <strong>Premium</strong> você ganha:
-            </p>
-            <ul className="space-y-2 text-sm">
-              <li className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-primary" />
-                Grupos compartilhados
-              </li>
-              <li className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-primary" />
-                Relatórios avançados
-              </li>
-              <li className="flex items-center gap-2">
-                <Download className="w-4 h-4 text-primary" />
-                Exportação em PDF/Excel
-              </li>
-            </ul>
-          </div>
+              <div className="space-y-3 py-4">
+                {ALL_STEP_IDS.map((id) => {
+                  const isCompleted = completedSteps.has(id);
+                  const label = STEP_LABELS[id] || id;
+                  return (
+                    <div key={id} className="flex items-center gap-3 text-sm">
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                        isCompleted ? "bg-green-500/20" : "bg-muted"
+                      }`}>
+                        {isCompleted ? (
+                          <Check className="w-4 h-4 text-green-500" />
+                        ) : (
+                          <Circle className="w-3 h-3 text-muted-foreground" />
+                        )}
+                      </div>
+                      <span className={isCompleted ? "" : "text-muted-foreground"}>
+                        {label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
 
-          <DialogFooter className="flex-col sm:flex-col gap-2">
-            <Button
-              onClick={() => {
-                closeCompletionDialog();
-                navigate("/subscription");
-              }}
-              className="w-full"
-            >
-              <Sparkles className="w-4 h-4 mr-2" />
-              Conhecer Premium
-            </Button>
-            <Button variant="outline" onClick={closeCompletionDialog} className="w-full">
-              Começar a usar
-            </Button>
-          </DialogFooter>
+              <DialogFooter
+                className="flex-col sm:flex-col gap-2"
+                style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+              >
+                <Button
+                  onClick={() => setCompletionPhase("premium")}
+                  className="w-full h-12 text-base font-medium"
+                >
+                  Continuar
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <>
+              <DialogHeader className="text-center space-y-4">
+                <div className="mx-auto w-16 h-16 bg-gradient-to-br from-primary to-purple-500 rounded-full flex items-center justify-center">
+                  <Crown className="w-8 h-8 text-white" />
+                </div>
+                <DialogTitle className="text-2xl">
+                  Quer ainda mais recursos?
+                </DialogTitle>
+                <DialogDescription className="text-base">
+                  Com o <strong>Premium</strong> você desbloqueia:
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-3 py-4">
+                <div className="flex items-center gap-3 text-sm">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                    <Users className="w-4 h-4 text-primary" />
+                  </div>
+                  <span>Grupos compartilhados</span>
+                </div>
+                <div className="flex items-center gap-3 text-sm">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                    <FileText className="w-4 h-4 text-primary" />
+                  </div>
+                  <span>Relatórios avançados</span>
+                </div>
+                <div className="flex items-center gap-3 text-sm">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                    <Download className="w-4 h-4 text-primary" />
+                  </div>
+                  <span>Exportação em PDF/Excel</span>
+                </div>
+              </div>
+
+              <DialogFooter
+                className="flex-col sm:flex-col gap-2"
+                style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+              >
+                <Button
+                  onClick={() => {
+                    closeCompletionDialog();
+                    navigate("/subscription");
+                  }}
+                  className="w-full h-12 text-base font-medium"
+                >
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Conhecer Premium
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={closeCompletionDialog}
+                  className="w-full h-12 text-base font-medium"
+                >
+                  Talvez depois
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     );
@@ -222,6 +274,10 @@ export function OnboardingTour() {
   const isInfoWithoutTarget =
     currentSubstep.actionType === "info" && !currentSubstep.targetSelector;
   const isCompletion = currentSubstep.actionType === "completion";
+
+  const isCompactSubstep = COMPACT_SUBSTEP_PREFIXES.some((p) =>
+    currentSubstep.id.startsWith(p)
+  );
 
   // ─── Override description for card completion ─────────────
   const effectiveSubstep = { ...currentSubstep };
@@ -255,6 +311,7 @@ export function OnboardingTour() {
           onProceed={isCompletion ? proceedToNextStep : undefined}
           onSkipSubstep={effectiveSubstep.skipLabel ? handleSkipSubstep : undefined}
           onBack={canGoBack ? goBackSubstep : undefined}
+          compact={isCompactSubstep}
         />
       </>
     );
@@ -266,6 +323,7 @@ export function OnboardingTour() {
       <OnboardingOverlay
         targetSelector={currentSubstep.targetSelector}
         isVisible={true}
+        lockTarget={currentSubstep.lockTarget}
       />
       <OnboardingTooltip
         substep={effectiveSubstep}
@@ -281,6 +339,7 @@ export function OnboardingTour() {
         onClose={skipOnboarding}
         onSkipSubstep={currentSubstep.skipLabel ? handleSkipSubstep : undefined}
         onBack={canGoBack ? goBackSubstep : undefined}
+        compact={isCompactSubstep}
       />
     </>
   );
