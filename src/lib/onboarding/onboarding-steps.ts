@@ -34,6 +34,10 @@ export interface OnboardingSubstep {
   // For completion substeps
   repeatLabel?: string;
   proceedLabel?: string;
+  // When true, the spotlight overlay places a transparent click-blocking layer
+  // over the highlighted target so the user can't interact with it. Used in
+  // info substeps that *describe* an option without allowing selection yet.
+  lockTarget?: boolean;
   // Conditional: skip this substep if condition not met
   condition?: (ctx: { formElement?: HTMLElement; seenEvents?: Set<string> }) => boolean;
 }
@@ -691,7 +695,7 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         actionType: "info",
         title: "Como você recebe dinheiro?",
         description:
-          "Você pode registrar 3 tipos de entrada:\n\n💰 Entrada do mês — freelance, venda, bônus\n🔄 Entrada fixa — salário mensal\n📑 Entrada parcelada — projeto/venda parcelada\n\nEscolha o tipo que mais combina com você no formulário.",
+          "Você pode registrar 3 tipos de entrada:\n\n💰 Entrada do mês — freelance, venda ou bônus\n🔄 Entrada fixa — salário ou valor recorrente\n📑 Entrada parcelada — projetos/vendas em parcelas\n\nEscolha no formulário a opção que combina com esta entrada.",
         emoji: "💰",
         navigateLabel: "Continuar",
         skipLabel: "Pular esta etapa",
@@ -719,14 +723,51 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         placement: "above",
       },
       {
+        id: "income-type-info-monthly",
+        actionType: "info",
+        targetSelector: "income-type-monthly",
+        title: "Entrada do Mês",
+        description:
+          "Use para ganhos pontuais recebidos neste mês — freelance, venda ou bônus.",
+        emoji: "💰",
+        scrollToTarget: true,
+        placement: "below",
+        lockTarget: true,
+      },
+      {
+        id: "income-type-info-recurring",
+        actionType: "info",
+        targetSelector: "income-type-recurring",
+        title: "Entrada Fixa",
+        description:
+          "Use para salário ou qualquer valor que entra todo mês.",
+        emoji: "🔄",
+        scrollToTarget: true,
+        placement: "below",
+        lockTarget: true,
+      },
+      {
+        id: "income-type-info-installment",
+        actionType: "info",
+        targetSelector: "income-type-installment",
+        title: "Entrada Parcelada",
+        description:
+          "Use para projetos ou vendas que você vai receber em parcelas.",
+        emoji: "📑",
+        scrollToTarget: true,
+        placement: "below",
+        lockTarget: true,
+      },
+      {
         id: "income-type-select",
         actionType: "select",
         targetSelector: "income-type-selector",
         title: "Escolha o Tipo de Entrada",
         description:
-          "Escolha o tipo de entrada que mais combina com a forma como você recebe dinheiro.\n\n💰 Entrada do Mês — para valores pontuais como freelance, venda, bônus\n🔄 Entrada Fixa — para salário ou valor recorrente todo mês\n📑 Entrada Parcelada — para projetos ou vendas recebidos em parcelas",
-        emoji: "💰",
+          "Agora escolha o tipo que melhor representa esta entrada.",
+        emoji: "✅",
         requiresValidation: true,
+        autoAdvanceOnSelect: true,
         scrollToTarget: true,
         placement: "below",
       },
