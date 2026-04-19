@@ -536,7 +536,12 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       return Math.max(currentStep.substeps.findIndex((s) => s.id === "recurring-type-info"), 0);
     }
     if (currentStep?.id === "add-income") {
-      return Math.max(currentStep.substeps.findIndex((s) => s.id === "income-type-select"), 0);
+      // Inclui os 3 substeps informativos (income-type-info-*) no guided flow
+      // para que o sheet "Nova Entrada" não feche ao clicar "Continuar".
+      // Fallback para "income-type-select" se os info substeps não existirem.
+      const candidates = ["income-type-info-monthly", "income-type-select"];
+      const firstFormIdx = currentStep.substeps.findIndex((s) => candidates.includes(s.id));
+      return firstFormIdx >= 0 ? firstFormIdx : currentStep.substeps.length;
     }
     if (currentStep?.id === "add-budget-goal") {
       return Math.max(currentStep.substeps.findIndex((s) => s.id === "budget-scope-select"), 0);
