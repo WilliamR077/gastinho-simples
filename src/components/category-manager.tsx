@@ -77,7 +77,7 @@ interface EditingCategory {
 const isOutrosCategory = (category: UserCategory) =>
   category.name.toLowerCase() === "outros";
 
-export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
+export function CategoryManager({ open, onOpenChange, context = "expense" }: CategoryManagerProps) {
   const {
     activeCategories,
     hiddenCategories,
@@ -114,15 +114,25 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
     }
 
     try {
+      const eventName = open
+        ? OPEN_EVENT_BY_CONTEXT[context]
+        : CLOSE_EVENT_BY_CONTEXT[context];
       window.dispatchEvent(
         new CustomEvent("gastinho-onboarding-event", {
-          detail: open ? "category-manager-opened" : "category-manager-closed",
+          detail: eventName,
         })
       );
     } catch {
       void 0;
     }
-  }, [open]);
+  }, [open, context]);
+
+  // Wrapper para garantir que qualquer forma de fechamento (X, ESC,
+  // outside-click, gesto, botão "Voltar ao formulário") propague o evento
+  // contextual antes de notificar o pai.
+  const handleSheetOpenChange = (nextOpen: boolean) => {
+    onOpenChange(nextOpen);
+  };
 
   const handleAdd = async () => {
     if (!newName.trim()) return;
