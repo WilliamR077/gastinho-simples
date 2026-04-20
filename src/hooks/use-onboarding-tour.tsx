@@ -155,9 +155,24 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       attributeFilter: ["class", "style", "hidden", "data-state", "aria-hidden"],
     });
 
-    // Timeout fallback — don't crash if element never appears
-    const timeout = setTimeout(() => {
+    // Timeout fallback — don't crash if element never appears.
+    // Se o step já foi cumprido no DB (ex.: meta criada antes mas botão virou
+    // CTA de upgrade no plano grátis), conclui automaticamente em vez de travar.
+    const timeout = setTimeout(async () => {
       observer.disconnect();
+      if (!currentStep) return;
+      try {
+        const real = await computeRealCompletedRef.current?.();
+        if (real && real.has(currentStep.id)) {
+          console.info(
+            "[Onboarding] target ausente mas step já concluído no DB — pulando",
+            currentStep.id
+          );
+          completeCurrentStepRef.current?.();
+        }
+      } catch (err) {
+        console.warn("[Onboarding] fallback de target falhou", err);
+      }
     }, 10000);
 
     return () => {
