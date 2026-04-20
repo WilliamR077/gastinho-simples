@@ -205,6 +205,7 @@ export function RecurringExpenseFormSheet({
             <CategorySelector
               value={category}
               onValueChange={setCategory}
+              context="recurring"
             />
           </div>
 
