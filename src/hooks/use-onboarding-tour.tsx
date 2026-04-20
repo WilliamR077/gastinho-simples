@@ -703,6 +703,37 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  // Mantém refs sempre atualizados com os callbacks mais recentes
+  // para uso em timeouts/observers que rodam fora do ciclo do React.
+  computeRealCompletedRef.current = computeRealCompleted;
+  completeCurrentStepRef.current = completeCurrentStep;
+
+  // ─── Revalidação ao trocar de step ─────────────────────────
+  // Se o usuário entrou em um step que já está concluído (DB/skipped/local),
+  // pula automaticamente para o próximo pendente. Guard de loop via ref.
+  useEffect(() => {
+    if (!isOpen || !currentStep) return;
+    if (lastRevalidatedStepIdxRef.current === stepIndex) return;
+    lastRevalidatedStepIdxRef.current = stepIndex;
+
+    let cancelled = false;
+    (async () => {
+      const real = await computeRealCompleted();
+      if (cancelled) return;
+      if (real.has(currentStep.id)) {
+        console.info(
+          "[Onboarding] step já concluído ao entrar — pulando",
+          currentStep.id
+        );
+        completeCurrentStep();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, stepIndex, currentStep?.id, computeRealCompleted]);
+
   const checkExistingData = async (
     userId: string
   ): Promise<Set<string>> => {
