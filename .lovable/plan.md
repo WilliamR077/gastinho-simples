@@ -1,70 +1,79 @@
 
 
-## Plano: 3 refinamentos no onboarding (cartão, categorias, meta) + reforço de posicionamento
+## Plano: Lote final de correções no onboarding (revisado)
 
-### 1) Copy do "Limite do Cartão (Opcional)"
+### 1) Proteção de fechamento no fluxo de Meta
 
-**`src/lib/onboarding/onboarding-steps.ts`** — substep `optional-limit`:
+**`src/components/budget-goal-form-sheet.tsx`**:
+- Ler `currentStep` e `substepIndex` do contexto do onboarding.
+- Calcular `isOnboardingGuarding = currentStep?.id === "add-budget-goal" && substepIndex >= índiceDe("budget-click-btn")`.
+- No `<SheetContent>`: `onPointerDownOutside`, `onEscapeKeyDown` e `onInteractOutside` chamam `e.preventDefault()` quando `isOnboardingGuarding`.
+- No `<Sheet onOpenChange>`: ignorar `open=false` quando `isOnboardingGuarding`.
 
-```text
-title: "Limite do Cartão (Opcional)",
-description:
-  "Se quiser, informe o limite do cartão para o app acompanhar quanto dele já foi usado nas suas compras.\n\nAssim, você consegue ver o consumo do limite e evitar gastos acima do valor disponível.",
-```
+### 2) Fechamento do Category Manager — eventos por contexto
 
-### 2) Responsividade de "Gerenciar Categorias" + sticky footer
+**Identificar componentes**: `src/components/category-manager.tsx` (despesa), `src/components/income-category-manager.tsx` (entrada). Para despesa fixa/recorrente, verificar se há `recurring-category-manager.tsx` ou se reutiliza `category-manager` com prop de contexto.
 
-**`src/components/category-manager.tsx`**:
+**Estratégia**:
+- Adicionar prop opcional `context?: "expense" | "recurring" | "income"` no `category-manager` (default `"expense"`).
+- Mapa de eventos:
+  - `expense` → `category-manager-closed`
+  - `recurring` → `recurring-category-manager-closed`
+  - `income` → `income-category-manager-closed`
+- No `onOpenChange(false)` do `<Sheet>`, despachar `window.dispatchEvent(new CustomEvent("gastinho-onboarding-event", { detail: { event: <evento_do_contexto> } }))` antes do `onClose`.
+- `income-category-manager.tsx` despacha sempre `income-category-manager-closed` (componente dedicado).
+- Atualizar callers do `category-manager` para passar `context="recurring"` quando aberto a partir do form de recorrente.
 
-- **`CategoryRow` responsivo**: wrapper externo `flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2`. Linha principal (ícone + nome + badge) ganha `w-full sm:flex-1 min-w-0`. Bloco de ações ganha `self-end sm:self-auto shrink-0` — em mobile vai para 2ª linha; em sm+ fica à direita.
-- **Zero clipping horizontal**: `SheetContent` com `overflow-hidden` + reduzir padding direito do `ScrollArea`.
-- **Sticky footer**: reestruturar `SheetContent` em `flex flex-col`. Header fixo, `ScrollArea` com `flex-1 min-h-0`, footer `sticky bottom-0 border-t bg-background pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]` contendo o botão "Adicionar Categoria" (ou o form inline quando `showAddForm = true`). AdMob já silenciado via `useAdBannerLock`.
+Garante que X, outside click, ESC e gesto disparem o evento correto para cada fluxo do onboarding.
 
-### 3) Meta: tooltip compacto + posicionamento garantido
+### 3) Cancelamento/skip do PIN
 
-**3.1 — Compact mode para meta:**
+- **`onboarding-steps.ts`**: adicionar `skipLabel: "Configurar depois"` no substep `settings-pin-info`.
+- **`security-settings.tsx`**: no `onOpenChange(false)` do dialog de PIN sem submit, despachar `gastinho-onboarding-event` com `security-pin-cancelled`.
+- **`use-onboarding-tour.tsx`**: listener para `security-pin-cancelled` que avança o substep (equivalente a skip).
 
-`src/components/onboarding-tour.tsx` — adicionar `"budget-"` ao `COMPACT_SUBSTEP_PREFIXES`. Reduz largura para 280px, padding e fonte automaticamente.
+### 4) Cleanup defensivo do AdMob em mudança de rota
 
-**3.2 — Copy curta de "Tipo de Limite":**
+**`src/App.tsx`**:
+- `useEffect(() => { adBannerCoordinator.forceReleaseByPrefixes(["category-", "expense-form-", "income-form-", "budget-", "card-", "recurring-"]); }, [location.pathname])`.
+- Locks legítimos em sheets que sobrevivem à navegação serão re-registrados pelo `useAdBannerLock` no novo render.
+- Se `forceReleaseByPrefixes` não existir no `adBannerCoordinator`, adicionar método ou usar `forceRelease(prefix)` em loop.
 
-`src/lib/onboarding/onboarding-steps.ts` — substep `budget-type-info`:
+### 5) Intro do Category Manager — target específico
 
-```text
-title: "Tipo de Limite",
-description:
-  "Você pode criar:\n\n📊 Limite mensal total — controla os gastos do mês inteiro\n📦 Limite por categoria — controla uma categoria específica\n\nPara começar, vamos usar Limite Mensal Total, que é o mais simples.",
-```
+**`category-manager.tsx`** e **`income-category-manager.tsx`**:
+- Adicionar `data-onboarding="category-manager-header"` (ou `income-category-manager-header`) no `<SheetTitle>`.
 
-**3.3 — Reforço de posicionamento (validação extra solicitada):**
+**`onboarding-steps.ts`**:
+- Substeps `*-category-manager-intro` trocam `targetSelector` de `category-manager-sheet` → `category-manager-header` (e equivalente para income).
 
-Caso `compact` sozinho não baste em viewports estreitos, aplicar **dois reforços** para todos os substeps `budget-*` que tenham `targetSelector` (não os centralizados):
+### 6) Copies mais curtas
 
-a) **Placement explícito por substep** em `onboarding-steps.ts`: definir `placement: "below"` (ou `"above"` quando o alvo está no rodapé do sheet) nos substeps de meta que destacam campos do form. Como o form de meta abre como sheet/dialog cobrindo a viewport, o alvo costuma ficar na parte superior — `placement: "below"` empurra o tooltip para baixo do campo.
-
-b) **Offset maior em modo compact para meta** — em `onboarding-tooltip.tsx`, parametrizar o `gap` do cálculo de posição: quando `targetSelector` começa com indicação de meta, usar `gap = 24` em vez de `16`, dando mais respiro entre o highlight e o tooltip. Implementação: passar uma prop opcional `extraGap?: number` ou detectar via `substep.id?.startsWith("budget-")` dentro do `updatePosition`.
-
-c) **Algoritmo de fallback**: já existe (linhas 119-122 do `onboarding-tooltip.tsx`) — escolhe o lado com menor `overlapArea`. Adicionar tolerância: se o melhor candidato ainda tiver `overlapArea > 0`, tentar deslocar o tooltip horizontalmente (left/right do alvo) antes de aceitar overlap. Implementação simples: após calcular acima/abaixo, se ambos sobrepõem, calcular candidato `left` (tooltip à esquerda do alvo) e `right` (à direita) e escolher o de menor overlap entre os 4.
-
-Esses 3 reforços (a + b + c) garantem que mesmo em telas estreitas o tooltip não cubra o highlight da meta. Aplicados condicionalmente — não afetam outros steps.
+**`onboarding-steps.ts`**:
+- `expense-category`: `"Abra a lista e escolha uma categoria. Para criar ou editar, toque em 'Gerenciar categorias'."`
+- `reports-period`: `"Use o seletor para mudar o período dos relatórios."` (sem menção a Premium).
 
 ### Arquivos afetados
 
 | Arquivo | Mudança |
 |---|---|
-| `src/lib/onboarding/onboarding-steps.ts` | Copy de `optional-limit` e `budget-type-info`; `placement` explícito nos substeps `budget-*` com target |
-| `src/components/category-manager.tsx` | `CategoryRow` responsivo (col em mobile, row em sm+); sticky footer com botão/form de adicionar; layout flex no SheetContent |
-| `src/components/onboarding-tour.tsx` | Adicionar `"budget-"` ao `COMPACT_SUBSTEP_PREFIXES` |
-| `src/components/onboarding/onboarding-tooltip.tsx` | Gap maior para substeps de meta; fallback horizontal (left/right) quando above/below sobrepõem |
+| `src/components/budget-goal-form-sheet.tsx` | `preventClose` por substep do onboarding |
+| `src/components/category-manager.tsx` | Prop `context`; evento contextual em qualquer fechamento; `data-onboarding` no header |
+| `src/components/income-category-manager.tsx` | Evento `income-category-manager-closed` em qualquer fechamento; `data-onboarding` no header |
+| Callers do `category-manager` (recurring) | Passar `context="recurring"` |
+| `src/components/security-settings.tsx` | Despachar `security-pin-cancelled` em cancelamento |
+| `src/lib/onboarding/onboarding-steps.ts` | `skipLabel` no PIN; novos targets de intro; copies encurtadas |
+| `src/hooks/use-onboarding-tour.tsx` | Listener para `security-pin-cancelled` |
+| `src/services/admob-visibility-coordinator.ts` | Garantir método de release por prefixos (se necessário) |
+| `src/App.tsx` | `useEffect([location.pathname])` chamando release por prefixos |
 
 ### Critérios de aceite
 
-1. Copy do limite do cartão explica acompanhamento de uso. ✅
-2. Ícones de ação nunca cortados (quebra para 2ª linha em mobile). ✅
-3. "Adicionar Categoria" sticky no rodapé. ✅
-4. Sem clipping horizontal. ✅
-5. Tooltip da meta compacto. ✅
-6. Tooltip não cobre alvo: compact + placement + gap maior + fallback horizontal. ✅
-7. Copy de "Tipo de Limite" curta e escaneável. ✅
-8. Resultado mais responsivo e premium. ✅
+1. Sheet de meta protegido entre `budget-click-btn` e finalização. ✅
+2. Cada fluxo (despesa/recorrente/entrada) recebe seu evento correto em qualquer forma de fechamento. ✅
+3. PIN cancelado dispara evento + tem `skipLabel`. ✅
+4. Route change limpa locks órfãos por prefixos conhecidos. ✅
+5. Intro de categorias usa header específico, não sheet inteiro. ✅
+6. Copies de `expense-category` e `reports-period` reduzidas. ✅
+7. Sem regressões no restante do fluxo. ✅
 
