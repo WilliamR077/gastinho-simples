@@ -127,12 +127,10 @@ export function CategoryManager({ open, onOpenChange, context = "expense" }: Cat
     }
   }, [open, context]);
 
-  // Wrapper para garantir que qualquer forma de fechamento (X, ESC,
-  // outside-click, gesto, botão "Voltar ao formulário") propague o evento
-  // contextual antes de notificar o pai.
-  const handleSheetOpenChange = (nextOpen: boolean) => {
-    onOpenChange(nextOpen);
-  };
+  // Nota: o useEffect acima já dispara o evento contextual de fechamento
+  // sempre que `open` vira false, qualquer que seja a forma de fechamento
+  // (X, ESC, outside-click, gesto, ou botão "Voltar ao formulário").
+
 
   const handleAdd = async () => {
     if (!newName.trim()) return;
@@ -311,7 +309,10 @@ export function CategoryManager({ open, onOpenChange, context = "expense" }: Cat
           <SheetHeader className="text-left px-6 pt-6 pb-2 shrink-0">
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-1 min-w-0">
-                <SheetTitle className="flex items-center gap-2 text-primary">
+                <SheetTitle
+                  className="flex items-center gap-2 text-primary"
+                  data-onboarding="category-manager-header"
+                >
                   ✏️ Gerenciar Categorias
                 </SheetTitle>
                 <SheetDescription>
