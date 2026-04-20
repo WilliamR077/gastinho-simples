@@ -16,6 +16,7 @@ import { useSubscription } from "@/hooks/use-subscription";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, TrendingDown, TrendingUp, Scale } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useOnboardingTour } from "@/hooks/use-onboarding-tour";
 
 const budgetGoalSchema = z.object({
   type: z.enum(["monthly_total", "category", "income_monthly_total", "income_category", "balance_target"] as const),
@@ -49,6 +50,21 @@ export function BudgetGoalFormSheet({
   const { canAddGoal, features } = useSubscription();
   const { activeCategories: incomeActiveCategories } = useIncomeCategories();
   const navigate = useNavigate();
+  const { currentStep, currentSubstepIndex } = useOnboardingTour();
+
+  // Proteção: enquanto o onboarding estiver guiando o step "add-budget-goal"
+  // a partir do substep "budget-click-btn", o sheet NÃO pode fechar via
+  // gestos/outside/ESC. Caso contrário, os targets dos substeps de form
+  // (goal-scope-expense, goal-type-select, goal-amount-input) desmontam e
+  // o tutorial precisa esperar o fallback de 10s.
+  const isOnboardingGuarding = (() => {
+    if (currentStep?.id !== "add-budget-goal") return false;
+    const guardStartIdx = currentStep.substeps.findIndex(
+      (s) => s.id === "budget-click-btn"
+    );
+    if (guardStartIdx < 0) return false;
+    return currentSubstepIndex >= guardStartIdx;
+  })();
 
   const {
     register,
@@ -87,7 +103,7 @@ export function BudgetGoalFormSheet({
   };
 
   const handleOpenChange = (newOpen: boolean) => {
-    if (!newOpen && preventClose) return;
+    if (!newOpen && (preventClose || isOnboardingGuarding)) return;
     if (!newOpen) {
       setGoalScope(null);
       setGoalType("monthly_total");
@@ -109,7 +125,19 @@ export function BudgetGoalFormSheet({
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent side="bottom" className="h-[70vh] overflow-y-auto">
+      <SheetContent
+        side="bottom"
+        className="h-[70vh] overflow-y-auto"
+        onPointerDownOutside={(e) => {
+          if (isOnboardingGuarding) e.preventDefault();
+        }}
+        onInteractOutside={(e) => {
+          if (isOnboardingGuarding) e.preventDefault();
+        }}
+        onEscapeKeyDown={(e) => {
+          if (isOnboardingGuarding) e.preventDefault();
+        }}
+      >
         <SheetHeader className="mb-4">
           <SheetTitle className="text-primary">Definir Nova Meta</SheetTitle>
           <SheetDescription>
