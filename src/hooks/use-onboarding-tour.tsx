@@ -85,6 +85,11 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   const [showCompletionDialog, setShowCompletionDialog] = useState(false);
   const [pendingAdvance, setPendingAdvance] = useState<PendingAdvanceState | null>(null);
   const seenEventsRef = useRef<Set<string>>(new Set());
+  // Refs para callbacks usados em effects antes da definição (ex.: timeout fallback)
+  const computeRealCompletedRef = useRef<((justId?: string) => Promise<Set<string>>) | null>(null);
+  const completeCurrentStepRef = useRef<(() => void) | null>(null);
+  // Guard de loop para revalidação automática de stepIndex
+  const lastRevalidatedStepIdxRef = useRef<number | null>(null);
 
   // Filter mobile-only steps
   const availableSteps = ONBOARDING_STEPS.filter(
