@@ -55,11 +55,16 @@ export function OnboardingTooltip({
   onBack,
   compact = false,
 }: OnboardingTooltipProps) {
-  const [pos, setPos] = useState<{ top: number; left: number; placement: "above" | "below" } | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; placement: "above" | "below" | "left" | "right" } | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number>(0);
 
   const maxTooltipWidth = compact ? 280 : 320;
+
+  // Budget substeps tend to render inside form sheets on small viewports, so
+  // we allow a larger gap between the tooltip and the highlighted target and
+  // enable a horizontal (left/right) fallback when above/below would overlap.
+  const isBudgetSubstep = substep.id?.startsWith("budget-");
 
   const updatePosition = useCallback(() => {
     if (!targetSelector) {
@@ -76,16 +81,18 @@ export function OnboardingTooltip({
     const rect = el.getBoundingClientRect();
     const tooltipHeight = tooltipRef.current?.offsetHeight || 180;
     const tooltipWidth = Math.min(maxTooltipWidth, window.innerWidth - 32);
-    const gap = 16;
+    const gap = isBudgetSubstep ? 24 : 16;
     const padding = 8;
-    const centerX = rect.left + rect.width / 2;
-    let left = centerX - tooltipWidth / 2;
-    left = Math.max(16, Math.min(left, window.innerWidth - tooltipWidth - 16));
 
+    const clampLeft = (left: number) =>
+      Math.max(16, Math.min(left, window.innerWidth - tooltipWidth - 16));
     const clampTop = (top: number) =>
       Math.max(8, Math.min(top, window.innerHeight - tooltipHeight - 8));
 
-    const getOverlapArea = (top: number) => {
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    const getOverlapArea = (top: number, left: number) => {
       const tooltipBottom = top + tooltipHeight;
       const tooltipRight = left + tooltipWidth;
       const overlapWidth = Math.max(0, Math.min(tooltipRight, rect.right) - Math.max(left, rect.left));
@@ -93,33 +100,66 @@ export function OnboardingTooltip({
       return overlapWidth * overlapHeight;
     };
 
+    const verticalLeft = clampLeft(centerX - tooltipWidth / 2);
+
     const preferredPlacements: Array<"above" | "below"> =
       substep.placement === "above"
         ? ["above", "below"]
         : substep.placement === "below"
           ? ["below", "above"]
-          : [window.innerHeight - rect.bottom >= rect.top ? "below" : "above", window.innerHeight - rect.bottom >= rect.top ? "above" : "below"];
+          : [
+              window.innerHeight - rect.bottom >= rect.top ? "below" : "above",
+              window.innerHeight - rect.bottom >= rect.top ? "above" : "below",
+            ];
 
-    const candidates = preferredPlacements.map((placement) => {
+    type Candidate = {
+      placement: "above" | "below" | "left" | "right";
+      top: number;
+      left: number;
+      overlapArea: number;
+    };
+
+    const candidates: Candidate[] = preferredPlacements.map((placement) => {
       const initialTop =
         placement === "above"
           ? rect.top - padding - gap - tooltipHeight
           : rect.bottom + padding + gap;
       const top = clampTop(initialTop);
-
       return {
         placement,
         top,
-        overlapArea: getOverlapArea(top),
+        left: verticalLeft,
+        overlapArea: getOverlapArea(top, verticalLeft),
       };
     });
+
+    // Horizontal fallback for budget substeps: try placing the tooltip to the
+    // left/right of the target when above/below still overlap the highlight.
+    if (isBudgetSubstep) {
+      const horizontalTop = clampTop(centerY - tooltipHeight / 2);
+      const leftCandidateLeft = clampLeft(rect.left - padding - gap - tooltipWidth);
+      const rightCandidateLeft = clampLeft(rect.right + padding + gap);
+
+      candidates.push({
+        placement: "left",
+        top: horizontalTop,
+        left: leftCandidateLeft,
+        overlapArea: getOverlapArea(horizontalTop, leftCandidateLeft),
+      });
+      candidates.push({
+        placement: "right",
+        top: horizontalTop,
+        left: rightCandidateLeft,
+        overlapArea: getOverlapArea(horizontalTop, rightCandidateLeft),
+      });
+    }
 
     const bestCandidate =
       candidates.find((candidate) => candidate.overlapArea === 0) ??
       candidates.sort((a, b) => a.overlapArea - b.overlapArea)[0];
 
-    setPos({ top: bestCandidate.top, left, placement: bestCandidate.placement });
-  }, [targetSelector, substep.placement, maxTooltipWidth]);
+    setPos({ top: bestCandidate.top, left: bestCandidate.left, placement: bestCandidate.placement });
+  }, [targetSelector, substep.placement, maxTooltipWidth, isBudgetSubstep]);
 
   useEffect(() => {
     if (!targetSelector) {
