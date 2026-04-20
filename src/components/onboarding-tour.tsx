@@ -321,6 +321,29 @@ export function OnboardingTour() {
   }
 
   // ─── Interactive substep with target: overlay + tooltip ───
+  // When `noSpotlight` is true, render only the tooltip anchored to the
+  // target — no dark overlay, no spotlight, full screen interactive.
+  if (currentSubstep.noSpotlight) {
+    return (
+      <OnboardingTooltip
+        substep={effectiveSubstep}
+        targetSelector={currentSubstep.targetSelector}
+        stepIndex={currentStepIndex}
+        totalSteps={totalSteps}
+        substepIndex={currentSubstepIndex}
+        totalSubsteps={totalSubsteps}
+        progress={progress}
+        isValid={isValid}
+        onNext={advanceSubstep}
+        onSkipStep={skipCurrentStep}
+        onClose={skipOnboarding}
+        onSkipSubstep={currentSubstep.skipLabel ? handleSkipSubstep : undefined}
+        onBack={canGoBack ? goBackSubstep : undefined}
+        compact={isCompactSubstep}
+      />
+    );
+  }
+
   return (
     <>
       <OnboardingOverlay

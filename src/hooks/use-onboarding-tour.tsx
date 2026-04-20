@@ -555,6 +555,12 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     }
 
     if (currentSubstep.focusTarget) {
+      // Skip auto-focus on touch devices: focusing an <input> on mobile pops
+      // the virtual keyboard and hides the tooltip + highlighted field.
+      const isTouchDevice =
+        typeof window !== "undefined" &&
+        (window.matchMedia?.("(pointer: coarse)").matches || "ontouchstart" in window);
+      if (isTouchDevice) return;
       setTimeout(() => {
         const input =
           el.tagName === "INPUT" || el.tagName === "TEXTAREA"
