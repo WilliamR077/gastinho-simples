@@ -609,24 +609,77 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  function completeCurrentStep() {
-    if (!currentStep) return;
-    setCompletedSteps((prev) => new Set([...prev, currentStep.id]));
+  // Combina 4 fontes para garantir progressão monotônica:
+  // 1) DB (checkExistingData já inclui skipped do localStorage)
+  // 2) skipped steps (redundância defensiva caso checkExistingData mude)
+  // 3) step recém-concluído (ainda não persistido no DB)
+  // 4) completedSteps em memória (etapas concluídas nesta sessão)
+  const computeRealCompleted = useCallback(
+    async (justCompletedId?: string): Promise<Set<string>> => {
+      const result = new Set<string>();
 
-    const nextStepIdx = stepIndex + 1;
-    if (nextStepIdx >= availableSteps.length) {
+      // 1. DB
+      if (user) {
+        try {
+          const fromDb = await checkExistingData(user.id);
+          fromDb.forEach((id) => result.add(id));
+        } catch (err) {
+          console.warn("[Onboarding] checkExistingData failed", err);
+        }
+      }
+
+      // 2. Skipped (defensivo — checkExistingData já inclui, mas garante caso falhe)
+      try {
+        const skipped = JSON.parse(localStorage.getItem(SKIPPED_STEPS_KEY) || "[]");
+        if (Array.isArray(skipped)) skipped.forEach((id: string) => result.add(id));
+      } catch {
+        void 0;
+      }
+
+      // 3. Recém-concluído
+      if (justCompletedId) result.add(justCompletedId);
+
+      // 4. Progresso local em memória
+      completedSteps.forEach((id) => result.add(id));
+
+      return result;
+    },
+    [user, completedSteps]
+  );
+
+  const findNextPendingIdx = useCallback(
+    (real: Set<string>, fromIdx: number): number =>
+      availableSteps.findIndex((s, idx) => idx >= fromIdx && !real.has(s.id)),
+    [availableSteps]
+  );
+
+  async function completeCurrentStep() {
+    if (!currentStep) return;
+    const justId = currentStep.id;
+    setCompletedSteps((prev) => new Set([...prev, justId]));
+
+    const real = await computeRealCompleted(justId);
+
+    // Procurar próximo pendente adiante; se nada, do início (etapa reaberta no meio)
+    let nextIdx = findNextPendingIdx(real, stepIndex + 1);
+    if (nextIdx === -1) nextIdx = findNextPendingIdx(real, 0);
+
+    if (nextIdx === -1) {
       setIsOpen(false);
       setShowCompletionDialog(true);
       localStorage.setItem(STORAGE_KEY, "true");
       localStorage.removeItem(PROGRESS_KEY);
-    } else {
-      setStepIndex(nextStepIdx);
-      setSubstepIndex(0);
-      // Navigate if needed
-      const nextStep = availableSteps[nextStepIdx];
-      if (nextStep.targetRoute && nextStep.targetRoute !== location.pathname) {
-        navigate(nextStep.targetRoute);
-      }
+      return;
+    }
+
+    setPendingAdvance(null);
+    seenEventsRef.current.clear();
+    setStepIndex(nextIdx);
+    setSubstepIndex(0);
+
+    const nextStep = availableSteps[nextIdx];
+    if (nextStep.targetRoute && nextStep.targetRoute !== location.pathname) {
+      navigate(nextStep.targetRoute);
     }
   }
 
