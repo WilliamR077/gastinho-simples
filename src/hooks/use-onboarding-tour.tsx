@@ -429,6 +429,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     if (!isOpen) {
       setPendingAdvance(null);
       seenEventsRef.current.clear();
+      lastRevalidatedStepIdxRef.current = null;
     }
   }, [isOpen]);
 
