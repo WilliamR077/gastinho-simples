@@ -37,6 +37,9 @@ const COMPACT_SUBSTEP_PREFIXES = [
   "expense-category-manager-",
   "recurring-category-manager-",
   "income-category-manager-",
+  // Budget/meta substeps render compact so the tooltip doesn't dominate the
+  // form sheet and overlap highlighted fields on small viewports.
+  "budget-",
 ];
 
 export function OnboardingTour() {

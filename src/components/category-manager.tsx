@@ -157,7 +157,7 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
 
     return (
       <div
-        className={`flex items-center justify-between gap-2 rounded-lg p-3 min-w-0 ${
+        className={`flex flex-col gap-2 rounded-lg p-3 min-w-0 sm:flex-row sm:items-center sm:justify-between ${
           isHidden ? "bg-muted/30 opacity-60" : "bg-muted/50"
         }`}
         data-onboarding={
@@ -169,7 +169,7 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
         }
       >
         {isEditing ? (
-          <div className="flex flex-1 items-center gap-2 min-w-0">
+          <div className="flex flex-1 items-center gap-2 min-w-0 w-full">
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="outline" size="sm" className="h-10 w-10 shrink-0 text-xl">
@@ -211,7 +211,7 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
           </div>
         ) : (
           <>
-            <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="flex items-center gap-3 min-w-0 w-full sm:flex-1">
               <span className="text-xl shrink-0">{category.icon}</span>
               <span className={`truncate ${isHidden ? "line-through text-muted-foreground" : ""}`}>
                 {category.name}
@@ -227,9 +227,9 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
               ) : null}
             </div>
             {isOutros ? (
-              <span className="text-xs text-muted-foreground shrink-0">Fixa</span>
+              <span className="text-xs text-muted-foreground shrink-0 self-end sm:self-auto">Fixa</span>
             ) : (
-              <div className="flex items-center gap-0.5 shrink-0">
+              <div className="flex items-center gap-0.5 shrink-0 self-end sm:self-auto">
                 <Button
                   size="icon"
                   variant="ghost"
@@ -273,12 +273,12 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent
           side="bottom"
-          className="h-[85vh]"
+          className="h-[85vh] flex flex-col overflow-hidden p-0"
           data-onboarding="category-manager-sheet"
         >
-          <SheetHeader className="text-left">
+          <SheetHeader className="text-left px-6 pt-6 pb-2 shrink-0">
             <div className="flex items-start justify-between gap-3">
-              <div className="space-y-1">
+              <div className="space-y-1 min-w-0">
                 <SheetTitle className="flex items-center gap-2 text-primary">
                   ✏️ Gerenciar Categorias
                 </SheetTitle>
@@ -292,19 +292,20 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
                 size="sm"
                 onClick={() => onOpenChange(false)}
                 data-onboarding="category-manager-close-btn"
+                className="shrink-0"
               >
                 Voltar ao formulário
               </Button>
             </div>
           </SheetHeader>
 
-          <ScrollArea className="mt-4 h-[calc(100%-120px)] pr-4">
+          <ScrollArea className="flex-1 min-h-0 px-6">
             {loading ? (
               <div className="flex h-32 items-center justify-center">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
             ) : (
-              <div className="space-y-6">
+              <div className="space-y-6 pt-2 pb-4">
                 <div className="space-y-3">
                   <h3 className="text-sm font-medium text-muted-foreground">
                     📌 Categorias Ativas ({activeCategories.length})
@@ -315,83 +316,6 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
                     ))}
                   </div>
                 </div>
-
-                {showAddForm ? (
-                  <div
-                    className="space-y-3 rounded-lg border border-dashed p-4"
-                    data-onboarding="category-manager-add-btn"
-                  >
-                    <h3 className="text-sm font-medium">Nova Categoria</h3>
-                    <div className="flex items-center gap-2">
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button variant="outline" size="sm" className="h-12 w-12 text-2xl">
-                            {newIcon}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-64 bg-background p-2">
-                          <div className="grid grid-cols-6 gap-1">
-                            {EMOJI_OPTIONS.map((emoji) => (
-                              <Button
-                                key={emoji}
-                                variant={newIcon === emoji ? "secondary" : "ghost"}
-                                size="sm"
-                                className="h-9 w-9 text-lg"
-                                onClick={() => setNewIcon(emoji)}
-                              >
-                                {emoji}
-                              </Button>
-                            ))}
-                          </div>
-                        </PopoverContent>
-                      </Popover>
-                      <div className="flex-1 space-y-1">
-                        <Label htmlFor="new-category-name">Nome</Label>
-                        <Input
-                          id="new-category-name"
-                          value={newName}
-                          onChange={(e) => setNewName(e.target.value)}
-                          placeholder="Ex: Pets, Academia..."
-                        />
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setShowAddForm(false);
-                          setNewName("");
-                          setNewIcon("📦");
-                        }}
-                        className="flex-1"
-                      >
-                        Cancelar
-                      </Button>
-                      <Button
-                        onClick={handleAdd}
-                        disabled={!newName.trim() || saving}
-                        className="flex-1"
-                      >
-                        {saving ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          <Plus className="mr-2 h-4 w-4" />
-                        )}
-                        Adicionar
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowAddForm(true)}
-                    className="w-full border-dashed"
-                    data-onboarding="category-manager-add-btn"
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Adicionar Categoria
-                  </Button>
-                )}
 
                 {hiddenCategories.length > 0 && (
                   <>
@@ -415,6 +339,88 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
               </div>
             )}
           </ScrollArea>
+
+          {/* Sticky footer: Add Category button (or inline form when active) */}
+          <div
+            className="shrink-0 border-t bg-background px-6 pt-3"
+            style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
+          >
+            {showAddForm ? (
+              <div
+                className="space-y-3 rounded-lg border border-dashed p-3"
+                data-onboarding="category-manager-add-btn"
+              >
+                <h3 className="text-sm font-medium">Nova Categoria</h3>
+                <div className="flex items-center gap-2">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-12 w-12 text-2xl shrink-0">
+                        {newIcon}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-64 bg-background p-2">
+                      <div className="grid grid-cols-6 gap-1">
+                        {EMOJI_OPTIONS.map((emoji) => (
+                          <Button
+                            key={emoji}
+                            variant={newIcon === emoji ? "secondary" : "ghost"}
+                            size="sm"
+                            className="h-9 w-9 text-lg"
+                            onClick={() => setNewIcon(emoji)}
+                          >
+                            {emoji}
+                          </Button>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                  <div className="flex-1 space-y-1 min-w-0">
+                    <Label htmlFor="new-category-name">Nome</Label>
+                    <Input
+                      id="new-category-name"
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      placeholder="Ex: Pets, Academia..."
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowAddForm(false);
+                      setNewName("");
+                      setNewIcon("📦");
+                    }}
+                    className="flex-1"
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    onClick={handleAdd}
+                    disabled={!newName.trim() || saving}
+                    className="flex-1"
+                  >
+                    {saving ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Plus className="mr-2 h-4 w-4" />
+                    )}
+                    Adicionar
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button
+                onClick={() => setShowAddForm(true)}
+                className="w-full h-12"
+                data-onboarding="category-manager-add-btn"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Adicionar Categoria
+              </Button>
+            )}
+          </div>
         </SheetContent>
       </Sheet>
 
