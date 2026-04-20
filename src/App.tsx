@@ -41,8 +41,25 @@ const queryClient = new QueryClient();
 
 const AppContent = () => {
   const { user, loading } = useAuth();
+  const location = useLocation();
   const [isLocked, setIsLocked] = useState(false);
   const [lockChecked, setLockChecked] = useState(false);
+
+  // Cleanup defensivo de locks órfãos do banner AdMob ao trocar de rota.
+  // Locks legítimos em sheets que sobrevivem à navegação serão
+  // re-registrados pelo `useAdBannerLock` no novo render.
+  useEffect(() => {
+    adBannerCoordinator.forceReleaseByPrefixes([
+      "category-",
+      "expense-form-",
+      "income-form-",
+      "budget-",
+      "card-",
+      "recurring-",
+      "reminders-",
+      "calculator-",
+    ]);
+  }, [location.pathname]);
 
   // Listener para deep link do OAuth (Google Sign-In no Android)
   useEffect(() => {
