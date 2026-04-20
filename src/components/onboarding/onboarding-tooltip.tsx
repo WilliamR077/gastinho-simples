@@ -65,6 +65,10 @@ export function OnboardingTooltip({
   // we allow a larger gap between the tooltip and the highlighted target and
   // enable a horizontal (left/right) fallback when above/below would overlap.
   const isBudgetSubstep = substep.id?.startsWith("budget-");
+  // Info substeps inside budget form get extra breathing room — these only
+  // describe the field, never require interaction with it, so we can bias
+  // hard against any overlap.
+  const isBudgetInfoSubstep = isBudgetSubstep && substep.actionType === "info";
 
   const updatePosition = useCallback(() => {
     if (!targetSelector) {
@@ -81,7 +85,7 @@ export function OnboardingTooltip({
     const rect = el.getBoundingClientRect();
     const tooltipHeight = tooltipRef.current?.offsetHeight || 180;
     const tooltipWidth = Math.min(maxTooltipWidth, window.innerWidth - 32);
-    const gap = isBudgetSubstep ? 24 : 16;
+    const gap = isBudgetInfoSubstep ? 32 : isBudgetSubstep ? 24 : 16;
     const padding = 8;
 
     const clampLeft = (left: number) =>
@@ -154,12 +158,20 @@ export function OnboardingTooltip({
       });
     }
 
+    // For budget info substeps, prefer horizontal placement when any vertical
+    // candidate still overlaps the target after clamping.
+    const verticalCandidates = candidates.slice(0, 2);
+    const horizontalCandidates = candidates.slice(2);
+    const anyVerticalOverlap = verticalCandidates.some((c) => c.overlapArea > 0);
+
     const bestCandidate =
       candidates.find((candidate) => candidate.overlapArea === 0) ??
-      candidates.sort((a, b) => a.overlapArea - b.overlapArea)[0];
+      (isBudgetInfoSubstep && anyVerticalOverlap && horizontalCandidates.length > 0
+        ? horizontalCandidates.sort((a, b) => a.overlapArea - b.overlapArea)[0]
+        : candidates.sort((a, b) => a.overlapArea - b.overlapArea)[0]);
 
     setPos({ top: bestCandidate.top, left: bestCandidate.left, placement: bestCandidate.placement });
-  }, [targetSelector, substep.placement, maxTooltipWidth, isBudgetSubstep]);
+  }, [targetSelector, substep.placement, maxTooltipWidth, isBudgetSubstep, isBudgetInfoSubstep]);
 
   useEffect(() => {
     if (!targetSelector) {
