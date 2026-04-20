@@ -157,7 +157,7 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
 
     return (
       <div
-        className={`flex items-center justify-between gap-2 rounded-lg p-3 min-w-0 ${
+        className={`flex flex-col gap-2 rounded-lg p-3 min-w-0 sm:flex-row sm:items-center sm:justify-between ${
           isHidden ? "bg-muted/30 opacity-60" : "bg-muted/50"
         }`}
         data-onboarding={
@@ -169,7 +169,7 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
         }
       >
         {isEditing ? (
-          <div className="flex flex-1 items-center gap-2 min-w-0">
+          <div className="flex flex-1 items-center gap-2 min-w-0 w-full">
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="outline" size="sm" className="h-10 w-10 shrink-0 text-xl">
@@ -211,7 +211,7 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
           </div>
         ) : (
           <>
-            <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="flex items-center gap-3 min-w-0 w-full sm:flex-1">
               <span className="text-xl shrink-0">{category.icon}</span>
               <span className={`truncate ${isHidden ? "line-through text-muted-foreground" : ""}`}>
                 {category.name}
@@ -227,9 +227,9 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
               ) : null}
             </div>
             {isOutros ? (
-              <span className="text-xs text-muted-foreground shrink-0">Fixa</span>
+              <span className="text-xs text-muted-foreground shrink-0 self-end sm:self-auto">Fixa</span>
             ) : (
-              <div className="flex items-center gap-0.5 shrink-0">
+              <div className="flex items-center gap-0.5 shrink-0 self-end sm:self-auto">
                 <Button
                   size="icon"
                   variant="ghost"
