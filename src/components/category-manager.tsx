@@ -41,10 +41,32 @@ const EMOJI_OPTIONS = [
   "🍱", "🚲",
 ];
 
+export type CategoryManagerContext = "expense" | "recurring" | "income";
+
 interface CategoryManagerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Identifica o fluxo do onboarding que abriu o gerenciador para que o evento
+   * de fechamento despachado seja o esperado pelo respectivo step.
+   *  - "expense"   → "category-manager-closed"
+   *  - "recurring" → "recurring-category-manager-closed"
+   *  - "income"    → "income-category-manager-closed"
+   */
+  context?: CategoryManagerContext;
 }
+
+const OPEN_EVENT_BY_CONTEXT: Record<CategoryManagerContext, string> = {
+  expense: "category-manager-opened",
+  recurring: "recurring-category-manager-opened",
+  income: "income-category-manager-opened",
+};
+
+const CLOSE_EVENT_BY_CONTEXT: Record<CategoryManagerContext, string> = {
+  expense: "category-manager-closed",
+  recurring: "recurring-category-manager-closed",
+  income: "income-category-manager-closed",
+};
 
 interface EditingCategory {
   id: string;
@@ -55,7 +77,7 @@ interface EditingCategory {
 const isOutrosCategory = (category: UserCategory) =>
   category.name.toLowerCase() === "outros";
 
-export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
+export function CategoryManager({ open, onOpenChange, context = "expense" }: CategoryManagerProps) {
   const {
     activeCategories,
     hiddenCategories,
@@ -92,15 +114,23 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
     }
 
     try {
+      const eventName = open
+        ? OPEN_EVENT_BY_CONTEXT[context]
+        : CLOSE_EVENT_BY_CONTEXT[context];
       window.dispatchEvent(
         new CustomEvent("gastinho-onboarding-event", {
-          detail: open ? "category-manager-opened" : "category-manager-closed",
+          detail: eventName,
         })
       );
     } catch {
       void 0;
     }
-  }, [open]);
+  }, [open, context]);
+
+  // Nota: o useEffect acima já dispara o evento contextual de fechamento
+  // sempre que `open` vira false, qualquer que seja a forma de fechamento
+  // (X, ESC, outside-click, gesto, ou botão "Voltar ao formulário").
+
 
   const handleAdd = async () => {
     if (!newName.trim()) return;
@@ -279,7 +309,10 @@ export function CategoryManager({ open, onOpenChange }: CategoryManagerProps) {
           <SheetHeader className="text-left px-6 pt-6 pb-2 shrink-0">
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-1 min-w-0">
-                <SheetTitle className="flex items-center gap-2 text-primary">
+                <SheetTitle
+                  className="flex items-center gap-2 text-primary"
+                  data-onboarding="category-manager-header"
+                >
                   ✏️ Gerenciar Categorias
                 </SheetTitle>
                 <SheetDescription>

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Settings, Loader2 } from "lucide-react";
 import { useCategories } from "@/hooks/use-categories";
-import { CategoryManager } from "@/components/category-manager";
+import { CategoryManager, type CategoryManagerContext } from "@/components/category-manager";
 import { categoryLabels, categoryIcons, ExpenseCategory } from "@/types/expense";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -14,6 +14,12 @@ interface CategorySelectorProps {
   className?: string;
   triggerClassName?: string;
   onboardingTarget?: string;
+  /**
+   * Contexto do fluxo onde este seletor está sendo usado. Determina qual
+   * evento de onboarding o CategoryManager irá despachar ao abrir/fechar.
+   * Default: "expense".
+   */
+  context?: CategoryManagerContext;
 }
 
 export function CategorySelector({ 
@@ -22,6 +28,7 @@ export function CategorySelector({
   className,
   triggerClassName,
   onboardingTarget,
+  context = "expense",
 }: CategorySelectorProps) {
   const { activeCategories, loading, refresh } = useCategories();
   const [showManager, setShowManager] = useState(false);
@@ -151,7 +158,7 @@ export function CategorySelector({
         </SelectContent>
       </Select>
 
-      <CategoryManager open={showManager} onOpenChange={handleManagerClose} />
+      <CategoryManager open={showManager} onOpenChange={handleManagerClose} context={context} />
     </>
   );
 }

@@ -143,6 +143,7 @@ export function RecurringExpenseForm({ onAddRecurringExpense }: RecurringExpense
               value={categoryId}
               onValueChange={setCategoryId}
               triggerClassName="bg-background/50"
+              context="recurring"
             />
           </div>
 

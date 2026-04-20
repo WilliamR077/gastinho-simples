@@ -139,6 +139,27 @@ export function SecuritySettings() {
     setShowPinDialog(true);
   };
 
+  // Despacha evento contextual de cancelamento quando o usuário fecha o
+  // dialog sem salvar (X, ESC, outside-click, botão Cancelar). O onboarding
+  // do step "setup-settings" usa este evento para sair do substep do PIN
+  // sem travar quando o usuário decide configurar mais tarde.
+  const handlePinDialogOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen && showPinDialog) {
+      try {
+        window.dispatchEvent(
+          new CustomEvent("gastinho-onboarding-event", {
+            detail: "security-pin-cancelled",
+          })
+        );
+      } catch {
+        void 0;
+      }
+      setNewPin("");
+      setConfirmPin("");
+    }
+    setShowPinDialog(nextOpen);
+  };
+
   if (!isNative) {
     return (
       <Card>
@@ -271,7 +292,7 @@ export function SecuritySettings() {
       </Card>
 
       {/* Dialog para configurar PIN */}
-      <Dialog open={showPinDialog} onOpenChange={setShowPinDialog}>
+      <Dialog open={showPinDialog} onOpenChange={handlePinDialogOpenChange}>
         <DialogContent data-onboarding="settings-pin-dialog">
           <DialogHeader>
             <DialogTitle>Configurar PIN</DialogTitle>
@@ -308,7 +329,7 @@ export function SecuritySettings() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowPinDialog(false)}>
+            <Button variant="outline" onClick={() => handlePinDialogOpenChange(false)}>
               Cancelar
             </Button>
             <Button onClick={handleSavePin}>

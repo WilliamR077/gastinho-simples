@@ -322,11 +322,13 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     const REOPEN_MAP: Record<string, { closedEvent: string; introId: string; stepIds: string[] }> = {
       "category-manager-opened": {
         closedEvent: "category-manager-closed",
-        // expense + recurring share the "category-manager-opened" event but
-        // each step has its own intro id. We resolve the right one by
-        // checking currentStep?.id below.
         introId: "expense-category-manager-intro",
-        stepIds: ["add-expense", "add-recurring-expense"],
+        stepIds: ["add-expense"],
+      },
+      "recurring-category-manager-opened": {
+        closedEvent: "recurring-category-manager-closed",
+        introId: "recurring-category-manager-intro",
+        stepIds: ["add-recurring-expense"],
       },
       "income-category-manager-opened": {
         closedEvent: "income-category-manager-closed",
@@ -346,12 +348,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         // already went through the manager once and came back).
         if (seenEventsRef.current.has(reopenInfo.closedEvent)) {
           seenEventsRef.current.delete(reopenInfo.closedEvent);
-          // Pick the right intro id for the active step
-          const introId =
-            currentStep.id === "add-recurring-expense"
-              ? "recurring-category-manager-intro"
-              : reopenInfo.introId;
-          const introIdx = currentStep.substeps.findIndex((s) => s.id === introId);
+          const introIdx = currentStep.substeps.findIndex((s) => s.id === reopenInfo.introId);
           if (introIdx >= 0) {
             setPendingAdvance(null);
             setSubstepIndex(introIdx);
@@ -365,8 +362,17 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
 
       if (
         detail === "category-manager-closed" &&
-        (currentStep?.id === "add-expense" || currentStep?.id === "add-recurring-expense") &&
-        (currentSubstep?.id.startsWith("expense-category-manager-") || currentSubstep?.id.startsWith("recurring-category-manager-"))
+        currentStep?.id === "add-expense" &&
+        currentSubstep?.id.startsWith("expense-category-manager-")
+      ) {
+        advanceSubstepInternal();
+        return;
+      }
+
+      if (
+        detail === "recurring-category-manager-closed" &&
+        currentStep?.id === "add-recurring-expense" &&
+        currentSubstep?.id.startsWith("recurring-category-manager-")
       ) {
         advanceSubstepInternal();
         return;
@@ -376,6 +382,17 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         detail === "income-category-manager-closed" &&
         currentStep?.id === "add-income" &&
         currentSubstep?.id.startsWith("income-category-manager-")
+      ) {
+        advanceSubstepInternal();
+        return;
+      }
+
+      // Cancelamento do PIN: avança o substep "settings-pin-info" sem travar
+      // o tutorial quando o usuário escolhe configurar mais tarde.
+      if (
+        detail === "security-pin-cancelled" &&
+        currentStep?.id === "setup-settings" &&
+        currentSubstep?.id === "settings-pin-info"
       ) {
         advanceSubstepInternal();
         return;

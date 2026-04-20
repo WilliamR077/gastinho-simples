@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { ThemeProvider } from "@/hooks/use-theme";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { SharedGroupsProvider } from "@/hooks/use-shared-groups";
@@ -14,6 +14,7 @@ import { OnboardingProvider } from "@/hooks/use-onboarding-tour";
 import { OnboardingTour } from "@/components/onboarding-tour";
 import { firebaseNotificationService } from "@/services/firebase-notification-service";
 import { adMobService } from "@/services/admob-service";
+import { adBannerCoordinator } from "@/services/admob-visibility-coordinator";
 import { appLockService } from "@/services/app-lock-service";
 import { billingService } from "@/services/billing-service";
 import { AppLockScreen } from "@/components/app-lock-screen";
@@ -40,8 +41,25 @@ const queryClient = new QueryClient();
 
 const AppContent = () => {
   const { user, loading } = useAuth();
+  const location = useLocation();
   const [isLocked, setIsLocked] = useState(false);
   const [lockChecked, setLockChecked] = useState(false);
+
+  // Cleanup defensivo de locks órfãos do banner AdMob ao trocar de rota.
+  // Locks legítimos em sheets que sobrevivem à navegação serão
+  // re-registrados pelo `useAdBannerLock` no novo render.
+  useEffect(() => {
+    adBannerCoordinator.forceReleaseByPrefixes([
+      "category-",
+      "expense-form-",
+      "income-form-",
+      "budget-",
+      "card-",
+      "recurring-",
+      "reminders-",
+      "calculator-",
+    ]);
+  }, [location.pathname]);
 
   // Listener para deep link do OAuth (Google Sign-In no Android)
   useEffect(() => {

@@ -262,7 +262,7 @@ const EXPENSE_SUBSTEPS: OnboardingSubstep[] = [
     targetSelector: "expense-category-field",
     title: "Escolha a Categoria",
     description:
-      'Abra a lista e escolha uma categoria padrão. Se quiser personalizar, toque em "Gerenciar categorias..." para editar, ocultar, excluir ou criar uma nova.',
+      "Abra a lista e escolha uma categoria. Para criar ou editar, toque em 'Gerenciar categorias'.",
     emoji: "📦",
     autoAdvanceOnEvent: ["expense-category-selected", "category-manager-opened"],
     scrollToTarget: true,
@@ -271,7 +271,7 @@ const EXPENSE_SUBSTEPS: OnboardingSubstep[] = [
   {
     id: "expense-category-manager-intro",
     actionType: "info",
-    targetSelector: "category-manager-sheet",
+    targetSelector: "category-manager-header",
     title: "Gerencie suas Categorias",
     description:
       "Aqui ficam as categorias padrão e as que você criar. Se quiser adaptar o app à sua realidade, este é o lugar certo.",
@@ -588,14 +588,14 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         description:
           "Agora escolha a categoria que melhor representa essa despesa.",
         emoji: "📦",
-        autoAdvanceOnEvent: ["expense-category-selected", "category-manager-opened"],
+        autoAdvanceOnEvent: ["expense-category-selected", "recurring-category-manager-opened"],
         scrollToTarget: true,
         placement: "below",
       },
       {
         id: "recurring-category-manager-intro",
         actionType: "info",
-        targetSelector: "category-manager-sheet",
+        targetSelector: "category-manager-header",
         title: "Gerencie suas Categorias",
         description:
           "Aqui ficam as categorias padrão e as que você criar. Se quiser adaptar o app à sua realidade, este é o lugar certo.",
@@ -604,8 +604,8 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         placement: "above",
         condition: (ctx) => {
           return (
-            !!ctx.seenEvents?.has("category-manager-opened") &&
-            !ctx.seenEvents?.has("category-manager-closed")
+            !!ctx.seenEvents?.has("recurring-category-manager-opened") &&
+            !ctx.seenEvents?.has("recurring-category-manager-closed")
           );
         },
       },
@@ -617,13 +617,13 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         description:
           "Quando terminar de personalizar, toque aqui para voltar ao formulário e escolher a categoria.",
         emoji: "↩️",
-        autoAdvanceOnEvent: "category-manager-closed",
+        autoAdvanceOnEvent: "recurring-category-manager-closed",
         scrollToTarget: true,
         placement: "above",
         condition: (ctx) => {
           return (
-            !!ctx.seenEvents?.has("category-manager-opened") &&
-            !ctx.seenEvents?.has("category-manager-closed")
+            !!ctx.seenEvents?.has("recurring-category-manager-opened") &&
+            !ctx.seenEvents?.has("recurring-category-manager-closed")
           );
         },
       },
@@ -639,7 +639,7 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         scrollToTarget: true,
         placement: "below",
         condition: (ctx) => {
-          return !!ctx.seenEvents?.has("category-manager-closed");
+          return !!ctx.seenEvents?.has("recurring-category-manager-closed");
         },
       },
       {
@@ -812,7 +812,7 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
       {
         id: "income-category-manager-intro",
         actionType: "info",
-        targetSelector: "category-manager-sheet",
+        targetSelector: "category-manager-header",
         title: "Gerencie suas Categorias de Entrada",
         description:
           "Aqui ficam as categorias de entrada. Personalize conforme sua realidade.",
@@ -1049,7 +1049,7 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         targetSelector: "reports-period-selector",
         title: "Tipo de Período",
         description:
-          "Aqui você escolhe como visualizar seus relatórios: por mês, ano, trimestre ou período customizado. No plano gratuito, a visualização mensal fica disponível. As opções avançadas fazem parte do plano Premium.",
+          "Use o seletor para mudar o período dos relatórios.",
         emoji: "📅",
         scrollToTarget: true,
         placement: "below",
@@ -1270,7 +1270,8 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         title: "PIN de Segurança",
         description: "Agora defina um PIN de 4 a 6 números para proteger o acesso ao app.",
         emoji: "🔑",
-        autoAdvanceOnEvent: "security-pin-saved",
+        autoAdvanceOnEvent: ["security-pin-saved", "security-pin-cancelled"],
+        skipLabel: "Configurar depois",
         scrollToTarget: true,
         placement: "below",
         condition: () => !!document.querySelector('[data-onboarding="settings-pin-dialog"]'),

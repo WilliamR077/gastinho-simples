@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -69,6 +69,27 @@ export function IncomeCategoryManager({ open, onOpenChange }: IncomeCategoryMana
   const [saving, setSaving] = useState(false);
   const [editingCategory, setEditingCategory] = useState<EditingCategory | null>(null);
   const [deletingCategory, setDeletingCategory] = useState<UserIncomeCategory | null>(null);
+  const hasOpenedRef = useRef(false);
+
+  // Dispara evento contextual do onboarding em qualquer forma de fechamento
+  // do sheet (X, ESC, outside-click, gesto). O onboarding do step "add-income"
+  // depende deste evento para avançar do substep do gerenciador.
+  useEffect(() => {
+    if (open) {
+      hasOpenedRef.current = true;
+    } else if (!hasOpenedRef.current) {
+      return;
+    }
+    try {
+      window.dispatchEvent(
+        new CustomEvent("gastinho-onboarding-event", {
+          detail: open ? "income-category-manager-opened" : "income-category-manager-closed",
+        })
+      );
+    } catch {
+      void 0;
+    }
+  }, [open]);
 
   const handleAdd = async () => {
     if (!newName.trim()) return;
@@ -185,7 +206,10 @@ export function IncomeCategoryManager({ open, onOpenChange }: IncomeCategoryMana
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent side="bottom" className="h-[85vh]">
           <SheetHeader className="text-left">
-            <SheetTitle className="text-green-600 dark:text-green-400 flex items-center gap-2">
+            <SheetTitle
+              className="text-green-600 dark:text-green-400 flex items-center gap-2"
+              data-onboarding="category-manager-header"
+            >
               ✏️ Gerenciar Categorias de Entrada
             </SheetTitle>
             <SheetDescription>
