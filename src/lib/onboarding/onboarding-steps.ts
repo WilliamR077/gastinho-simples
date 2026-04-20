@@ -136,7 +136,8 @@ const CARDS_SUBSTEPS: OnboardingSubstep[] = [
     actionType: "optional-group",
     targetSelector: "card-limit-input",
     title: "Limite do Cartão (Opcional)",
-    description: "Se quiser, defina o limite do cartão. Pode pular se preferir.",
+    description:
+      "Se quiser, informe o limite do cartão para o app acompanhar quanto dele já foi usado nas suas compras.\n\nAssim, você consegue ver o consumo do limite e evitar gastos acima do valor disponível.",
     emoji: "💰",
     skipLabel: "Pular",
     scrollToTarget: true,
@@ -981,7 +982,7 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         targetSelector: "goal-type-select",
         title: "Tipo de Limite",
         description:
-          "Existem dois tipos de limite:\n\n📊 Limite Mensal Total → define um teto de gastos no mês inteiro\n📦 Limite por Categoria → limita gastos em uma categoria específica\n\nPara começar, vamos usar 'Limite Mensal Total', que é o mais simples e útil.",
+          "Você pode criar:\n\n📊 Limite mensal total — controla os gastos do mês inteiro\n📦 Limite por categoria — controla uma categoria específica\n\nPara começar, vamos usar Limite Mensal Total, que é o mais simples.",
         emoji: "📊",
         scrollToTarget: true,
         placement: "below",
