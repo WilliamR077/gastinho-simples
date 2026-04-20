@@ -292,7 +292,7 @@ export function SecuritySettings() {
       </Card>
 
       {/* Dialog para configurar PIN */}
-      <Dialog open={showPinDialog} onOpenChange={setShowPinDialog}>
+      <Dialog open={showPinDialog} onOpenChange={handlePinDialogOpenChange}>
         <DialogContent data-onboarding="settings-pin-dialog">
           <DialogHeader>
             <DialogTitle>Configurar PIN</DialogTitle>
@@ -329,7 +329,7 @@ export function SecuritySettings() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowPinDialog(false)}>
+            <Button variant="outline" onClick={() => handlePinDialogOpenChange(false)}>
               Cancelar
             </Button>
             <Button onClick={handleSavePin}>
