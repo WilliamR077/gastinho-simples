@@ -223,6 +223,10 @@ export default function Auth() {
               {isGoogleLoading ? "Conectando..." : "Entrar com Google"}
             </Button>
 
+            <p className="text-xs text-muted-foreground text-center">
+              Recomendado — entre com sua conta Google em 1 clique, sem precisar criar senha.
+            </p>
+
             <button
               type="button"
               onClick={() => setShowEmailForm(prev => !prev)}
@@ -242,6 +246,10 @@ export default function Auth() {
                       <span className="bg-card px-2 text-muted-foreground">ou</span>
                     </div>
                   </div>
+
+                  <p className="text-xs text-muted-foreground text-center">
+                    Atenção: ao criar conta com email, você receberá uma confirmação na sua caixa de entrada antes de conseguir acessar o app.
+                  </p>
 
                   <Tabs defaultValue="signin" className="w-full">
                     <TabsList className="grid w-full grid-cols-2">
