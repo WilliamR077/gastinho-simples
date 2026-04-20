@@ -38,6 +38,10 @@ export interface OnboardingSubstep {
   // over the highlighted target so the user can't interact with it. Used in
   // info substeps that *describe* an option without allowing selection yet.
   lockTarget?: boolean;
+  // When true, no overlay/spotlight is rendered — only the tooltip anchored
+  // to the target. Useful for introductory "info" substeps inside sheets where
+  // the user should still be able to interact with the entire screen.
+  noSpotlight?: boolean;
   // Conditional: skip this substep if condition not met
   condition?: (ctx: { formElement?: HTMLElement; seenEvents?: Set<string> }) => boolean;
 }
@@ -278,6 +282,7 @@ const EXPENSE_SUBSTEPS: OnboardingSubstep[] = [
     emoji: "🛠️",
     scrollToTarget: true,
     placement: "above",
+    noSpotlight: true,
     condition: (ctx) => {
       return (
         !!ctx.seenEvents?.has("category-manager-opened") &&
@@ -602,6 +607,7 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         emoji: "🛠️",
         scrollToTarget: true,
         placement: "above",
+        noSpotlight: true,
         condition: (ctx) => {
           return (
             !!ctx.seenEvents?.has("recurring-category-manager-opened") &&
@@ -819,6 +825,7 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         emoji: "🛠️",
         scrollToTarget: true,
         placement: "above",
+        noSpotlight: true,
         condition: (ctx) => {
           return (
             !!ctx.seenEvents?.has("income-category-manager-opened") &&
@@ -985,7 +992,7 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
           "Você pode criar:\n\n📊 Limite mensal total — controla os gastos do mês inteiro\n📦 Limite por categoria — controla uma categoria específica\n\nPara começar, vamos usar Limite Mensal Total, que é o mais simples.",
         emoji: "📊",
         scrollToTarget: true,
-        placement: "below",
+        placement: "above",
       },
       {
         id: "budget-amount",

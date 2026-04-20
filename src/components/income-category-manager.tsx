@@ -160,7 +160,6 @@ export function IncomeCategoryManager({ open, onOpenChange }: IncomeCategoryMana
               value={editingCategory.name}
               onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
               className="flex-1"
-              autoFocus
             />
             <Button size="icon" variant="ghost" onClick={handleSaveEdit} disabled={saving}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4 text-green-500" />}

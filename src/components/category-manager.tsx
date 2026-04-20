@@ -226,7 +226,6 @@ export function CategoryManager({ open, onOpenChange, context = "expense" }: Cat
               value={editingCategory.name}
               onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
               className="flex-1 min-w-0"
-              autoFocus
             />
             <Button size="icon" variant="ghost" onClick={handleSaveEdit} disabled={saving} className="shrink-0">
               {saving ? (

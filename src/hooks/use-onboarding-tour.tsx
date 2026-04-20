@@ -555,6 +555,12 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     }
 
     if (currentSubstep.focusTarget) {
+      // Skip auto-focus on touch devices: focusing an <input> on mobile pops
+      // the virtual keyboard and hides the tooltip + highlighted field.
+      const isTouchDevice =
+        typeof window !== "undefined" &&
+        (window.matchMedia?.("(pointer: coarse)").matches || "ontouchstart" in window);
+      if (isTouchDevice) return;
       setTimeout(() => {
         const input =
           el.tagName === "INPUT" || el.tagName === "TEXTAREA"
@@ -708,6 +714,21 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(STORAGE_KEY, "true");
       localStorage.removeItem(PROGRESS_KEY);
       return;
+    }
+
+    // Wait for the budget form sheet to fully unmount before highlighting the
+    // next step (Relatórios). Otherwise the highlight appears on top of the
+    // still-closing sheet for ~300ms (Radix close animation).
+    if (justId === "add-budget-goal") {
+      const start = Date.now();
+      while (Date.now() - start < 600) {
+        const stillMounted =
+          getReadyTargetElement("goal-amount-input") ||
+          getReadyTargetElement("goal-type-select") ||
+          getReadyTargetElement("goal-submit-btn");
+        if (!stillMounted) break;
+        await new Promise((r) => requestAnimationFrame(() => r(null)));
+      }
     }
 
     setPendingAdvance(null);
