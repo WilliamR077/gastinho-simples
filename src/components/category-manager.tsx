@@ -41,10 +41,32 @@ const EMOJI_OPTIONS = [
   "🍱", "🚲",
 ];
 
+export type CategoryManagerContext = "expense" | "recurring" | "income";
+
 interface CategoryManagerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Identifica o fluxo do onboarding que abriu o gerenciador para que o evento
+   * de fechamento despachado seja o esperado pelo respectivo step.
+   *  - "expense"   → "category-manager-closed"
+   *  - "recurring" → "recurring-category-manager-closed"
+   *  - "income"    → "income-category-manager-closed"
+   */
+  context?: CategoryManagerContext;
 }
+
+const OPEN_EVENT_BY_CONTEXT: Record<CategoryManagerContext, string> = {
+  expense: "category-manager-opened",
+  recurring: "recurring-category-manager-opened",
+  income: "income-category-manager-opened",
+};
+
+const CLOSE_EVENT_BY_CONTEXT: Record<CategoryManagerContext, string> = {
+  expense: "category-manager-closed",
+  recurring: "recurring-category-manager-closed",
+  income: "income-category-manager-closed",
+};
 
 interface EditingCategory {
   id: string;
