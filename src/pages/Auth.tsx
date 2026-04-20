@@ -29,6 +29,7 @@ export default function Auth() {
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [showSignupPassword, setShowSignupPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showEmailForm, setShowEmailForm] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
 
