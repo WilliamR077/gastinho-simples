@@ -262,7 +262,7 @@ const EXPENSE_SUBSTEPS: OnboardingSubstep[] = [
     targetSelector: "expense-category-field",
     title: "Escolha a Categoria",
     description:
-      'Abra a lista e escolha uma categoria padrão. Se quiser personalizar, toque em "Gerenciar categorias..." para editar, ocultar, excluir ou criar uma nova.',
+      "Abra a lista e escolha uma categoria. Para criar ou editar, toque em 'Gerenciar categorias'.",
     emoji: "📦",
     autoAdvanceOnEvent: ["expense-category-selected", "category-manager-opened"],
     scrollToTarget: true,
@@ -271,7 +271,7 @@ const EXPENSE_SUBSTEPS: OnboardingSubstep[] = [
   {
     id: "expense-category-manager-intro",
     actionType: "info",
-    targetSelector: "category-manager-sheet",
+    targetSelector: "category-manager-header",
     title: "Gerencie suas Categorias",
     description:
       "Aqui ficam as categorias padrão e as que você criar. Se quiser adaptar o app à sua realidade, este é o lugar certo.",
