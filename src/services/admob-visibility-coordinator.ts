@@ -50,6 +50,25 @@ class AdBannerCoordinator {
     }
   }
 
+  /**
+   * Libera todas as razões cujo nome começa com qualquer um dos prefixos
+   * fornecidos. Usado em cleanup defensivo na mudança de rota: locks legítimos
+   * de sheets ainda montados serão re-registrados pelo `useAdBannerLock` no
+   * novo render; locks órfãos somem.
+   */
+  forceReleaseByPrefixes(prefixes: string[]): void {
+    if (!prefixes || prefixes.length === 0) return;
+    for (const r of Array.from(this.reasons)) {
+      if (prefixes.some((p) => r.startsWith(p))) {
+        this.reasons.delete(r);
+      }
+    }
+    if (this.reasons.size === 0 && this.hidden) {
+      this.hidden = false;
+      void adMobService.showBanner();
+    }
+  }
+
   /** Útil para debug/testes */
   getActiveReasons(): string[] {
     return Array.from(this.reasons);
