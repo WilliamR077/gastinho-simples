@@ -607,6 +607,7 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         emoji: "🛠️",
         scrollToTarget: true,
         placement: "above",
+        noSpotlight: true,
         condition: (ctx) => {
           return (
             !!ctx.seenEvents?.has("recurring-category-manager-opened") &&
@@ -824,6 +825,7 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
         emoji: "🛠️",
         scrollToTarget: true,
         placement: "above",
+        noSpotlight: true,
         condition: (ctx) => {
           return (
             !!ctx.seenEvents?.has("income-category-manager-opened") &&
