@@ -716,6 +716,21 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    // Wait for the budget form sheet to fully unmount before highlighting the
+    // next step (Relatórios). Otherwise the highlight appears on top of the
+    // still-closing sheet for ~300ms (Radix close animation).
+    if (justId === "add-budget-goal") {
+      const start = Date.now();
+      while (Date.now() - start < 600) {
+        const stillMounted =
+          getReadyTargetElement("goal-amount-input") ||
+          getReadyTargetElement("goal-type-select") ||
+          getReadyTargetElement("goal-submit-btn");
+        if (!stillMounted) break;
+        await new Promise((r) => requestAnimationFrame(() => r(null)));
+      }
+    }
+
     setPendingAdvance(null);
     seenEventsRef.current.clear();
     setStepIndex(nextIdx);
