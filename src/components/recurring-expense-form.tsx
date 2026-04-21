@@ -10,6 +10,11 @@ import { supabase } from "@/integrations/supabase/client"
 import { Card as CardType } from "@/types/card"
 import { CategorySelector } from "@/components/category-selector"
 import { useCategories } from "@/hooks/use-categories"
+import {
+  PAYMENT_METHOD_LIST,
+  requiresCard,
+  clearCardDependentFieldsIfNeeded,
+} from "@/lib/payment-methods"
 
 interface RecurringExpenseFormProps {
   onAddRecurringExpense: (data: RecurringExpenseFormData) => void
@@ -49,8 +54,8 @@ export function RecurringExpenseForm({ onAddRecurringExpense }: RecurringExpense
   }
 
   const getAvailableCards = () => {
-    if (!paymentMethod) return [];
-    
+    if (!paymentMethod || !requiresCard(paymentMethod)) return [];
+
     return cards.filter(card => {
       if (card.card_type === 'both') return true;
       if (paymentMethod === 'credit') return card.card_type === 'credit';
@@ -61,11 +66,16 @@ export function RecurringExpenseForm({ onAddRecurringExpense }: RecurringExpense
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!description || !amount || parseFloat(amount) <= 0) {
       return
     }
 
+    if (requiresCard(paymentMethod) && !cardId) {
+      return
+    }
+
+    const sanitizedCardId = requiresCard(paymentMethod) ? (cardId || undefined) : undefined;
     const selectedCategory = activeCategories.find(c => c.id === categoryId);
 
     onAddRecurringExpense({
@@ -74,7 +84,7 @@ export function RecurringExpenseForm({ onAddRecurringExpense }: RecurringExpense
       paymentMethod,
       dayOfMonth: parseInt(dayOfMonth),
       category: selectedCategory?.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_") as any || "outros",
-      cardId: cardId || undefined,
+      cardId: sanitizedCardId,
       categoryId: categoryId || undefined,
     })
 
@@ -149,19 +159,27 @@ export function RecurringExpenseForm({ onAddRecurringExpense }: RecurringExpense
 
           <div className="space-y-2">
             <Label htmlFor="recurring-payment">Forma de Pagamento</Label>
-            <Select value={paymentMethod} onValueChange={(value) => setPaymentMethod(value as PaymentMethod)}>
+            <Select
+              value={paymentMethod}
+              onValueChange={(value) => {
+                const newMethod = value as PaymentMethod;
+                const cleaned = clearCardDependentFieldsIfNeeded(newMethod, { cardId });
+                setPaymentMethod(newMethod);
+                setCardId(cleaned.cardId ?? "");
+              }}
+            >
               <SelectTrigger id="recurring-payment" className="bg-background/50">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="credit">Cartão de Crédito</SelectItem>
-                <SelectItem value="debit">Cartão de Débito</SelectItem>
-                <SelectItem value="pix">PIX</SelectItem>
+                {PAYMENT_METHOD_LIST.map((m) => (
+                  <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
 
-          {(paymentMethod === "credit" || paymentMethod === "debit") && (
+          {requiresCard(paymentMethod) && (
             <div className="space-y-2">
               <Label htmlFor="recurring-card">Selecione o Cartão</Label>
               <Select value={cardId} onValueChange={setCardId}>

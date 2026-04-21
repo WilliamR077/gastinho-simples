@@ -20,6 +20,12 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { CategorySelector } from "@/components/category-selector"
 import { useCategories } from "@/hooks/use-categories"
 import { DescriptionAutocomplete } from "@/components/description-autocomplete"
+import {
+  PAYMENT_METHOD_LIST,
+  requiresCard,
+  allowsInstallments,
+  clearCardDependentFieldsIfNeeded,
+} from "@/lib/payment-methods"
 
 interface ExpenseFormProps {
   onAddExpense: (data: ExpenseFormData) => void;
@@ -68,8 +74,8 @@ export function ExpenseForm({
   }
 
   const getAvailableCards = () => {
-    if (!paymentMethod) return [];
-    
+    if (!paymentMethod || !requiresCard(paymentMethod)) return [];
+
     return cards.filter(card => {
       if (card.card_type === 'both') return true;
       if (paymentMethod === 'credit') return card.card_type === 'credit';
@@ -136,7 +142,7 @@ export function ExpenseForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!description.trim() || !amount || !paymentMethod) {
       return
     }
@@ -146,8 +152,15 @@ export function ExpenseForm({
       return
     }
 
-    const installmentCount = paymentMethod === "credit" ? parseInt(installments) : 1
-    
+    // Bloqueia submit quando cartão é obrigatório e não foi selecionado.
+    if (requiresCard(paymentMethod) && !cardId) {
+      return
+    }
+
+    // Defesa em profundidade: nunca grava installments > 1 ou cardId em método incompatível.
+    const installmentCount = allowsInstallments(paymentMethod) ? parseInt(installments) : 1
+    const sanitizedCardId = requiresCard(paymentMethod) ? (cardId || undefined) : undefined
+
     onAddExpense({
       description: description.trim(),
       amount: numericAmount,
@@ -155,10 +168,10 @@ export function ExpenseForm({
       expenseDate,
       installments: installmentCount,
       category: selectedCategory?.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_") as any || "outros",
-      cardId: cardId || undefined,
+      cardId: sanitizedCardId,
       categoryId: categoryId || undefined,
     })
-    
+
     // Reset form
     setDescription("")
     setAmount("")
@@ -260,19 +273,31 @@ export function ExpenseForm({
 
           <div className="space-y-2">
             <Label htmlFor="payment-method">Forma de Pagamento</Label>
-            <Select value={paymentMethod} onValueChange={(value: PaymentMethod) => setPaymentMethod(value)}>
+            <Select
+              value={paymentMethod}
+              onValueChange={(value: PaymentMethod) => {
+                // Limpa campos dependentes ao trocar para método sem cartão / sem parcelas.
+                const cleaned = clearCardDependentFieldsIfNeeded(value, {
+                  cardId,
+                  installments: parseInt(installments) || 1,
+                });
+                setPaymentMethod(value);
+                setCardId(cleaned.cardId ?? "");
+                setInstallments(String(cleaned.installments ?? 1));
+              }}
+            >
               <SelectTrigger className="transition-all duration-300 focus:shadow-elegant">
                 <SelectValue placeholder="Selecione a forma de pagamento" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="pix">PIX</SelectItem>
-                <SelectItem value="debit">Cartão de Débito</SelectItem>
-                <SelectItem value="credit">Cartão de Crédito</SelectItem>
+                {PAYMENT_METHOD_LIST.map((m) => (
+                  <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
 
-          {(paymentMethod === "credit" || paymentMethod === "debit") && (
+          {requiresCard(paymentMethod) && (
             <div className="space-y-2">
               <Label htmlFor="card">Selecione o Cartão</Label>
               <Select value={cardId} onValueChange={setCardId}>
@@ -313,8 +338,8 @@ export function ExpenseForm({
               </div>
             );
           })()}
-          
-          {paymentMethod === "credit" && (
+
+          {allowsInstallments(paymentMethod) && (
             <div className="space-y-2">
               <Label htmlFor="installments">Número de Parcelas</Label>
               <Select value={installments} onValueChange={setInstallments}>

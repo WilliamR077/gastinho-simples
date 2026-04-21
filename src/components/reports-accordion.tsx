@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Progress } from "@/components/ui/progress";
 import { ReportViewModel, applyCumulativeMode, applyWeeklyMode } from "@/utils/report-view-model";
+import { paymentMethodColor, paymentMethodLabel } from "@/lib/payment-methods";
 
 interface GroupMember {
   user_id: string;
@@ -43,14 +44,8 @@ interface ReportsAccordionProps {
   viewModel: ReportViewModel;
 }
 
-const COLORS = {
-  credit: "#f59e0b",
-  debit: "#8b5cf6",
-  pix: "#06b6d4",
-};
-
 const CATEGORY_COLORS = [
-  "#ef4444", "#f97316", "#f59e0b", "#eab308", 
+  "#ef4444", "#f97316", "#f59e0b", "#eab308",
   "#84cc16", "#22c55e", "#10b981", "#14b8a6",
   "#06b6d4", "#0ea5e9", "#3b82f6", "#6366f1",
   "#8b5cf6", "#a855f7", "#d946ef", "#ec4899"
@@ -60,12 +55,6 @@ const MEMBER_COLORS = [
   "#3b82f6", "#10b981", "#f59e0b", "#ef4444",
   "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16"
 ];
-
-const paymentMethodLabels: Record<PaymentMethod, string> = {
-  credit: "Crédito",
-  debit: "Débito",
-  pix: "PIX"
-};
 
 export function ReportsAccordion({ 
   cards,
@@ -307,7 +296,7 @@ export function ReportsAccordion({
                       <div className="h-2 rounded-full bg-muted overflow-hidden">
                         <div
                           className="h-full rounded-full transition-all duration-500"
-                          style={{ width: `${barWidth}%`, backgroundColor: COLORS[pm.method] }}
+                          style={{ width: `${barWidth}%`, backgroundColor: paymentMethodColor(pm.method) }}
                         />
                       </div>
                     </div>
@@ -646,7 +635,7 @@ export function ReportsAccordion({
                       </div>
                       <div className="text-right">
                         <div className="font-semibold text-sm text-red-500">{formatCurrency(Number(expense.amount))}</div>
-                        <Badge variant="secondary" className="text-[10px]">{paymentMethodLabels[expense.payment_method]}</Badge>
+                        <Badge variant="secondary" className="text-[10px]">{paymentMethodLabel(expense.payment_method)}</Badge>
                       </div>
                     </div>
                   );

@@ -946,7 +946,7 @@ export type Database = {
         | "reembolso"
         | "aluguel"
         | "outros"
-      payment_method: "pix" | "credit" | "debit"
+      payment_method: "pix" | "credit" | "debit" | "cash"
       subscription_tier: "free" | "no_ads" | "premium" | "premium_plus"
     }
     CompositeTypes: {
@@ -1105,7 +1105,7 @@ export const Constants = {
         "aluguel",
         "outros",
       ],
-      payment_method: ["pix", "credit", "debit"],
+      payment_method: ["pix", "credit", "debit", "cash"],
       subscription_tier: ["free", "no_ads", "premium", "premium_plus"],
     },
   },

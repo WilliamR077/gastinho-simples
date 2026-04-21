@@ -12,6 +12,11 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Users, User } from "lucide-react";
 import { CategorySelector } from "@/components/category-selector";
 import { useCategories } from "@/hooks/use-categories";
+import {
+  PAYMENT_METHOD_LIST,
+  requiresCard,
+  clearCardDependentFieldsIfNeeded,
+} from "@/lib/payment-methods";
 
 interface RecurringExpenseFormSheetProps {
   open: boolean;
@@ -73,7 +78,7 @@ export function RecurringExpenseFormSheet({
   };
 
   const getAvailableCards = () => {
-    if (!paymentMethod) return [];
+    if (!paymentMethod || !requiresCard(paymentMethod)) return [];
 
     return cards.filter((card) => {
       if (card.card_type === "both") return true;
@@ -105,13 +110,19 @@ export function RecurringExpenseFormSheet({
       return;
     }
 
+    if (requiresCard(paymentMethod) && !cardId) {
+      return;
+    }
+
+    const sanitizedCardId = requiresCard(paymentMethod) ? (cardId || undefined) : undefined;
+
     onAddRecurringExpense({
       description,
       amount: parseFloat(amount),
       paymentMethod,
       dayOfMonth: parseInt(dayOfMonth),
       categoryId: category,
-      cardId: cardId || undefined,
+      cardId: sanitizedCardId,
       sharedGroupId: selectedDestination !== "personal" ? selectedDestination : undefined,
     });
 
@@ -211,19 +222,27 @@ export function RecurringExpenseFormSheet({
 
           <div className="space-y-2">
             <Label htmlFor="recurring-sheet-payment">Forma de Pagamento</Label>
-            <Select value={paymentMethod} onValueChange={(value) => setPaymentMethod(value as PaymentMethod)}>
+            <Select
+              value={paymentMethod}
+              onValueChange={(value) => {
+                const newMethod = value as PaymentMethod;
+                const cleaned = clearCardDependentFieldsIfNeeded(newMethod, { cardId });
+                setPaymentMethod(newMethod);
+                setCardId(cleaned.cardId ?? "");
+              }}
+            >
               <SelectTrigger id="recurring-sheet-payment">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="credit">Cartão de Crédito</SelectItem>
-                <SelectItem value="debit">Cartão de Débito</SelectItem>
-                <SelectItem value="pix">PIX</SelectItem>
+                {PAYMENT_METHOD_LIST.map((m) => (
+                  <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
 
-          {(paymentMethod === "credit" || paymentMethod === "debit") && (
+          {requiresCard(paymentMethod) && (
             <div className="space-y-2">
               <Label htmlFor="recurring-sheet-card">Selecione o Cartão</Label>
               <Select value={cardId} onValueChange={setCardId}>

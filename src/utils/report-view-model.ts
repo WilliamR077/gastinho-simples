@@ -11,12 +11,7 @@ import {
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { calculateBillingPeriod, CreditCardConfig } from "@/utils/billing-period";
-
-const paymentMethodLabels: Record<PaymentMethod, string> = {
-  credit: "Crédito",
-  debit: "Débito",
-  pix: "PIX"
-};
+import { PAYMENT_METHOD_LIST, paymentMethodLabel } from "@/lib/payment-methods";
 
 export interface CategoryDataItem {
   name: string;
@@ -289,19 +284,22 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
     categoryData = [...top5, { name: "Outros", icon: "📦", value: Number(othersTotal.toFixed(2)), percentage: othersPct }];
   }
 
-  // Payment method data
-  const pmTotals: Record<PaymentMethod, number> = { credit: 0, debit: 0, pix: 0 };
-  filteredExpenses.forEach(e => { pmTotals[e.payment_method] += Number(e.amount); });
-  filteredRecurringExpenses.forEach(r => { pmTotals[r.payment_method] += Number(r.amount) * rm; });
+  // Payment method data — acumulador derivado de PAYMENT_METHOD_LIST (inclui cash).
+  const pmTotals = PAYMENT_METHOD_LIST.reduce((acc, m) => {
+    acc[m.value] = 0;
+    return acc;
+  }, {} as Record<PaymentMethod, number>);
+  filteredExpenses.forEach(e => { pmTotals[e.payment_method] = (pmTotals[e.payment_method] ?? 0) + Number(e.amount); });
+  filteredRecurringExpenses.forEach(r => { pmTotals[r.payment_method] = (pmTotals[r.payment_method] ?? 0) + Number(r.amount) * rm; });
   const pmTotal = Object.values(pmTotals).reduce((s, v) => s + v, 0);
-  const paymentMethodData: PaymentMethodDataItem[] = Object.entries(pmTotals)
-    .filter(([, v]) => v > 0)
-    .map(([method, value]) => ({
-      name: paymentMethodLabels[method as PaymentMethod],
-      method: method as PaymentMethod,
-      value: Number(value.toFixed(2)),
-      percentage: pmTotal > 0 ? (value / pmTotal) * 100 : 0,
+  const paymentMethodData: PaymentMethodDataItem[] = PAYMENT_METHOD_LIST
+    .map((m) => ({
+      name: paymentMethodLabel(m.value),
+      method: m.value,
+      value: Number((pmTotals[m.value] ?? 0).toFixed(2)),
+      percentage: pmTotal > 0 ? ((pmTotals[m.value] ?? 0) / pmTotal) * 100 : 0,
     }))
+    .filter((item) => item.value > 0)
     .sort((a, b) => b.value - a.value);
 
   // Card data

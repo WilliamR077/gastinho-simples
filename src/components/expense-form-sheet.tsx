@@ -21,6 +21,12 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { CategorySelector } from "@/components/category-selector";
 import { useCategories } from "@/hooks/use-categories";
 import { DescriptionAutocomplete } from "@/components/description-autocomplete";
+import {
+  PAYMENT_METHOD_LIST,
+  requiresCard,
+  allowsInstallments,
+  clearCardDependentFieldsIfNeeded,
+} from "@/lib/payment-methods";
 
 interface ExpenseFormSheetProps {
   open: boolean;
@@ -98,7 +104,7 @@ export function ExpenseFormSheet({
   };
 
   const getAvailableCards = () => {
-    if (!paymentMethod) return [];
+    if (!paymentMethod || !requiresCard(paymentMethod)) return [];
 
     return cards.filter((card) => {
       if (card.card_type === "both") return true;
@@ -197,7 +203,13 @@ export function ExpenseFormSheet({
       return;
     }
 
-    const installmentCount = paymentMethod === "credit" ? parseInt(installments) : 1;
+    if (requiresCard(paymentMethod) && !cardId) {
+      return;
+    }
+
+    // Defesa em profundidade.
+    const installmentCount = allowsInstallments(paymentMethod) ? parseInt(installments) : 1;
+    const sanitizedCardId = requiresCard(paymentMethod) ? (cardId || undefined) : undefined;
 
     onAddExpense({
       description: description.trim(),
@@ -206,7 +218,7 @@ export function ExpenseFormSheet({
       expenseDate,
       installments: installmentCount,
       categoryId: category,
-      cardId: cardId || undefined,
+      cardId: sanitizedCardId,
       sharedGroupId: selectedDestination !== "personal" ? selectedDestination : undefined,
     });
 
@@ -361,19 +373,30 @@ export function ExpenseFormSheet({
 
           <div className="space-y-2" data-tour="form-payment" data-onboarding="expense-payment">
             <Label htmlFor="sheet-payment-method">Forma de Pagamento</Label>
-            <Select value={paymentMethod} onValueChange={(value: PaymentMethod) => setPaymentMethod(value)}>
+            <Select
+              value={paymentMethod}
+              onValueChange={(value: PaymentMethod) => {
+                const cleaned = clearCardDependentFieldsIfNeeded(value, {
+                  cardId,
+                  installments: parseInt(installments) || 1,
+                });
+                setPaymentMethod(value);
+                setCardId(cleaned.cardId ?? "");
+                setInstallments(String(cleaned.installments ?? 1));
+              }}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Selecione a forma de pagamento" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="pix">PIX</SelectItem>
-                <SelectItem value="debit">Cartão de Débito</SelectItem>
-                <SelectItem value="credit">Cartão de Crédito</SelectItem>
+                {PAYMENT_METHOD_LIST.map((m) => (
+                  <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
 
-          {(paymentMethod === "credit" || paymentMethod === "debit") && (
+          {requiresCard(paymentMethod) && (
             <div className="space-y-2" data-onboarding="expense-card-select">
               <Label htmlFor="sheet-card">Selecione o Cartão</Label>
               <Select value={cardId} onValueChange={setCardId}>
@@ -397,7 +420,7 @@ export function ExpenseFormSheet({
             </div>
           )}
 
-          {paymentMethod === "credit" && (
+          {allowsInstallments(paymentMethod) && (
             <div className="space-y-2" data-onboarding="expense-installments">
               <Label htmlFor="sheet-installments">Número de Parcelas</Label>
               <Select value={installments} onValueChange={setInstallments}>

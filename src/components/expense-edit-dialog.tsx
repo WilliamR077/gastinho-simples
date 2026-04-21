@@ -21,11 +21,17 @@ import { Card as CardType } from "@/types/card";
 import { CategorySelector } from "@/components/category-selector";
 import { useCategories } from "@/hooks/use-categories";
 import { ExpenseSplitSection } from "@/components/expense-split-section";
+import {
+  PAYMENT_METHOD_LIST,
+  requiresCard,
+  allowsInstallments,
+  clearCardDependentFieldsIfNeeded,
+} from "@/lib/payment-methods";
 
 const expenseEditSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
   amount: z.number().positive("Valor deve ser positivo"),
-  paymentMethod: z.enum(["pix", "debit", "credit"] as const),
+  paymentMethod: z.enum(["pix", "debit", "credit", "cash"] as const),
   expenseDate: z.date(),
   categoryId: z.string().min(1, "Categoria é obrigatória"),
   cardId: z.string().optional(),
@@ -100,8 +106,8 @@ export function ExpenseEditDialog({
 
   const getAvailableCards = () => {
     const paymentMethod = form.watch("paymentMethod");
-    if (!paymentMethod) return [];
-    
+    if (!paymentMethod || !requiresCard(paymentMethod)) return [];
+
     return cards.filter(card => {
       if (card.card_type === 'both') return true;
       if (paymentMethod === 'credit') return card.card_type === 'credit';
@@ -161,6 +167,16 @@ export function ExpenseEditDialog({
     if (!expense) return;
     setSplitError(null);
 
+    // Defesa em profundidade: garante card_id null para métodos sem cartão
+    // mesmo se o estado do form estiver sujo.
+    const sanitizedCardId = requiresCard(data.paymentMethod) ? data.cardId : undefined;
+
+    // Bloqueia submit quando cartão é obrigatório e não foi selecionado.
+    if (requiresCard(data.paymentMethod) && !sanitizedCardId) {
+      form.setError("cardId", { message: "Selecione um cartão" });
+      return;
+    }
+
     const selectedCategory = activeCategories.find(c => c.id === data.categoryId);
     
     // Validate split
@@ -191,7 +207,7 @@ export function ExpenseEditDialog({
       paymentMethod: data.paymentMethod,
       expenseDate: data.expenseDate,
       category: selectedCategory?.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_") as any || "outros",
-      cardId: data.cardId || undefined,
+      cardId: sanitizedCardId || undefined,
       categoryId: data.categoryId || undefined,
       ...(isGroupContext && isShared && splitParticipants.length > 0 && {
         isShared: true,
@@ -288,16 +304,28 @@ export function ExpenseEditDialog({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Forma de Pagamento</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
+                  <Select
+                    onValueChange={(v) => {
+                      const newMethod = v as PaymentMethod;
+                      // Aplica regra de limpeza ao trocar método (cartão / parcelas)
+                      const cleaned = clearCardDependentFieldsIfNeeded(newMethod, {
+                        cardId: form.getValues("cardId"),
+                      });
+                      field.onChange(newMethod);
+                      form.setValue("cardId", (cleaned.cardId ?? "") as string);
+                      form.clearErrors("cardId");
+                    }}
+                    value={field.value}
+                  >
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione a forma de pagamento" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent className="bg-background">
-                      <SelectItem value="pix">PIX</SelectItem>
-                      <SelectItem value="debit">Débito</SelectItem>
-                      <SelectItem value="credit">Crédito</SelectItem>
+                      {PAYMENT_METHOD_LIST.map((m) => (
+                        <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -305,7 +333,7 @@ export function ExpenseEditDialog({
               )}
             />
 
-            {(form.watch("paymentMethod") === "credit" || form.watch("paymentMethod") === "debit") && (
+            {requiresCard(form.watch("paymentMethod")) && (
               <FormField
                 control={form.control}
                 name="cardId"

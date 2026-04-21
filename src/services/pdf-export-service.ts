@@ -10,6 +10,7 @@ import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { ReportViewModel, CashFlowDataItem } from '@/utils/report-view-model';
+import { paymentMethodLabel } from '@/lib/payment-methods';
 
 const isNativeApp = () => Capacitor.isNativePlatform();
 
@@ -38,16 +39,13 @@ interface GroupMember {
   role: string;
 }
 
-const paymentMethodLabels: Record<PaymentMethod, string> = {
-  credit: 'Crédito',
-  debit: 'Débito',
-  pix: 'PIX'
-};
-
+// PDF mantém sua própria paleta de cores (distinta da home) por convenção visual de relatório.
+// Adicionar 'cash' aqui evita que o lookup retorne undefined; cor lime para coerência semântica.
 const COLORS: Record<string, string> = {
   credit: '#f59e0b',
   debit: '#8b5cf6',
   pix: '#06b6d4',
+  cash: '#84cc16',
 };
 
 const CATEGORY_COLORS = [
@@ -719,7 +717,7 @@ export async function exportReportsToPDF(params: ExportReportParams) {
           e.description,
           isPaid ? 'Paga' : 'Pendente',
           `Dia ${e.day_of_month}`,
-          paymentMethodLabels[e.payment_method],
+          paymentMethodLabel(e.payment_method),
           card?.name || '-',
           formatCurrency(Number(e.amount)),
         ];
