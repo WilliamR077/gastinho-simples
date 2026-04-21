@@ -11,6 +11,11 @@ import { useSubscription } from "@/hooks/use-subscription";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { parseLocalDate } from "@/lib/utils";
+import {
+  PAYMENT_METHOD_LIST,
+  paymentMethodColor,
+  paymentMethodLabel,
+} from "@/lib/payment-methods";
 
 interface ExpenseChartsProps {
   expenses: Expense[];
@@ -26,24 +31,12 @@ interface ExpenseChartsProps {
   category?: ExpenseCategory;
 }
 
-const COLORS = {
-  credit: "#ef4444",
-  debit: "#3b82f6", 
-  pix: "#10b981",
-};
-
 const CATEGORY_COLORS = [
-  "#ef4444", "#f97316", "#f59e0b", "#eab308", 
+  "#ef4444", "#f97316", "#f59e0b", "#eab308",
   "#84cc16", "#22c55e", "#10b981", "#14b8a6",
   "#06b6d4", "#0ea5e9", "#3b82f6", "#6366f1",
   "#8b5cf6", "#a855f7", "#d946ef", "#ec4899"
 ];
-
-const paymentMethodLabels: Record<PaymentMethod, string> = {
-  credit: "Crédito",
-  debit: "Débito",
-  pix: "PIX"
-};
 
 export function ExpenseCharts({ 
   expenses, 
@@ -105,28 +98,30 @@ export function ExpenseCharts({
 
   // Dados para gráfico de pizza - Por forma de pagamento
   const paymentMethodData = useMemo(() => {
-    const totals: Record<PaymentMethod, number> = {
-      credit: 0,
-      debit: 0,
-      pix: 0
-    };
+    // Inicializa acumulador derivado da fonte única (ordem garantida).
+    const totals = PAYMENT_METHOD_LIST.reduce((acc, m) => {
+      acc[m.value] = 0;
+      return acc;
+    }, {} as Record<PaymentMethod, number>);
 
     filteredExpenses.forEach(expense => {
-      totals[expense.payment_method] += Number(expense.amount);
+      totals[expense.payment_method] = (totals[expense.payment_method] ?? 0) + Number(expense.amount);
     });
 
     // Adicionar despesas recorrentes
     activeRecurringExpenses.forEach(recurring => {
-      totals[recurring.payment_method] += Number(recurring.amount);
+      totals[recurring.payment_method] = (totals[recurring.payment_method] ?? 0) + Number(recurring.amount);
     });
 
-    return Object.entries(totals)
-      .filter(([_, value]) => value > 0)
-      .map(([method, value]) => ({
-        name: paymentMethodLabels[method as PaymentMethod],
-        value: Number(value.toFixed(2)),
-        percentage: 0 // Será calculado depois
-      }));
+    // Itera PAYMENT_METHOD_LIST para preservar displayOrder na legenda/tooltip.
+    return PAYMENT_METHOD_LIST
+      .map((m) => ({
+        method: m.value,
+        name: paymentMethodLabel(m.value),
+        value: Number((totals[m.value] ?? 0).toFixed(2)),
+        percentage: 0 // será calculado depois
+      }))
+      .filter((item) => item.value > 0);
   }, [filteredExpenses, activeRecurringExpenses]);
 
   // Calcular percentuais
@@ -267,11 +262,10 @@ export function ExpenseCharts({
                   fill="#8884d8"
                   dataKey="value"
                 >
-                  {paymentMethodDataWithPercentage.map((entry, index) => {
-                    const method = entry.name.toLowerCase() as 'crédito' | 'débito' | 'pix';
-                    const colorKey = method === 'crédito' ? 'credit' : method === 'débito' ? 'debit' : 'pix';
-                    return <Cell key={`cell-${index}`} fill={COLORS[colorKey]} />;
-                  })}
+                  {paymentMethodDataWithPercentage.map((entry, index) => (
+                    // Usa diretamente o `method` do dataset (não reverte por label) — robusto a novos métodos.
+                    <Cell key={`cell-${index}`} fill={paymentMethodColor((entry as any).method)} />
+                  ))}
                 </Pie>
                 <Tooltip 
                   formatter={(value: number) => `R$ ${value.toFixed(2)}`}
