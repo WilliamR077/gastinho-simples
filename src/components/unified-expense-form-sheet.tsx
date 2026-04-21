@@ -29,6 +29,12 @@ import { DescriptionAutocomplete } from "@/components/description-autocomplete";
 import { calculateBillingPeriod, formatBillingPeriodLabel, CreditCardConfig } from "@/utils/billing-period";
 import { CardLimitSummary } from "@/components/card-limit-summary";
 import { type CardLimitSummary as CardLimitSummaryData } from "@/utils/card-limit-view-model";
+import {
+  PAYMENT_METHOD_LIST,
+  requiresCard,
+  allowsInstallments,
+  clearCardDependentFieldsIfNeeded,
+} from "@/lib/payment-methods";
 
 type ExpenseType = "monthly" | "recurring";
 
@@ -185,7 +191,7 @@ export function UnifiedExpenseFormSheet({
   };
 
   const getAvailableCards = () => {
-    if (!paymentMethod) return [];
+    if (!paymentMethod || !requiresCard(paymentMethod)) return [];
 
     return cards.filter((card) => {
       if (card.card_type === "both") return true;
@@ -295,6 +301,11 @@ export function UnifiedExpenseFormSheet({
       return;
     }
 
+    if (requiresCard(paymentMethod) && !cardId) {
+      setSplitError("Selecione um cartão para esta forma de pagamento.");
+      return;
+    }
+
     // Validações de split
     const isGroupDestination = selectedDestination !== "personal";
     if (isGroupDestination && isShared) {
@@ -312,9 +323,10 @@ export function UnifiedExpenseFormSheet({
       }
     }
 
-    // Validação de responsáveis por parcela
-    const installmentCount = paymentMethod === "credit" ? parseInt(installments) : 1;
-    const showInstallmentResponsible = isGroupDestination && paymentMethod === "credit" && installmentCount > 1 && expenseType === "monthly" && !isShared;
+    // Validação de responsáveis por parcela — usa allowsInstallments para coerência.
+    const installmentCount = allowsInstallments(paymentMethod) ? parseInt(installments) : 1;
+    const sanitizedCardId = requiresCard(paymentMethod) ? (cardId || undefined) : undefined;
+    const showInstallmentResponsible = isGroupDestination && allowsInstallments(paymentMethod) && installmentCount > 1 && expenseType === "monthly" && !isShared;
     if (showInstallmentResponsible && installmentAssignment === "per_installment") {
       for (let i = 1; i <= installmentCount; i++) {
         if (!installmentResponsibles[i]) {
@@ -332,7 +344,7 @@ export function UnifiedExpenseFormSheet({
         expenseDate,
         installments: installmentCount,
         categoryId: category,
-        cardId: cardId || undefined,
+        cardId: sanitizedCardId,
         sharedGroupId: selectedDestination !== "personal" ? selectedDestination : undefined,
         ...(isGroupDestination && isShared && splitParticipants.length > 0 && {
           isShared: true,
@@ -353,7 +365,7 @@ export function UnifiedExpenseFormSheet({
         paymentMethod,
         dayOfMonth: parseInt(dayOfMonth),
         categoryId: category,
-        cardId: cardId || undefined,
+        cardId: sanitizedCardId,
         sharedGroupId: selectedDestination !== "personal" ? selectedDestination : undefined,
       });
     }
@@ -572,19 +584,30 @@ export function UnifiedExpenseFormSheet({
 
           <div className="space-y-2" data-tour="form-payment" data-onboarding="expense-payment">
             <Label htmlFor="sheet-payment-method">Forma de Pagamento</Label>
-            <Select value={paymentMethod} onValueChange={(value: PaymentMethod) => setPaymentMethod(value)}>
+            <Select
+              value={paymentMethod}
+              onValueChange={(value: PaymentMethod) => {
+                const cleaned = clearCardDependentFieldsIfNeeded(value, {
+                  cardId,
+                  installments: parseInt(installments) || 1,
+                });
+                setPaymentMethod(value);
+                setCardId(cleaned.cardId ?? "");
+                setInstallments(String(cleaned.installments ?? 1));
+              }}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Selecione a forma de pagamento" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="pix">PIX</SelectItem>
-                <SelectItem value="debit">Cartão de Débito</SelectItem>
-                <SelectItem value="credit">Cartão de Crédito</SelectItem>
+                {PAYMENT_METHOD_LIST.map((m) => (
+                  <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
 
-          {(paymentMethod === "credit" || paymentMethod === "debit") && (
+          {requiresCard(paymentMethod) && (
             <div className="space-y-2" data-onboarding="expense-card-select">
               <Label htmlFor="sheet-card">Selecione o Cartão</Label>
               <Select value={cardId} onValueChange={setCardId}>
@@ -631,8 +654,8 @@ export function UnifiedExpenseFormSheet({
           )}
 
 
-          {/* Parcelas - apenas para despesa do mês no crédito */}
-          {expenseType === "monthly" && paymentMethod === "credit" && (
+          {/* Parcelas - apenas para despesa do mês quando método permite */}
+          {expenseType === "monthly" && allowsInstallments(paymentMethod) && (
             <div className="space-y-2" data-onboarding="expense-installments">
               <Label htmlFor="sheet-installments">Número de Parcelas</Label>
               <Select value={installments} onValueChange={setInstallments}>
