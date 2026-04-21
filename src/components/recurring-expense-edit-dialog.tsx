@@ -12,11 +12,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card as CardType } from "@/types/card";
 import { CategorySelector } from "@/components/category-selector";
 import { useCategories } from "@/hooks/use-categories";
+import {
+  PAYMENT_METHOD_LIST,
+  requiresCard,
+  clearCardDependentFieldsIfNeeded,
+} from "@/lib/payment-methods";
 
 const recurringExpenseEditSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
   amount: z.number().positive("Valor deve ser positivo"),
-  paymentMethod: z.enum(["pix", "debit", "credit"] as const),
+  paymentMethod: z.enum(["pix", "debit", "credit", "cash"] as const),
   dayOfMonth: z.number().min(1, "Dia deve ser entre 1 e 31").max(31, "Dia deve ser entre 1 e 31"),
   categoryId: z.string().min(1, "Categoria é obrigatória"),
   cardId: z.string().optional(),
@@ -73,8 +78,8 @@ export function RecurringExpenseEditDialog({ expense, open, onOpenChange, onSave
 
   const getAvailableCards = () => {
     const paymentMethod = form.watch("paymentMethod");
-    if (!paymentMethod) return [];
-    
+    if (!paymentMethod || !requiresCard(paymentMethod)) return [];
+
     return cards.filter(card => {
       if (card.card_type === 'both') return true;
       if (paymentMethod === 'credit') return card.card_type === 'credit';
@@ -117,16 +122,24 @@ export function RecurringExpenseEditDialog({ expense, open, onOpenChange, onSave
 
   const handleSubmit = (data: RecurringExpenseEditFormData) => {
     if (!expense) return;
-    
+
+    // Defesa em profundidade: card_id sempre null para métodos sem cartão.
+    const sanitizedCardId = requiresCard(data.paymentMethod) ? data.cardId : undefined;
+
+    if (requiresCard(data.paymentMethod) && !sanitizedCardId) {
+      form.setError("cardId", { message: "Selecione um cartão" });
+      return;
+    }
+
     const selectedCategory = activeCategories.find(c => c.id === data.categoryId);
-    
+
     const formData: RecurringExpenseFormData = {
       description: data.description,
       amount: data.amount,
       paymentMethod: data.paymentMethod,
       dayOfMonth: data.dayOfMonth,
       category: selectedCategory?.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_") as any || "outros",
-      cardId: data.cardId || undefined,
+      cardId: sanitizedCardId || undefined,
       categoryId: data.categoryId || undefined,
     };
     onSave(expense.id, formData);
@@ -198,16 +211,27 @@ export function RecurringExpenseEditDialog({ expense, open, onOpenChange, onSave
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Forma de Pagamento</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
+                  <Select
+                    onValueChange={(v) => {
+                      const newMethod = v as any;
+                      const cleaned = clearCardDependentFieldsIfNeeded(newMethod, {
+                        cardId: form.getValues("cardId"),
+                      });
+                      field.onChange(newMethod);
+                      form.setValue("cardId", (cleaned.cardId ?? "") as string);
+                      form.clearErrors("cardId");
+                    }}
+                    value={field.value}
+                  >
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione a forma de pagamento" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent className="bg-background">
-                      <SelectItem value="pix">PIX</SelectItem>
-                      <SelectItem value="debit">Débito</SelectItem>
-                      <SelectItem value="credit">Crédito</SelectItem>
+                      {PAYMENT_METHOD_LIST.map((m) => (
+                        <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -215,7 +239,7 @@ export function RecurringExpenseEditDialog({ expense, open, onOpenChange, onSave
               )}
             />
 
-            {(form.watch("paymentMethod") === "credit" || form.watch("paymentMethod") === "debit") && (
+            {requiresCard(form.watch("paymentMethod")) && (
               <FormField
                 control={form.control}
                 name="cardId"
