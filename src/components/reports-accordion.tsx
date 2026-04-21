@@ -296,7 +296,7 @@ export function ReportsAccordion({
                       <div className="h-2 rounded-full bg-muted overflow-hidden">
                         <div
                           className="h-full rounded-full transition-all duration-500"
-                          style={{ width: `${barWidth}%`, backgroundColor: COLORS[pm.method] }}
+                          style={{ width: `${barWidth}%`, backgroundColor: paymentMethodColor(pm.method) }}
                         />
                       </div>
                     </div>
@@ -635,7 +635,7 @@ export function ReportsAccordion({
                       </div>
                       <div className="text-right">
                         <div className="font-semibold text-sm text-red-500">{formatCurrency(Number(expense.amount))}</div>
-                        <Badge variant="secondary" className="text-[10px]">{paymentMethodLabels[expense.payment_method]}</Badge>
+                        <Badge variant="secondary" className="text-[10px]">{paymentMethodLabel(expense.payment_method)}</Badge>
                       </div>
                     </div>
                   );

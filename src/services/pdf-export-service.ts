@@ -717,7 +717,7 @@ export async function exportReportsToPDF(params: ExportReportParams) {
           e.description,
           isPaid ? 'Paga' : 'Pendente',
           `Dia ${e.day_of_month}`,
-          paymentMethodLabels[e.payment_method],
+          paymentMethodLabel(e.payment_method),
           card?.name || '-',
           formatCurrency(Number(e.amount)),
         ];
