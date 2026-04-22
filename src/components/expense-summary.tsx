@@ -1,4 +1,4 @@
-import { CreditCard, Smartphone, TrendingUp, Target, Check, AlertTriangle, AlertCircle } from "lucide-react";
+import { TrendingUp, Target, Check, AlertTriangle, AlertCircle } from "lucide-react";
 import { Expense, PaymentMethod, categoryLabels } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
 import { BudgetGoal } from "@/types/budget-goal";
@@ -9,6 +9,7 @@ import { useCategories } from "@/hooks/use-categories";
 import { calculateCreditCardSpend } from "@/utils/credit-card-spend";
 import { CardLimitSummary } from "@/components/card-limit-summary";
 import { type CardLimitSummary as CardLimitSummaryData } from "@/utils/card-limit-view-model";
+import { PAYMENT_METHOD_LIST, paymentMethodIcon, paymentMethodColor } from "@/lib/payment-methods";
 
 interface ExpenseSummaryProps {
   expenses: Expense[];
@@ -43,13 +44,18 @@ export function ExpenseSummary({
   cardLimitSummaries,
   onCardLimitDetailsClick
 }: ExpenseSummaryProps) {
+  // Inicializa totais a partir da fonte única (inclui cash automaticamente)
+  const initialTotals = PAYMENT_METHOD_LIST.reduce(
+    (acc, m) => ({ ...acc, [m.value]: 0 }),
+    { total: 0 } as Record<PaymentMethod | "total", number>
+  );
   const totals = expenses.reduce(
     (acc, expense) => {
       acc[expense.payment_method] += expense.amount;
       acc.total += expense.amount;
       return acc;
     },
-    { pix: 0, debit: 0, credit: 0, total: 0 }
+    initialTotals
   );
 
   // Filter and add active recurring expenses that apply to the current period
@@ -204,28 +210,21 @@ export function ExpenseSummary({
     activeRecurringExpenses.filter((e) => e.payment_method === method).length;
   };
 
-  const paymentMethods: {key: PaymentMethod;label: string;icon: React.ReactNode;colorClass: string;cardTotals: Record<string, {total: number;color: string;cardId?: string | null;}>;}[] = [
-  {
-    key: 'pix',
-    label: 'PIX',
-    icon: <Smartphone className="h-4 w-4 text-emerald-500" />,
-    colorClass: 'text-emerald-600 dark:text-emerald-400',
-    cardTotals: {}
-  },
-  {
-    key: 'debit',
-    label: 'Débito',
-    icon: <CreditCard className="h-4 w-4 text-blue-500" />,
-    colorClass: 'text-blue-600 dark:text-blue-400',
-    cardTotals: debitCardTotals
-  },
-  {
-    key: 'credit',
-    label: 'Crédito',
-    icon: <CreditCard className="h-4 w-4 text-amber-500" />,
-    colorClass: 'text-amber-600 dark:text-amber-400',
-    cardTotals: creditCardTotals
-  }];
+  // Lista derivada da fonte única — ordem segue displayOrder (Crédito → Débito → PIX → Dinheiro)
+  const cardTotalsByMethod: Partial<Record<PaymentMethod, Record<string, {total: number;color: string;cardId?: string | null;}>>> = {
+    credit: creditCardTotals,
+    debit: debitCardTotals,
+  };
+  const paymentMethods = PAYMENT_METHOD_LIST.map((m) => {
+    const IconComp = m.icon;
+    return {
+      key: m.value,
+      label: m.label,
+      icon: <IconComp className="h-4 w-4" style={{ color: m.color }} />,
+      color: m.color,
+      cardTotals: cardTotalsByMethod[m.value] || {},
+    };
+  });
 
 
   return (
@@ -238,7 +237,7 @@ export function ExpenseSummary({
 
     {/* Payment method rows */}
     <div className="space-y-0">
-      {paymentMethods.map(({ key, label, icon, colorClass, cardTotals }) => {
+      {paymentMethods.map(({ key, label, icon, color, cardTotals }) => {
         const value = totals[key];
         const count = getTransactionCount(key);
         const isZero = value === 0;
@@ -258,7 +257,7 @@ export function ExpenseSummary({
                 <span className="text-sm font-medium text-foreground">{label}</span>
               </div>
               <div className="flex items-center gap-3">
-                <span className={`text-sm font-semibold ${colorClass}`}>
+                <span className="text-sm font-semibold" style={{ color }}>
                   {formatCurrency(value)}
                 </span>
                 <span className="text-xs text-muted-foreground min-w-[60px] text-right">
