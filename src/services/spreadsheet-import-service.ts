@@ -345,9 +345,19 @@ export function mapRowsToExpenses(rows: Record<string, any>[], mapping: ColumnMa
     // Categoria
     const category = mapping.category ? mapCategory(row[mapping.category]) : "outros";
     
-    // Forma de pagamento
-    const paymentMethod = mapping.paymentMethod ? mapPaymentMethod(row[mapping.paymentMethod]) : "pix";
-    
+    // Forma de pagamento — sem fallback silencioso
+    let paymentMethod: PaymentMethod = "pix";
+    if (mapping.paymentMethod) {
+      const result = mapPaymentMethod(row[mapping.paymentMethod]);
+      if (result.error) {
+        errors.push(result.error);
+      }
+      // Usa o método mapeado quando disponível; caso contrário, mantém "pix"
+      // como placeholder para o select da pré-visualização (a linha ficará inválida
+      // por causa do erro acima, então o usuário pode corrigir manualmente).
+      if (result.method) paymentMethod = result.method;
+    }
+
     return {
       description,
       amount,
