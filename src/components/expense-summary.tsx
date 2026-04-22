@@ -240,6 +240,8 @@ export function ExpenseSummary({
       {paymentMethods.map(({ key, label, icon, color, cardTotals }) => {
         const value = totals[key];
         const count = getTransactionCount(key);
+        // Oculta métodos sem nenhuma transação (aparecem assim que receberem ao menos 1)
+        if (count === 0) return null;
         const isZero = value === 0;
         const isActive = activePaymentMethod === key;
         const hasCardDetails = Object.keys(cardTotals).length > 0 && !isZero;
