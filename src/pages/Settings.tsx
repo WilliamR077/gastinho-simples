@@ -17,7 +17,8 @@ import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
-import { categoryLabels } from "@/types/expense";
+import { categoryLabels, PaymentMethod } from "@/types/expense";
+import { paymentMethodLabel } from "@/lib/payment-methods";
 import { parseLocalDate } from "@/lib/utils";
 import { sanitizeErrorMessage } from "@/utils/security";
 import { Capacitor } from "@capacitor/core";
@@ -135,8 +136,7 @@ export default function Settings() {
         Descrição: exp.description,
         Valor: `R$ ${Number(exp.amount).toFixed(2)}`,
         Categoria: categoryLabels[exp.category as keyof typeof categoryLabels] || exp.category,
-        "Forma de Pagamento": exp.payment_method === "credit" ? "Cartão de Crédito" : 
-                              exp.payment_method === "debit" ? "Cartão de Débito" : "PIX",
+        "Forma de Pagamento": paymentMethodLabel(exp.payment_method as PaymentMethod),
         Parcelas: exp.total_installments > 1 ? `${exp.installment_number}/${exp.total_installments}` : "À vista",
       })) || [];
 
@@ -144,8 +144,7 @@ export default function Settings() {
         Descrição: rec.description,
         Valor: `R$ ${Number(rec.amount).toFixed(2)}`,
         Categoria: categoryLabels[rec.category as keyof typeof categoryLabels] || rec.category,
-        "Forma de Pagamento": rec.payment_method === "credit" ? "Cartão de Crédito" : 
-                              rec.payment_method === "debit" ? "Cartão de Débito" : "PIX",
+        "Forma de Pagamento": paymentMethodLabel(rec.payment_method as PaymentMethod),
         "Dia do Mês": rec.day_of_month,
         Status: rec.is_active ? "Ativa" : "Inativa",
       })) || [];
@@ -258,8 +257,7 @@ export default function Settings() {
           exp.description,
           `R$ ${Number(exp.amount).toFixed(2)}`,
           categoryLabels[exp.category as keyof typeof categoryLabels] || exp.category,
-          exp.payment_method === "credit" ? "Cartão" : 
-          exp.payment_method === "debit" ? "Débito" : "PIX",
+          paymentMethodLabel(exp.payment_method as PaymentMethod),
         ]);
 
         autoTable(doc, {

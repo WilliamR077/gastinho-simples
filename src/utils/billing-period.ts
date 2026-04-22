@@ -167,6 +167,7 @@ export function generateBillingPeriods(
   const periods = new Set<string>();
 
   expenses
+    // Apenas crédito gera fatura — outros métodos (debit/pix/cash) são naturalmente ignorados
     .filter(expense => expense.payment_method === "credit")
     .forEach(expense => {
       const expenseDate = parseLocalDate(expense.expense_date);
@@ -211,6 +212,7 @@ export function filterExpensesByBillingPeriod<T extends { expense_date: string; 
   cardsConfig?: Map<string, CreditCardConfig>
 ): T[] {
   return expenses.filter(expense => {
+    // Apenas crédito tem fatura — outros métodos (debit/pix/cash) são naturalmente excluídos
     if (expense.payment_method !== "credit") return false;
 
     const expenseDate = parseLocalDate(expense.expense_date);

@@ -48,6 +48,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AppHeader } from "@/components/app-header";
 import { generateBillingPeriods, filterExpensesByBillingPeriod, calculateBillingPeriod, CreditCardConfig } from "@/utils/billing-period";
+import { affectsCardBilling } from "@/lib/payment-methods";
 import { Card as CardType } from "@/types/card";
 import { Footer } from "@/components/footer";
 import { NotificationService } from "@/services/notification-service";
@@ -1503,9 +1504,9 @@ export default function Index() {
     const selectedMonth = format(currentMonth, "yyyy-MM");
 
     return expenses.filter((expense) => {
-      // In billing mode, ONLY credit expenses are shown
+      // In billing mode, ONLY methods that affect card billing are shown (atualmente: credit)
       if (viewMode === "billing") {
-        if (expense.payment_method !== "credit") return false;
+        if (!affectsCardBilling(expense.payment_method)) return false;
         
         // If a specific card is selected, filter by it
         if (billingCardId && expense.card_id !== billingCardId) return false;
@@ -1830,7 +1831,8 @@ export default function Index() {
     // Despesas do período (billing-aware)
     const periodExpenses = expenses.filter((e) => {
       if (viewMode === "billing") {
-        if (e.payment_method !== "credit") return false;
+        // Modo fatura mostra apenas métodos que afetam billing de cartão
+        if (!affectsCardBilling(e.payment_method)) return false;
         if (billingCardId && e.card_id !== billingCardId) return false;
         const expDate = parseLocalDate(e.expense_date);
         let config: CreditCardConfig | undefined;

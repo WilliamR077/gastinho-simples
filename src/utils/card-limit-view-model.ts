@@ -72,6 +72,7 @@ const toCardExpenseRecords = (expenses: Expense[] | CardExpenseRecord[]): CardEx
   return expenses
     .filter((expense) => {
       if (!expense.card_id) return false;
+      // Apenas crédito ocupa limite — outros métodos (debit/pix/cash) são naturalmente ignorados
       if ("payment_method" in expense && expense.payment_method !== "credit") return false;
       return true;
     })
