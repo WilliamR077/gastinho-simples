@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import { supabase } from "@/integrations/supabase/client";
 import { ExpenseCategory, PaymentMethod } from "@/types/expense";
+import { parsePaymentMethodAlias } from "@/lib/payment-methods";
 
 export interface ImportedRow {
   description: string;
@@ -132,32 +133,8 @@ const CATEGORY_MAPPINGS: Record<string, ExpenseCategory> = {
   "diversos": "outros",
 };
 
-// Mapeamento de formas de pagamento
-const PAYMENT_MAPPINGS: Record<string, PaymentMethod> = {
-  "credito": "credit",
-  "crédito": "credit",
-  "credit": "credit",
-  "cartao credito": "credit",
-  "cartão crédito": "credit",
-  "cartao de credito": "credit",
-  "cartão de crédito": "credit",
-  "cc": "credit",
-  "debito": "debit",
-  "débito": "debit",
-  "debit": "debit",
-  "cartao debito": "debit",
-  "cartão débito": "debit",
-  "cartao de debito": "debit",
-  "cartão de débito": "debit",
-  "cd": "debit",
-  "pix": "pix",
-  "transferencia": "pix",
-  "transferência": "pix",
-  "ted": "pix",
-  "doc": "pix",
-  "dinheiro": "pix",
-  "boleto": "pix",
-};
+// Mapeamento de formas de pagamento agora vem de src/lib/payment-methods.ts
+// (importAliases). Não duplicar aqui.
 
 // Detectar coluna automaticamente
 function detectColumn(columns: string[], patterns: string[]): string | null {
@@ -308,20 +285,26 @@ export function mapCategory(value: any): ExpenseCategory {
   return "outros";
 }
 
-// Mapear forma de pagamento
-export function mapPaymentMethod(value: any): PaymentMethod {
-  if (!value) return "pix";
-  
-  const normalized = String(value).toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  
-  for (const [key, method] of Object.entries(PAYMENT_MAPPINGS)) {
-    const normalizedKey = key.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    if (normalized.includes(normalizedKey) || normalizedKey.includes(normalized)) {
-      return method;
-    }
+// Mapear forma de pagamento — sem fallback silencioso.
+// Retorna { method, error }:
+//   - value vazio/null → default explícito "pix" (preserva comportamento atual)
+//   - value preenchido + alias reconhecido → método mapeado
+//   - value preenchido + alias desconhecido → method=null + mensagem de erro
+export interface PaymentMethodMapResult {
+  method: PaymentMethod | null;
+  error: string | null;
+}
+export function mapPaymentMethod(value: any): PaymentMethodMapResult {
+  if (value === null || value === undefined || String(value).trim() === "") {
+    return { method: "pix", error: null };
   }
-  
-  return "pix";
+  const raw = String(value);
+  const { method } = parsePaymentMethodAlias(raw);
+  if (method) return { method, error: null };
+  return {
+    method: null,
+    error: `Forma de pagamento não reconhecida: "${raw}". Aceitos: Crédito, Débito, PIX, Dinheiro.`,
+  };
 }
 
 // Converter linhas para formato de despesas
@@ -362,9 +345,19 @@ export function mapRowsToExpenses(rows: Record<string, any>[], mapping: ColumnMa
     // Categoria
     const category = mapping.category ? mapCategory(row[mapping.category]) : "outros";
     
-    // Forma de pagamento
-    const paymentMethod = mapping.paymentMethod ? mapPaymentMethod(row[mapping.paymentMethod]) : "pix";
-    
+    // Forma de pagamento — sem fallback silencioso
+    let paymentMethod: PaymentMethod = "pix";
+    if (mapping.paymentMethod) {
+      const result = mapPaymentMethod(row[mapping.paymentMethod]);
+      if (result.error) {
+        errors.push(result.error);
+      }
+      // Usa o método mapeado quando disponível; caso contrário, mantém "pix"
+      // como placeholder para o select da pré-visualização (a linha ficará inválida
+      // por causa do erro acima, então o usuário pode corrigir manualmente).
+      if (result.method) paymentMethod = result.method;
+    }
+
     return {
       description,
       amount,

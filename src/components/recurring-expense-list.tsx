@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
-import { CreditCard, Smartphone, Calendar, User } from "lucide-react"
+import { Calendar, User } from "lucide-react"
+import { paymentMethodIcon, paymentMethodLabel } from "@/lib/payment-methods"
 import { RecurringExpense } from "@/types/recurring-expense"
 import { categoryLabels, categoryIcons, ExpenseCategory } from "@/types/expense"
 import { useCategories } from "@/hooks/use-categories"
@@ -25,12 +26,6 @@ const getUserDisplayName = (userId: string, members: SharedGroupMember[]): strin
   if (!member?.user_email) return null;
   return member.user_email.split("@")[0];
 };
-
-const paymentMethodConfig = {
-  pix: { label: "PIX", icon: Smartphone },
-  debit: { label: "Débito", icon: CreditCard },
-  credit: { label: "Crédito", icon: CreditCard }
-}
 
 export function RecurringExpenseList({
   expenses,
@@ -89,8 +84,8 @@ export function RecurringExpenseList({
         <CardContent className="p-0">
           <div className="divide-y divide-border/30">
             {expenses.map((expense) => {
-              const config = paymentMethodConfig[expense.payment_method]
-              const Icon = config.icon
+              const Icon = paymentMethodIcon(expense.payment_method)
+              const methodLabel = paymentMethodLabel(expense.payment_method)
               const categoryDisplay = getCategoryDisplay(expense)
               const cardName = expense.card?.name || expense.card_name;
               const cardColor = expense.card?.color || expense.card_color || undefined;
@@ -123,7 +118,7 @@ export function RecurringExpenseList({
                     <span className="whitespace-nowrap">Dia {expense.day_of_month}</span>
                     <span>•</span>
                     <Icon className="h-3 w-3 shrink-0" />
-                    <span className="truncate">{config.label}</span>
+                    <span className="truncate">{methodLabel}</span>
                     {shortCardName && (
                       <>
                         <span>•</span>

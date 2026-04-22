@@ -35,6 +35,7 @@ import {
 } from "@/services/spreadsheet-import-service";
 import { categoryLabels, ExpenseCategory } from "@/types/expense";
 import { PaymentMethod } from "@/types/expense";
+import { PAYMENT_METHOD_LIST } from "@/lib/payment-methods";
 import { 
   Upload, 
   FileSpreadsheet, 
@@ -278,12 +279,9 @@ export function SpreadsheetImportSheet({ open, onOpenChange, onSuccess }: Spread
     "educacao", "moradia", "vestuario", "servicos", "outros"
   ];
 
-  // Available payment methods
-  const paymentMethods: { value: PaymentMethod; label: string }[] = [
-    { value: "pix", label: "PIX" },
-    { value: "credit", label: "Crédito" },
-    { value: "debit", label: "Débito" },
-  ];
+  // Available payment methods (derivado da fonte única — inclui Dinheiro automaticamente)
+  const paymentMethods: { value: PaymentMethod; label: string }[] =
+    PAYMENT_METHOD_LIST.map((m) => ({ value: m.value, label: m.label }));
   
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>

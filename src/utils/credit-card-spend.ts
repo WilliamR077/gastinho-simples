@@ -60,6 +60,7 @@ export function calculateCreditCardSpend(
   };
 
   expenses
+    // Apenas crédito consome limite/fatura — outros métodos (debit/pix/cash) são naturalmente ignorados
     .filter((e) => e.payment_method === "credit")
     .forEach((expense) => {
       addCardSpend(
@@ -71,6 +72,7 @@ export function calculateCreditCardSpend(
     });
 
   recurringExpenses
+    // Apenas crédito consome limite/fatura — outros métodos (debit/pix/cash) são naturalmente ignorados
     .filter((e) => e.is_active && e.payment_method === "credit")
     .filter((e) => {
       const day = e.day_of_month;

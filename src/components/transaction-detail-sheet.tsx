@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Pencil, Copy, Trash2, CreditCard, Smartphone, Calendar, Tag, Clock, Users, Power, Receipt, User, Scale, ChevronDown, Layers, Info, ExternalLink } from "lucide-react";
+import { paymentMethodLabel, paymentMethodIcon, affectsCardBilling } from "@/lib/payment-methods";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { splitTypeLabels, SplitType } from "@/types/expense-split";
@@ -46,18 +47,6 @@ interface TransactionDetailSheetProps {
   isGroupContext?: boolean;
   onOpenFirstInstallment?: (installmentGroupId: string, type: 'expense' | 'income') => void;
 }
-
-const paymentMethodLabels: Record<string, string> = {
-  pix: "PIX",
-  debit: "Débito",
-  credit: "Crédito",
-};
-
-const paymentMethodIcons: Record<string, typeof Smartphone> = {
-  pix: Smartphone,
-  debit: CreditCard,
-  credit: CreditCard,
-};
 
 const parseLocalDate = (dateString: string): Date => {
   const datePart = dateString.split("T")[0].split(" ")[0];
@@ -314,10 +303,10 @@ const createdByColor =
           {/* Método de pagamento (só despesas) */}
           {isExpense && (expense || recurringExpense) && (() => {
             const exp = expense || recurringExpense!;
-            const MethodIcon = paymentMethodIcons[exp.payment_method] || CreditCard;
-            const methodLabel = paymentMethodLabels[exp.payment_method] || exp.payment_method;
+            const MethodIcon = paymentMethodIcon(exp.payment_method);
+            const methodLabelText = paymentMethodLabel(exp.payment_method);
             const cardName = exp.card?.name || (exp as any).card_name;
-            const fullMethod = cardName ? `${methodLabel} • ${cardName}` : methodLabel;
+            const fullMethod = cardName ? `${methodLabelText} • ${cardName}` : methodLabelText;
             return (
               <DetailRow
                 icon={<MethodIcon className="h-4 w-4" />}
@@ -435,8 +424,8 @@ const createdByColor =
             </>
           )}
 
-          {/* Fatura (billing info for credit expenses) */}
-          {expense && expense.payment_method === "credit" && (() => {
+          {/* Fatura aparece apenas para métodos que afetam billing de cartão (atualmente: credit) */}
+          {expense && affectsCardBilling(expense.payment_method) && (() => {
             const card = expense.card_id ? cardsData.find(c => c.id === expense.card_id) : null;
             if (!card || (card.due_day == null && card.closing_day == null)) return null;
             const config: CreditCardConfig = {

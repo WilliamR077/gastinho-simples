@@ -17,6 +17,7 @@ import { generateBillingPeriods, CreditCardConfig } from "@/utils/billing-period
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { PAYMENT_METHOD_LIST } from "@/lib/payment-methods";
 
 export type FilterTab = "expenses" | "incomes";
 
@@ -288,9 +289,9 @@ export function ExpenseFilters({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Todas as formas</SelectItem>
-                        <SelectItem value="pix">PIX</SelectItem>
-                        <SelectItem value="debit">Débito</SelectItem>
-                        <SelectItem value="credit">Crédito</SelectItem>
+                        {PAYMENT_METHOD_LIST.map((m) => (
+                          <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>

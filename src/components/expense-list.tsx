@@ -2,8 +2,9 @@ import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { CreditCard, Smartphone, Receipt, Users, User, Calculator, AlertTriangle } from "lucide-react"
+import { Receipt, Users, User, Calculator, AlertTriangle } from "lucide-react"
 import { Expense, categoryLabels, categoryIcons, ExpenseCategory } from "@/types/expense"
+import { paymentMethodIcon, paymentMethodLabel } from "@/lib/payment-methods"
 import { SharedGroupMember } from "@/types/shared-group"
 import { useCategories } from "@/hooks/use-categories"
 import { getMemberColor } from "@/components/group-member-summary"
@@ -37,12 +38,6 @@ const getUserDisplayName = (userId: string, members: SharedGroupMember[]): strin
   if (!member?.user_email) return null;
   return member.user_email.split('@')[0];
 };
-
-const paymentMethodConfig = {
-  pix: { label: "PIX", icon: Smartphone },
-  debit: { label: "Débito", icon: CreditCard },
-  credit: { label: "Crédito", icon: CreditCard }
-}
 
 const parseLocalDate = (dateString: string) => {
   const datePart = dateString.split('T')[0].split(' ')[0];
@@ -107,8 +102,8 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onDuplic
         <CardContent className="p-0">
           <div className="divide-y divide-border/30">
             {currentExpenses.map((expense) => {
-              const config = paymentMethodConfig[expense.payment_method]
-              const Icon = config.icon
+              const Icon = paymentMethodIcon(expense.payment_method)
+              const methodLabel = paymentMethodLabel(expense.payment_method)
               const categoryDisplay = getCategoryDisplay(expense)
               const cardName = expense.card?.name || expense.card_name;
               const cardColor = expense.card?.color || expense.card_color || undefined;
@@ -144,7 +139,7 @@ export function ExpenseList({ expenses, onDeleteExpense, onEditExpense, onDuplic
                       <span className="whitespace-nowrap">{parseLocalDate(expense.expense_date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
                       <span>•</span>
                       <Icon className="h-3 w-3 shrink-0" />
-                      <span className="truncate">{config.label}</span>
+                      <span className="truncate">{methodLabel}</span>
                       {shortCardName && (
                         <>
                           <span>•</span>
