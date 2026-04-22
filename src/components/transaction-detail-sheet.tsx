@@ -424,8 +424,8 @@ const createdByColor =
             </>
           )}
 
-          {/* Fatura (billing info for credit expenses) */}
-          {expense && expense.payment_method === "credit" && (() => {
+          {/* Fatura aparece apenas para métodos que afetam billing de cartão (atualmente: credit) */}
+          {expense && affectsCardBilling(expense.payment_method) && (() => {
             const card = expense.card_id ? cardsData.find(c => c.id === expense.card_id) : null;
             if (!card || (card.due_day == null && card.closing_day == null)) return null;
             const config: CreditCardConfig = {

@@ -16,6 +16,7 @@ import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { ExpenseFilters } from "@/components/expense-filters";
 import { Badge } from "@/components/ui/badge";
+import { PAYMENT_METHOD_LIST } from "@/lib/payment-methods";
 
 interface CompactFilterBarProps {
   filters: ExpenseFilters;
@@ -259,9 +260,9 @@ export function CompactFilterBar({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todas</SelectItem>
-                    <SelectItem value="pix">PIX</SelectItem>
-                    <SelectItem value="debit">Débito</SelectItem>
-                    <SelectItem value="credit">Crédito</SelectItem>
+                    {PAYMENT_METHOD_LIST.map((m) => (
+                      <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
