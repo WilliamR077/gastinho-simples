@@ -1,225 +1,111 @@
 
 
-# Plano Final v2: Adicionar método "Dinheiro" (cash) — ajustado
+# Plano final de execução: finalizar suporte ao método "Dinheiro" (cash)
 
-## 1. Resumo executivo
+## 1. Escopo e estado atual
 
-Adicionar `cash` ao enum `payment_method` (apenas para despesas e despesas recorrentes), centralizando metadados e regras de negócio em `src/lib/payment-methods.ts`. **Preservar cores atuais** dos métodos existentes; adicionar lime apenas para `cash`. Implementar limpeza obrigatória de campos dependentes de cartão ao trocar para método sem cartão. Importação rejeita valores desconhecidos com erro explícito.
+A fase 1–3 do plano aprovado já foi executada (fonte única em `src/lib/payment-methods.ts`, migration aplicada, 7 forms refatorados, charts e PDF atualizados). Faltam **9 arquivos** para fechar a entrega: visualização (3), filtros (2), importação/exportação (3) e billing (1). Esta segunda passada conclui a entrega e devolve o fechamento solicitado.
 
----
+## 2. Mudanças por arquivo
 
-## 2. Estratégia em fases
+### Visualização — substituir maps locais por helpers centralizados
 
-1. **Preparação** — criar `src/lib/payment-methods.ts` com cores idênticas às atuais, helpers (`requiresCard`, `allowsInstallments`, `affectsCardBilling`), ordem explícita.
-2. **Banco** — migration `ALTER TYPE … ADD VALUE 'cash'`; aguardar regeneração de `types.ts`.
-3. **Forms** — Selects derivados da fonte única; aplicar regra de limpeza de campos dependentes ao trocar método.
-4. **Visualizações/filtros/resumos/gráficos** — substituir maps locais por consumo da fonte única.
-5. **Importação/exportação** — exportação via `paymentMethodLabel()`; importação rejeita aliases desconhecidos com erro.
-6. **Testes manuais** — checklist completa, com foco em regra de limpeza e billing.
+**`src/components/expense-summary.tsx`**
+- Trocar acumulador fixo `{ pix: 0, debit: 0, credit: 0, total: 0 }` por inicialização derivada de `PAYMENT_METHOD_LIST` (ficará `{ pix, debit, credit, cash, total }`).
+- Substituir array literal `paymentMethods` pelos itens derivados de `PAYMENT_METHOD_LIST`, mapeando `cardTotals` por método: `credit→creditCardTotals`, `debit→debitCardTotals`, demais → `{}`.
+- Ícone derivado de `paymentMethodIcon(key)` com cor inline `style={{ color: paymentMethodColor(key) }}`. Remover `colorClass` por método (o helper já entrega cor exata).
+- Manter cor lime para `cash` na linha "Dinheiro" (sem cartões agrupados).
 
----
+**`src/components/expense-list.tsx`**
+- Remover `paymentMethodConfig` local (objeto de 3 entradas).
+- Linha 110–111: trocar por `const Icon = paymentMethodIcon(expense.payment_method)` e usar `paymentMethodLabel(expense.payment_method)` na linha 147.
 
-## 3. Fonte única da verdade — `src/lib/payment-methods.ts`
+**`src/components/transaction-detail-sheet.tsx`**
+- Remover `paymentMethodLabels` (linha 50–54) e `paymentMethodIcons` (linha 56–60) locais.
+- Importar `paymentMethodLabel`, `paymentMethodIcon` da fonte única.
+- Linhas 317–318: usar os helpers diretamente.
+- Linha 439: comparação `payment_method === "credit"` para mostrar bloco de fatura — manter, mas trocar para `affectsCardBilling(expense.payment_method)` (conceito de domínio mais correto). Adicionar comentário `// Fatura aparece apenas para métodos que afetam billing de cartão`.
 
-```ts
-import { Banknote, CreditCard, Smartphone, type LucideIcon } from "lucide-react";
-import type { PaymentMethod } from "@/types/expense";
+**`src/components/recurring-expense-list.tsx`**
+- Remover `paymentMethodConfig` local (linha 29–33).
+- Substituir por `paymentMethodIcon` e `paymentMethodLabel` da fonte única (linhas 92–93 e 126).
 
-export interface PaymentMethodMeta {
-  value: PaymentMethod;
-  label: string;
-  icon: LucideIcon;
-  color: string;            // preservado dos componentes atuais
-  requiresCard: boolean;
-  allowsInstallments: boolean;
-  affectsCardBilling: boolean;
-  importAliases: string[];  // só para parser de planilha
-  displayOrder: number;     // ordem fixa nos selects/filtros/charts
-}
+### Filtros — adicionar opção "Dinheiro" derivada de PAYMENT_METHOD_LIST
 
-export const PAYMENT_METHODS: Record<PaymentMethod, PaymentMethodMeta> = {
-  credit: { value: "credit", label: "Crédito", icon: CreditCard, color: <cor atual em expense-charts.tsx>, requiresCard: true,  allowsInstallments: true,  affectsCardBilling: true,  importAliases: [...], displayOrder: 1 },
-  debit:  { value: "debit",  label: "Débito",  icon: CreditCard, color: <cor atual em expense-charts.tsx>, requiresCard: true,  allowsInstallments: false, affectsCardBilling: false, importAliases: [...], displayOrder: 2 },
-  pix:    { value: "pix",    label: "PIX",     icon: Smartphone, color: <cor atual em expense-charts.tsx>, requiresCard: false, allowsInstallments: false, affectsCardBilling: false, importAliases: [...], displayOrder: 3 },
-  cash:   { value: "cash",   label: "Dinheiro", icon: Banknote,  color: "#84cc16" /* lime-500, único valor novo */, requiresCard: false, allowsInstallments: false, affectsCardBilling: false, importAliases: ["dinheiro","cash","espécie","especie","money","papel"], displayOrder: 4 },
-};
+**`src/components/compact-filter-bar.tsx`** (linhas 260–266) e **`src/components/expense-filters.tsx`** (linhas 289–295)
+- Substituir os 3 `<SelectItem>` hardcoded por `.map()` sobre `PAYMENT_METHOD_LIST`, preservando o item `"all"` no topo.
+- Resultado: filtro passa a oferecer 4 opções (Crédito, Débito, PIX, Dinheiro) na ordem de `displayOrder`.
 
-// Ordem explícita — NUNCA usar Object.values diretamente em UI
-export const PAYMENT_METHOD_LIST: PaymentMethodMeta[] =
-  (Object.values(PAYMENT_METHODS) as PaymentMethodMeta[])
-    .sort((a, b) => a.displayOrder - b.displayOrder);
+### Importação — sem fallback silencioso
 
-// Helpers
-export const paymentMethodLabel = (m: PaymentMethod) => PAYMENT_METHODS[m]?.label ?? String(m);
-export const paymentMethodIcon  = (m: PaymentMethod) => PAYMENT_METHODS[m]?.icon ?? Banknote;
-export const paymentMethodColor = (m: PaymentMethod) => PAYMENT_METHODS[m]?.color ?? "#6b7280";
-export const requiresCard         = (m: PaymentMethod) => PAYMENT_METHODS[m]?.requiresCard ?? false;
-export const allowsInstallments   = (m: PaymentMethod) => PAYMENT_METHODS[m]?.allowsInstallments ?? false;
-export const affectsCardBilling   = (m: PaymentMethod) => PAYMENT_METHODS[m]?.affectsCardBilling ?? false;
+**`src/services/spreadsheet-import-service.ts`**
+- Importar `parsePaymentMethodAlias` da fonte única.
+- Reescrever `mapPaymentMethod(value)`:
+  - Se `value` vazio/null → retornar `{ method: "pix", error: null }` (default documentado e preservado).
+  - Caso contrário, chamar `parsePaymentMethodAlias`. Se `method === null` → retornar `{ method: null, error: 'Forma de pagamento não reconhecida: "X". Aceitos: Crédito, Débito, PIX, Dinheiro.' }`.
+- Em `mapRowsToExpenses`: quando o erro vier preenchido, push em `errors` da linha e marcar `isValid: false`. A linha continua aparecendo na pré-visualização para o usuário corrigir manualmente.
+- Remover o `PAYMENT_MAPPINGS` local (já duplicado nos `importAliases` da fonte única).
 
-// Parser de importação — sem fallback silencioso
-export interface AliasParseResult {
-  method: PaymentMethod | null;
-  matchedAlias: string | null;
-}
-export function parsePaymentMethodAlias(raw: string): AliasParseResult {
-  const norm = raw.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  for (const m of PAYMENT_METHOD_LIST) {
-    if (m.importAliases.some(a => a.normalize("NFD").replace(/[\u0300-\u036f]/g, "") === norm)) {
-      return { method: m.value, matchedAlias: raw };
-    }
-  }
-  return { method: null, matchedAlias: null };
-}
+**`src/components/spreadsheet-import-sheet.tsx`** (linhas 282–286)
+- Substituir array literal `paymentMethods` por `PAYMENT_METHOD_LIST.map(m => ({ value: m.value, label: m.label }))` para incluir "Dinheiro" no select de edição da pré-visualização.
+- Não precisa mudar UI de erro: o componente já exibe `expense.errors` em vermelho na célula de descrição (linha 547). Usuário verá a mensagem clara e poderá trocar o select para o método correto.
 
-// Regra de limpeza ao trocar método — usado por todos os forms
-export interface CardDependentFields {
-  cardId?: string | null;
-  installments?: number | null;
-}
-export function clearCardDependentFieldsIfNeeded(
-  newMethod: PaymentMethod,
-  current: CardDependentFields
-): CardDependentFields {
-  const next = { ...current };
-  if (!requiresCard(newMethod)) next.cardId = null;
-  if (!allowsInstallments(newMethod)) next.installments = 1; // ou null conforme schema do form
-  return next;
-}
-```
+### Exportação — usar paymentMethodLabel
 
-**Cores:** durante implementação, ler os valores hex EXATOS hoje em `expense-charts.tsx` (`methodColors`) e copiar literalmente para `credit`/`debit`/`pix`. Lime `#84cc16` é o único valor novo.
+**`src/pages/Settings.tsx`** (linhas 138–139, 147–148, 261–262)
+- Importar `paymentMethodLabel` da fonte única.
+- Trocar os 3 ternários por `paymentMethodLabel(exp.payment_method as PaymentMethod)`.
+- Para CSV linha 261–262 (que usa "Cartão" em vez de "Crédito"): manter texto idêntico ao atual usando `paymentMethodLabel` (que retornará "Crédito"/"Débito"/"PIX"/"Dinheiro"). Isto é uma melhoria deliberada: Crédito é mais preciso que "Cartão" (que poderia significar débito também).
+- Para o XLSX linhas 138–139 e 147–148 (que usa "Cartão de Crédito"/"Cartão de Débito"): manter os textos antigos via map local ou aceitar a normalização para os labels canônicos. **Decisão:** normalizar para os labels canônicos da fonte única (consistência total, sem fallback).
 
----
+### Billing — usar conceito de domínio
 
-## 4. Regra de limpeza de campos dependentes de cartão
+**`src/pages/Index.tsx`** (linhas 1508 e 1833)
+- Trocar `expense.payment_method !== "credit"` por `!affectsCardBilling(expense.payment_method)`.
+- Adicionar import de `affectsCardBilling`.
+- Adicionar comentário curto: `// Modo fatura mostra apenas métodos que afetam billing de cartão`.
 
-**Onde aplicar** (criação, edição, recorrente):
-- `expense-form.tsx`, `expense-form-sheet.tsx`, `unified-expense-form-sheet.tsx`
-- `recurring-expense-form.tsx`, `recurring-expense-form-sheet.tsx`
-- `expense-edit-dialog.tsx`, `recurring-expense-edit-dialog.tsx`
+**`src/utils/billing-period.ts`, `src/utils/credit-card-spend.ts`, `src/utils/card-limit-view-model.ts`**
+- Manter as comparações `=== "credit"` (são corretas: a lógica de fatura/limite só se aplica a crédito; débito/PIX/cash são naturalmente excluídos).
+- Adicionar comentário `// Apenas crédito gera fatura/limite — outros métodos (debit/pix/cash) são naturalmente ignorados` em cada local.
 
-**Como aplicar:**
-1. No `onChange` do Select de método, chamar `clearCardDependentFieldsIfNeeded(novo, { cardId, installments })` e aplicar o resultado ao state do form.
-2. Renderização condicional: `{requiresCard(method) && <CardSelect />}` e `{allowsInstallments(method) && <InstallmentsField />}`.
-3. Validação no submit: se `requiresCard(method)` e `!cardId`, bloquear com mensagem clara.
-4. No payload final ao Supabase: garantir `card_id: requiresCard(method) ? cardId : null` e `installments: allowsInstallments(method) ? installments : 1` — defesa em profundidade caso o state esteja sujo.
+## 3. Validação após edição
 
-**Casos cobertos:**
-- Criar despesa em `cash` → nenhum cartão enviado, sem parcelamento.
-- Editar de `credit` (com cartão X, 3 parcelas) → `cash`: `card_id` vai a null e `installments` volta a 1.
-- Editar de `cash` → `credit`: campo cartão reaparece e fica obrigatório; submit sem cartão bloqueado.
-- Recorrentes: idem.
+1. **Typecheck** via `tsc --noEmit` (verificar que nenhum `Record<PaymentMethod, X>` fechado quebrou).
+2. **Lint** via `eslint`.
+3. **Build** via `vite build`.
+4. **Smoke test manual** seguindo a checklist do plano original (criar cash, editar credit→cash limpa cartão+parcelas, filtro mostra Dinheiro, PDF/CSV mostra "Dinheiro", importação rejeita "carteira virtual" com erro claro, billing ignora cash).
 
----
+## 4. Fechamento entregue ao usuário
 
-## 5. Importação sem fallback silencioso
+Ao final, devolverei mensagem com:
 
-`src/services/spreadsheet-import-service.ts`:
-- Substituir `mapPaymentMethod(value)` (que hoje retorna `pix` por padrão) por uso de `parsePaymentMethodAlias(value)`.
-- Comportamento por linha:
-  - Coluna método **vazia/ausente:** usar default explícito documentado (`pix`, comportamento atual) — está OK.
-  - Coluna método **preenchida + alias reconhecido:** mapear normalmente.
-  - Coluna método **preenchida + alias desconhecido:** marcar `isValid: false` e adicionar erro: `Forma de pagamento não reconhecida: "X". Aceitos: Crédito, Débito, PIX, Dinheiro.`
-- A linha aparece na pré-visualização do `spreadsheet-import-sheet.tsx` em estado de erro, não é importada, e o usuário pode corrigir a planilha ou ignorar.
+1. **Lista exata de arquivos alterados** nesta passada (9) e os já alterados na primeira passada (referência).
+2. **Confirmação item-a-item** dos 6 pontos restantes do plano original.
+3. **Resultado de typecheck/lint/build** (saída literal dos comandos).
+4. **Checklist dos casos de teste obrigatórios** (marcado como ✅ verificado por inspeção de código + ⚠ requer teste manual no preview, com instrução clara do que testar).
+5. **Confirmação explícita** dos 5 invariantes:
+   - cash NÃO entra em billing/fatura (`affectsCardBilling("cash") === false`, comparações em `Index.tsx`/`billing-period.ts`/`credit-card-spend.ts`/`card-limit-view-model.ts` excluem cash).
+   - cash NÃO exige cartão (`requiresCard("cash") === false`, forms ocultam o campo, payload final grava `card_id: null`).
+   - cash NÃO permite parcelamento (`allowsInstallments("cash") === false`, forms ocultam parcelas, payload força `installments: 1`).
+   - Importação NÃO faz fallback silencioso (parser retorna `null` para alias desconhecido, linha vai para preview marcada como inválida com mensagem clara).
+   - PDF/CSV exibem "Dinheiro" (todos os ternários removidos, lookup via `paymentMethodLabel` da fonte única).
 
----
+## 5. Lista final de arquivos a alterar nesta passada
 
-## 6. Pontos impactados por camada
+1. `src/components/expense-summary.tsx`
+2. `src/components/expense-list.tsx`
+3. `src/components/transaction-detail-sheet.tsx`
+4. `src/components/recurring-expense-list.tsx`
+5. `src/components/compact-filter-bar.tsx`
+6. `src/components/expense-filters.tsx`
+7. `src/services/spreadsheet-import-service.ts`
+8. `src/components/spreadsheet-import-sheet.tsx`
+9. `src/pages/Settings.tsx`
+10. `src/pages/Index.tsx`
+11. `src/utils/billing-period.ts` (apenas comentários de documentação)
+12. `src/utils/credit-card-spend.ts` (apenas comentários de documentação)
+13. `src/utils/card-limit-view-model.ts` (apenas comentários de documentação)
 
-### Banco
-- Migration: `ALTER TYPE public.payment_method ADD VALUE IF NOT EXISTS 'cash';`
-- Sem backfill, sem mudança de RLS, sem mudança de índice.
-- `src/integrations/supabase/types.ts` regenerado.
-
-### Forms (obrigatórios — 7 arquivos)
-- 7 arquivos listados na seção 4 — adotam `PAYMENT_METHOD_LIST`, `requiresCard`, `allowsInstallments`, `clearCardDependentFieldsIfNeeded`.
-
-### Visualização (5 arquivos)
-- `expense-charts.tsx` — remover `methodColors`/`methodLabels` locais; iterar `PAYMENT_METHOD_LIST` para acumulador e legenda; tooltip usa `paymentMethodLabel`.
-- `expense-summary.tsx` — acumulador derivado de `PAYMENT_METHOD_LIST`; cash não entra em totalização por cartão (filtro continua por `card_id`, não por método).
-- `expense-list.tsx`, `transaction-detail-sheet.tsx`, `recurring-expense-list.tsx` — `paymentMethodLabel` + `paymentMethodIcon`.
-
-### Filtros (2 arquivos)
-- `compact-filter-bar.tsx`, `expense-filters.tsx` — opções derivadas de `PAYMENT_METHOD_LIST`.
-
-### Importação/Exportação (4 arquivos)
-- `spreadsheet-import-service.ts` — usar `parsePaymentMethodAlias`; remover fallback silencioso.
-- `spreadsheet-import-sheet.tsx` — exibir erro de método desconhecido na pré-visualização.
-- `pdf-export-service.ts` — substituir ternários por `paymentMethodLabel`.
-- `Settings.tsx` (CSV) — idem.
-
-### Revisar sem alterar comportamento (5 arquivos)
-- `card-limit-view-model.ts`, `credit-card-spend.ts`, `billing-period.ts`: confirmar que filtram positivamente por `=== "credit"` (correto). Onde houver comparação inevitável, **adicionar comentário** apontando que o conceito é `affectsCardBilling`.
-- `report-view-model.ts`: confirmar agrupamentos derivados de `PAYMENT_METHOD_LIST`.
-- `Index.tsx` (~linha 1508): se for `payment_method !== "credit"` em modo fatura, **trocar** por `!affectsCardBilling(payment_method)` para usar conceito de domínio.
-
----
-
-## 7. Casos de teste obrigatórios
-
-**Criação/edição:**
-- [ ] Criar despesa avulsa em `cash` (sem campo de cartão visível, sem parcelas).
-- [ ] Criar despesa recorrente em `cash`.
-- [ ] Editar despesa `credit` (com cartão + 3 parcelas) para `cash` → cartão e parcelas somem da UI; payload salva `card_id=null`, `installments=1`.
-- [ ] Editar despesa `debit` (com cartão) para `pix` → `card_id` limpo.
-- [ ] Editar despesa `cash` para `credit` → seletor de cartão reaparece e bloqueia submit sem cartão.
-- [ ] Editar despesa `cash` para `credit` com 3 parcelas → série criada normalmente.
-- [ ] Mesma sequência para despesas recorrentes.
-
-**Visualização:**
-- [ ] Listas mostram ícone Banknote + "Dinheiro" para `cash`; cores de `pix`/`credit`/`debit` permanecem idênticas às atuais.
-- [ ] Card "Gastos por Método" inclui linha "Dinheiro" lime; soma das fatias = total.
-- [ ] Tooltip do gráfico exibe "Dinheiro" e valor correto.
-
-**Filtros:**
-- [ ] Filtro tem opção "Dinheiro" na ordem definida (4ª posição).
-- [ ] Filtrar por `cash` retorna apenas despesas em dinheiro; filtrar por `credit` não inclui `cash`.
-
-**Importação:**
-- [ ] Planilha com "Dinheiro"/"cash"/"espécie" mapeia para `cash`.
-- [ ] Planilha com "carteira virtual" (alias desconhecido) gera linha inválida com mensagem clara, **não** importa como `pix`.
-- [ ] Planilha com coluna método vazia continua usando default `pix` (comportamento atual preservado).
-
-**Exportação:**
-- [ ] PDF exibe "Dinheiro" para `cash` (não "PIX").
-- [ ] CSV em Settings exibe "Dinheiro".
-
-**Billing/fatura:**
-- [ ] Despesa em `cash` não aparece na fatura nem decrementa limite de cartão.
-- [ ] Modo fatura no `Index` ignora `cash` (via `!affectsCardBilling`).
-
-**Regressão:**
-- [ ] Fluxo de `pix`, `credit`, `debit` idêntico ao anterior, com cores preservadas.
-
----
-
-## 8. Critérios de aceite (revisados)
-
-1. ✅ Migration aplicada; `types.ts` regenerado contém `"cash"`.
-2. ✅ `src/lib/payment-methods.ts` existe e exporta `PAYMENT_METHODS`, `PAYMENT_METHOD_LIST` (ordenado), helpers e `parsePaymentMethodAlias`.
-3. ✅ Cores de `credit`/`debit`/`pix` na fonte central são **idênticas** às que estavam em `expense-charts.tsx` antes da refatoração.
-4. ✅ **Nenhum** componente possui map local de `methodColors`/`methodLabels`/`methodIcons` — todos consomem a fonte única. (Strings `"credit"`/`"debit"`/`"pix"` podem permanecer como valores de domínio em forms, queries e filtros.)
-5. ✅ **Nenhum** ternário de fallback do tipo `=== "credit" ? ... : === "debit" ? ... : "PIX"` em código de exportação ou exibição.
-6. ✅ Forms aplicam `clearCardDependentFieldsIfNeeded` no onChange do método e validam `requiresCard` no submit.
-7. ✅ Payload final ao Supabase nunca grava `card_id` para método sem cartão nem `installments > 1` para método sem parcelamento.
-8. ✅ Importação rejeita aliases desconhecidos com erro explícito; não há fallback silencioso para `pix` em valores preenchidos.
-9. ✅ Lógica de billing/fatura usa `affectsCardBilling()` quando aplicável; comparações diretas remanescentes (ex.: `=== "credit"` em queries de fatura) têm comentário explicando o motivo.
-10. ✅ Ordem dos métodos em selects/filtros/charts segue `displayOrder` (Crédito → Débito → PIX → Dinheiro).
-11. ✅ Sem regressão visual em `pix`/`credit`/`debit`.
-
----
-
-## 9. Lista final de arquivos
-
-**Novo (1):** `src/lib/payment-methods.ts`
-**Migration (1):** `supabase/migrations/<ts>_add_cash_payment_method.sql`
-**Auto-regenerado (1):** `src/integrations/supabase/types.ts`
-**Forms (7):** `expense-form.tsx`, `expense-form-sheet.tsx`, `unified-expense-form-sheet.tsx`, `recurring-expense-form.tsx`, `recurring-expense-form-sheet.tsx`, `expense-edit-dialog.tsx`, `recurring-expense-edit-dialog.tsx`
-**Visualização (5):** `expense-charts.tsx`, `expense-summary.tsx`, `expense-list.tsx`, `transaction-detail-sheet.tsx`, `recurring-expense-list.tsx`
-**Filtros (2):** `compact-filter-bar.tsx`, `expense-filters.tsx`
-**Importação/Exportação (4):** `spreadsheet-import-service.ts`, `spreadsheet-import-sheet.tsx`, `pdf-export-service.ts`, `Settings.tsx`
-**Revisar (5):** `card-limit-view-model.ts`, `credit-card-spend.ts`, `billing-period.ts`, `report-view-model.ts`, `Index.tsx`
-
-**Total:** 1 novo + 1 migration + 18 modificados + 5 revisados.
+**Total nesta passada:** 10 arquivos modificados + 3 anotados com comentários de documentação. Nenhum arquivo novo, nenhuma migration adicional.
 
