@@ -382,15 +382,36 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
       .sort((a, b) => b.value - a.value);
   }
 
+  // Helper: verifica se uma despesa/entrada fixa ocorre em um dado dia do mês visualizado
+  const recurringHitsDay = (
+    r: { day_of_month: number; start_date: string | null; end_date: string | null; created_at: string },
+    day: Date
+  ): boolean => {
+    if (r.day_of_month !== day.getDate()) return false;
+    const sd = r.start_date ? parseISO(r.start_date) : parseLocalDate(r.created_at);
+    const ed = r.end_date ? parseISO(r.end_date) : null;
+    return sd <= day && (!ed || ed >= day);
+  };
+
   // Cash flow data (raw = daily/monthly without cumulative)
   const cashFlowDataRaw: CashFlowDataItem[] = periodType === "month"
     ? eachDayOfInterval({ start: startDate, end: endDate }).map(day => {
         const dayExp = filteredExpenses.filter(e => isSameDay(parseLocalDate(e.expense_date), day));
         const dayInc = filteredIncomes.filter(i => isSameDay(parseLocalDate(i.income_date), day));
+        let entradas = dayInc.reduce((s, i) => s + Number(i.amount), 0);
+        let saidas = dayExp.reduce((s, e) => s + Number(e.amount), 0);
+        // Incluir entradas fixas no dia configurado
+        filteredRecurringIncomes.forEach(r => {
+          if (recurringHitsDay(r, day)) entradas += Number(r.amount);
+        });
+        // Incluir despesas fixas no dia configurado
+        filteredRecurringExpenses.forEach(r => {
+          if (recurringHitsDay(r, day)) saidas += Number(r.amount);
+        });
         return {
           label: format(day, "dd"),
-          entradas: Number(dayInc.reduce((s, i) => s + Number(i.amount), 0).toFixed(2)),
-          saidas: Number(dayExp.reduce((s, e) => s + Number(e.amount), 0).toFixed(2)),
+          entradas: Number(entradas.toFixed(2)),
+          saidas: Number(saidas.toFixed(2)),
         };
       })
     : eachMonthOfInterval({ start: startDate, end: endDate }).map(month => {
@@ -416,7 +437,11 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
   const evolutionDataRaw: EvolutionDataItem[] = periodType === "month"
     ? eachDayOfInterval({ start: startDate, end: endDate }).map(day => {
         const dayExp = filteredExpenses.filter(e => isSameDay(parseLocalDate(e.expense_date), day));
-        return { label: format(day, "dd"), total: Number(dayExp.reduce((s, e) => s + Number(e.amount), 0).toFixed(2)) };
+        let total = dayExp.reduce((s, e) => s + Number(e.amount), 0);
+        filteredRecurringExpenses.forEach(r => {
+          if (recurringHitsDay(r, day)) total += Number(r.amount);
+        });
+        return { label: format(day, "dd"), total: Number(total.toFixed(2)) };
       })
     : eachMonthOfInterval({ start: startDate, end: endDate }).map(month => {
         const ms = startOfMonth(month), me = endOfMonth(month);
