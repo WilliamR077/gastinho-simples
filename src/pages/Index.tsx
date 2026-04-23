@@ -1779,7 +1779,7 @@ export default function Index() {
   // Entradas recorrentes filtradas por categoria e filtros globais
   const displayedRecurringIncomes = useMemo(() => {
     return recurringIncomes.filter((i) => {
-      if (activeIncomeCategoryFilter && (i as any).income_category_id !== activeIncomeCategoryFilter && i.category !== activeIncomeCategoryFilter) return false;
+      if (activeIncomeCategoryFilter && (i as any).income_category_id !== activeIncomeCategoryFilter && i.category !== activeIncomeCategoryFilter && (i as any).category_name !== activeIncomeCategoryFilter) return false;
       if (filters.description && !i.description.toLowerCase().includes(filters.description.toLowerCase())) return false;
       if (filters.minAmount !== undefined && i.amount < filters.minAmount) return false;
       if (filters.maxAmount !== undefined && i.amount > filters.maxAmount) return false;
