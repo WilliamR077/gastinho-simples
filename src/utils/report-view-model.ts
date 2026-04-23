@@ -268,7 +268,8 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
     categoryDataMap[c.key].value += Number(r.amount) * rm;
   });
   const catDataTotal = Object.values(categoryDataMap).reduce((s, i) => s + i.value, 0);
-  let categoryData: CategoryDataItem[] = Object.values(categoryDataMap)
+  // Mostra todas as categorias reais (sem agrupar em "Outros") — espelha o card da Início
+  const categoryData: CategoryDataItem[] = Object.values(categoryDataMap)
     .filter(i => i.value > 0)
     .map(i => ({
       ...i,
@@ -276,13 +277,6 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
       percentage: catDataTotal > 0 ? (i.value / catDataTotal) * 100 : 0,
     }))
     .sort((a, b) => b.value - a.value);
-  if (categoryData.length > 5) {
-    const top5 = categoryData.slice(0, 5);
-    const others = categoryData.slice(5);
-    const othersTotal = others.reduce((s, i) => s + i.value, 0);
-    const othersPct = catDataTotal > 0 ? (othersTotal / catDataTotal) * 100 : 0;
-    categoryData = [...top5, { name: "Outros", icon: "📦", value: Number(othersTotal.toFixed(2)), percentage: othersPct }];
-  }
 
   // Payment method data — acumulador derivado de PAYMENT_METHOD_LIST (inclui cash).
   const pmTotals = PAYMENT_METHOD_LIST.reduce((acc, m) => {
