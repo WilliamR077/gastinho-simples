@@ -437,7 +437,11 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
   const evolutionDataRaw: EvolutionDataItem[] = periodType === "month"
     ? eachDayOfInterval({ start: startDate, end: endDate }).map(day => {
         const dayExp = filteredExpenses.filter(e => isSameDay(parseLocalDate(e.expense_date), day));
-        return { label: format(day, "dd"), total: Number(dayExp.reduce((s, e) => s + Number(e.amount), 0).toFixed(2)) };
+        let total = dayExp.reduce((s, e) => s + Number(e.amount), 0);
+        filteredRecurringExpenses.forEach(r => {
+          if (recurringHitsDay(r, day)) total += Number(r.amount);
+        });
+        return { label: format(day, "dd"), total: Number(total.toFixed(2)) };
       })
     : eachMonthOfInterval({ start: startDate, end: endDate }).map(month => {
         const ms = startOfMonth(month), me = endOfMonth(month);
