@@ -1649,13 +1649,23 @@ export default function Index() {
     });
   }, [recurringExpenses, filters]);
 
+  // Helper: testa se uma despesa pertence à categoria ativa.
+  // O CategoryInsightCard agrupa por nome de exibição, então comparamos
+  // contra category_id (UUID), category (enum legado) e category_name (denormalizado).
+  const matchesActiveCategory = (e: { category_id?: string | null; category?: string | null; category_name?: string | null }) => {
+    if (!activeCategoryFilter) return true;
+    return (
+      e.category_id === activeCategoryFilter ||
+      e.category === activeCategoryFilter ||
+      e.category_name === activeCategoryFilter
+    );
+  };
+
   // Despesas filtradas por categoria e cartão
   const displayedExpenses = useMemo(() => {
     let result = filteredExpenses;
     if (activeCategoryFilter) {
-      result = result.filter((e) =>
-        e.category_id === activeCategoryFilter || e.category === activeCategoryFilter
-      );
+      result = result.filter(matchesActiveCategory);
     }
     if (activeCardFilter) {
       result = result.filter((e) => {
@@ -1671,9 +1681,7 @@ export default function Index() {
   const displayedRecurringExpenses = useMemo(() => {
     let result = filteredRecurringExpenses;
     if (activeCategoryFilter) {
-      result = result.filter((e) =>
-        e.category_id === activeCategoryFilter || e.category === activeCategoryFilter
-      );
+      result = result.filter(matchesActiveCategory);
     }
     if (activeCardFilter) {
       result = result.filter((e) => {
@@ -1756,7 +1764,8 @@ export default function Index() {
     });
     return dateFiltered.filter((i) => {
       // Filtro de categoria
-      if (activeIncomeCategoryFilter && (i as any).income_category_id !== activeIncomeCategoryFilter && i.category !== activeIncomeCategoryFilter) return false;
+      // Card de entradas agrupa por nome de exibição: comparamos contra id, enum e category_name denormalizado
+      if (activeIncomeCategoryFilter && (i as any).income_category_id !== activeIncomeCategoryFilter && i.category !== activeIncomeCategoryFilter && (i as any).category_name !== activeIncomeCategoryFilter) return false;
       // Filtro de descrição
       if (filters.description && !i.description.toLowerCase().includes(filters.description.toLowerCase())) return false;
       // Filtro de valor mínimo
@@ -1770,7 +1779,7 @@ export default function Index() {
   // Entradas recorrentes filtradas por categoria e filtros globais
   const displayedRecurringIncomes = useMemo(() => {
     return recurringIncomes.filter((i) => {
-      if (activeIncomeCategoryFilter && (i as any).income_category_id !== activeIncomeCategoryFilter && i.category !== activeIncomeCategoryFilter) return false;
+      if (activeIncomeCategoryFilter && (i as any).income_category_id !== activeIncomeCategoryFilter && i.category !== activeIncomeCategoryFilter && (i as any).category_name !== activeIncomeCategoryFilter) return false;
       if (filters.description && !i.description.toLowerCase().includes(filters.description.toLowerCase())) return false;
       if (filters.minAmount !== undefined && i.amount < filters.minAmount) return false;
       if (filters.maxAmount !== undefined && i.amount > filters.maxAmount) return false;
