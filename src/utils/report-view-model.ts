@@ -11,7 +11,7 @@ import {
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { calculateBillingPeriod, CreditCardConfig } from "@/utils/billing-period";
-import { PAYMENT_METHOD_LIST, paymentMethodLabel } from "@/lib/payment-methods";
+import { PAYMENT_METHOD_LIST, paymentMethodLabel, usesCard } from "@/lib/payment-methods";
 
 export interface CategoryDataItem {
   name: string;
