@@ -122,6 +122,15 @@ export const allowsInstallments = (m: PaymentMethod | undefined | null | ""): bo
 export const affectsCardBilling = (m: PaymentMethod | undefined | null | ""): boolean =>
   m ? (PAYMENT_METHODS[m as PaymentMethod]?.affectsCardBilling ?? false) : false;
 
+/**
+ * Indica se o método de pagamento usa um cartão físico (crédito ou débito).
+ * Diferente de `affectsCardBilling` (só crédito) — débito também usa cartão,
+ * mas não gera fatura. Use no relatório "Gastos por Cartão" para excluir
+ * PIX e Dinheiro do agrupamento.
+ */
+export const usesCard = (m: PaymentMethod | undefined | null | ""): boolean =>
+  m === "credit" || m === "debit";
+
 // ============ Parser de importação (sem fallback silencioso) ============
 
 export interface AliasParseResult {

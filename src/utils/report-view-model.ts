@@ -11,7 +11,7 @@ import {
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { calculateBillingPeriod, CreditCardConfig } from "@/utils/billing-period";
-import { PAYMENT_METHOD_LIST, paymentMethodLabel } from "@/lib/payment-methods";
+import { PAYMENT_METHOD_LIST, paymentMethodLabel, usesCard } from "@/lib/payment-methods";
 
 export interface CategoryDataItem {
   name: string;
@@ -88,6 +88,7 @@ export interface ReportViewModel {
   categoryData: CategoryDataItem[];
   paymentMethodData: PaymentMethodDataItem[];
   cardData: CardDataItem[];
+  uniqueCardCount: number;
   memberData: MemberDataItem[];
   cashFlowDataRaw: CashFlowDataItem[];
   evolutionDataRaw: EvolutionDataItem[];
@@ -296,36 +297,69 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
     .filter((item) => item.value > 0)
     .sort((a, b) => b.value - a.value);
 
-  // Card data
-  const cardTotalsMap: Record<string, { name: string; color: string; value: number }> = {};
-  cardTotalsMap['no-card'] = { name: 'Sem cartão', color: '#9ca3af', value: 0 };
-  filteredExpenses.forEach(e => {
-    if (e.card_id) {
-      const card = cards.find(c => c.id === e.card_id);
-      if (card) {
-        if (!cardTotalsMap[card.id]) cardTotalsMap[card.id] = { name: card.name, color: card.color, value: 0 };
-        cardTotalsMap[card.id].value += Number(e.amount);
-      }
-    } else { cardTotalsMap['no-card'].value += Number(e.amount); }
+  // Card data — apenas despesas em cartão (crédito/débito). PIX/Dinheiro são
+  // excluídos. Quando um mesmo cartão tem gastos em crédito E débito, divide
+  // em duas fatias rotuladas; caso contrário, mantém o nome simples.
+  // Helper local: escurece uma cor hex misturando com preto na proporção dada.
+  const darkenHex = (hex: string, ratio = 0.3): string => {
+    const h = hex.replace("#", "");
+    if (h.length !== 6) return hex;
+    const r = Math.round(parseInt(h.slice(0, 2), 16) * (1 - ratio));
+    const g = Math.round(parseInt(h.slice(2, 4), 16) * (1 - ratio));
+    const b = Math.round(parseInt(h.slice(4, 6), 16) * (1 - ratio));
+    return `#${[r, g, b].map(v => v.toString(16).padStart(2, "0")).join("")}`;
+  };
+
+  // Agrupa por chave composta `${card_id}::${payment_method}`
+  type CardBucket = { cardId: string; method: PaymentMethod; name: string; color: string; value: number };
+  const cardBuckets: Record<string, CardBucket> = {};
+
+  const accumulateCardExpense = (
+    cardId: string | null | undefined,
+    method: PaymentMethod,
+    amount: number
+  ) => {
+    if (!usesCard(method)) return; // exclui PIX/Dinheiro
+    if (!cardId) {
+      console.warn("[report] despesa em cartão sem card_id — ignorada", { method, amount });
+      return;
+    }
+    const card = cards.find(c => c.id === cardId);
+    if (!card) return;
+    const key = `${cardId}::${method}`;
+    if (!cardBuckets[key]) {
+      cardBuckets[key] = { cardId, method, name: card.name, color: card.color, value: 0 };
+    }
+    cardBuckets[key].value += amount;
+  };
+
+  filteredExpenses.forEach(e => accumulateCardExpense(e.card_id, e.payment_method, Number(e.amount)));
+  filteredRecurringExpenses.forEach(r => accumulateCardExpense(r.card_id, r.payment_method, Number(r.amount) * rm));
+
+  // Conta tipos distintos por cartão para decidir sufixo
+  const methodsPerCard: Record<string, Set<PaymentMethod>> = {};
+  Object.values(cardBuckets).forEach(b => {
+    if (!methodsPerCard[b.cardId]) methodsPerCard[b.cardId] = new Set();
+    methodsPerCard[b.cardId].add(b.method);
   });
-  filteredRecurringExpenses.forEach(r => {
-    if (r.card_id) {
-      const card = cards.find(c => c.id === r.card_id);
-      if (card) {
-        if (!cardTotalsMap[card.id]) cardTotalsMap[card.id] = { name: card.name, color: card.color, value: 0 };
-        cardTotalsMap[card.id].value += Number(r.amount) * rm;
-      }
-    } else { cardTotalsMap['no-card'].value += Number(r.amount) * rm; }
-  });
-  const cardDataTotal = Object.values(cardTotalsMap).reduce((s, i) => s + i.value, 0);
-  const cardData: CardDataItem[] = Object.values(cardTotalsMap)
-    .filter(i => i.value > 0)
-    .map(i => ({
-      ...i,
-      value: Number(i.value.toFixed(2)),
-      percentage: cardDataTotal > 0 ? ((i.value / cardDataTotal) * 100).toFixed(1) : "0",
-    }))
+
+  const cardDataTotal = Object.values(cardBuckets).reduce((s, i) => s + i.value, 0);
+  const cardData: CardDataItem[] = Object.values(cardBuckets)
+    .filter(b => b.value > 0)
+    .map(b => {
+      const hasBoth = (methodsPerCard[b.cardId]?.size ?? 0) > 1;
+      const suffix = hasBoth ? (b.method === "credit" ? " - Crédito" : " - Débito") : "";
+      const finalColor = hasBoth && b.method === "debit" ? darkenHex(b.color, 0.3) : b.color;
+      return {
+        name: `${b.name}${suffix}`,
+        color: finalColor,
+        value: Number(b.value.toFixed(2)),
+        percentage: cardDataTotal > 0 ? ((b.value / cardDataTotal) * 100).toFixed(1) : "0",
+      };
+    })
     .sort((a, b) => b.value - a.value);
+
+  const uniqueCardCount = Object.keys(methodsPerCard).length;
 
   // Member data
   let memberData: MemberDataItem[] = [];
@@ -427,6 +461,7 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
     categoryData,
     paymentMethodData,
     cardData,
+    uniqueCardCount,
     memberData,
     cashFlowDataRaw,
     evolutionDataRaw,
