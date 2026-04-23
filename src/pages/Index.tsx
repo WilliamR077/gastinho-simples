@@ -1764,7 +1764,8 @@ export default function Index() {
     });
     return dateFiltered.filter((i) => {
       // Filtro de categoria
-      if (activeIncomeCategoryFilter && (i as any).income_category_id !== activeIncomeCategoryFilter && i.category !== activeIncomeCategoryFilter) return false;
+      // Card de entradas agrupa por nome de exibição: comparamos contra id, enum e category_name denormalizado
+      if (activeIncomeCategoryFilter && (i as any).income_category_id !== activeIncomeCategoryFilter && i.category !== activeIncomeCategoryFilter && (i as any).category_name !== activeIncomeCategoryFilter) return false;
       // Filtro de descrição
       if (filters.description && !i.description.toLowerCase().includes(filters.description.toLowerCase())) return false;
       // Filtro de valor mínimo
