@@ -317,11 +317,17 @@ export function ReportsAccordion({
                 <CreditCard className="w-5 h-5 text-orange-500" />
                 <div className="text-left">
                   <span className="font-semibold">Gastos por Cartão</span>
-                  <span className="text-xs text-muted-foreground block">{cardData.length} cartões</span>
+                  <span className="text-xs text-muted-foreground block">
+                    {viewModel.uniqueCardCount} {viewModel.uniqueCardCount === 1 ? "cartão" : "cartões"}
+                  </span>
                 </div>
               </div>
             </AccordionTrigger>
             <AccordionContent className="px-4 pb-4">
+              <p className="text-xs text-muted-foreground mb-3 text-center">
+                Considera apenas despesas pagas com cartão de crédito ou débito.
+                PIX e Dinheiro não entram nesta soma.
+              </p>
               <div className="flex flex-col items-center">
                 <ResponsiveContainer width="100%" height={200}>
                   <PieChart>

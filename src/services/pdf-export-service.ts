@@ -515,7 +515,15 @@ export async function exportReportsToPDF(params: ExportReportParams) {
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('Gastos por Cartão', 14, yPosition);
-    yPosition += 7;
+    yPosition += 6;
+
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(120);
+    doc.text('Considera apenas despesas pagas com cartão de crédito ou débito. PIX e Dinheiro não entram nesta soma.', 14, yPosition);
+    doc.setTextColor(0);
+    doc.setFont('helvetica', 'normal');
+    yPosition += 6;
 
     const donutChartData: ChartData[] = cardData.map((c) => ({
       label: c.name,

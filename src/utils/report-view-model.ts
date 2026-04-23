@@ -461,6 +461,7 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
     categoryData,
     paymentMethodData,
     cardData,
+    uniqueCardCount,
     memberData,
     cashFlowDataRaw,
     evolutionDataRaw,
