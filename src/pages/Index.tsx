@@ -1649,13 +1649,23 @@ export default function Index() {
     });
   }, [recurringExpenses, filters]);
 
+  // Helper: testa se uma despesa pertence à categoria ativa.
+  // O CategoryInsightCard agrupa por nome de exibição, então comparamos
+  // contra category_id (UUID), category (enum legado) e category_name (denormalizado).
+  const matchesActiveCategory = (e: { category_id?: string | null; category?: string | null; category_name?: string | null }) => {
+    if (!activeCategoryFilter) return true;
+    return (
+      e.category_id === activeCategoryFilter ||
+      e.category === activeCategoryFilter ||
+      e.category_name === activeCategoryFilter
+    );
+  };
+
   // Despesas filtradas por categoria e cartão
   const displayedExpenses = useMemo(() => {
     let result = filteredExpenses;
     if (activeCategoryFilter) {
-      result = result.filter((e) =>
-        e.category_id === activeCategoryFilter || e.category === activeCategoryFilter
-      );
+      result = result.filter(matchesActiveCategory);
     }
     if (activeCardFilter) {
       result = result.filter((e) => {
@@ -1671,9 +1681,7 @@ export default function Index() {
   const displayedRecurringExpenses = useMemo(() => {
     let result = filteredRecurringExpenses;
     if (activeCategoryFilter) {
-      result = result.filter((e) =>
-        e.category_id === activeCategoryFilter || e.category === activeCategoryFilter
-      );
+      result = result.filter(matchesActiveCategory);
     }
     if (activeCardFilter) {
       result = result.filter((e) => {
