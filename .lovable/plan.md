@@ -1,111 +1,81 @@
 
 
-# Plano final de execução: finalizar suporte ao método "Dinheiro" (cash)
+# Plano: Refinar relatório "Gastos por Cartão"
 
-## 1. Escopo e estado atual
+## Problema atual
+O gráfico inclui despesas PIX/Dinheiro (sem cartão) na categoria "Sem cartão", o que distorce o relatório — ele deveria refletir **apenas gastos em cartões**. Além disso, um mesmo cartão físico pode ser usado tanto em crédito quanto débito (ex: Banco do Brasil), e hoje aparece agrupado em uma única fatia.
 
-A fase 1–3 do plano aprovado já foi executada (fonte única em `src/lib/payment-methods.ts`, migration aplicada, 7 forms refatorados, charts e PDF atualizados). Faltam **9 arquivos** para fechar a entrega: visualização (3), filtros (2), importação/exportação (3) e billing (1). Esta segunda passada conclui a entrega e devolve o fechamento solicitado.
+## Decisão recomendada (responde à pergunta do usuário)
 
-## 2. Mudanças por arquivo
+Vou recomendar a **opção 1 (Cartão + tipo)** ao invés de filtrar só crédito, porque:
+- Preserva visibilidade do débito (que também é cartão e gera gasto real)
+- Separa "Banco do Brasil - Crédito" de "Banco do Brasil - Débito" como o usuário pediu
+- Não esconde dados — apenas reorganiza
+- "Só crédito" perderia gastos legítimos de cartão e seria mais restritivo que o título sugere
 
-### Visualização — substituir maps locais por helpers centralizados
+A subdivisão crédito/débito **só aparece quando o mesmo cartão tem gastos nos dois tipos**. Cartão usado só em crédito mantém o nome simples ("Smiles - Vivi"), sem sufixo desnecessário.
 
-**`src/components/expense-summary.tsx`**
-- Trocar acumulador fixo `{ pix: 0, debit: 0, credit: 0, total: 0 }` por inicialização derivada de `PAYMENT_METHOD_LIST` (ficará `{ pix, debit, credit, cash, total }`).
-- Substituir array literal `paymentMethods` pelos itens derivados de `PAYMENT_METHOD_LIST`, mapeando `cardTotals` por método: `credit→creditCardTotals`, `debit→debitCardTotals`, demais → `{}`.
-- Ícone derivado de `paymentMethodIcon(key)` com cor inline `style={{ color: paymentMethodColor(key) }}`. Remover `colorClass` por método (o helper já entrega cor exata).
-- Manter cor lime para `cash` na linha "Dinheiro" (sem cartões agrupados).
+## Mudanças
 
-**`src/components/expense-list.tsx`**
-- Remover `paymentMethodConfig` local (objeto de 3 entradas).
-- Linha 110–111: trocar por `const Icon = paymentMethodIcon(expense.payment_method)` e usar `paymentMethodLabel(expense.payment_method)` na linha 147.
+### 1. `src/utils/report-view-model.ts` — recalcular `cardData`
 
-**`src/components/transaction-detail-sheet.tsx`**
-- Remover `paymentMethodLabels` (linha 50–54) e `paymentMethodIcons` (linha 56–60) locais.
-- Importar `paymentMethodLabel`, `paymentMethodIcon` da fonte única.
-- Linhas 317–318: usar os helpers diretamente.
-- Linha 439: comparação `payment_method === "credit"` para mostrar bloco de fatura — manter, mas trocar para `affectsCardBilling(expense.payment_method)` (conceito de domínio mais correto). Adicionar comentário `// Fatura aparece apenas para métodos que afetam billing de cartão`.
+Refatorar o bloco `// Card data` (linhas 299–328):
 
-**`src/components/recurring-expense-list.tsx`**
-- Remover `paymentMethodConfig` local (linha 29–33).
-- Substituir por `paymentMethodIcon` e `paymentMethodLabel` da fonte única (linhas 92–93 e 126).
+- **Excluir** despesas com `payment_method === 'pix' | 'cash'` do agrupamento (usar helper `affectsCardBilling` não serve aqui porque débito também não afeta billing; usar lista explícita ou novo helper `usesCard(method)` que retorna `true` para credit/debit).
+- **Remover** a entrada `'no-card'` do mapa inicial — não faz mais sentido.
+- Agrupar por chave composta `${card_id}::${payment_method}` ao acumular.
+- Após o agrupamento, para cada `card_id`, contar quantos tipos distintos (crédito/débito) tem:
+  - Se **2 tipos** → nome final = `"${card.name} - Crédito"` e `"${card.name} - Débito"`, cores ligeiramente diferenciadas (cor base do cartão + opacidade/shade para débito)
+  - Se **1 tipo** → nome final = `card.name` (sem sufixo)
+- Ignorar despesas com `card_id` vazio mas `payment_method === 'credit' | 'debit'` (caso edge — sinal de dado inconsistente; logar `console.warn` e não somar).
 
-### Filtros — adicionar opção "Dinheiro" derivada de PAYMENT_METHOD_LIST
+Adicionar novo helper em `src/lib/payment-methods.ts`:
+```ts
+export function usesCard(method: PaymentMethod): boolean {
+  return method === 'credit' || method === 'debit';
+}
+```
 
-**`src/components/compact-filter-bar.tsx`** (linhas 260–266) e **`src/components/expense-filters.tsx`** (linhas 289–295)
-- Substituir os 3 `<SelectItem>` hardcoded por `.map()` sobre `PAYMENT_METHOD_LIST`, preservando o item `"all"` no topo.
-- Resultado: filtro passa a oferecer 4 opções (Crédito, Débito, PIX, Dinheiro) na ordem de `displayOrder`.
+### 2. `src/components/reports-accordion.tsx` — adicionar texto explicativo
 
-### Importação — sem fallback silencioso
+No bloco "Gastos por Cartão" (linhas 312–350), adicionar logo abaixo do `AccordionContent`, antes do gráfico:
 
-**`src/services/spreadsheet-import-service.ts`**
-- Importar `parsePaymentMethodAlias` da fonte única.
-- Reescrever `mapPaymentMethod(value)`:
-  - Se `value` vazio/null → retornar `{ method: "pix", error: null }` (default documentado e preservado).
-  - Caso contrário, chamar `parsePaymentMethodAlias`. Se `method === null` → retornar `{ method: null, error: 'Forma de pagamento não reconhecida: "X". Aceitos: Crédito, Débito, PIX, Dinheiro.' }`.
-- Em `mapRowsToExpenses`: quando o erro vier preenchido, push em `errors` da linha e marcar `isValid: false`. A linha continua aparecendo na pré-visualização para o usuário corrigir manualmente.
-- Remover o `PAYMENT_MAPPINGS` local (já duplicado nos `importAliases` da fonte única).
+```tsx
+<p className="text-xs text-muted-foreground mb-3 text-center">
+  Considera apenas despesas pagas com cartão de crédito ou débito.
+  PIX e Dinheiro não entram nesta soma.
+</p>
+```
 
-**`src/components/spreadsheet-import-sheet.tsx`** (linhas 282–286)
-- Substituir array literal `paymentMethods` por `PAYMENT_METHOD_LIST.map(m => ({ value: m.value, label: m.label }))` para incluir "Dinheiro" no select de edição da pré-visualização.
-- Não precisa mudar UI de erro: o componente já exibe `expense.errors` em vermelho na célula de descrição (linha 547). Usuário verá a mensagem clara e poderá trocar o select para o método correto.
+Também atualizar o subtítulo no header de `{cardData.length} cartões` para algo mais preciso quando há subdivisão — manter contagem de **cartões físicos únicos** (não de fatias do gráfico). Calcular no view-model como novo campo `uniqueCardCount`.
 
-### Exportação — usar paymentMethodLabel
+### 3. `src/services/pdf-export-service.ts` — espelhar UI
 
-**`src/pages/Settings.tsx`** (linhas 138–139, 147–148, 261–262)
-- Importar `paymentMethodLabel` da fonte única.
-- Trocar os 3 ternários por `paymentMethodLabel(exp.payment_method as PaymentMethod)`.
-- Para CSV linha 261–262 (que usa "Cartão" em vez de "Crédito"): manter texto idêntico ao atual usando `paymentMethodLabel` (que retornará "Crédito"/"Débito"/"PIX"/"Dinheiro"). Isto é uma melhoria deliberada: Crédito é mais preciso que "Cartão" (que poderia significar débito também).
-- Para o XLSX linhas 138–139 e 147–148 (que usa "Cartão de Crédito"/"Cartão de Débito"): manter os textos antigos via map local ou aceitar a normalização para os labels canônicos. **Decisão:** normalizar para os labels canônicos da fonte única (consistência total, sem fallback).
+Na seção 6 (linha 512), adicionar a mesma frase explicativa antes da legenda do donut, garantindo paridade total UI ↔ PDF (regra do projeto).
 
-### Billing — usar conceito de domínio
+## Lógica de cor para subdivisão crédito/débito
 
-**`src/pages/Index.tsx`** (linhas 1508 e 1833)
-- Trocar `expense.payment_method !== "credit"` por `!affectsCardBilling(expense.payment_method)`.
-- Adicionar import de `affectsCardBilling`.
-- Adicionar comentário curto: `// Modo fatura mostra apenas métodos que afetam billing de cartão`.
+Quando um cartão se divide em duas fatias:
+- **Crédito** mantém a cor original do cartão (`card.color`)
+- **Débito** usa a mesma cor com opacidade reduzida via mistura com `#000` 30% (helper simples de manipulação de hex)
 
-**`src/utils/billing-period.ts`, `src/utils/credit-card-spend.ts`, `src/utils/card-limit-view-model.ts`**
-- Manter as comparações `=== "credit"` (são corretas: a lógica de fatura/limite só se aplica a crédito; débito/PIX/cash são naturalmente excluídos).
-- Adicionar comentário `// Apenas crédito gera fatura/limite — outros métodos (debit/pix/cash) são naturalmente ignorados` em cada local.
+Isso preserva identidade visual do cartão e ainda permite distinguir os dois tipos no donut.
 
-## 3. Validação após edição
+## Casos de teste obrigatórios
 
-1. **Typecheck** via `tsc --noEmit` (verificar que nenhum `Record<PaymentMethod, X>` fechado quebrou).
-2. **Lint** via `eslint`.
-3. **Build** via `vite build`.
-4. **Smoke test manual** seguindo a checklist do plano original (criar cash, editar credit→cash limpa cartão+parcelas, filtro mostra Dinheiro, PDF/CSV mostra "Dinheiro", importação rejeita "carteira virtual" com erro claro, billing ignora cash).
+1. Cartão usado só em crédito → aparece como `"Smiles - Vivi"` (sem sufixo)
+2. Cartão usado em crédito + débito → aparece como duas fatias `"Banco do Brasil - Crédito"` e `"Banco do Brasil - Débito"`
+3. Despesa PIX/Dinheiro **não aparece** no gráfico (nem como "Sem cartão")
+4. Texto explicativo visível na UI e no PDF
+5. Período sem nenhuma despesa de cartão → bloco inteiro fica oculto (já tratado por `cardData.length > 0`)
+6. Subtítulo do accordion mostra **número de cartões físicos únicos**, não de fatias
 
-## 4. Fechamento entregue ao usuário
+## Arquivos alterados
 
-Ao final, devolverei mensagem com:
+1. `src/lib/payment-methods.ts` — novo helper `usesCard`
+2. `src/utils/report-view-model.ts` — refatoração do bloco `cardData` + novo campo `uniqueCardCount`
+3. `src/components/reports-accordion.tsx` — texto explicativo + subtítulo dinâmico
+4. `src/services/pdf-export-service.ts` — texto explicativo na seção 6
 
-1. **Lista exata de arquivos alterados** nesta passada (9) e os já alterados na primeira passada (referência).
-2. **Confirmação item-a-item** dos 6 pontos restantes do plano original.
-3. **Resultado de typecheck/lint/build** (saída literal dos comandos).
-4. **Checklist dos casos de teste obrigatórios** (marcado como ✅ verificado por inspeção de código + ⚠ requer teste manual no preview, com instrução clara do que testar).
-5. **Confirmação explícita** dos 5 invariantes:
-   - cash NÃO entra em billing/fatura (`affectsCardBilling("cash") === false`, comparações em `Index.tsx`/`billing-period.ts`/`credit-card-spend.ts`/`card-limit-view-model.ts` excluem cash).
-   - cash NÃO exige cartão (`requiresCard("cash") === false`, forms ocultam o campo, payload final grava `card_id: null`).
-   - cash NÃO permite parcelamento (`allowsInstallments("cash") === false`, forms ocultam parcelas, payload força `installments: 1`).
-   - Importação NÃO faz fallback silencioso (parser retorna `null` para alias desconhecido, linha vai para preview marcada como inválida com mensagem clara).
-   - PDF/CSV exibem "Dinheiro" (todos os ternários removidos, lookup via `paymentMethodLabel` da fonte única).
-
-## 5. Lista final de arquivos a alterar nesta passada
-
-1. `src/components/expense-summary.tsx`
-2. `src/components/expense-list.tsx`
-3. `src/components/transaction-detail-sheet.tsx`
-4. `src/components/recurring-expense-list.tsx`
-5. `src/components/compact-filter-bar.tsx`
-6. `src/components/expense-filters.tsx`
-7. `src/services/spreadsheet-import-service.ts`
-8. `src/components/spreadsheet-import-sheet.tsx`
-9. `src/pages/Settings.tsx`
-10. `src/pages/Index.tsx`
-11. `src/utils/billing-period.ts` (apenas comentários de documentação)
-12. `src/utils/credit-card-spend.ts` (apenas comentários de documentação)
-13. `src/utils/card-limit-view-model.ts` (apenas comentários de documentação)
-
-**Total nesta passada:** 10 arquivos modificados + 3 anotados com comentários de documentação. Nenhum arquivo novo, nenhuma migration adicional.
+**Total:** 4 arquivos. Sem migration, sem mudança de schema.
 
