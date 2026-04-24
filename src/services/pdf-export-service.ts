@@ -290,12 +290,32 @@ function createDualBarChartCanvas(
 const formatCurrency = (v: number) => `R$ ${v.toFixed(2).replace('.', ',')}`;
 
 const formatDeltaWithAbsolute = (delta: number | null, currentVal: number, previousVal: number): string => {
-  if (previousVal < 10) return "sem base";
+  if (previousVal === 0 && currentVal === 0) return "—";
+  if (previousVal === 0 && currentVal > 0) return `novo (+${formatCurrency(currentVal)})`;
   if (delta === null) return "—";
   const sign = delta >= 0 ? "+" : "-";
   const diff = currentVal - previousVal;
   const diffStr = diff >= 0 ? `+${formatCurrency(diff)}` : `-${formatCurrency(Math.abs(diff))}`;
   return `${sign}${Math.abs(delta).toFixed(0)}% (${diffStr})`;
+};
+
+const formatPreviousPeriodLabel = (
+  dates: { start: Date; end: Date } | null,
+  pType: PeriodType
+): string => {
+  if (!dates) return "";
+  const { start, end } = dates;
+  if (pType === "month") {
+    const m = start.toLocaleString('pt-BR', { month: 'short', year: 'numeric' });
+    return m.replace('.', '');
+  }
+  if (pType === "year") return String(start.getFullYear());
+  if (pType === "quarter") {
+    const q = Math.floor(start.getMonth() / 3) + 1;
+    return `Q${q}/${start.getFullYear()}`;
+  }
+  const fmt = (d: Date) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
+  return `${fmt(start)} - ${fmt(end)}`;
 };
 
 // ============ MAIN EXPORT ============
@@ -638,12 +658,19 @@ export async function exportReportsToPDF(params: ExportReportParams) {
   }
 
   // ============ SECTION 10: COMPARAÇÃO VS ANTERIOR ============
-  if (previousPeriodDates && (previousTotalExpenses > 0 || previousTotalIncomes > 0)) {
-    checkPageBreak(45);
+  if (previousPeriodDates) {
+    checkPageBreak(50);
+    const prevLabel = formatPreviousPeriodLabel(previousPeriodDates, periodType);
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('Comparação vs Período Anterior', 14, yPosition);
-    yPosition += 7;
+    yPosition += 5;
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(128);
+    doc.text(`Base: ${prevLabel}`, 14, yPosition);
+    doc.setTextColor(0);
+    yPosition += 5;
 
     const compData = [
       { label: 'Entradas', current: totalIncomes, previous: previousTotalIncomes, delta: incomeDelta },
@@ -653,7 +680,7 @@ export async function exportReportsToPDF(params: ExportReportParams) {
 
     autoTable(doc, {
       startY: yPosition,
-      head: [['', 'Atual', 'Anterior', 'Variação']],
+      head: [['', 'Atual', `Anterior (${prevLabel})`, 'Variação']],
       body: compData.map(item => [
         item.label,
         formatCurrency(item.current),
@@ -665,8 +692,8 @@ export async function exportReportsToPDF(params: ExportReportParams) {
       styles: { fontSize: 8 },
       columnStyles: {
         0: { fontStyle: 'bold', cellWidth: 30 },
-        1: { cellWidth: 45, halign: 'right' },
-        2: { cellWidth: 45, halign: 'right' },
+        1: { cellWidth: 40, halign: 'right' },
+        2: { cellWidth: 50, halign: 'right' },
         3: { cellWidth: 50 },
       },
       margin: { left: 14, right: 14 }
