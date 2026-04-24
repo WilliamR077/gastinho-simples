@@ -200,7 +200,7 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
 
   const balance = totalIncomes - totalPeriod;
 
-  // Previous period
+  // Previous period — abrange month, quarter, year e custom (all = sem comparação)
   let previousPeriodDates: { start: Date; end: Date } | null = null;
   if (periodType === "month") {
     const ps = subMonths(startDate, 1);
@@ -210,23 +210,80 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
     previousPeriodDates = { start: new Date(ps.getFullYear(), 0, 1), end: new Date(ps.getFullYear(), 11, 31) };
   } else if (periodType === "quarter") {
     const ps = subQuarters(startDate, 1);
-    previousPeriodDates = { start: startOfMonth(ps), end: endOfMonth(subMonths(startDate, 1)) };
+    const pe = subQuarters(endDate, 1);
+    previousPeriodDates = { start: startOfMonth(ps), end: endOfMonth(pe) };
+  } else if (periodType === "custom") {
+    const durationDays = differenceInDays(endDate, startDate);
+    const prevEnd = new Date(startDate);
+    prevEnd.setDate(prevEnd.getDate() - 1);
+    prevEnd.setHours(23, 59, 59, 999);
+    const prevStart = new Date(prevEnd);
+    prevStart.setDate(prevStart.getDate() - durationDays);
+    prevStart.setHours(0, 0, 0, 0);
+    previousPeriodDates = { start: prevStart, end: prevEnd };
   }
+
+  // Helper interno: replica EXATAMENTE a lógica usada para o período atual,
+  // incluindo competência de crédito e recorrentes — assim o "anterior" não diverge.
+  const computeTotalsForPeriod = (
+    pStart: Date,
+    pEnd: Date,
+    pType: PeriodType
+  ): { totalExpenses: number; totalIncomes: number } => {
+    const pStr = format(pStart, "yyyy-MM");
+    const monthsCount = eachMonthOfInterval({ start: pStart, end: pEnd }).length;
+    const rmLocal = pType === "month" ? 1 : monthsCount;
+
+    const expFiltered = expenses.filter(e => {
+      const d = parseLocalDate(e.expense_date);
+      if (e.payment_method === "credit" && e.card_id && cardsConfigMap.has(e.card_id)) {
+        const config = cardsConfigMap.get(e.card_id)!;
+        const billingPeriod = calculateBillingPeriod(d, config);
+        if (pType === "month") return billingPeriod === pStr;
+        const [bYear, bMonth] = billingPeriod.split("-").map(Number);
+        const billingDate = new Date(bYear, bMonth - 1, 1);
+        return billingDate >= startOfMonth(pStart) && billingDate <= endOfMonth(pEnd);
+      }
+      return d >= pStart && d <= pEnd;
+    });
+
+    const recExpFiltered = recurringExpenses.filter(re => {
+      if (!re.is_active && !re.end_date) return false;
+      const sd = re.start_date ? parseISO(re.start_date) : parseLocalDate(re.created_at);
+      const ed = re.end_date ? parseISO(re.end_date) : null;
+      return sd <= pEnd && (!ed || ed >= pStart);
+    });
+
+    const incFiltered = incomes.filter(i => {
+      const d = parseLocalDate(i.income_date);
+      return d >= pStart && d <= pEnd;
+    });
+
+    const recIncFiltered = recurringIncomes.filter(ri => {
+      if (!ri.is_active && !ri.end_date) return false;
+      const sd = ri.start_date ? parseISO(ri.start_date) : parseLocalDate(ri.created_at);
+      const ed = ri.end_date ? parseISO(ri.end_date) : null;
+      return sd <= pEnd && (!ed || ed >= pStart);
+    });
+
+    const totalExpenses = expFiltered.reduce((s, e) => s + Number(e.amount), 0)
+      + recExpFiltered.reduce((s, e) => s + Number(e.amount), 0) * rmLocal;
+    const totalIncomesLocal = incFiltered.reduce((s, i) => s + Number(i.amount), 0)
+      + recIncFiltered.reduce((s, i) => s + Number(i.amount), 0) * rmLocal;
+
+    return { totalExpenses, totalIncomes: totalIncomesLocal };
+  };
 
   let previousTotalExpenses = 0;
   let previousTotalIncomes = 0;
   if (previousPeriodDates) {
-    previousTotalExpenses = expenses.filter(e => {
-      const d = parseLocalDate(e.expense_date);
-      return d >= previousPeriodDates!.start && d <= previousPeriodDates!.end;
-    }).reduce((s, e) => s + Number(e.amount), 0);
-    previousTotalIncomes = incomes.filter(i => {
-      const d = parseLocalDate(i.income_date);
-      return d >= previousPeriodDates!.start && d <= previousPeriodDates!.end;
-    }).reduce((s, i) => s + Number(i.amount), 0);
+    const prevTotals = computeTotalsForPeriod(previousPeriodDates.start, previousPeriodDates.end, periodType);
+    previousTotalExpenses = prevTotals.totalExpenses;
+    previousTotalIncomes = prevTotals.totalIncomes;
   }
   const previousBalance = previousTotalIncomes - previousTotalExpenses;
 
+  // Delta apenas é null quando o valor anterior é exatamente 0 (sem base real)
   const expenseDelta = previousTotalExpenses > 0 ? ((totalPeriod - previousTotalExpenses) / previousTotalExpenses) * 100 : null;
   const incomeDelta = previousTotalIncomes > 0 ? ((totalIncomes - previousTotalIncomes) / previousTotalIncomes) * 100 : null;
   const balanceDelta = previousBalance !== 0 ? ((balance - previousBalance) / Math.abs(previousBalance)) * 100 : null;

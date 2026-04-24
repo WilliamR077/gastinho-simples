@@ -102,13 +102,27 @@ export function ReportsAccordion({
     return `${sign} ${Math.abs(delta).toFixed(0)}%`;
   };
   const formatDeltaWithAbsolute = (delta: number | null, currentVal: number, previousVal: number) => {
-    if (previousVal < 10) return "sem base";
+    if (previousVal === 0 && currentVal === 0) return "—";
+    if (previousVal === 0 && currentVal > 0) return "novo";
     if (delta === null) return null;
     const sign = delta >= 0 ? "↑" : "↓";
     const diff = currentVal - previousVal;
     const diffStr = diff >= 0 ? `+${formatCurrency(diff)}` : `-${formatCurrency(Math.abs(diff))}`;
     return `${sign} ${Math.abs(delta).toFixed(0)}% (${diffStr})`;
   };
+
+  // Rótulo do período anterior — ex.: "Mar/2026", "Q1/2026", "2025", "01/03 - 31/03"
+  const previousPeriodLabel = useMemo(() => {
+    if (!previousPeriodDates) return "";
+    const { start, end } = previousPeriodDates;
+    if (periodType === "month") return format(start, "MMM/yyyy");
+    if (periodType === "year") return format(start, "yyyy");
+    if (periodType === "quarter") {
+      const q = Math.floor(start.getMonth() / 3) + 1;
+      return `Q${q}/${start.getFullYear()}`;
+    }
+    return `${format(start, "dd/MM")} - ${format(end, "dd/MM")}`;
+  }, [previousPeriodDates, periodType]);
 
   const tooltipStyle = {
     contentStyle: { backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', color: 'hsl(var(--foreground))' },
@@ -484,14 +498,16 @@ export function ReportsAccordion({
         </AccordionItem>
 
         {/* === BLOCO 4A: Comparação com período anterior === */}
-        {previousPeriodDates && (previousTotalExpenses > 0 || previousTotalIncomes > 0) && (
+        {previousPeriodDates && (
           <AccordionItem value="comparison" className="border rounded-lg bg-card" data-onboarding="reports-comparison">
             <AccordionTrigger className="px-4 py-3 hover:no-underline">
               <div className="flex items-center gap-3">
                 <Target className="w-5 h-5 text-blue-500" />
                 <div className="text-left">
                   <span className="font-semibold">Comparação</span>
-                  <span className="text-xs text-muted-foreground block">vs período anterior</span>
+                  <span className="text-xs text-muted-foreground block">
+                    vs {previousPeriodLabel}
+                  </span>
                 </div>
               </div>
             </AccordionTrigger>
@@ -501,28 +517,38 @@ export function ReportsAccordion({
                   { label: "Entradas", current: totalIncomes, previous: previousTotalIncomes, delta: incomeDelta, goodUp: true },
                   { label: "Saídas", current: totalPeriod, previous: previousTotalExpenses, delta: expenseDelta, goodUp: false },
                   { label: "Saldo", current: balance, previous: previousBalance, delta: balanceDelta, goodUp: true },
-                ].map((item) => (
-                  <div key={item.label} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                    <div>
-                      <p className="text-xs text-muted-foreground">{item.label}</p>
-                      <p className="text-sm font-semibold">{formatCurrency(item.current)}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs text-muted-foreground">Anterior: {formatCurrency(item.previous)}</p>
-                      {item.previous >= 10 && item.delta !== null ? (
-                        <p className={`text-sm font-semibold ${
-                          item.goodUp 
-                            ? (item.delta >= 0 ? 'text-green-500' : 'text-red-500')
-                            : (item.delta <= 0 ? 'text-green-500' : 'text-red-500')
-                        }`}>
-                          {formatDeltaWithAbsolute(item.delta, item.current, item.previous)}
+                ].map((item) => {
+                  const isNew = item.previous === 0 && item.current > 0;
+                  const isEmpty = item.previous === 0 && item.current === 0;
+                  return (
+                    <div key={item.label} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                      <div>
+                        <p className="text-xs text-muted-foreground">{item.label}</p>
+                        <p className="text-sm font-semibold">{formatCurrency(item.current)}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-muted-foreground">
+                          Anterior ({previousPeriodLabel}): {formatCurrency(item.previous)}
                         </p>
-                      ) : item.previous < 10 && item.current > 0 ? (
-                        <p className="text-sm text-muted-foreground italic">sem base</p>
-                      ) : null}
+                        {isEmpty ? (
+                          <p className="text-sm text-muted-foreground">—</p>
+                        ) : isNew ? (
+                          <p className={`text-sm font-semibold ${item.goodUp ? 'text-green-500' : 'text-red-500'}`}>
+                            novo (+{formatCurrency(item.current)})
+                          </p>
+                        ) : item.delta !== null ? (
+                          <p className={`text-sm font-semibold ${
+                            item.goodUp 
+                              ? (item.delta >= 0 ? 'text-green-500' : 'text-red-500')
+                              : (item.delta <= 0 ? 'text-green-500' : 'text-red-500')
+                          }`}>
+                            {formatDeltaWithAbsolute(item.delta, item.current, item.previous)}
+                          </p>
+                        ) : null}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </AccordionContent>
           </AccordionItem>
