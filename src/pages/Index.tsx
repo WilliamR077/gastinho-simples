@@ -297,7 +297,25 @@ export default function Index() {
       if (error) throw error;
       
       let expensesWithSplits = data || [];
-      
+
+      // Defensive cleanup: filter out orphan installments (series without 1st installment)
+      const groupsWithFirst = new Set<string>();
+      for (const e of expensesWithSplits as any[]) {
+        if (e.installment_group_id && (e.installment_number ?? 1) === 1) {
+          groupsWithFirst.add(e.installment_group_id);
+        }
+      }
+      const orphanExpenses = (expensesWithSplits as any[]).filter(
+        (e) => e.installment_group_id && (e.installment_number ?? 1) > 1 && !groupsWithFirst.has(e.installment_group_id)
+      );
+      if (orphanExpenses.length > 0) {
+        const orphanIds = orphanExpenses.map((o) => o.id);
+        expensesWithSplits = (expensesWithSplits as any[]).filter((e) => !orphanIds.includes(e.id));
+        supabase.from("expenses").delete().in("id", orphanIds).then(({ error: delErr }) => {
+          if (delErr) console.error("Failed to clean orphan expense installments:", delErr);
+        });
+      }
+
       // Carregar splits para despesas compartilhadas
       const sharedIds = expensesWithSplits.filter((e: any) => e.is_shared).map((e: any) => e.id);
       if (sharedIds.length > 0) {
@@ -427,7 +445,27 @@ export default function Index() {
       const { data, error } = await query;
 
       if (error) throw error;
-      setIncomes((data || []) as Income[]);
+
+      // Defensive cleanup: filter out orphan installments (series without 1st installment)
+      const all = (data || []) as Income[];
+      const groupsWithFirst = new Set<string>();
+      for (const i of all) {
+        const gid = (i as any).installment_group_id;
+        if (gid && ((i as any).installment_number ?? 1) === 1) groupsWithFirst.add(gid);
+      }
+      const orphans = all.filter((i) => {
+        const gid = (i as any).installment_group_id;
+        return gid && ((i as any).installment_number ?? 1) > 1 && !groupsWithFirst.has(gid);
+      });
+      const cleaned = all.filter((i) => !orphans.includes(i));
+      setIncomes(cleaned);
+
+      if (orphans.length > 0) {
+        const orphanIds = orphans.map((o) => o.id);
+        supabase.from("incomes").delete().in("id", orphanIds).then(({ error: delErr }) => {
+          if (delErr) console.error("Failed to clean orphan income installments:", delErr);
+        });
+      }
     } catch (error) {
       console.error("Error loading incomes:", error);
     }
