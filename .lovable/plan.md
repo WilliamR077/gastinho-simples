@@ -1,59 +1,109 @@
 
 
-# Plano: Comparação sempre com base no período anterior
+# Plano: Agrupar parcelas no relatório "Maiores Gastos"
 
 ## Problema
 
-No relatório "Comparação" (página de Relatórios), todas as linhas mostram **"sem base"** porque o cálculo do período anterior:
+Em visualizações de **trimestre / ano / personalizado / todo o histórico**, o Top 10 fica poluído por parcelas individuais da mesma compra (ex: "Notebook 1/8", "Notebook 2/8", "Notebook 3/8"…), distorcendo o ranking — o usuário vê o mesmo notebook ocupando várias posições em vez de ver suas compras realmente maiores.
 
-1. **Ignora despesas e entradas fixas** (recorrentes) — só soma `expenses`/`incomes` regulares. Como o usuário tem 3 entradas fixas no dia 5, o `previousTotalIncomes` fica em R$ 0,00 e cai na regra `< 10` → "sem base".
-2. **Ignora competência de cartão de crédito** (billing period) na soma anterior, divergindo da soma atual.
-3. **Não suporta `custom` nem `all`**: `previousPeriodDates` fica `null` para esses tipos, então não há comparação.
-4. **Threshold artificial de R$ 10**: `if (previousVal < 10) return "sem base"` — esconde a base mesmo quando ela existe e é pequena (ex.: R$ 3,00 anterior é base válida).
+Na visualização **mensal**, faz sentido manter a parcela individual, pois representa o impacto real daquele mês.
 
 ## Solução
 
-### 1. `src/utils/report-view-model.ts` — recalcular período anterior corretamente
+Comportamento **dependente do período**:
 
-Substituir o bloco `// Previous period` (linhas 203–232) por uma versão que:
+- **`month`** → mantém como está hoje (parcela individual, ex: "Notebook (3/8)" R$ 320,52).
+- **`quarter` / `year` / `custom` / `all`** → agrupar parcelas que pertencem ao mesmo `installment_group_id` em uma única linha, somando os valores das parcelas **que caem dentro do período selecionado**.
 
-**a) Define `previousPeriodDates` para todos os tipos:**
-- `month` → mês anterior (já feito).
-- `quarter` → 3 meses anteriores ao quarter atual (corrigir cálculo: hoje pega "mês anterior ao início" como fim, o que distorce; usar `subQuarters(startDate, 1)` como início e o último dia desse trimestre como fim).
-- `year` → ano anterior completo (já feito).
-- `custom` → mesma duração em dias deslocada para trás: `prevEnd = startDate - 1 dia`, `prevStart = prevEnd - (endDate - startDate)`.
-- `all` → sem período anterior (manter `null`); a UI dirá "Todo o histórico" sem comparação (caso legítimo).
+### Formato da linha agrupada
 
-**b) Inclui recorrentes e respeita competência de crédito**, espelhando exatamente a lógica de `filteredExpenses`/`filteredIncomes`/`filteredRecurringExpenses`/`filteredRecurringIncomes` (incluindo `usesCard`/billing period). Extrair em uma função helper interna `computeTotalsForPeriod(start, end, periodType)` que retorna `{ totalExpenses, totalIncomes }` e usar tanto para o período atual quanto anterior — isso elimina divergências futuras.
+- **Descrição**: nome base sem o "(x/y)" + sufixo `(Nx)` indicando quantas parcelas foram somadas naquele período.
+  - Ex: `"Notebook (3 parcelas)"`
+- **Subtítulo (linha 2)**: range de datas das parcelas somadas.
+  - Ex: `"01/04 → 01/06"` (primeira parcela até última no período)
+- **Valor**: soma das parcelas dentro do período.
+- **Tooltip / disclaimer**: badge ou texto pequeno indicando "x de N parcelas" para deixar claro que pode haver mais parcelas fora do período.
+  - Ex: `"3 de 8 parcelas no período"`
 
-**c) Mantém `xxxDelta` como `null` apenas quando o valor anterior é exatamente 0** (não mais `< 10`). Quando há base mínima real, calcular o percentual.
+Despesas avulsas (sem `installment_group_id`) e fixas (recorrentes) seguem inalteradas.
 
-### 2. `src/components/reports-accordion.tsx` — remover threshold de 10 e melhorar fallback
+Se o grupo de parcelas tem **apenas 1 parcela** dentro do período, exibir como linha normal (sem agrupamento), pois agrupar 1 item não agrega valor.
 
-- `formatDeltaWithAbsolute` (linha 104): trocar `if (previousVal < 10) return "sem base"` por `if (previousVal === 0 && currentVal === 0) return "—"` e `if (previousVal === 0 && currentVal > 0) return "novo"` (rótulo positivo: "começou agora", em vez de "sem base").
-- Linha 520: remover a checagem `item.previous < 10 && item.current > 0`. Mostrar sempre o delta (ou "novo" quando `previous === 0`).
-- Adicionar exibição do **rótulo do período anterior** ao lado de "Anterior: R$ X,XX" (ex.: "Anterior (Mar/2026): R$ 1.000,00") para deixar claro qual é a base sendo comparada. Calcular esse label a partir de `previousPeriodDates` + `periodType`.
+## Mudanças
 
-### 3. `src/services/pdf-export-service.ts` — espelhar UI
+### 1. `src/utils/report-view-model.ts`
 
-- Aplicar mesma mudança em `formatDeltaWithAbsolute` (linha 292).
-- Incluir rótulo do período anterior na seção de comparação para paridade total UI ↔ PDF.
+**a) Estender `TopExpenseItem`:**
+```ts
+type TopExpenseItem = {
+  description: string;
+  amount: number;
+  date: string;
+  type: 'expense' | 'recurring' | 'installment-group';
+  dayOfMonth?: number;
+  // novos campos para grupos de parcelas:
+  installmentsInPeriod?: number;
+  totalInstallments?: number;
+  dateRange?: { start: string; end: string };
+};
+```
 
-## Casos de teste obrigatórios
+**b) Refatorar bloco "Top expenses" (linhas 518–522):**
 
-1. Mês atual com entradas fixas → linha "Entradas" mostra delta vs mês anterior (não mais "sem base").
-2. Trimestre → comparação correta com trimestre anterior (3 meses).
-3. Ano → comparação com ano anterior completo.
-4. Custom (ex.: 10 dias) → comparação com 10 dias anteriores ao início selecionado.
-5. "Todo o histórico" → bloco de comparação oculto ou exibe "—" (sem comparação aplicável).
-6. Período anterior com 0 e atual com valor → mostra "novo" em vez de "sem base".
-7. Despesas de crédito do período anterior caem na competência correta (mesma lógica do atual).
+- Se `periodType === 'month'`: manter lógica atual.
+- Senão:
+  1. Separar `filteredExpenses` em:
+     - **avulsas** (sem `installment_group_id`)
+     - **parceladas** (com `installment_group_id`)
+  2. Agrupar parceladas por `installment_group_id`, somando `amount`, contando parcelas, capturando `min(expense_date)` e `max(expense_date)` e usando `total_installments` da primeira para o "x de N".
+  3. Para grupos com 1 parcela no período → tratar como avulsa (manter descrição original com "(x/y)" para clareza).
+  4. Para grupos com 2+ parcelas → criar item `type: 'installment-group'` com descrição base limpa (remover sufixo `"(n/m)"` via regex `/\s*\(\d+\/\d+\)\s*$/`) e adicionar `(Nx parcelas)`.
+  5. Concatenar avulsas + grupos + recorrentes, ordenar por `amount` desc, slice(10).
+
+### 2. `src/components/reports-accordion.tsx` (linhas 477–496)
+
+Atualizar render do item para suportar o novo tipo:
+
+```tsx
+<p className="text-xs text-muted-foreground">
+  {e.type === 'recurring' && `Fixa • Dia ${e.dayOfMonth}`}
+  {e.type === 'expense' && format(parseLocalDate(e.date), "dd/MM")}
+  {e.type === 'installment-group' && (
+    <>
+      {format(parseLocalDate(e.dateRange!.start), "dd/MM")} → {format(parseLocalDate(e.dateRange!.end), "dd/MM")}
+      <span className="ml-1 text-[10px] opacity-75">
+        ({e.installmentsInPeriod} de {e.totalInstallments} parcelas)
+      </span>
+    </>
+  )}
+</p>
+```
+
+Adicionar disclaimer geral no topo do accordion (apenas quando `periodType !== 'month'` e existir algum grupo agrupado):
+```tsx
+<p className="text-xs text-muted-foreground mb-3">
+  Compras parceladas são somadas pelas parcelas que caem neste período.
+</p>
+```
+
+### 3. `src/services/pdf-export-service.ts` (linhas 624–657)
+
+Espelhar a UI: na coluna "Data", mostrar o range para `installment-group` e adicionar a contagem `"(3 de 8)"` na descrição. Manter mesmo disclaimer logo acima da tabela.
+
+## Casos de teste
+
+1. **Mês de abril** com parcela 1/8 do Notebook → aparece como hoje: `"Notebook (1/8) — 01/04 — R$ 320,52"`.
+2. **Ano 2026** com 8 parcelas do Notebook (todas no ano) → uma única linha: `"Notebook (8 parcelas) — 01/04 → 01/11 — R$ 2.564,16 — (8 de 8)"` no topo do ranking.
+3. **Trimestre Q2/2026** com parcelas 1, 2 e 3 → `"Notebook (3 parcelas) — 01/04 → 01/06 — R$ 961,56 — (3 de 8)"`.
+4. **Custom 1/4 → 30/4** com só parcela 1 → linha normal sem agrupamento (mantém "1/8").
+5. Despesas fixas e avulsas continuam aparecendo igual.
+6. Top 10 nunca mostra a mesma compra parcelada duplicada em períodos > mês.
 
 ## Arquivos alterados
 
-1. `src/utils/report-view-model.ts` — refatorar bloco do período anterior + helper interno + suporte a custom.
-2. `src/components/reports-accordion.tsx` — remover threshold, adicionar rótulo do período base, mudar fallback.
-3. `src/services/pdf-export-service.ts` — espelhar UI.
+1. `src/utils/report-view-model.ts` — agrupamento + novo tipo no `TopExpenseItem`.
+2. `src/components/reports-accordion.tsx` — render condicional + disclaimer.
+3. `src/services/pdf-export-service.ts` — paridade com UI.
 
 **Total:** 3 arquivos. Sem migration, sem mudança de schema.
 
