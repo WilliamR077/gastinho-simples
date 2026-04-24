@@ -1,81 +1,59 @@
 
 
-# Plano: Refinar relatório "Gastos por Cartão"
+# Plano: Comparação sempre com base no período anterior
 
-## Problema atual
-O gráfico inclui despesas PIX/Dinheiro (sem cartão) na categoria "Sem cartão", o que distorce o relatório — ele deveria refletir **apenas gastos em cartões**. Além disso, um mesmo cartão físico pode ser usado tanto em crédito quanto débito (ex: Banco do Brasil), e hoje aparece agrupado em uma única fatia.
+## Problema
 
-## Decisão recomendada (responde à pergunta do usuário)
+No relatório "Comparação" (página de Relatórios), todas as linhas mostram **"sem base"** porque o cálculo do período anterior:
 
-Vou recomendar a **opção 1 (Cartão + tipo)** ao invés de filtrar só crédito, porque:
-- Preserva visibilidade do débito (que também é cartão e gera gasto real)
-- Separa "Banco do Brasil - Crédito" de "Banco do Brasil - Débito" como o usuário pediu
-- Não esconde dados — apenas reorganiza
-- "Só crédito" perderia gastos legítimos de cartão e seria mais restritivo que o título sugere
+1. **Ignora despesas e entradas fixas** (recorrentes) — só soma `expenses`/`incomes` regulares. Como o usuário tem 3 entradas fixas no dia 5, o `previousTotalIncomes` fica em R$ 0,00 e cai na regra `< 10` → "sem base".
+2. **Ignora competência de cartão de crédito** (billing period) na soma anterior, divergindo da soma atual.
+3. **Não suporta `custom` nem `all`**: `previousPeriodDates` fica `null` para esses tipos, então não há comparação.
+4. **Threshold artificial de R$ 10**: `if (previousVal < 10) return "sem base"` — esconde a base mesmo quando ela existe e é pequena (ex.: R$ 3,00 anterior é base válida).
 
-A subdivisão crédito/débito **só aparece quando o mesmo cartão tem gastos nos dois tipos**. Cartão usado só em crédito mantém o nome simples ("Smiles - Vivi"), sem sufixo desnecessário.
+## Solução
 
-## Mudanças
+### 1. `src/utils/report-view-model.ts` — recalcular período anterior corretamente
 
-### 1. `src/utils/report-view-model.ts` — recalcular `cardData`
+Substituir o bloco `// Previous period` (linhas 203–232) por uma versão que:
 
-Refatorar o bloco `// Card data` (linhas 299–328):
+**a) Define `previousPeriodDates` para todos os tipos:**
+- `month` → mês anterior (já feito).
+- `quarter` → 3 meses anteriores ao quarter atual (corrigir cálculo: hoje pega "mês anterior ao início" como fim, o que distorce; usar `subQuarters(startDate, 1)` como início e o último dia desse trimestre como fim).
+- `year` → ano anterior completo (já feito).
+- `custom` → mesma duração em dias deslocada para trás: `prevEnd = startDate - 1 dia`, `prevStart = prevEnd - (endDate - startDate)`.
+- `all` → sem período anterior (manter `null`); a UI dirá "Todo o histórico" sem comparação (caso legítimo).
 
-- **Excluir** despesas com `payment_method === 'pix' | 'cash'` do agrupamento (usar helper `affectsCardBilling` não serve aqui porque débito também não afeta billing; usar lista explícita ou novo helper `usesCard(method)` que retorna `true` para credit/debit).
-- **Remover** a entrada `'no-card'` do mapa inicial — não faz mais sentido.
-- Agrupar por chave composta `${card_id}::${payment_method}` ao acumular.
-- Após o agrupamento, para cada `card_id`, contar quantos tipos distintos (crédito/débito) tem:
-  - Se **2 tipos** → nome final = `"${card.name} - Crédito"` e `"${card.name} - Débito"`, cores ligeiramente diferenciadas (cor base do cartão + opacidade/shade para débito)
-  - Se **1 tipo** → nome final = `card.name` (sem sufixo)
-- Ignorar despesas com `card_id` vazio mas `payment_method === 'credit' | 'debit'` (caso edge — sinal de dado inconsistente; logar `console.warn` e não somar).
+**b) Inclui recorrentes e respeita competência de crédito**, espelhando exatamente a lógica de `filteredExpenses`/`filteredIncomes`/`filteredRecurringExpenses`/`filteredRecurringIncomes` (incluindo `usesCard`/billing period). Extrair em uma função helper interna `computeTotalsForPeriod(start, end, periodType)` que retorna `{ totalExpenses, totalIncomes }` e usar tanto para o período atual quanto anterior — isso elimina divergências futuras.
 
-Adicionar novo helper em `src/lib/payment-methods.ts`:
-```ts
-export function usesCard(method: PaymentMethod): boolean {
-  return method === 'credit' || method === 'debit';
-}
-```
+**c) Mantém `xxxDelta` como `null` apenas quando o valor anterior é exatamente 0** (não mais `< 10`). Quando há base mínima real, calcular o percentual.
 
-### 2. `src/components/reports-accordion.tsx` — adicionar texto explicativo
+### 2. `src/components/reports-accordion.tsx` — remover threshold de 10 e melhorar fallback
 
-No bloco "Gastos por Cartão" (linhas 312–350), adicionar logo abaixo do `AccordionContent`, antes do gráfico:
-
-```tsx
-<p className="text-xs text-muted-foreground mb-3 text-center">
-  Considera apenas despesas pagas com cartão de crédito ou débito.
-  PIX e Dinheiro não entram nesta soma.
-</p>
-```
-
-Também atualizar o subtítulo no header de `{cardData.length} cartões` para algo mais preciso quando há subdivisão — manter contagem de **cartões físicos únicos** (não de fatias do gráfico). Calcular no view-model como novo campo `uniqueCardCount`.
+- `formatDeltaWithAbsolute` (linha 104): trocar `if (previousVal < 10) return "sem base"` por `if (previousVal === 0 && currentVal === 0) return "—"` e `if (previousVal === 0 && currentVal > 0) return "novo"` (rótulo positivo: "começou agora", em vez de "sem base").
+- Linha 520: remover a checagem `item.previous < 10 && item.current > 0`. Mostrar sempre o delta (ou "novo" quando `previous === 0`).
+- Adicionar exibição do **rótulo do período anterior** ao lado de "Anterior: R$ X,XX" (ex.: "Anterior (Mar/2026): R$ 1.000,00") para deixar claro qual é a base sendo comparada. Calcular esse label a partir de `previousPeriodDates` + `periodType`.
 
 ### 3. `src/services/pdf-export-service.ts` — espelhar UI
 
-Na seção 6 (linha 512), adicionar a mesma frase explicativa antes da legenda do donut, garantindo paridade total UI ↔ PDF (regra do projeto).
-
-## Lógica de cor para subdivisão crédito/débito
-
-Quando um cartão se divide em duas fatias:
-- **Crédito** mantém a cor original do cartão (`card.color`)
-- **Débito** usa a mesma cor com opacidade reduzida via mistura com `#000` 30% (helper simples de manipulação de hex)
-
-Isso preserva identidade visual do cartão e ainda permite distinguir os dois tipos no donut.
+- Aplicar mesma mudança em `formatDeltaWithAbsolute` (linha 292).
+- Incluir rótulo do período anterior na seção de comparação para paridade total UI ↔ PDF.
 
 ## Casos de teste obrigatórios
 
-1. Cartão usado só em crédito → aparece como `"Smiles - Vivi"` (sem sufixo)
-2. Cartão usado em crédito + débito → aparece como duas fatias `"Banco do Brasil - Crédito"` e `"Banco do Brasil - Débito"`
-3. Despesa PIX/Dinheiro **não aparece** no gráfico (nem como "Sem cartão")
-4. Texto explicativo visível na UI e no PDF
-5. Período sem nenhuma despesa de cartão → bloco inteiro fica oculto (já tratado por `cardData.length > 0`)
-6. Subtítulo do accordion mostra **número de cartões físicos únicos**, não de fatias
+1. Mês atual com entradas fixas → linha "Entradas" mostra delta vs mês anterior (não mais "sem base").
+2. Trimestre → comparação correta com trimestre anterior (3 meses).
+3. Ano → comparação com ano anterior completo.
+4. Custom (ex.: 10 dias) → comparação com 10 dias anteriores ao início selecionado.
+5. "Todo o histórico" → bloco de comparação oculto ou exibe "—" (sem comparação aplicável).
+6. Período anterior com 0 e atual com valor → mostra "novo" em vez de "sem base".
+7. Despesas de crédito do período anterior caem na competência correta (mesma lógica do atual).
 
 ## Arquivos alterados
 
-1. `src/lib/payment-methods.ts` — novo helper `usesCard`
-2. `src/utils/report-view-model.ts` — refatoração do bloco `cardData` + novo campo `uniqueCardCount`
-3. `src/components/reports-accordion.tsx` — texto explicativo + subtítulo dinâmico
-4. `src/services/pdf-export-service.ts` — texto explicativo na seção 6
+1. `src/utils/report-view-model.ts` — refatorar bloco do período anterior + helper interno + suporte a custom.
+2. `src/components/reports-accordion.tsx` — remover threshold, adicionar rótulo do período base, mudar fallback.
+3. `src/services/pdf-export-service.ts` — espelhar UI.
 
-**Total:** 4 arquivos. Sem migration, sem mudança de schema.
+**Total:** 3 arquivos. Sem migration, sem mudança de schema.
 
