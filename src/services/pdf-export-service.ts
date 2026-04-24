@@ -632,17 +632,39 @@ export async function exportReportsToPDF(params: ExportReportParams) {
     doc.setTextColor(128);
     doc.text('Top 10 do período', 52, yPosition);
     doc.setTextColor(0);
-    yPosition += 7;
+    yPosition += 5;
+
+    const hasInstallmentGroup = topExpenses.some(e => e.type === 'installment-group');
+    if (hasInstallmentGroup) {
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'italic');
+      doc.setTextColor(100);
+      doc.text('* Compras parceladas são somadas pelas parcelas que caem neste período.', 14, yPosition);
+      doc.setTextColor(0);
+      doc.setFont('helvetica', 'normal');
+      yPosition += 4;
+    }
+    yPosition += 2;
 
     autoTable(doc, {
       startY: yPosition,
       head: [['#', 'Descrição', 'Data', 'Valor']],
-      body: topExpenses.map((e, i) => [
-        `${i + 1}`,
-        e.description.length > 35 ? e.description.substring(0, 35) + '...' : e.description,
-        e.type === 'recurring' ? `Fixa • Dia ${e.dayOfMonth}` : format(parseLocalDate(e.date), "dd/MM"),
-        formatCurrency(e.amount),
-      ]),
+      body: topExpenses.map((e, i) => {
+        let dateCell: string;
+        if (e.type === 'recurring') {
+          dateCell = `Fixa • Dia ${e.dayOfMonth}`;
+        } else if (e.type === 'installment-group' && e.dateRange) {
+          dateCell = `${format(parseLocalDate(e.dateRange.start), "dd/MM")} → ${format(parseLocalDate(e.dateRange.end), "dd/MM")} (${e.installmentsInPeriod}/${e.totalInstallments})`;
+        } else {
+          dateCell = format(parseLocalDate(e.date), "dd/MM");
+        }
+        return [
+          `${i + 1}`,
+          e.description.length > 35 ? e.description.substring(0, 35) + '...' : e.description,
+          dateCell,
+          formatCurrency(e.amount),
+        ];
+      }),
       theme: 'striped',
       headStyles: { fillColor: [234, 179, 8], textColor: [0, 0, 0], fontSize: 8 },
       styles: { fontSize: 8 },

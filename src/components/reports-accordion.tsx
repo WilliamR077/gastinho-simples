@@ -476,15 +476,27 @@ export function ReportsAccordion({
           <AccordionContent className="px-4 pb-4">
             {topExpenses.length > 0 ? (
               <div className="space-y-2">
+                {periodType !== 'month' && topExpenses.some(e => e.type === 'installment-group') && (
+                  <p className="text-xs text-muted-foreground mb-2 italic">
+                    Compras parceladas são somadas pelas parcelas que caem neste período.
+                  </p>
+                )}
                 {topExpenses.map((e, i) => (
                   <div key={i} className="flex items-center gap-3 p-2 rounded-lg bg-muted/50">
                     <span className="text-xs font-bold text-muted-foreground w-5 text-center">{i + 1}</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{e.description}</p>
                       <p className="text-xs text-muted-foreground">
-                        {e.type === 'recurring' 
-                          ? `Fixa • Dia ${e.dayOfMonth}` 
-                          : format(parseLocalDate(e.date), "dd/MM")}
+                        {e.type === 'recurring' && `Fixa • Dia ${e.dayOfMonth}`}
+                        {e.type === 'expense' && format(parseLocalDate(e.date), "dd/MM")}
+                        {e.type === 'installment-group' && e.dateRange && (
+                          <>
+                            {format(parseLocalDate(e.dateRange.start), "dd/MM")} → {format(parseLocalDate(e.dateRange.end), "dd/MM")}
+                            <span className="ml-1 text-[10px] opacity-75">
+                              ({e.installmentsInPeriod} de {e.totalInstallments} parcelas)
+                            </span>
+                          </>
+                        )}
                       </p>
                     </div>
                     <span className="text-sm font-semibold text-red-500 whitespace-nowrap">{formatCurrency(e.amount)}</span>
