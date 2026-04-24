@@ -56,8 +56,12 @@ export interface TopExpenseItem {
   description: string;
   amount: number;
   date: string;
-  type: 'expense' | 'recurring';
+  type: 'expense' | 'recurring' | 'installment-group';
   dayOfMonth: number | undefined;
+  // Campos opcionais para grupos de parcelas (em períodos > mês)
+  installmentsInPeriod?: number;
+  totalInstallments?: number;
+  dateRange?: { start: string; end: string };
 }
 
 interface GroupMember {
@@ -515,10 +519,102 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
   const days = differenceInDays(endDate, startDate) + 1;
   const dailyAverage = days > 0 ? totalPeriod / days : 0;
 
-  // Top expenses
+  // Top expenses — agrupa parcelas em visões > mês para evitar poluição do ranking
+  const stripInstallmentSuffix = (s: string) => s.replace(/\s*\(\d+\/\d+\)\s*$/, '').trim();
+  let topExpenseItems: TopExpenseItem[] = [];
+
+  if (periodType === "month") {
+    // Visão mensal: cada parcela conta individualmente (impacto real do mês)
+    topExpenseItems = filteredExpenses.map(e => ({
+      description: e.description,
+      amount: Number(e.amount),
+      date: e.expense_date,
+      type: 'expense' as const,
+      dayOfMonth: undefined,
+    }));
+  } else {
+    // Visões maiores: agrupa parcelas do mesmo installment_group_id
+    const standalone: TopExpenseItem[] = [];
+    const groupsMap: Record<string, {
+      description: string;
+      amount: number;
+      count: number;
+      totalInstallments: number;
+      minDate: string;
+      maxDate: string;
+      sampleDate: string;
+    }> = {};
+
+    filteredExpenses.forEach(e => {
+      if (!e.installment_group_id) {
+        standalone.push({
+          description: e.description,
+          amount: Number(e.amount),
+          date: e.expense_date,
+          type: 'expense' as const,
+          dayOfMonth: undefined,
+        });
+        return;
+      }
+      const gid = e.installment_group_id;
+      if (!groupsMap[gid]) {
+        groupsMap[gid] = {
+          description: stripInstallmentSuffix(e.description),
+          amount: 0,
+          count: 0,
+          totalInstallments: e.total_installments || 0,
+          minDate: e.expense_date,
+          maxDate: e.expense_date,
+          sampleDate: e.expense_date,
+        };
+      }
+      const g = groupsMap[gid];
+      g.amount += Number(e.amount);
+      g.count += 1;
+      if (e.total_installments && e.total_installments > g.totalInstallments) {
+        g.totalInstallments = e.total_installments;
+      }
+      if (e.expense_date < g.minDate) g.minDate = e.expense_date;
+      if (e.expense_date > g.maxDate) g.maxDate = e.expense_date;
+    });
+
+    Object.values(groupsMap).forEach(g => {
+      if (g.count <= 1) {
+        // Apenas 1 parcela no período → trata como avulsa (mantém descrição original com "x/y")
+        const original = filteredExpenses.find(e => e.expense_date === g.sampleDate && stripInstallmentSuffix(e.description) === g.description);
+        standalone.push({
+          description: original?.description || g.description,
+          amount: g.amount,
+          date: g.sampleDate,
+          type: 'expense' as const,
+          dayOfMonth: undefined,
+        });
+      } else {
+        standalone.push({
+          description: `${g.description} (${g.count} parcelas)`,
+          amount: g.amount,
+          date: g.minDate,
+          type: 'installment-group' as const,
+          dayOfMonth: undefined,
+          installmentsInPeriod: g.count,
+          totalInstallments: g.totalInstallments || g.count,
+          dateRange: { start: g.minDate, end: g.maxDate },
+        });
+      }
+    });
+
+    topExpenseItems = standalone;
+  }
+
   const topExpenses: TopExpenseItem[] = [
-    ...filteredExpenses.map(e => ({ description: e.description, amount: Number(e.amount), date: e.expense_date, type: 'expense' as const, dayOfMonth: undefined as number | undefined })),
-    ...filteredRecurringExpenses.map(r => ({ description: r.description, amount: Number(r.amount), date: '', type: 'recurring' as const, dayOfMonth: r.day_of_month })),
+    ...topExpenseItems,
+    ...filteredRecurringExpenses.map(r => ({
+      description: r.description,
+      amount: Number(r.amount) * rm,
+      date: '',
+      type: 'recurring' as const,
+      dayOfMonth: r.day_of_month,
+    })),
   ].sort((a, b) => b.amount - a.amount).slice(0, 10);
 
   return {
