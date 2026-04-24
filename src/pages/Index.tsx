@@ -297,7 +297,25 @@ export default function Index() {
       if (error) throw error;
       
       let expensesWithSplits = data || [];
-      
+
+      // Defensive cleanup: filter out orphan installments (series without 1st installment)
+      const groupsWithFirst = new Set<string>();
+      for (const e of expensesWithSplits as any[]) {
+        if (e.installment_group_id && (e.installment_number ?? 1) === 1) {
+          groupsWithFirst.add(e.installment_group_id);
+        }
+      }
+      const orphanExpenses = (expensesWithSplits as any[]).filter(
+        (e) => e.installment_group_id && (e.installment_number ?? 1) > 1 && !groupsWithFirst.has(e.installment_group_id)
+      );
+      if (orphanExpenses.length > 0) {
+        const orphanIds = orphanExpenses.map((o) => o.id);
+        expensesWithSplits = (expensesWithSplits as any[]).filter((e) => !orphanIds.includes(e.id));
+        supabase.from("expenses").delete().in("id", orphanIds).then(({ error: delErr }) => {
+          if (delErr) console.error("Failed to clean orphan expense installments:", delErr);
+        });
+      }
+
       // Carregar splits para despesas compartilhadas
       const sharedIds = expensesWithSplits.filter((e: any) => e.is_shared).map((e: any) => e.id);
       if (sharedIds.length > 0) {
