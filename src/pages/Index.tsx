@@ -427,7 +427,27 @@ export default function Index() {
       const { data, error } = await query;
 
       if (error) throw error;
-      setIncomes((data || []) as Income[]);
+
+      // Defensive cleanup: filter out orphan installments (series without 1st installment)
+      const all = (data || []) as Income[];
+      const groupsWithFirst = new Set<string>();
+      for (const i of all) {
+        const gid = (i as any).installment_group_id;
+        if (gid && ((i as any).installment_number ?? 1) === 1) groupsWithFirst.add(gid);
+      }
+      const orphans = all.filter((i) => {
+        const gid = (i as any).installment_group_id;
+        return gid && ((i as any).installment_number ?? 1) > 1 && !groupsWithFirst.has(gid);
+      });
+      const cleaned = all.filter((i) => !orphans.includes(i));
+      setIncomes(cleaned);
+
+      if (orphans.length > 0) {
+        const orphanIds = orphans.map((o) => o.id);
+        supabase.from("incomes").delete().in("id", orphanIds).then(({ error: delErr }) => {
+          if (delErr) console.error("Failed to clean orphan income installments:", delErr);
+        });
+      }
     } catch (error) {
       console.error("Error loading incomes:", error);
     }
