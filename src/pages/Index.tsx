@@ -1665,7 +1665,44 @@ export default function Index() {
 
   // Filtrar despesas recorrentes baseado nos filtros aplicados
   const filteredRecurringExpenses = useMemo(() => {
+    const selectedMonth = format(currentMonth, "yyyy-MM");
+    const [yStr, mStr] = selectedMonth.split("-");
+    const year = Number(yStr);
+    const monthIdx = Number(mStr) - 1;
+
     return recurringExpenses.filter((expense) => {
+      // In billing mode, only methods that affect card billing are shown
+      if (viewMode === "billing") {
+        if (!affectsCardBilling(expense.payment_method)) return false;
+        if (billingCardId && expense.card_id !== billingCardId) return false;
+
+        let config: CreditCardConfig | undefined;
+        if (expense.card_id && cardsConfigMap.has(expense.card_id)) {
+          config = cardsConfigMap.get(expense.card_id);
+        } else if (creditCardConfig) {
+          config = creditCardConfig;
+        }
+        if (config) {
+          // Verifica se o dia da despesa fixa, em algum mês próximo, cai
+          // na fatura selecionada. Testamos mês anterior, atual e próximo
+          // para cobrir cartões cujo período de fatura cruza o virar do mês.
+          const day = expense.day_of_month;
+          const candidates = [-1, 0, 1].map((offset) => {
+            const m = monthIdx + offset;
+            const y = year + Math.floor(m / 12);
+            const mm = ((m % 12) + 12) % 12;
+            const lastDay = new Date(y, mm + 1, 0).getDate();
+            return new Date(y, mm, Math.min(day, lastDay), 12, 0, 0);
+          });
+          const matches = candidates.some(
+            (d) => calculateBillingPeriod(d, config!) === selectedMonth
+          );
+          if (!matches) return false;
+        } else {
+          return false;
+        }
+      }
+
       if (filters.description) {
         if (!expense.description.toLowerCase().includes(filters.description.toLowerCase())) {
           return false;
@@ -1683,9 +1720,35 @@ export default function Index() {
       if (filters.cardId && expense.card_id !== filters.cardId) {
         return false;
       }
+
+      // Billing period filter (only in calendar mode) — same as expenses
+      if (viewMode === "calendar" && filters.billingPeriod && creditCardConfig) {
+        if (!affectsCardBilling(expense.payment_method)) return false;
+        let config: CreditCardConfig | undefined =
+          expense.card_id && cardsConfigMap.has(expense.card_id)
+            ? cardsConfigMap.get(expense.card_id)
+            : creditCardConfig;
+        if (!config) return false;
+        const [byStr, bmStr] = filters.billingPeriod.split("-");
+        const by = Number(byStr);
+        const bmIdx = Number(bmStr) - 1;
+        const day = expense.day_of_month;
+        const candidates = [-1, 0, 1].map((offset) => {
+          const m = bmIdx + offset;
+          const y = by + Math.floor(m / 12);
+          const mm = ((m % 12) + 12) % 12;
+          const lastDay = new Date(y, mm + 1, 0).getDate();
+          return new Date(y, mm, Math.min(day, lastDay), 12, 0, 0);
+        });
+        const matches = candidates.some(
+          (d) => calculateBillingPeriod(d, config!) === filters.billingPeriod
+        );
+        if (!matches) return false;
+      }
+
       return true;
     });
-  }, [recurringExpenses, filters]);
+  }, [recurringExpenses, filters, viewMode, currentMonth, billingCardId, cardsConfigMap, creditCardConfig]);
 
   // Helper: testa se uma despesa pertence à categoria ativa.
   // O CategoryInsightCard agrupa por nome de exibição, então comparamos
