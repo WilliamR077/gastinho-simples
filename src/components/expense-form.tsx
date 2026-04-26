@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { PlusCircle, CalendarIcon, AlertTriangle } from "lucide-react"
+import { PlusCircle, CalendarIcon, AlertTriangle, CreditCard } from "lucide-react"
+import { useNavigate } from "react-router-dom"
 import { PaymentMethod, ExpenseFormData, Expense } from "@/types/expense"
 import { cn, normalizeToLocalDate, parseLocalDate } from "@/lib/utils"
 import { supabase } from "@/integrations/supabase/client"
@@ -49,6 +50,7 @@ export function ExpenseForm({
   const [cardId, setCardId] = useState<string>("")
   const { activeCategories } = useCategories()
   const [cards, setCards] = useState<CardType[]>([])
+  const navigate = useNavigate()
 
   useEffect(() => {
     loadCards()
@@ -152,11 +154,8 @@ export function ExpenseForm({
       return
     }
 
-    // Bloqueia submit quando cartão é obrigatório e não foi selecionado.
-    if (requiresCard(paymentMethod) && !cardId) {
-      return
-    }
-
+    // Cartão é opcional: se o método exige cartão mas nenhum foi selecionado,
+    // a despesa é gravada sem vínculo (cardId = undefined).
     // Defesa em profundidade: nunca grava installments > 1 ou cardId em método incompatível.
     const installmentCount = allowsInstallments(paymentMethod) ? parseInt(installments) : 1
     const sanitizedCardId = requiresCard(paymentMethod) ? (cardId || undefined) : undefined
