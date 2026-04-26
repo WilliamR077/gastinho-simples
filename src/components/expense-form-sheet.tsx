@@ -8,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { CalendarIcon, AlertTriangle, Users, User } from "lucide-react";
+import { CalendarIcon, AlertTriangle, Users, User, CreditCard } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { PaymentMethod, ExpenseFormData, Expense } from "@/types/expense";
 import { cn, normalizeToLocalDate, parseLocalDate } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -60,6 +61,7 @@ export function ExpenseFormSheet({
   const [selectedDestination, setSelectedDestination] = useState<string>("personal");
   
   const { activeCategories } = useCategories();
+  const navigate = useNavigate();
 
   const { groups, currentContext } = useSharedGroups();
 
