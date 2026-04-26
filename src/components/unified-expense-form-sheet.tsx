@@ -8,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { CalendarIcon, AlertTriangle, Users, User } from "lucide-react";
+import { CalendarIcon, AlertTriangle, Users, User, CreditCard } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { ExpenseSplitSection } from "@/components/expense-split-section";
 import { SplitType, SplitParticipant } from "@/types/expense-split";
 import { SharedGroupMember } from "@/types/shared-group";
