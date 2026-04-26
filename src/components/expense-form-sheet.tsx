@@ -205,9 +205,8 @@ export function ExpenseFormSheet({
       return;
     }
 
-    if (requiresCard(paymentMethod) && !cardId) {
-      return;
-    }
+    // Cartão é opcional: se o método exige cartão mas nenhum foi selecionado,
+    // a despesa é gravada sem vínculo (cardId = undefined).
 
     // Defesa em profundidade.
     const installmentCount = allowsInstallments(paymentMethod) ? parseInt(installments) : 1;
