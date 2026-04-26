@@ -1960,11 +1960,16 @@ export default function Index() {
       return date >= monthStart && date <= monthEnd;
     });
     const totalExpenses = periodExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
-    const totalRecurringExpenses = recurringExpenses.
-    filter((e) => e.is_active).
-    reduce((sum, e) => sum + Number(e.amount), 0);
+    // No modo fatura, usa as despesas fixas já filtradas (que respeitam método/cartão/período de fatura).
+    // No modo calendário, soma todas as fixas ativas (comportamento original).
+    const totalRecurringExpenses = viewMode === "billing"
+      ? filteredRecurringExpenses.reduce((sum, e) => sum + Number(e.amount), 0)
+      : recurringExpenses.
+        filter((e) => e.is_active).
+        reduce((sum, e) => sum + Number(e.amount), 0);
 
-    // Receitas do período
+    // Receitas do período — no modo fatura, mantém entradas do mês cheio
+    // (usuário quer ver saldo = entrada total do mês - despesa da fatura selecionada)
     const periodIncomes = incomes.filter((i) => {
       const date = parseLocalDate(i.income_date);
       return date >= monthStart && date <= monthEnd;
@@ -1978,7 +1983,7 @@ export default function Index() {
       totalIncome: totalIncomes + totalRecurringIncomes,
       totalExpense: totalExpenses + totalRecurringExpenses
     };
-  }, [expenses, recurringExpenses, incomes, recurringIncomes, filters.startDate, filters.endDate, viewMode, currentMonth, cardsConfigMap, creditCardConfig, billingCardId]);
+  }, [expenses, recurringExpenses, filteredRecurringExpenses, incomes, recurringIncomes, filters.startDate, filters.endDate, viewMode, currentMonth, cardsConfigMap, creditCardConfig, billingCardId]);
 
   if (authLoading || loading) {
     return (
