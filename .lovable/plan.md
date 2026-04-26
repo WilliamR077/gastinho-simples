@@ -1,109 +1,78 @@
-
-
-# Plano: Agrupar parcelas no relatório "Maiores Gastos"
+# Plano: Permitir despesa de crédito sem cartão cadastrado
 
 ## Problema
 
-Em visualizações de **trimestre / ano / personalizado / todo o histórico**, o Top 10 fica poluído por parcelas individuais da mesma compra (ex: "Notebook 1/8", "Notebook 2/8", "Notebook 3/8"…), distorcendo o ranking — o usuário vê o mesmo notebook ocupando várias posições em vez de ver suas compras realmente maiores.
+Quando o usuário escolhe um método que exige cartão (crédito ou débito) e **não** tem cartão cadastrado (ou simplesmente não seleciona nenhum), o botão "Adicionar Despesa" **fica habilitado visualmente** (`disabled` não inclui `cardId`), mas o `handleSubmit` aborta silenciosamente:
 
-Na visualização **mensal**, faz sentido manter a parcela individual, pois representa o impacto real daquele mês.
+```ts
+if (requiresCard(paymentMethod) && !cardId) {
+  return  // ← falha silenciosa, parece bug
+}
+```
+
+Resultado: clique no botão não faz nada, sem aviso.
+
+Isso ocorre nos **3 formulários de despesa**:
+- `src/components/expense-form.tsx` (linha 156)
+- `src/components/expense-form-sheet.tsx` (linha 206)
+- `src/components/unified-expense-form-sheet.tsx` (linha 304)
 
 ## Solução
 
-Comportamento **dependente do período**:
+Voltar ao comportamento anterior em que **cartão é opcional** para despesas de crédito/débito, mas com um nudge claro para cadastrar cartões — sem bloquear o usuário.
 
-- **`month`** → mantém como está hoje (parcela individual, ex: "Notebook (3/8)" R$ 320,52).
-- **`quarter` / `year` / `custom` / `all`** → agrupar parcelas que pertencem ao mesmo `installment_group_id` em uma única linha, somando os valores das parcelas **que caem dentro do período selecionado**.
+### Mudanças funcionais
 
-### Formato da linha agrupada
+1. **Remover o bloqueio silencioso** no `handleSubmit` dos 3 formulários — não tratar mais `requiresCard && !cardId` como erro. A despesa é gravada com `cardId = undefined`.
+2. **Manter `sanitizedCardId`** como está: `requiresCard(paymentMethod) ? (cardId || undefined) : undefined`. Já cobre o caso de cartão vazio.
+3. **Adicionar aviso visual (Alert)** logo abaixo do `<Select>` de cartão **quando o método exige cartão e não há cartões cadastrados** (lista vazia em `getAvailableCards()`):
 
-- **Descrição**: nome base sem o "(x/y)" + sufixo `(Nx)` indicando quantas parcelas foram somadas naquele período.
-  - Ex: `"Notebook (3 parcelas)"`
-- **Subtítulo (linha 2)**: range de datas das parcelas somadas.
-  - Ex: `"01/04 → 01/06"` (primeira parcela até última no período)
-- **Valor**: soma das parcelas dentro do período.
-- **Tooltip / disclaimer**: badge ou texto pequeno indicando "x de N parcelas" para deixar claro que pode haver mais parcelas fora do período.
-  - Ex: `"3 de 8 parcelas no período"`
+   ```
+   ⚠️ Você ainda não tem cartões cadastrados.
+   [Cadastrar cartão agora →]   ← link navega para /cards
+   ```
 
-Despesas avulsas (sem `installment_group_id`) e fixas (recorrentes) seguem inalteradas.
+   Visual: usar `<Alert>` com `AlertTriangle` em tom de aviso (warning, não destrutivo) e um link/Button `variant="link"` apontando para `/cards`.
 
-Se o grupo de parcelas tem **apenas 1 parcela** dentro do período, exibir como linha normal (sem agrupamento), pois agrupar 1 item não agrega valor.
+4. **Mostrar um aviso mais leve** quando há cartões cadastrados, mas o usuário não selecionou nenhum:
 
-## Mudanças
+   ```
+   ℹ️ Sem cartão selecionado. A despesa será salva sem vínculo a um cartão.
+   ```
 
-### 1. `src/utils/report-view-model.ts`
+   Texto pequeno em `text-muted-foreground`, sem alerta cheio. Permite ao usuário entender por que a fatura/limite não vai aparecer.
 
-**a) Estender `TopExpenseItem`:**
-```ts
-type TopExpenseItem = {
-  description: string;
-  amount: number;
-  date: string;
-  type: 'expense' | 'recurring' | 'installment-group';
-  dayOfMonth?: number;
-  // novos campos para grupos de parcelas:
-  installmentsInPeriod?: number;
-  totalInstallments?: number;
-  dateRange?: { start: string; end: string };
-};
-```
+5. **Botão "Adicionar Despesa" continua habilitado** com a regra atual (`description + amount + paymentMethod`). Não bloqueia por cartão.
 
-**b) Refatorar bloco "Top expenses" (linhas 518–522):**
+### Comportamento por contexto
 
-- Se `periodType === 'month'`: manter lógica atual.
-- Senão:
-  1. Separar `filteredExpenses` em:
-     - **avulsas** (sem `installment_group_id`)
-     - **parceladas** (com `installment_group_id`)
-  2. Agrupar parceladas por `installment_group_id`, somando `amount`, contando parcelas, capturando `min(expense_date)` e `max(expense_date)` e usando `total_installments` da primeira para o "x de N".
-  3. Para grupos com 1 parcela no período → tratar como avulsa (manter descrição original com "(x/y)" para clareza).
-  4. Para grupos com 2+ parcelas → criar item `type: 'installment-group'` com descrição base limpa (remover sufixo `"(n/m)"` via regex `/\s*\(\d+\/\d+\)\s*$/`) e adicionar `(Nx parcelas)`.
-  5. Concatenar avulsas + grupos + recorrentes, ordenar por `amount` desc, slice(10).
+| Situação | Botão | Aviso |
+|---|---|---|
+| Crédito/Débito + tem cartões + selecionou um | habilitado | nenhum |
+| Crédito/Débito + tem cartões + não selecionou | habilitado | aviso leve "será salva sem vínculo" |
+| Crédito/Débito + sem cartões cadastrados | habilitado | Alert com link "Cadastrar cartão agora" → `/cards` |
+| Outros métodos (pix, dinheiro, boleto…) | habilitado | nenhum (Select de cartão não aparece) |
 
-### 2. `src/components/reports-accordion.tsx` (linhas 477–496)
+### Detalhes técnicos
 
-Atualizar render do item para suportar o novo tipo:
+- Em `unified-expense-form-sheet.tsx` e `expense-form-sheet.tsx` o sheet fecha após salvar; o navegador para `/cards` deve fechar o sheet primeiro (`onOpenChange(false)` antes do `navigate`).
+- Em `expense-form.tsx` (form inline da página) basta `navigate("/cards")`.
+- Usar `useNavigate` do `react-router-dom` (já importado no projeto).
+- Reutilizar componente `<Alert>` do `@/components/ui/alert` (já usado no `expense-form.tsx` para budget warnings).
+- A despesa salva sem `card_id` continua válida no schema (coluna `card_id` em `expenses` é nullable, conforme uso atual).
 
-```tsx
-<p className="text-xs text-muted-foreground">
-  {e.type === 'recurring' && `Fixa • Dia ${e.dayOfMonth}`}
-  {e.type === 'expense' && format(parseLocalDate(e.date), "dd/MM")}
-  {e.type === 'installment-group' && (
-    <>
-      {format(parseLocalDate(e.dateRange!.start), "dd/MM")} → {format(parseLocalDate(e.dateRange!.end), "dd/MM")}
-      <span className="ml-1 text-[10px] opacity-75">
-        ({e.installmentsInPeriod} de {e.totalInstallments} parcelas)
-      </span>
-    </>
-  )}
-</p>
-```
+### Casos de teste
 
-Adicionar disclaimer geral no topo do accordion (apenas quando `periodType !== 'month'` e existir algum grupo agrupado):
-```tsx
-<p className="text-xs text-muted-foreground mb-3">
-  Compras parceladas são somadas pelas parcelas que caem neste período.
-</p>
-```
-
-### 3. `src/services/pdf-export-service.ts` (linhas 624–657)
-
-Espelhar a UI: na coluna "Data", mostrar o range para `installment-group` e adicionar a contagem `"(3 de 8)"` na descrição. Manter mesmo disclaimer logo acima da tabela.
-
-## Casos de teste
-
-1. **Mês de abril** com parcela 1/8 do Notebook → aparece como hoje: `"Notebook (1/8) — 01/04 — R$ 320,52"`.
-2. **Ano 2026** com 8 parcelas do Notebook (todas no ano) → uma única linha: `"Notebook (8 parcelas) — 01/04 → 01/11 — R$ 2.564,16 — (8 de 8)"` no topo do ranking.
-3. **Trimestre Q2/2026** com parcelas 1, 2 e 3 → `"Notebook (3 parcelas) — 01/04 → 01/06 — R$ 961,56 — (3 de 8)"`.
-4. **Custom 1/4 → 30/4** com só parcela 1 → linha normal sem agrupamento (mantém "1/8").
-5. Despesas fixas e avulsas continuam aparecendo igual.
-6. Top 10 nunca mostra a mesma compra parcelada duplicada em períodos > mês.
+1. Usuário sem cartões → escolhe crédito → vê alerta "Cadastre seu cartão" + link → clica em "Adicionar Despesa" → despesa criada sem `card_id`.
+2. Usuário com cartões → escolhe crédito → não seleciona cartão → vê texto "será salva sem vínculo" → consegue salvar.
+3. Usuário com cartões → escolhe crédito → seleciona cartão → fluxo normal (fatura/limite aparecem).
+4. Usuário escolhe Pix → nenhum aviso, sem campo de cartão, botão habilita normalmente.
+5. Link "Cadastrar cartão agora" navega para `/cards` (e fecha sheet quando aplicável).
 
 ## Arquivos alterados
 
-1. `src/utils/report-view-model.ts` — agrupamento + novo tipo no `TopExpenseItem`.
-2. `src/components/reports-accordion.tsx` — render condicional + disclaimer.
-3. `src/services/pdf-export-service.ts` — paridade com UI.
+1. `src/components/expense-form.tsx` — remover bloqueio + adicionar avisos.
+2. `src/components/expense-form-sheet.tsx` — remover bloqueio + adicionar avisos + fechar sheet ao navegar.
+3. `src/components/unified-expense-form-sheet.tsx` — remover bloqueio + adicionar avisos + fechar sheet ao navegar.
 
-**Total:** 3 arquivos. Sem migration, sem mudança de schema.
-
+**Total:** 3 arquivos. Sem mudança de schema, sem migration.
