@@ -400,24 +400,51 @@ export function ExpenseFormSheet({
           {requiresCard(paymentMethod) && (
             <div className="space-y-2" data-onboarding="expense-card-select">
               <Label htmlFor="sheet-card">Selecione o Cartão</Label>
-              <Select value={cardId} onValueChange={setCardId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o cartão" />
-                </SelectTrigger>
-                <SelectContent>
-                  {getAvailableCards().map((card) => (
-                    <SelectItem key={card.id} value={card.id}>
-                      <div className="flex items-center gap-2">
-                        <div
-                          style={{ backgroundColor: card.color }}
-                          className="w-3 h-3 rounded-full"
-                        />
-                        {card.name}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {getAvailableCards().length > 0 ? (
+                <>
+                  <Select value={cardId} onValueChange={setCardId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o cartão (opcional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getAvailableCards().map((card) => (
+                        <SelectItem key={card.id} value={card.id}>
+                          <div className="flex items-center gap-2">
+                            <div
+                              style={{ backgroundColor: card.color }}
+                              className="w-3 h-3 rounded-full"
+                            />
+                            {card.name}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {!cardId && (
+                    <p className="text-xs text-muted-foreground">
+                      Sem cartão selecionado. A despesa será salva sem vínculo a um cartão.
+                    </p>
+                  )}
+                </>
+              ) : (
+                <Alert className="border-primary/40 bg-primary/5">
+                  <CreditCard className="h-4 w-4 text-primary" />
+                  <AlertDescription className="text-foreground">
+                    Você ainda não tem cartões cadastrados. A despesa será salva sem vínculo a um cartão.
+                    <Button
+                      type="button"
+                      variant="link"
+                      className="h-auto p-0 ml-1 text-primary"
+                      onClick={() => {
+                        onOpenChange(false);
+                        navigate("/cards");
+                      }}
+                    >
+                      Cadastrar cartão agora →
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
           )}
 
