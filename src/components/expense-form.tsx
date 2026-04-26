@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { PlusCircle, CalendarIcon, AlertTriangle } from "lucide-react"
+import { PlusCircle, CalendarIcon, AlertTriangle, CreditCard } from "lucide-react"
+import { useNavigate } from "react-router-dom"
 import { PaymentMethod, ExpenseFormData, Expense } from "@/types/expense"
 import { cn, normalizeToLocalDate, parseLocalDate } from "@/lib/utils"
 import { supabase } from "@/integrations/supabase/client"
@@ -49,6 +50,7 @@ export function ExpenseForm({
   const [cardId, setCardId] = useState<string>("")
   const { activeCategories } = useCategories()
   const [cards, setCards] = useState<CardType[]>([])
+  const navigate = useNavigate()
 
   useEffect(() => {
     loadCards()
@@ -152,11 +154,8 @@ export function ExpenseForm({
       return
     }
 
-    // Bloqueia submit quando cartão é obrigatório e não foi selecionado.
-    if (requiresCard(paymentMethod) && !cardId) {
-      return
-    }
-
+    // Cartão é opcional: se o método exige cartão mas nenhum foi selecionado,
+    // a despesa é gravada sem vínculo (cardId = undefined).
     // Defesa em profundidade: nunca grava installments > 1 ou cardId em método incompatível.
     const installmentCount = allowsInstallments(paymentMethod) ? parseInt(installments) : 1
     const sanitizedCardId = requiresCard(paymentMethod) ? (cardId || undefined) : undefined
@@ -300,24 +299,48 @@ export function ExpenseForm({
           {requiresCard(paymentMethod) && (
             <div className="space-y-2">
               <Label htmlFor="card">Selecione o Cartão</Label>
-              <Select value={cardId} onValueChange={setCardId}>
-                <SelectTrigger className="transition-all duration-300 focus:shadow-elegant">
-                  <SelectValue placeholder="Selecione o cartão" />
-                </SelectTrigger>
-                <SelectContent>
-                  {getAvailableCards().map((card) => (
-                    <SelectItem key={card.id} value={card.id}>
-                      <div className="flex items-center gap-2">
-                        <div 
-                          style={{ backgroundColor: card.color }} 
-                          className="w-3 h-3 rounded-full"
-                        />
-                        {card.name}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {getAvailableCards().length > 0 ? (
+                <>
+                  <Select value={cardId} onValueChange={setCardId}>
+                    <SelectTrigger className="transition-all duration-300 focus:shadow-elegant">
+                      <SelectValue placeholder="Selecione o cartão (opcional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getAvailableCards().map((card) => (
+                        <SelectItem key={card.id} value={card.id}>
+                          <div className="flex items-center gap-2">
+                            <div
+                              style={{ backgroundColor: card.color }}
+                              className="w-3 h-3 rounded-full"
+                            />
+                            {card.name}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {!cardId && (
+                    <p className="text-xs text-muted-foreground">
+                      Sem cartão selecionado. A despesa será salva sem vínculo a um cartão.
+                    </p>
+                  )}
+                </>
+              ) : (
+                <Alert className="border-primary/40 bg-primary/5">
+                  <CreditCard className="h-4 w-4 text-primary" />
+                  <AlertDescription className="text-foreground">
+                    Você ainda não tem cartões cadastrados. A despesa será salva sem vínculo a um cartão.
+                    <Button
+                      type="button"
+                      variant="link"
+                      className="h-auto p-0 ml-1 text-primary"
+                      onClick={() => navigate("/cards")}
+                    >
+                      Cadastrar cartão agora →
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
           )}
 
