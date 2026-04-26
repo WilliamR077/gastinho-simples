@@ -106,6 +106,7 @@ export function UnifiedExpenseFormSheet({
   
   const { activeCategories } = useCategories();
   const { groups, currentContext } = useSharedGroups();
+  const navigate = useNavigate();
   const { isOpen: isOnboardingOpen, currentStep, currentSubstep } = useOnboardingTour();
   const selectedCardLimitSummary = paymentMethod === "credit" && cardId
     ? cardLimitSummaries?.get(cardId)
