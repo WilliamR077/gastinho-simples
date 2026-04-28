@@ -1,7 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const ADMIN_EMAIL = "gastinhosimples@gmail.com";
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -36,7 +34,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Validate admin via JWT
+    // Validate admin via JWT + has_role RPC
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Não autorizado" }), {
@@ -53,27 +51,31 @@ Deno.serve(async (req) => {
 
     const token = authHeader.replace("Bearer ", "");
     const { data: claimsData, error: claimsError } = await anonClient.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
+    if (claimsError || !claimsData?.claims?.sub) {
       return new Response(JSON.stringify({ error: "Token inválido" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const callerEmail = claimsData.claims.email as string | undefined;
-    const callerId = claimsData.claims.sub as string | undefined;
-    if (callerEmail !== ADMIN_EMAIL) {
-      return new Response(JSON.stringify({ error: "Acesso negado" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const callerId = claimsData.claims.sub as string;
 
     // Service role client for admin operations
     const adminClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
+
+    const { data: roleData, error: roleError } = await adminClient.rpc("has_role", {
+      _user_id: callerId,
+      _role: "admin",
+    });
+    if (roleError || roleData !== true) {
+      return new Response(JSON.stringify({ error: "Acesso negado" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     if (req.method === "GET") {
       const url = new URL(req.url);
@@ -295,7 +297,7 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
-    console.error("Admin subscriptions error:", err);
+    console.error("admin-subscriptions error:", (err as Error).message);
     return new Response(JSON.stringify({ error: (err as Error).message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

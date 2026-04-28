@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { useIsAdmin } from "@/hooks/use-is-admin";
 import { Navigate, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -22,7 +23,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-const ADMIN_EMAIL = "gastinhosimples@gmail.com";
+// admin gate is enforced via has_role RPC (useIsAdmin)
 const SUBS_API = `https://jaoldaqvbdllowepzwbr.supabase.co/functions/v1/admin-subscriptions`;
 const DASH_API = `https://jaoldaqvbdllowepzwbr.supabase.co/functions/v1/admin-dashboard`;
 const NOTIF_API = `https://jaoldaqvbdllowepzwbr.supabase.co/functions/v1/admin-notifications`;
@@ -945,6 +946,7 @@ function NotificationsTab({ allEmails }: { allEmails: string[] }) {
 
 export default function Admin() {
   const { user, loading: authLoading } = useAuth();
+  const { isAdmin, loading: roleLoading } = useIsAdmin();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("overview");
   const [dashData, setDashData] = useState<DashboardData | null>(null);
@@ -984,8 +986,8 @@ export default function Admin() {
     setDashFetched(false);
   };
 
-  if (authLoading) return null;
-  if (!user || user.email !== ADMIN_EMAIL) return <Navigate to="/" replace />;
+  if (authLoading || roleLoading) return null;
+  if (!user || !isAdmin) return <Navigate to="/" replace />;
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">

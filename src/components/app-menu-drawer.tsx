@@ -10,6 +10,7 @@ import { useState, useEffect } from "react";
 import { RemindersDrawer } from "./reminders-drawer";
 import { Reminder } from "./reminders-button";
 import { adMobService } from "@/services/admob-service";
+import { useIsAdmin } from "@/hooks/use-is-admin";
 
 const DISMISSED_REMINDERS_KEY = 'gastinho_dismissed_reminders';
 
@@ -23,6 +24,7 @@ interface AppMenuDrawerProps {
 export function AppMenuDrawer({ open, onOpenChange, onSignOut, recurringExpenses }: AppMenuDrawerProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { isAdmin } = useIsAdmin();
   const { theme, setTheme } = useTheme();
   const [remindersOpen, setRemindersOpen] = useState(false);
   const [reminders, setReminders] = useState<Reminder[]>([]);
@@ -104,7 +106,7 @@ export function AppMenuDrawer({ open, onOpenChange, onSignOut, recurringExpenses
     { icon: CreditCard, label: "Cartões", onClick: () => handleNavigate("/cards"), dataTour: "cards-button", dataOnboarding: undefined as string | undefined },
     { icon: Settings, label: "Configurações", onClick: () => handleNavigate("/settings"), dataTour: "settings-button", dataOnboarding: "settings-nav-item" },
     { icon: User, label: "Conta", onClick: () => handleNavigate("/account"), dataOnboarding: undefined as string | undefined },
-    ...(user?.email === "gastinhosimples@gmail.com"
+    ...(isAdmin
       ? [{ icon: Shield, label: "Admin", onClick: () => handleNavigate("/admin"), dataTour: undefined, badge: undefined, dataOnboarding: undefined as string | undefined }]
       : []),
     {

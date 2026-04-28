@@ -82,8 +82,7 @@ async function getAccessToken(): Promise<string> {
   const private_key_pem = serviceAccount.private_key.replace(/\\n/g, '\n');
 
   console.log("📝 Project ID:", project_id);
-  console.log("📝 Client Email:", client_email);
-  console.log("🔑 Private key format check:", private_key_pem.substring(0, 30) + "...");
+  console.log("send-notification: signing JWT with service account");
 
   // Criar JWT assinado com a private key da service account
   const iat = getNumericDate(0);

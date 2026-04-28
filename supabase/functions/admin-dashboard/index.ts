@@ -1,7 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const ADMIN_EMAIL = "gastinhosimples@gmail.com";
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -28,13 +26,22 @@ async function validateAdmin(req: Request) {
 
   const token = authHeader.replace("Bearer ", "");
   const { data, error } = await anonClient.auth.getClaims(token);
-  if (error || !data?.claims) throw new Error("Token inválido");
-  if (data.claims.email !== ADMIN_EMAIL) throw new Error("Acesso negado");
+  if (error || !data?.claims?.sub) throw new Error("Token inválido");
 
-  return createClient(
+  const callerId = data.claims.sub as string;
+
+  const adminClient = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
+
+  const { data: roleData, error: roleError } = await adminClient.rpc("has_role", {
+    _user_id: callerId,
+    _role: "admin",
+  });
+  if (roleError || roleData !== true) throw new Error("Acesso negado");
+
+  return adminClient;
 }
 
 const PRICES = { premium: 14.9, no_ads: 3.9, premium_plus: 14.9 };

@@ -57,7 +57,7 @@ serve(async (req) => {
     // Parse do body
     const { productId, tier: providedTier, platform }: SyncRequest = await req.json();
 
-    console.log('🔄 Sincronizando assinatura:', { productId, platform, userId: user.id });
+    console.log('sync-subscription: start', { productId, platform, userId: user.id });
 
     // Determinar o tier baseado no product ID
     const tier = providedTier || PRODUCT_ID_TO_TIER[productId] || 'free';
@@ -84,7 +84,7 @@ serve(async (req) => {
         .maybeSingle();
 
       if (existingSub) {
-        console.log('⚠️ Token já pertence a outro usuário:', existingSub.user_id);
+        console.warn('sync-subscription: token belongs to other user');
         return new Response(
           JSON.stringify({
             success: false,
@@ -232,10 +232,9 @@ async function validateWithGooglePlay(
     
     if (response.ok) {
       const data = await response.json();
-      console.log('📦 Resposta do Google Play:', {
+      console.log('sync-subscription: Play API ok', {
         paymentState: data.paymentState,
-        expiryTimeMillis: data.expiryTimeMillis,
-        cancelReason: data.cancelReason,
+        hasExpiry: !!data.expiryTimeMillis,
       });
       
       // Verificar se a assinatura está ativa
@@ -261,8 +260,7 @@ async function validateWithGooglePlay(
         expiresAt,
       };
     } else {
-      const errorData = await response.text();
-      console.error('❌ Erro na API do Google Play:', response.status, errorData);
+      console.error('sync-subscription: Play API error status', response.status);
       return { valid: false };
     }
   } catch (error) {
@@ -327,8 +325,7 @@ async function getGoogleAccessToken(serviceAccount: any): Promise<string | null>
       const tokenData = await tokenResponse.json();
       return tokenData.access_token;
     } else {
-      const errorText = await tokenResponse.text();
-      console.error('❌ Erro ao obter access token:', errorText);
+      console.error('Google token endpoint error');
     }
     
     return null;

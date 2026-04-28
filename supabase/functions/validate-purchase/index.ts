@@ -59,20 +59,16 @@ serve(async (req) => {
     // Parse do body
     const { productId, purchaseToken, platform, tier: providedTier }: PurchaseValidationRequest = await req.json();
 
-    console.log('📦 Validando compra:', { 
-      productId, 
-      platform, 
+    console.log('validate-purchase: received', {
+      productId,
+      platform,
       userId: user.id,
-      purchaseTokenLength: purchaseToken?.length || 0,
-      purchaseTokenPrefix: purchaseToken?.substring(0, 30) || 'EMPTY',
+      tokenLen: purchaseToken?.length || 0,
     });
 
     // Verificar se temos um purchaseToken válido
     if (!purchaseToken || purchaseToken === 'restored' || purchaseToken.length < 50) {
-      console.error('❌ purchaseToken inválido ou ausente:', { 
-        token: purchaseToken?.substring(0, 30),
-        length: purchaseToken?.length,
-      });
+      console.warn('validate-purchase: invalid token');
       return new Response(
         JSON.stringify({
           success: false,
@@ -119,7 +115,7 @@ serve(async (req) => {
       .maybeSingle();
 
     if (existingSub) {
-      console.log('⚠️ Token já pertence a outro usuário:', existingSub.user_id);
+      console.warn('validate-purchase: token belongs to other user');
       return new Response(
         JSON.stringify({
           success: false,
@@ -212,79 +208,47 @@ async function validateGooglePlayPurchase(
 ): Promise<{ valid: boolean; expiresAt?: string; errorCode?: string; details?: any }> {
   try {
     const serviceAccountJson = Deno.env.get('GOOGLE_PLAY_SERVICE_ACCOUNT');
-    
+
     if (!serviceAccountJson) {
-      console.error('❌ GOOGLE_PLAY_SERVICE_ACCOUNT not configured - CRITICAL!');
-      console.error('❌ Por favor configure o secret GOOGLE_PLAY_SERVICE_ACCOUNT no Supabase Dashboard');
+      console.error('GOOGLE_PLAY_SERVICE_ACCOUNT not configured');
       return { valid: false, errorCode: 'SERVICE_ACCOUNT_NOT_CONFIGURED' };
     }
 
-    console.log('✅ GOOGLE_PLAY_SERVICE_ACCOUNT found, length:', serviceAccountJson.length);
-
     try {
       const serviceAccount = JSON.parse(serviceAccountJson);
-      
-      console.log('✅ Service Account parsed successfully:', {
-        hasClientEmail: !!serviceAccount.client_email,
-        hasPrivateKey: !!serviceAccount.private_key,
-        clientEmail: serviceAccount.client_email,
-      });
-      
+
       // IMPORTANTE: Converter \n literais em quebras de linha reais
       if (serviceAccount.private_key) {
         serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
-        console.log('✅ Private key processed, starts with:', serviceAccount.private_key.substring(0, 50));
-      }
-      
-      // Obter access token
-      console.log('🔄 Obtaining Google access token...');
-      const accessToken = await getGoogleAccessToken(serviceAccount);
-      
-      if (!accessToken) {
-        console.error('❌ Failed to obtain Google access token - check Service Account permissions');
-        return { valid: false, errorCode: 'ACCESS_TOKEN_FAILED' };
       }
 
-      console.log('✅ Access token obtained successfully');
+      // Obter access token
+      const accessToken = await getGoogleAccessToken(serviceAccount);
+
+      if (!accessToken) {
+        console.error('Failed to obtain Google access token');
+        return { valid: false, errorCode: 'ACCESS_TOKEN_FAILED' };
+      }
 
       // Verificar assinatura no Google Play
       const packageName = 'com.gastinhosimples.app';
       const apiUrl = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/purchases/subscriptions/${productId}/tokens/${purchaseToken}`;
-      
-      console.log('🔍 Calling Google Play API:', {
-        packageName,
-        productId,
-        tokenPrefix: purchaseToken.substring(0, 30) + '...',
-        tokenLength: purchaseToken.length,
-      });
-      
+
       const response = await fetch(apiUrl, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
         },
       });
-      
+
       if (response.ok) {
         const data = await response.json();
-        console.log('📦 Google Play API SUCCESS response:', {
-          paymentState: data.paymentState,
-          expiryTimeMillis: data.expiryTimeMillis,
-          acknowledgementState: data.acknowledgementState,
-          cancelReason: data.cancelReason,
-          autoRenewing: data.autoRenewing,
-          priceAmountMicros: data.priceAmountMicros,
-        });
-        
-        // Verificar se a assinatura está ativa
-        // paymentState: 0 = pendente, 1 = recebido, 2 = free trial, 3 = deferred
-        // acknowledgementState: 0 = não confirmado, 1 = confirmado
         const isActive = data.paymentState === 1 || data.paymentState === 2;
-        const expiresAt = data.expiryTimeMillis 
+        const expiresAt = data.expiryTimeMillis
           ? new Date(parseInt(data.expiryTimeMillis)).toISOString()
           : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-        
-        console.log('✅ Subscription validation result:', { isActive, expiresAt });
-        
+
+        console.log('validate-purchase: Play API ok', { isActive });
+
         return {
           valid: isActive,
           expiresAt,
@@ -295,31 +259,18 @@ async function validateGooglePlayPurchase(
           },
         };
       } else {
-        const errorData = await response.text();
-        console.error('❌ Google Play API ERROR:', response.status, errorData);
-        
-        // Parse error for better diagnostics
-        let parsedError: any = {};
-        try {
-          parsedError = JSON.parse(errorData);
-        } catch (e) {
-          parsedError = { raw: errorData };
-        }
-        
-        console.error('❌ Parsed error details:', parsedError);
-        
-        return { 
-          valid: false, 
+        console.error('validate-purchase: Play API error status', response.status);
+        return {
+          valid: false,
           errorCode: `GOOGLE_PLAY_API_ERROR_${response.status}`,
-          details: parsedError,
         };
       }
-    } catch (parseError) {
-      console.error('❌ Error parsing Service Account JSON:', parseError);
+    } catch {
+      console.error('validate-purchase: service account parse error');
       return { valid: false, errorCode: 'SERVICE_ACCOUNT_PARSE_ERROR' };
     }
-  } catch (error) {
-    console.error('❌ Error validating Google Play purchase:', error);
+  } catch {
+    console.error('validate-purchase: validation failed');
     return { valid: false, errorCode: 'VALIDATION_ERROR' };
   }
 }
@@ -386,8 +337,7 @@ async function getGoogleAccessToken(serviceAccount: any): Promise<string | null>
       const tokenData = await tokenResponse.json();
       return tokenData.access_token;
     } else {
-      const errorText = await tokenResponse.text();
-      console.error('❌ Erro ao obter access token:', errorText);
+      console.error('Google token endpoint error');
     }
     
     return null;
