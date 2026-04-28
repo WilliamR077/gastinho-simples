@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { create, getNumericDate } from "https://deno.land/x/djwt@v3.0.1/mod.ts";
-import { maskToken, maskEmail } from "../_shared/mask.ts";
+// shared mask helpers available if needed
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
