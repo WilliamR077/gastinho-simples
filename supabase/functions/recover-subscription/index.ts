@@ -70,7 +70,7 @@ serve(async (req) => {
     console.log('🔄 Tentando recuperar assinatura:', {
       userId: user.id,
       productId,
-      purchaseTokenPrefix: purchaseToken?.substring(0, 30),
+      tokenLen: purchaseToken?.length || 0,
     });
 
     // Validar parâmetros
@@ -183,7 +183,7 @@ serve(async (req) => {
         tier,
         expiresAt,
         method: 'manual_recovery',
-        purchaseTokenPrefix: purchaseToken.substring(0, 30),
+        tokenLen: purchaseToken.length,
       },
     });
 

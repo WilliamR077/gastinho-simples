@@ -23,7 +23,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-const ADMIN_EMAIL = "gastinhosimples@gmail.com";
+// admin gate is enforced via has_role RPC (useIsAdmin)
 const SUBS_API = `https://jaoldaqvbdllowepzwbr.supabase.co/functions/v1/admin-subscriptions`;
 const DASH_API = `https://jaoldaqvbdllowepzwbr.supabase.co/functions/v1/admin-dashboard`;
 const NOTIF_API = `https://jaoldaqvbdllowepzwbr.supabase.co/functions/v1/admin-notifications`;
