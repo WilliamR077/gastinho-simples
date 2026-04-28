@@ -109,7 +109,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const adminClient = await validateAdmin(req);
+    const { adminClient, callerEmail } = await validateAdmin(req);
 
     // GET: list notification logs
     if (req.method === "GET") {
@@ -157,7 +157,7 @@ Deno.serve(async (req) => {
           target_email: target_email || null,
           status: "no_tokens",
           recipients_count: 0,
-          sent_by: ADMIN_EMAIL,
+          sent_by: callerEmail,
         });
         return jsonResponse({ success: true, message: "Nenhum token FCM encontrado", sent: 0 });
       }
@@ -205,7 +205,7 @@ Deno.serve(async (req) => {
         target_email: target_email || null,
         status: failCount === 0 ? "sent" : successCount > 0 ? "partial" : "failed",
         recipients_count: successCount,
-        sent_by: ADMIN_EMAIL,
+        sent_by: callerEmail,
       });
 
       return jsonResponse({
