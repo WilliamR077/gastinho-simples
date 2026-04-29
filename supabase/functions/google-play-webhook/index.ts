@@ -105,13 +105,12 @@ serve(async (req) => {
 
     console.log('webhook received:', {
       messageId: body.message.messageId,
-      packageName: notification.packageName,
       eventTime: notification.eventTimeMillis,
     });
 
-    // 2) Validar packageName
-    if (notification.packageName && notification.packageName !== EXPECTED_PACKAGE_NAME) {
-      console.warn('webhook rejected: bad packageName');
+    // 2) Validação ESTRITA de packageName: ausente OU diferente => 403
+    if (notification.packageName !== EXPECTED_PACKAGE_NAME) {
+      console.warn('webhook rejected: packageName missing or mismatch');
       return plainResponse(403, 'Forbidden');
     }
 
@@ -137,11 +136,51 @@ serve(async (req) => {
       console.log('webhook subscription event:', {
         type: notificationType,
         typeCode: subNotification.notificationType,
-        subscriptionId: subNotification.subscriptionId,
         purchaseToken: maskToken(subNotification.purchaseToken),
       });
 
-      // Buscar assinatura pelo purchase_token
+      // 3) Validar productId conhecido ANTES de qualquer escrita ou chamada externa.
+      //    Produto desconhecido NUNCA ativa, vincula token, renova ou altera subscriptions.
+      const tier = PRODUCT_ID_TO_TIER[subNotification.subscriptionId];
+      if (!tier) {
+        console.warn('webhook rejected: unknown productId');
+        await supabaseAdmin.from('audit_log').insert({
+          user_id: '00000000-0000-0000-0000-000000000000',
+          action: 'google_play_unknown_product',
+          details: {
+            messageId: body.message.messageId,
+            notificationType,
+            purchaseTokenMasked: maskToken(subNotification.purchaseToken),
+            processedAt: new Date().toISOString(),
+          },
+        });
+        return plainResponse(200, 'OK');
+      }
+
+      // 4) Validar purchaseToken na Play API ANTES de qualquer escrita em subscriptions.
+      //    Se a Play API rejeitar/falhar: nenhum UPDATE (nem vinculação de token, nem
+      //    ativação, renovação, cancelamento, revogação ou expiração).
+      const subscriptionDetails = await getSubscriptionFromGooglePlay(
+        subNotification.subscriptionId,
+        subNotification.purchaseToken
+      );
+      if (!subscriptionDetails) {
+        console.warn('webhook rejected: Play API did not validate purchaseToken');
+        await supabaseAdmin.from('audit_log').insert({
+          user_id: '00000000-0000-0000-0000-000000000000',
+          action: 'google_play_invalid_token',
+          details: {
+            messageId: body.message.messageId,
+            notificationType,
+            purchaseTokenMasked: maskToken(subNotification.purchaseToken),
+            processedAt: new Date().toISOString(),
+          },
+        });
+        return plainResponse(200, 'OK');
+      }
+
+      // 5) Lookup só após validação. Vinculação a assinatura recente sem token ocorre
+      //    apenas dentro do handler específico (mesclada ao update de tier/expires_at).
       let subscription: any = null;
       const { data: foundSubscription, error: findError } = await supabaseAdmin
         .from('subscriptions')
@@ -150,15 +189,11 @@ serve(async (req) => {
         .eq('platform', 'android')
         .maybeSingle();
 
-      if (findError) {
-        console.error('subscription lookup error');
-      }
-
+      if (findError) console.error('subscription lookup error');
       subscription = foundSubscription;
 
       if (!subscription) {
         const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-
         const { data: recentSubscriptions, error: recentError } = await supabaseAdmin
           .from('subscriptions')
           .select('*')
@@ -168,23 +203,9 @@ serve(async (req) => {
           .order('created_at', { ascending: false })
           .limit(1);
 
-        if (recentError) {
-          console.error('recent subscription lookup error');
-        } else if (recentSubscriptions && recentSubscriptions.length > 0) {
+        if (recentError) console.error('recent subscription lookup error');
+        else if (recentSubscriptions && recentSubscriptions.length > 0) {
           subscription = recentSubscriptions[0];
-          console.log('linking purchase_token to recent subscription');
-
-          const { error: updateError } = await supabaseAdmin
-            .from('subscriptions')
-            .update({
-              purchase_token: subNotification.purchaseToken,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', subscription.id);
-
-          if (updateError) console.error('purchase_token link failed');
-        } else {
-          console.log('no subscription to link');
         }
       }
 
@@ -194,28 +215,38 @@ serve(async (req) => {
             supabaseAdmin,
             subNotification.purchaseToken,
             subNotification.subscriptionId,
+            tier,
             subscription,
+            subscriptionDetails,
             notificationType
           );
           break;
-        case 2:
         case 1:
+        case 2:
         case 7:
           await handleSubscriptionRenewal(
             supabaseAdmin,
             subNotification.purchaseToken,
-            subNotification.subscriptionId,
+            tier,
             subscription,
+            subscriptionDetails,
             notificationType
           );
           break;
         case 3:
+          await handleSubscriptionCanceledKeepActive(
+            supabaseAdmin,
+            subscription,
+            subscriptionDetails,
+            notificationType
+          );
+          break;
         case 12:
         case 13:
-          await handleSubscriptionCancellation(
+          await handleSubscriptionRevokedExpired(
             supabaseAdmin,
-            subNotification.purchaseToken,
             subscription,
+            subscriptionDetails,
             notificationType
           );
           break;
@@ -232,7 +263,6 @@ serve(async (req) => {
         action: `google_play_${notificationType.toLowerCase()}`,
         details: {
           messageId: body.message.messageId,
-          subscriptionId: subNotification.subscriptionId,
           notificationType,
           purchaseTokenMasked: maskToken(subNotification.purchaseToken),
           foundUser: !!subscription?.user_id,
