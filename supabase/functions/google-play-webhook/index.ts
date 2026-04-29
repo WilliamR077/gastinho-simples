@@ -105,13 +105,12 @@ serve(async (req) => {
 
     console.log('webhook received:', {
       messageId: body.message.messageId,
-      packageName: notification.packageName,
       eventTime: notification.eventTimeMillis,
     });
 
-    // 2) Validar packageName
-    if (notification.packageName && notification.packageName !== EXPECTED_PACKAGE_NAME) {
-      console.warn('webhook rejected: bad packageName');
+    // 2) Validação ESTRITA de packageName: ausente OU diferente => 403
+    if (notification.packageName !== EXPECTED_PACKAGE_NAME) {
+      console.warn('webhook rejected: packageName missing or mismatch');
       return plainResponse(403, 'Forbidden');
     }
 
@@ -137,11 +136,51 @@ serve(async (req) => {
       console.log('webhook subscription event:', {
         type: notificationType,
         typeCode: subNotification.notificationType,
-        subscriptionId: subNotification.subscriptionId,
         purchaseToken: maskToken(subNotification.purchaseToken),
       });
 
-      // Buscar assinatura pelo purchase_token
+      // 3) Validar productId conhecido ANTES de qualquer escrita ou chamada externa.
+      //    Produto desconhecido NUNCA ativa, vincula token, renova ou altera subscriptions.
+      const tier = PRODUCT_ID_TO_TIER[subNotification.subscriptionId];
+      if (!tier) {
+        console.warn('webhook rejected: unknown productId');
+        await supabaseAdmin.from('audit_log').insert({
+          user_id: '00000000-0000-0000-0000-000000000000',
+          action: 'google_play_unknown_product',
+          details: {
+            messageId: body.message.messageId,
+            notificationType,
+            purchaseTokenMasked: maskToken(subNotification.purchaseToken),
+            processedAt: new Date().toISOString(),
+          },
+        });
+        return plainResponse(200, 'OK');
+      }
+
+      // 4) Validar purchaseToken na Play API ANTES de qualquer escrita em subscriptions.
+      //    Se a Play API rejeitar/falhar: nenhum UPDATE (nem vinculação de token, nem
+      //    ativação, renovação, cancelamento, revogação ou expiração).
+      const subscriptionDetails = await getSubscriptionFromGooglePlay(
+        subNotification.subscriptionId,
+        subNotification.purchaseToken
+      );
+      if (!subscriptionDetails) {
+        console.warn('webhook rejected: Play API did not validate purchaseToken');
+        await supabaseAdmin.from('audit_log').insert({
+          user_id: '00000000-0000-0000-0000-000000000000',
+          action: 'google_play_invalid_token',
+          details: {
+            messageId: body.message.messageId,
+            notificationType,
+            purchaseTokenMasked: maskToken(subNotification.purchaseToken),
+            processedAt: new Date().toISOString(),
+          },
+        });
+        return plainResponse(200, 'OK');
+      }
+
+      // 5) Lookup só após validação. Vinculação a assinatura recente sem token ocorre
+      //    apenas dentro do handler específico (mesclada ao update de tier/expires_at).
       let subscription: any = null;
       const { data: foundSubscription, error: findError } = await supabaseAdmin
         .from('subscriptions')
@@ -150,15 +189,11 @@ serve(async (req) => {
         .eq('platform', 'android')
         .maybeSingle();
 
-      if (findError) {
-        console.error('subscription lookup error');
-      }
-
+      if (findError) console.error('subscription lookup error');
       subscription = foundSubscription;
 
       if (!subscription) {
         const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-
         const { data: recentSubscriptions, error: recentError } = await supabaseAdmin
           .from('subscriptions')
           .select('*')
@@ -168,23 +203,9 @@ serve(async (req) => {
           .order('created_at', { ascending: false })
           .limit(1);
 
-        if (recentError) {
-          console.error('recent subscription lookup error');
-        } else if (recentSubscriptions && recentSubscriptions.length > 0) {
+        if (recentError) console.error('recent subscription lookup error');
+        else if (recentSubscriptions && recentSubscriptions.length > 0) {
           subscription = recentSubscriptions[0];
-          console.log('linking purchase_token to recent subscription');
-
-          const { error: updateError } = await supabaseAdmin
-            .from('subscriptions')
-            .update({
-              purchase_token: subNotification.purchaseToken,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', subscription.id);
-
-          if (updateError) console.error('purchase_token link failed');
-        } else {
-          console.log('no subscription to link');
         }
       }
 
@@ -194,28 +215,38 @@ serve(async (req) => {
             supabaseAdmin,
             subNotification.purchaseToken,
             subNotification.subscriptionId,
+            tier,
             subscription,
+            subscriptionDetails,
             notificationType
           );
           break;
-        case 2:
         case 1:
+        case 2:
         case 7:
           await handleSubscriptionRenewal(
             supabaseAdmin,
             subNotification.purchaseToken,
-            subNotification.subscriptionId,
+            tier,
             subscription,
+            subscriptionDetails,
             notificationType
           );
           break;
         case 3:
+          await handleSubscriptionCanceledKeepActive(
+            supabaseAdmin,
+            subscription,
+            subscriptionDetails,
+            notificationType
+          );
+          break;
         case 12:
         case 13:
-          await handleSubscriptionCancellation(
+          await handleSubscriptionRevokedExpired(
             supabaseAdmin,
-            subNotification.purchaseToken,
             subscription,
+            subscriptionDetails,
             notificationType
           );
           break;
@@ -232,7 +263,6 @@ serve(async (req) => {
         action: `google_play_${notificationType.toLowerCase()}`,
         details: {
           messageId: body.message.messageId,
-          subscriptionId: subNotification.subscriptionId,
           notificationType,
           purchaseTokenMasked: maskToken(subNotification.purchaseToken),
           foundUser: !!subscription?.user_id,
@@ -260,21 +290,26 @@ serve(async (req) => {
   }
 });
 
+/**
+ * NOTA sobre `is_active`:
+ *  - `tier` é a fonte da verdade para gates premium (UI lê `tier`).
+ *  - `is_active=true` aqui significa "registro de assinatura sincronizado e vigente".
+ *  - Em REVOKED/EXPIRED: paga acabou definitivamente -> tier='free' + is_active=false.
+ *  - Em CANCELED: usuário cancelou auto-renew mas pagou pelo período corrente ->
+ *    mantém tier e is_active=true até `expires_at` (vindo da Play API).
+ */
+
 async function handleNewPurchase(
   supabase: any,
   purchaseToken: string,
   subscriptionId: string,
+  tier: string,
   existingSubscription: any,
+  subscriptionDetails: any,
   notificationType: string
 ) {
   console.log('processing:', notificationType);
   try {
-    const subscriptionDetails = await getSubscriptionFromGooglePlay(subscriptionId, purchaseToken);
-    if (!subscriptionDetails) {
-      console.error('Play API returned no details');
-      return;
-    }
-    const tier = PRODUCT_ID_TO_TIER[subscriptionId] || 'premium';
     const newExpiresAt = subscriptionDetails.expiryTimeMillis
       ? new Date(parseInt(subscriptionDetails.expiryTimeMillis)).toISOString()
       : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -305,18 +340,13 @@ async function handleNewPurchase(
 async function handleSubscriptionRenewal(
   supabase: any,
   purchaseToken: string,
-  subscriptionId: string,
+  tier: string,
   existingSubscription: any,
+  subscriptionDetails: any,
   notificationType: string
 ) {
   console.log('processing:', notificationType);
   try {
-    const subscriptionDetails = await getSubscriptionFromGooglePlay(subscriptionId, purchaseToken);
-    if (!subscriptionDetails) {
-      console.error('Play API returned no details');
-      return;
-    }
-    const tier = PRODUCT_ID_TO_TIER[subscriptionId] || 'premium';
     const newExpiresAt = subscriptionDetails.expiryTimeMillis
       ? new Date(parseInt(subscriptionDetails.expiryTimeMillis)).toISOString()
       : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -342,31 +372,60 @@ async function handleSubscriptionRenewal(
   }
 }
 
-async function handleSubscriptionCancellation(
+async function handleSubscriptionCanceledKeepActive(
   supabase: any,
-  _purchaseToken: string,
   existingSubscription: any,
+  subscriptionDetails: any,
   notificationType: string
 ) {
   console.log('processing:', notificationType);
-  if (existingSubscription) {
-    const shouldDeactivate =
-      notificationType === 'SUBSCRIPTION_REVOKED' || notificationType === 'SUBSCRIPTION_EXPIRED';
-    if (shouldDeactivate) {
-      const { error } = await supabase
-        .from('subscriptions')
-        .update({
-          tier: 'free',
-          is_active: true,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', existingSubscription.id);
-      if (error) console.error('subscription deactivation failed');
-      else console.log('subscription set to free');
-    } else {
-      console.log('canceled but still active until expiration');
-    }
+  if (!existingSubscription) {
+    console.log('cancellation without matching subscription');
+    return;
   }
+  // CANCELED: mantém tier/is_active até a data de expiração paga.
+  const newExpiresAt = subscriptionDetails.expiryTimeMillis
+    ? new Date(parseInt(subscriptionDetails.expiryTimeMillis)).toISOString()
+    : existingSubscription.expires_at;
+
+  const { error } = await supabase
+    .from('subscriptions')
+    .update({
+      is_active: true,
+      expires_at: newExpiresAt,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', existingSubscription.id);
+  if (error) console.error('subscription cancel-keep failed');
+  else console.log('subscription canceled but active until expiration');
+}
+
+async function handleSubscriptionRevokedExpired(
+  supabase: any,
+  existingSubscription: any,
+  subscriptionDetails: any,
+  notificationType: string
+) {
+  console.log('processing:', notificationType);
+  if (!existingSubscription) {
+    console.log('revoked/expired without matching subscription');
+    return;
+  }
+  const expiresAt = subscriptionDetails?.expiryTimeMillis
+    ? new Date(parseInt(subscriptionDetails.expiryTimeMillis)).toISOString()
+    : new Date().toISOString();
+
+  const { error } = await supabase
+    .from('subscriptions')
+    .update({
+      tier: 'free',
+      is_active: false,
+      expires_at: expiresAt,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', existingSubscription.id);
+  if (error) console.error('subscription deactivation failed');
+  else console.log('subscription set to free + inactive');
 }
 
 async function handleSubscriptionGracePeriod(
