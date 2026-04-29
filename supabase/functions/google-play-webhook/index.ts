@@ -290,21 +290,26 @@ serve(async (req) => {
   }
 });
 
+/**
+ * NOTA sobre `is_active`:
+ *  - `tier` é a fonte da verdade para gates premium (UI lê `tier`).
+ *  - `is_active=true` aqui significa "registro de assinatura sincronizado e vigente".
+ *  - Em REVOKED/EXPIRED: paga acabou definitivamente -> tier='free' + is_active=false.
+ *  - Em CANCELED: usuário cancelou auto-renew mas pagou pelo período corrente ->
+ *    mantém tier e is_active=true até `expires_at` (vindo da Play API).
+ */
+
 async function handleNewPurchase(
   supabase: any,
   purchaseToken: string,
   subscriptionId: string,
+  tier: string,
   existingSubscription: any,
+  subscriptionDetails: any,
   notificationType: string
 ) {
   console.log('processing:', notificationType);
   try {
-    const subscriptionDetails = await getSubscriptionFromGooglePlay(subscriptionId, purchaseToken);
-    if (!subscriptionDetails) {
-      console.error('Play API returned no details');
-      return;
-    }
-    const tier = PRODUCT_ID_TO_TIER[subscriptionId] || 'premium';
     const newExpiresAt = subscriptionDetails.expiryTimeMillis
       ? new Date(parseInt(subscriptionDetails.expiryTimeMillis)).toISOString()
       : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -335,18 +340,13 @@ async function handleNewPurchase(
 async function handleSubscriptionRenewal(
   supabase: any,
   purchaseToken: string,
-  subscriptionId: string,
+  tier: string,
   existingSubscription: any,
+  subscriptionDetails: any,
   notificationType: string
 ) {
   console.log('processing:', notificationType);
   try {
-    const subscriptionDetails = await getSubscriptionFromGooglePlay(subscriptionId, purchaseToken);
-    if (!subscriptionDetails) {
-      console.error('Play API returned no details');
-      return;
-    }
-    const tier = PRODUCT_ID_TO_TIER[subscriptionId] || 'premium';
     const newExpiresAt = subscriptionDetails.expiryTimeMillis
       ? new Date(parseInt(subscriptionDetails.expiryTimeMillis)).toISOString()
       : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -372,31 +372,60 @@ async function handleSubscriptionRenewal(
   }
 }
 
-async function handleSubscriptionCancellation(
+async function handleSubscriptionCanceledKeepActive(
   supabase: any,
-  _purchaseToken: string,
   existingSubscription: any,
+  subscriptionDetails: any,
   notificationType: string
 ) {
   console.log('processing:', notificationType);
-  if (existingSubscription) {
-    const shouldDeactivate =
-      notificationType === 'SUBSCRIPTION_REVOKED' || notificationType === 'SUBSCRIPTION_EXPIRED';
-    if (shouldDeactivate) {
-      const { error } = await supabase
-        .from('subscriptions')
-        .update({
-          tier: 'free',
-          is_active: true,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', existingSubscription.id);
-      if (error) console.error('subscription deactivation failed');
-      else console.log('subscription set to free');
-    } else {
-      console.log('canceled but still active until expiration');
-    }
+  if (!existingSubscription) {
+    console.log('cancellation without matching subscription');
+    return;
   }
+  // CANCELED: mantém tier/is_active até a data de expiração paga.
+  const newExpiresAt = subscriptionDetails.expiryTimeMillis
+    ? new Date(parseInt(subscriptionDetails.expiryTimeMillis)).toISOString()
+    : existingSubscription.expires_at;
+
+  const { error } = await supabase
+    .from('subscriptions')
+    .update({
+      is_active: true,
+      expires_at: newExpiresAt,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', existingSubscription.id);
+  if (error) console.error('subscription cancel-keep failed');
+  else console.log('subscription canceled but active until expiration');
+}
+
+async function handleSubscriptionRevokedExpired(
+  supabase: any,
+  existingSubscription: any,
+  subscriptionDetails: any,
+  notificationType: string
+) {
+  console.log('processing:', notificationType);
+  if (!existingSubscription) {
+    console.log('revoked/expired without matching subscription');
+    return;
+  }
+  const expiresAt = subscriptionDetails?.expiryTimeMillis
+    ? new Date(parseInt(subscriptionDetails.expiryTimeMillis)).toISOString()
+    : new Date().toISOString();
+
+  const { error } = await supabase
+    .from('subscriptions')
+    .update({
+      tier: 'free',
+      is_active: false,
+      expires_at: expiresAt,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', existingSubscription.id);
+  if (error) console.error('subscription deactivation failed');
+  else console.log('subscription set to free + inactive');
 }
 
 async function handleSubscriptionGracePeriod(
