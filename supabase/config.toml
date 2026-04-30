@@ -1,37 +1,43 @@
 project_id = "jaoldaqvbdllowepzwbr"
 
+# Cron-internal: keep verify_jwt=false; protected by INTERNAL_API_SECRET header.
 [functions.check-recurring-reminders]
 verify_jwt = false
 
-[functions.delete-user-account]
-verify_jwt = true
-
-[functions.send-notification]
-verify_jwt = false
-
-[functions.validate-purchase]
-verify_jwt = false
-
+# Cron-internal: keep verify_jwt=false; protected by INTERNAL_API_SECRET header.
 [functions.check-budget-goals]
 verify_jwt = false
 
+# Google Pub/Sub OIDC verified inside the function.
 [functions.google-play-webhook]
 verify_jwt = false
 
+# User-facing: require valid Supabase JWT.
+[functions.delete-user-account]
+verify_jwt = true
+
+[functions.validate-purchase]
+verify_jwt = true
+
 [functions.recover-subscription]
-verify_jwt = false
+verify_jwt = true
 
 [functions.sync-subscription]
-verify_jwt = false
+verify_jwt = true
 
 [functions.notify-group-expense]
-verify_jwt = false
+verify_jwt = true
 
 [functions.admin-subscriptions]
-verify_jwt = false
+verify_jwt = true
 
 [functions.admin-dashboard]
-verify_jwt = false
+verify_jwt = true
 
 [functions.admin-notifications]
+verify_jwt = true
+
+# Dual-mode: accepts user JWT (self-only) OR INTERNAL_API_SECRET (cron/admin).
+# Auth handled in code; verify_jwt=false to allow both paths.
+[functions.send-notification]
 verify_jwt = false

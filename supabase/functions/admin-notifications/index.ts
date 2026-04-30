@@ -2,17 +2,39 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { create, getNumericDate } from "https://deno.land/x/djwt@v3.0.1/mod.ts";
 // shared mask helpers available if needed
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const ALLOWED_ORIGINS = new Set([
+  "https://gastinho-simples.lovable.app",
+  "https://id-preview--a1f2a0b1-38be-4811-8b36-2e341ccca268.lovable.app",
+  "http://localhost:5173",
+  "http://localhost:8080",
+  "capacitor://localhost",
+  "https://localhost",
+]);
+
+function pickOrigin(req: Request): string {
+  const o = req.headers.get("origin");
+  return o && ALLOWED_ORIGINS.has(o) ? o : "";
+}
+
+function buildCorsHeaders(req: Request): Record<string,string> {
+  const origin = pickOrigin(req);
+  const base =  {
+  "Access-Control-Allow-Origin": "__ORIGIN__",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
+  base["Access-Control-Allow-Origin"] = origin;
+  base["Vary"] = "Origin";
+  return base;
+}
+// Back-compat default (no origin) for any legacy reference; real usage builds per-request.
+const corsHeaders = { "Access-Control-Allow-Origin": "", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Vary": "Origin" };
 
-function jsonResponse(data: unknown, status = 200) {
+function jsonResponse(req: Request, data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...buildCorsHeaders(req), "Content-Type": "application/json" },
   });
 }
 
@@ -105,7 +127,7 @@ async function getAccessToken(): Promise<string> {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: buildCorsHeaders(req) });
   }
 
   try {
@@ -120,13 +142,13 @@ Deno.serve(async (req) => {
         .limit(100);
 
       if (error) throw error;
-      return jsonResponse({ notifications: data || [] });
+      return jsonResponse(req, { notifications: data || [] });
     }
 
     // POST: send notification
     if (req.method === "POST") {
       const { title, body, target_type, target_email } = await req.json();
-      if (!title || !body) return jsonResponse({ error: "Título e corpo são obrigatórios" }, 400);
+      if (!title || !body) return jsonResponse(req, { error: "Título e corpo são obrigatórios" }, 400);
 
       let tokens: string[] = [];
 
@@ -134,7 +156,7 @@ Deno.serve(async (req) => {
         // Find user by email, get their FCM tokens
         const { data: { users } } = await adminClient.auth.admin.listUsers();
         const targetUser = users?.find((u) => u.email === target_email);
-        if (!targetUser) return jsonResponse({ error: "Usuário não encontrado" }, 404);
+        if (!targetUser) return jsonResponse(req, { error: "Usuário não encontrado" }, 404);
 
         const { data: fcmData } = await adminClient
           .from("user_fcm_tokens")
@@ -159,7 +181,7 @@ Deno.serve(async (req) => {
           recipients_count: 0,
           sent_by: callerEmail,
         });
-        return jsonResponse({ success: true, message: "Nenhum token FCM encontrado", sent: 0 });
+        return jsonResponse(req, { success: true, message: "Nenhum token FCM encontrado", sent: 0 });
       }
 
       // Get Firebase access token
@@ -208,7 +230,7 @@ Deno.serve(async (req) => {
         sent_by: callerEmail,
       });
 
-      return jsonResponse({
+      return jsonResponse(req, {
         success: true,
         message: `Notificação enviada para ${successCount} dispositivo(s)${failCount > 0 ? `, ${failCount} falha(s)` : ""}`,
         sent: successCount,
@@ -216,10 +238,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    return jsonResponse({ error: "Método não suportado" }, 405);
+    return jsonResponse(req, { error: "Método não suportado" }, 405);
   } catch (err: unknown) {
     const message = (err as Error).message || "Erro interno";
     const status = message === "Acesso negado" ? 403 : message === "Não autorizado" ? 401 : 500;
-    return jsonResponse({ error: message }, status);
+    return jsonResponse(req, { error: message }, status);
   }
 });

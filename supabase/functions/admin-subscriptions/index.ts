@@ -1,11 +1,33 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const ALLOWED_ORIGINS = new Set([
+  "https://gastinho-simples.lovable.app",
+  "https://id-preview--a1f2a0b1-38be-4811-8b36-2e341ccca268.lovable.app",
+  "http://localhost:5173",
+  "http://localhost:8080",
+  "capacitor://localhost",
+  "https://localhost",
+]);
+
+function pickOrigin(req: Request): string {
+  const o = req.headers.get("origin");
+  return o && ALLOWED_ORIGINS.has(o) ? o : "";
+}
+
+function buildCorsHeaders(req: Request): Record<string,string> {
+  const origin = pickOrigin(req);
+  const base =  {
+  "Access-Control-Allow-Origin": "__ORIGIN__",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
   "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
 };
+  base["Access-Control-Allow-Origin"] = origin;
+  base["Vary"] = "Origin";
+  return base;
+}
+// Back-compat default (no origin) for any legacy reference; real usage builds per-request.
+const corsHeaders = { "Access-Control-Allow-Origin": "", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Vary": "Origin" };
 
 type Duration = "1m" | "3m" | "6m" | "1y" | "lifetime";
 
@@ -30,7 +52,7 @@ function effectiveStatus(sub: any): "active" | "expired" | "lifetime" | "revoked
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: buildCorsHeaders(req) });
   }
 
   try {
@@ -39,7 +61,7 @@ Deno.serve(async (req) => {
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Não autorizado" }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...buildCorsHeaders(req), "Content-Type": "application/json" },
       });
     }
 
@@ -54,7 +76,7 @@ Deno.serve(async (req) => {
     if (claimsError || !claimsData?.claims?.sub) {
       return new Response(JSON.stringify({ error: "Token inválido" }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...buildCorsHeaders(req), "Content-Type": "application/json" },
       });
     }
 
@@ -73,7 +95,7 @@ Deno.serve(async (req) => {
     if (roleError || roleData !== true) {
       return new Response(JSON.stringify({ error: "Acesso negado" }), {
         status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...buildCorsHeaders(req), "Content-Type": "application/json" },
       });
     }
 
@@ -111,7 +133,7 @@ Deno.serve(async (req) => {
         }
 
         return new Response(JSON.stringify({ subscribers }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { headers: { ...buildCorsHeaders(req), "Content-Type": "application/json" } }
         );
       }
 
@@ -122,7 +144,7 @@ Deno.serve(async (req) => {
       if (!targetUser) {
         return new Response(JSON.stringify({ error: "Usuário não encontrado" }), {
           status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...buildCorsHeaders(req), "Content-Type": "application/json" },
         });
       }
 
@@ -151,7 +173,7 @@ Deno.serve(async (req) => {
               }
             : null,
         }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...buildCorsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -164,7 +186,7 @@ Deno.serve(async (req) => {
       if (!email || !tier || !["premium", "no_ads"].includes(tier)) {
         return new Response(
           JSON.stringify({ error: "Email e tier (premium/no_ads) são obrigatórios" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 400, headers: { ...buildCorsHeaders(req), "Content-Type": "application/json" } }
         );
       }
 
@@ -176,7 +198,7 @@ Deno.serve(async (req) => {
       if (!targetUser) {
         return new Response(JSON.stringify({ error: "Usuário não encontrado" }), {
           status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...buildCorsHeaders(req), "Content-Type": "application/json" },
         });
       }
 
@@ -197,7 +219,7 @@ Deno.serve(async (req) => {
             JSON.stringify({
               error: `Usuário tem assinatura ativa via ${platformLabel}. Aguarde expiração ou peça para o usuário cancelar antes de conceder manualmente.`,
             }),
-            { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            { status: 409, headers: { ...buildCorsHeaders(req), "Content-Type": "application/json" } }
           );
         }
       }
@@ -247,7 +269,7 @@ Deno.serve(async (req) => {
           message: `Plano ${tier} (${durLabel}) concedido para ${email}`,
           expires_at,
         }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...buildCorsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -256,7 +278,7 @@ Deno.serve(async (req) => {
       if (!email) {
         return new Response(JSON.stringify({ error: "Email é obrigatório" }), {
           status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...buildCorsHeaders(req), "Content-Type": "application/json" },
         });
       }
 
@@ -265,7 +287,7 @@ Deno.serve(async (req) => {
       if (!targetUser) {
         return new Response(JSON.stringify({ error: "Usuário não encontrado" }), {
           status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...buildCorsHeaders(req), "Content-Type": "application/json" },
         });
       }
 
@@ -288,19 +310,19 @@ Deno.serve(async (req) => {
 
       return new Response(
         JSON.stringify({ success: true, message: `Acesso revogado para ${email} (resetado para gratuito)` }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...buildCorsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
     return new Response(JSON.stringify({ error: "Método não suportado" }), {
       status: 405,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...buildCorsHeaders(req), "Content-Type": "application/json" },
     });
   } catch (err) {
     console.error("admin-subscriptions error:", (err as Error).message);
     return new Response(JSON.stringify({ error: (err as Error).message }), {
       status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...buildCorsHeaders(req), "Content-Type": "application/json" },
     });
   }
 });

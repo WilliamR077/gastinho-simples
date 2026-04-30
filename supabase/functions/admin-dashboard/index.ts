@@ -1,16 +1,38 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const ALLOWED_ORIGINS = new Set([
+  "https://gastinho-simples.lovable.app",
+  "https://id-preview--a1f2a0b1-38be-4811-8b36-2e341ccca268.lovable.app",
+  "http://localhost:5173",
+  "http://localhost:8080",
+  "capacitor://localhost",
+  "https://localhost",
+]);
+
+function pickOrigin(req: Request): string {
+  const o = req.headers.get("origin");
+  return o && ALLOWED_ORIGINS.has(o) ? o : "";
+}
+
+function buildCorsHeaders(req: Request): Record<string,string> {
+  const origin = pickOrigin(req);
+  const base =  {
+  "Access-Control-Allow-Origin": "__ORIGIN__",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
   "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
 };
+  base["Access-Control-Allow-Origin"] = origin;
+  base["Vary"] = "Origin";
+  return base;
+}
+// Back-compat default (no origin) for any legacy reference; real usage builds per-request.
+const corsHeaders = { "Access-Control-Allow-Origin": "", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Vary": "Origin" };
 
-function jsonResponse(data: unknown, status = 200) {
+function jsonResponse(req: Request, data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...buildCorsHeaders(req), "Content-Type": "application/json" },
   });
 }
 
@@ -48,7 +70,7 @@ const PRICES = { premium: 14.9, no_ads: 3.9, premium_plus: 14.9 };
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: buildCorsHeaders(req) });
   }
 
   try {
@@ -60,7 +82,7 @@ Deno.serve(async (req) => {
     if (action === "list_emails") {
       const { data: { users } } = await adminClient.auth.admin.listUsers({ perPage: 10000 });
       const emails = (users || []).map((u) => u.email).filter(Boolean).sort();
-      return jsonResponse({ emails });
+      return jsonResponse(req, { emails });
     }
 
     // ── Action: list_users ──
@@ -83,13 +105,13 @@ Deno.serve(async (req) => {
         };
       }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-      return jsonResponse({ users });
+      return jsonResponse(req, { users });
     }
 
     // ── Action: delete_user ──
     if (action === "delete_user" && req.method === "POST") {
       const { user_id } = await req.json();
-      if (!user_id) return jsonResponse({ error: "user_id é obrigatório" }, 400);
+      if (!user_id) return jsonResponse(req, { error: "user_id é obrigatório" }, 400);
 
       // Delete user data first
       await Promise.all([
@@ -113,7 +135,7 @@ Deno.serve(async (req) => {
       const { error } = await adminClient.auth.admin.deleteUser(user_id);
       if (error) throw error;
 
-      return jsonResponse({ success: true, message: "Usuário excluído com sucesso" });
+      return jsonResponse(req, { success: true, message: "Usuário excluído com sucesso" });
     }
 
     // User detail mode
@@ -121,7 +143,7 @@ Deno.serve(async (req) => {
     if (email) {
       const { data: { users } } = await adminClient.auth.admin.listUsers();
       const user = users?.find((u) => u.email === email);
-      if (!user) return jsonResponse({ error: "Usuário não encontrado" }, 404);
+      if (!user) return jsonResponse(req, { error: "Usuário não encontrado" }, 404);
 
       const [subRes, expRes, incRes, cardRes, groupRes, recentExpRes, recentIncRes] = await Promise.all([
         adminClient.from("subscriptions").select("*").eq("user_id", user.id).eq("is_active", true).maybeSingle(),
@@ -133,7 +155,7 @@ Deno.serve(async (req) => {
         adminClient.from("incomes").select("description, amount, income_date, category_name").eq("user_id", user.id).order("income_date", { ascending: false }).limit(5),
       ]);
 
-      return jsonResponse({
+      return jsonResponse(req, {
         user_id: user.id,
         email: user.email,
         created_at: user.created_at,
@@ -218,7 +240,7 @@ Deno.serve(async (req) => {
       email: userEmailMap.get(log.user_id) || "desconhecido",
     }));
 
-    return jsonResponse({
+    return jsonResponse(req, {
       overview: {
         total_users: allUsers.length,
         active_subscribers: activePaid.length,
@@ -241,6 +263,6 @@ Deno.serve(async (req) => {
   } catch (err: unknown) {
     const message = (err as Error).message || "Erro interno";
     const status = message === "Acesso negado" ? 403 : message === "Não autorizado" ? 401 : 500;
-    return jsonResponse({ error: message }, status);
+    return jsonResponse(req, { error: message }, status);
   }
 });

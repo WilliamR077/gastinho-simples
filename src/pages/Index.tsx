@@ -940,13 +940,11 @@ export default function Index() {
         supabase.functions.invoke("notify-group-expense", {
           body: {
             group_id: groupId_,
-            user_id: user.id,
             description: data.description,
             amount: data.amount,
             category_name: catName || categoryName,
             group_name: selectedGroup_?.name || currentContext.groupName || "Grupo"
-          },
-          headers: { "x-internal-secret": import.meta.env.VITE_INTERNAL_API_SECRET || "" }
+          }
         }).catch((err) => console.warn("⚠️ Falha ao notificar grupo:", err));
       }
 
