@@ -202,14 +202,10 @@ serve(async (req) => {
 
     console.log(`📤 Enviando notificação para user_id: ${user_id}`);
 
-    // Buscar FCM tokens do usuário no Supabase
-    const { createClient } = await import(
-      "https://esm.sh/@supabase/supabase-js@2"
-    );
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    // Buscar FCM tokens do usuário (service role para ler tabela elevada)
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = createClient(SUPABASE_URL, supabaseKey);
+
 
     const { data: tokens, error: tokenError } = await supabase
       .from("user_fcm_tokens")
