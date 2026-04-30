@@ -1,14 +1,30 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { create, getNumericDate } from "https://deno.land/x/djwt@v3.0.1/mod.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const FIREBASE_SERVICE_ACCOUNT_JSON = Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON");
 const INTERNAL_API_SECRET = Deno.env.get("INTERNAL_API_SECRET");
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-internal-secret",
-};
+const ALLOWED_ORIGINS = new Set<string>([
+  "https://gastinho-simples.lovable.app",
+  "https://id-preview--a1f2a0b1-38be-4811-8b36-2e341ccca268.lovable.app",
+  "http://localhost:5173",
+  "http://localhost:8080",
+  "capacitor://localhost",
+  "https://localhost",
+]);
+
+function buildCorsHeaders(origin: string | null): Record<string, string> {
+  const allowed = origin && ALLOWED_ORIGINS.has(origin) ? origin : "";
+  return {
+    "Access-Control-Allow-Origin": allowed,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-internal-secret",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Vary": "Origin",
+  };
+}
 
 interface NotificationPayload {
   user_id: string;
@@ -135,27 +151,54 @@ async function getAccessToken(): Promise<string> {
 }
 
 serve(async (req) => {
-  // Handle CORS preflight
+  const origin = req.headers.get("origin");
+  const corsHeaders = buildCorsHeaders(origin);
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Security: Validate internal API secret to prevent unauthorized notifications
+    // Dual-mode auth:
+    //   (a) Internal cron/admin: x-internal-secret matches INTERNAL_API_SECRET → may target any user_id.
+    //   (b) End-user via Supabase JWT: Authorization: Bearer <token> → may only target self.
     const providedSecret = req.headers.get("x-internal-secret");
-    if (!INTERNAL_API_SECRET || providedSecret !== INTERNAL_API_SECRET) {
-      console.error("❌ Unauthorized: Invalid or missing internal API secret");
-      return new Response(
-        JSON.stringify({ success: false, error: "Unauthorized" }),
-        {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 401,
-        }
-      );
+    const authHeader = req.headers.get("Authorization") ?? "";
+    const isInternal =
+      !!INTERNAL_API_SECRET && providedSecret === INTERNAL_API_SECRET;
+
+    let authenticatedUserId: string | null = null;
+
+    if (!isInternal) {
+      if (!authHeader.toLowerCase().startsWith("bearer ")) {
+        return new Response(
+          JSON.stringify({ success: false, error: "Unauthorized" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 401 }
+        );
+      }
+      const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: userData, error: userErr } = await userClient.auth.getUser();
+      if (userErr || !userData?.user) {
+        return new Response(
+          JSON.stringify({ success: false, error: "Unauthorized" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 401 }
+        );
+      }
+      authenticatedUserId = userData.user.id;
     }
 
     const payload: NotificationPayload = await req.json();
     const { user_id, title, body, data } = payload;
+
+    // Enforce self-only when authenticated via JWT.
+    if (!isInternal && authenticatedUserId && user_id !== authenticatedUserId) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Forbidden" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 403 }
+      );
+    }
 
     console.log(`📤 Enviando notificação para user_id: ${user_id}`);
 
