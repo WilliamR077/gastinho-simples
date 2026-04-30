@@ -29,7 +29,7 @@ function buildCorsHeaders(req) {
 // Back-compat default (no origin) for any legacy reference; real usage builds per-request.
 const corsHeaders = { "Access-Control-Allow-Origin": "", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Vary": "Origin" };
 
-function jsonResponse(data: unknown, status = 200) {
+function jsonResponse(req, req: Request, data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
     headers: { ...buildCorsHeaders(req), "Content-Type": "application/json" },
@@ -82,7 +82,7 @@ Deno.serve(async (req) => {
     if (action === "list_emails") {
       const { data: { users } } = await adminClient.auth.admin.listUsers({ perPage: 10000 });
       const emails = (users || []).map((u) => u.email).filter(Boolean).sort();
-      return jsonResponse({ emails });
+      return jsonResponse(req, { emails });
     }
 
     // ── Action: list_users ──
@@ -105,13 +105,13 @@ Deno.serve(async (req) => {
         };
       }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-      return jsonResponse({ users });
+      return jsonResponse(req, { users });
     }
 
     // ── Action: delete_user ──
     if (action === "delete_user" && req.method === "POST") {
       const { user_id } = await req.json();
-      if (!user_id) return jsonResponse({ error: "user_id é obrigatório" }, 400);
+      if (!user_id) return jsonResponse(req, { error: "user_id é obrigatório" }, 400);
 
       // Delete user data first
       await Promise.all([
@@ -135,7 +135,7 @@ Deno.serve(async (req) => {
       const { error } = await adminClient.auth.admin.deleteUser(user_id);
       if (error) throw error;
 
-      return jsonResponse({ success: true, message: "Usuário excluído com sucesso" });
+      return jsonResponse(req, { success: true, message: "Usuário excluído com sucesso" });
     }
 
     // User detail mode
@@ -143,7 +143,7 @@ Deno.serve(async (req) => {
     if (email) {
       const { data: { users } } = await adminClient.auth.admin.listUsers();
       const user = users?.find((u) => u.email === email);
-      if (!user) return jsonResponse({ error: "Usuário não encontrado" }, 404);
+      if (!user) return jsonResponse(req, { error: "Usuário não encontrado" }, 404);
 
       const [subRes, expRes, incRes, cardRes, groupRes, recentExpRes, recentIncRes] = await Promise.all([
         adminClient.from("subscriptions").select("*").eq("user_id", user.id).eq("is_active", true).maybeSingle(),
@@ -155,7 +155,7 @@ Deno.serve(async (req) => {
         adminClient.from("incomes").select("description, amount, income_date, category_name").eq("user_id", user.id).order("income_date", { ascending: false }).limit(5),
       ]);
 
-      return jsonResponse({
+      return jsonResponse(req, {
         user_id: user.id,
         email: user.email,
         created_at: user.created_at,
@@ -240,7 +240,7 @@ Deno.serve(async (req) => {
       email: userEmailMap.get(log.user_id) || "desconhecido",
     }));
 
-    return jsonResponse({
+    return jsonResponse(req, {
       overview: {
         total_users: allUsers.length,
         active_subscribers: activePaid.length,
@@ -263,6 +263,6 @@ Deno.serve(async (req) => {
   } catch (err: unknown) {
     const message = (err as Error).message || "Erro interno";
     const status = message === "Acesso negado" ? 403 : message === "Não autorizado" ? 401 : 500;
-    return jsonResponse({ error: message }, status);
+    return jsonResponse(req, { error: message }, status);
   }
 });
