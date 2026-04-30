@@ -1,15 +1,37 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const ALLOWED_ORIGINS = new Set([
+  "https://gastinho-simples.lovable.app",
+  "https://id-preview--a1f2a0b1-38be-4811-8b36-2e341ccca268.lovable.app",
+  "http://localhost:5173",
+  "http://localhost:8080",
+  "capacitor://localhost",
+  "https://localhost",
+]);
+
+function pickOrigin(req) {
+  const o = req.headers.get("origin");
+  return o && ALLOWED_ORIGINS.has(o) ? o : "";
+}
+
+function buildCorsHeaders(req) {
+  const origin = pickOrigin(req);
+  const base =  {
+  "Access-Control-Allow-Origin": "__ORIGIN__",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+  base["Access-Control-Allow-Origin"] = origin;
+  base["Vary"] = "Origin";
+  return base;
+}
+// Back-compat default (no origin) for any legacy reference; real usage builds per-request.
+const corsHeaders = { "Access-Control-Allow-Origin": "", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Vary": "Origin" };
 
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: buildCorsHeaders(req) });
   }
 
   try {
@@ -19,7 +41,7 @@ serve(async (req) => {
       console.error("Missing authorization header");
       return new Response(
         JSON.stringify({ error: "Não autorizado" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 401, headers: { ...buildCorsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -42,7 +64,7 @@ serve(async (req) => {
       console.error("Authentication error:", authError);
       return new Response(
         JSON.stringify({ error: "Não autorizado" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 401, headers: { ...buildCorsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -233,7 +255,7 @@ serve(async (req) => {
       }),
       {
         status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...buildCorsHeaders(req), "Content-Type": "application/json" },
       }
     );
   } catch (error: any) {
@@ -244,7 +266,7 @@ serve(async (req) => {
       }),
       {
         status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...buildCorsHeaders(req), "Content-Type": "application/json" },
       }
     );
   }

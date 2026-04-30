@@ -2,17 +2,39 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { create, getNumericDate } from "https://deno.land/x/djwt@v3.0.1/mod.ts";
 // shared mask helpers available if needed
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const ALLOWED_ORIGINS = new Set([
+  "https://gastinho-simples.lovable.app",
+  "https://id-preview--a1f2a0b1-38be-4811-8b36-2e341ccca268.lovable.app",
+  "http://localhost:5173",
+  "http://localhost:8080",
+  "capacitor://localhost",
+  "https://localhost",
+]);
+
+function pickOrigin(req) {
+  const o = req.headers.get("origin");
+  return o && ALLOWED_ORIGINS.has(o) ? o : "";
+}
+
+function buildCorsHeaders(req) {
+  const origin = pickOrigin(req);
+  const base =  {
+  "Access-Control-Allow-Origin": "__ORIGIN__",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
+  base["Access-Control-Allow-Origin"] = origin;
+  base["Vary"] = "Origin";
+  return base;
+}
+// Back-compat default (no origin) for any legacy reference; real usage builds per-request.
+const corsHeaders = { "Access-Control-Allow-Origin": "", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Vary": "Origin" };
 
 function jsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...buildCorsHeaders(req), "Content-Type": "application/json" },
   });
 }
 
@@ -105,7 +127,7 @@ async function getAccessToken(): Promise<string> {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: buildCorsHeaders(req) });
   }
 
   try {

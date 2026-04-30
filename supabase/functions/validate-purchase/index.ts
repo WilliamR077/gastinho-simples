@@ -1,10 +1,32 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+const ALLOWED_ORIGINS = new Set([
+  "https://gastinho-simples.lovable.app",
+  "https://id-preview--a1f2a0b1-38be-4811-8b36-2e341ccca268.lovable.app",
+  "http://localhost:5173",
+  "http://localhost:8080",
+  "capacitor://localhost",
+  "https://localhost",
+]);
+
+function pickOrigin(req) {
+  const o = req.headers.get("origin");
+  return o && ALLOWED_ORIGINS.has(o) ? o : "";
+}
+
+function buildCorsHeaders(req) {
+  const origin = pickOrigin(req);
+  const base =  {
+  "Access-Control-Allow-Origin": "__ORIGIN__",
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+  base["Access-Control-Allow-Origin"] = origin;
+  base["Vary"] = "Origin";
+  return base;
+}
+// Back-compat default (no origin) for any legacy reference; real usage builds per-request.
+const corsHeaders = { "Access-Control-Allow-Origin": "", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Vary": "Origin" };
 
 interface PurchaseValidationRequest {
   productId: string;
@@ -24,8 +46,8 @@ const PRODUCT_ID_TO_TIER: Record<string, string> = {
 
 serve(async (req) => {
   // Handle CORS
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response('ok', { headers: buildCorsHeaders(req) });
   }
 
   try {
@@ -77,7 +99,7 @@ serve(async (req) => {
           errorCode: 'INVALID_PURCHASE_TOKEN',
         }),
         {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          headers: { ...buildCorsHeaders(req), 'Content-Type': 'application/json' },
           status: 400,
         }
       );
@@ -124,7 +146,7 @@ serve(async (req) => {
           errorCode: 'TOKEN_BELONGS_TO_OTHER_USER',
         }),
         {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          headers: { ...buildCorsHeaders(req), 'Content-Type': 'application/json' },
           status: 400,
         }
       );
@@ -173,7 +195,7 @@ serve(async (req) => {
         expiresAt: validationResult.expiresAt,
       }),
       {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...buildCorsHeaders(req), 'Content-Type': 'application/json' },
         status: 200,
       }
     );
@@ -187,7 +209,7 @@ serve(async (req) => {
         error: errorMessage,
       }),
       {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...buildCorsHeaders(req), 'Content-Type': 'application/json' },
         status: 400,
       }
     );
