@@ -11,12 +11,12 @@ const ALLOWED_ORIGINS = new Set([
   "https://localhost",
 ]);
 
-function pickOrigin(req) {
+function pickOrigin(req: Request): string {
   const o = req.headers.get("origin");
   return o && ALLOWED_ORIGINS.has(o) ? o : "";
 }
 
-function buildCorsHeaders(req) {
+function buildCorsHeaders(req: Request): Record<string,string> {
   const origin = pickOrigin(req);
   const base =  {
   "Access-Control-Allow-Origin": "__ORIGIN__",
