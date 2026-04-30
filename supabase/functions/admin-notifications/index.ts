@@ -31,7 +31,7 @@ function buildCorsHeaders(req) {
 // Back-compat default (no origin) for any legacy reference; real usage builds per-request.
 const corsHeaders = { "Access-Control-Allow-Origin": "", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Vary": "Origin" };
 
-function jsonResponse(req, req: Request, data: unknown, status = 200) {
+function jsonResponse(req: Request, data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
     headers: { ...buildCorsHeaders(req), "Content-Type": "application/json" },
