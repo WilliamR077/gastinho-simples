@@ -913,6 +913,7 @@ export type Database = {
         Args: { group_id_param: string; user_id_param: string }
         Returns: Database["public"]["Enums"]["group_member_role"]
       }
+      get_internal_api_secret_for_cron: { Args: never; Returns: string }
       get_user_subscription_tier: {
         Args: { user_id_param: string }
         Returns: Database["public"]["Enums"]["subscription_tier"]
