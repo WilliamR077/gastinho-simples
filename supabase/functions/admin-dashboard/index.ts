@@ -75,7 +75,24 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const adminClient = await validateAdmin(req);
+  try {
+    const { adminClient, callerId } = await validateAdmin(req);
+
+    // Rate limit (fail-open): 60 req/60s per admin user.
+    const rlKey = await buildBucketKey({ functionName: "admin-dashboard", userId: callerId });
+    if (rlKey) {
+      const rl = await checkRateLimit(rlKey, {
+        functionName: "admin-dashboard",
+        maxRequests: 60,
+        windowSeconds: 60,
+        failOpen: true,
+      });
+      if (!rl.allowed) {
+        console.warn(`[admin-dashboard] rate-limited admin=${callerId} retry=${rl.retryAfterSeconds}s`);
+        return rateLimitResponse(rl, buildCorsHeaders(req));
+      }
+    }
+
     const url = new URL(req.url);
     const action = url.searchParams.get("action");
 
