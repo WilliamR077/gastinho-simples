@@ -477,6 +477,24 @@ export type Database = {
         }
         Relationships: []
       }
+      rate_limit_events: {
+        Row: {
+          bucket_key: string
+          created_at: string
+          id: number
+        }
+        Insert: {
+          bucket_key: string
+          created_at?: string
+          id?: number
+        }
+        Update: {
+          bucket_key?: string
+          created_at?: string
+          id?: number
+        }
+        Relationships: []
+      }
       recurring_expenses: {
         Row: {
           amount: number
@@ -882,6 +900,15 @@ export type Database = {
     }
     Functions: {
       can_create_group: { Args: { user_id_param: string }; Returns: boolean }
+      check_rate_limit: {
+        Args: {
+          p_bucket_key: string
+          p_max_requests: number
+          p_window_seconds: number
+        }
+        Returns: Json
+      }
+      cleanup_rate_limit_events: { Args: never; Returns: undefined }
       delete_group_and_data: {
         Args: { action_param: string; group_id_param: string }
         Returns: undefined
