@@ -79,6 +79,21 @@ serve(async (req) => {
       throw new Error('Não autorizado');
     }
 
+    // Rate limit (fail-closed): 10 req/60s per user.
+    const rlKey = await buildBucketKey({ functionName: "validate-purchase", userId: user.id });
+    if (rlKey) {
+      const rl = await checkRateLimit(rlKey, {
+        functionName: "validate-purchase",
+        maxRequests: 10,
+        windowSeconds: 60,
+        failOpen: false,
+      });
+      if (!rl.allowed) {
+        console.warn(`[validate-purchase] rate-limited user=${user.id} retry=${rl.retryAfterSeconds}s`);
+        return rateLimitResponse(rl, buildCorsHeaders(req));
+      }
+    }
+
     // Parse do body
     const { productId, purchaseToken, platform, tier: providedTier }: PurchaseValidationRequest = await req.json();
 
