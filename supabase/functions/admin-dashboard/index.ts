@@ -37,7 +37,7 @@ function jsonResponse(req: Request, data: unknown, status = 200) {
   });
 }
 
-async function validateAdmin(req: Request) {
+async function validateAdmin(req: Request): Promise<{ adminClient: ReturnType<typeof createClient>; callerId: string }> {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) throw new Error("Não autorizado");
 
@@ -64,7 +64,7 @@ async function validateAdmin(req: Request) {
   });
   if (roleError || roleData !== true) throw new Error("Acesso negado");
 
-  return adminClient;
+  return { adminClient, callerId };
 }
 
 const PRICES = { premium: 14.9, no_ads: 3.9, premium_plus: 14.9 };
