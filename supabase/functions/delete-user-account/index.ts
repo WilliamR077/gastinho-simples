@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildBucketKey, checkRateLimit, rateLimitResponse } from "../_shared/rate-limit.ts";
 
 const ALLOWED_ORIGINS = new Set([
   "https://gastinho-simples.lovable.app",
@@ -70,6 +71,21 @@ serve(async (req) => {
 
     const userId = user.id;
     console.log(`Processing account deletion for user: ${userId}`);
+
+    // Rate limit (fail-closed): 3 attempts / 5 min per user.
+    const rlKey = await buildBucketKey({ functionName: "delete-user-account", userId });
+    if (rlKey) {
+      const rl = await checkRateLimit(rlKey, {
+        functionName: "delete-user-account",
+        maxRequests: 3,
+        windowSeconds: 300,
+        failOpen: false,
+      });
+      if (!rl.allowed) {
+        console.warn(`[delete-user-account] rate-limited user=${userId} retry=${rl.retryAfterSeconds}s`);
+        return rateLimitResponse(rl, buildCorsHeaders(req));
+      }
+    }
 
     // Create admin client for data deletion
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);

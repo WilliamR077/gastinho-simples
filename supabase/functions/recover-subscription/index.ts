@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildBucketKey, checkRateLimit, rateLimitResponse } from "../_shared/rate-limit.ts";
 
 /**
  * Edge Function para recuperar assinatura manualmente
@@ -85,6 +86,21 @@ serve(async (req) => {
         JSON.stringify({ success: false, error: 'Não autorizado' }),
         { headers: { ...buildCorsHeaders(req), 'Content-Type': 'application/json' }, status: 401 }
       );
+    }
+
+    // Rate limit (fail-closed): 5 req/60s per user.
+    const rlKey = await buildBucketKey({ functionName: "recover-subscription", userId: user.id });
+    if (rlKey) {
+      const rl = await checkRateLimit(rlKey, {
+        functionName: "recover-subscription",
+        maxRequests: 5,
+        windowSeconds: 60,
+        failOpen: false,
+      });
+      if (!rl.allowed) {
+        console.warn(`[recover-subscription] rate-limited user=${user.id} retry=${rl.retryAfterSeconds}s`);
+        return rateLimitResponse(rl, buildCorsHeaders(req));
+      }
     }
 
     const { productId, purchaseToken }: RecoverRequest = await req.json();

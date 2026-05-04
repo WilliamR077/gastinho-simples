@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildBucketKey, checkRateLimit, rateLimitResponse } from "../_shared/rate-limit.ts";
 
 const ALLOWED_ORIGINS = new Set([
   "https://gastinho-simples.lovable.app",
@@ -36,7 +37,7 @@ function jsonResponse(req: Request, data: unknown, status = 200) {
   });
 }
 
-async function validateAdmin(req: Request) {
+async function validateAdmin(req: Request): Promise<{ adminClient: ReturnType<typeof createClient>; callerId: string }> {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) throw new Error("Não autorizado");
 
@@ -63,7 +64,7 @@ async function validateAdmin(req: Request) {
   });
   if (roleError || roleData !== true) throw new Error("Acesso negado");
 
-  return adminClient;
+  return { adminClient, callerId };
 }
 
 const PRICES = { premium: 14.9, no_ads: 3.9, premium_plus: 14.9 };
@@ -74,7 +75,23 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const adminClient = await validateAdmin(req);
+    const { adminClient, callerId } = await validateAdmin(req);
+
+    // Rate limit (fail-open): 60 req/60s per admin user.
+    const rlKey = await buildBucketKey({ functionName: "admin-dashboard", userId: callerId });
+    if (rlKey) {
+      const rl = await checkRateLimit(rlKey, {
+        functionName: "admin-dashboard",
+        maxRequests: 60,
+        windowSeconds: 60,
+        failOpen: true,
+      });
+      if (!rl.allowed) {
+        console.warn(`[admin-dashboard] rate-limited admin=${callerId} retry=${rl.retryAfterSeconds}s`);
+        return rateLimitResponse(rl, buildCorsHeaders(req));
+      }
+    }
+
     const url = new URL(req.url);
     const action = url.searchParams.get("action");
 

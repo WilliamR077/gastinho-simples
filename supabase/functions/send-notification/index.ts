@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { create, getNumericDate } from "https://deno.land/x/djwt@v3.0.1/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildBucketKey, checkRateLimit, rateLimitResponse, timingSafeEqual } from "../_shared/rate-limit.ts";
 
 const FIREBASE_SERVICE_ACCOUNT_JSON = Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON");
 const INTERNAL_API_SECRET = Deno.env.get("INTERNAL_API_SECRET");
@@ -164,8 +165,8 @@ serve(async (req) => {
     //   (b) End-user via Supabase JWT: Authorization: Bearer <token> → may only target self.
     const providedSecret = req.headers.get("x-internal-secret");
     const authHeader = req.headers.get("Authorization") ?? "";
-    const isInternal =
-      !!INTERNAL_API_SECRET && providedSecret === INTERNAL_API_SECRET;
+    // Constant-time comparison; never short-circuits on truthiness alone.
+    const isInternal = timingSafeEqual(providedSecret, INTERNAL_API_SECRET ?? null);
 
     let authenticatedUserId: string | null = null;
 
@@ -187,6 +188,25 @@ serve(async (req) => {
         );
       }
       authenticatedUserId = userData.user.id;
+
+      // Rate limit (fail-open): only end-users; cron bypass skips.
+      // 60 req/60s per user.
+      const rlKey = await buildBucketKey({
+        functionName: "send-notification",
+        userId: authenticatedUserId,
+      });
+      if (rlKey) {
+        const rl = await checkRateLimit(rlKey, {
+          functionName: "send-notification",
+          maxRequests: 60,
+          windowSeconds: 60,
+          failOpen: true,
+        });
+        if (!rl.allowed) {
+          console.warn(`[send-notification] rate-limited user=${authenticatedUserId} retry=${rl.retryAfterSeconds}s`);
+          return rateLimitResponse(rl, corsHeaders);
+        }
+      }
     }
 
     const payload: NotificationPayload = await req.json();

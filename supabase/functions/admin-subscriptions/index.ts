@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildBucketKey, checkRateLimit, rateLimitResponse } from "../_shared/rate-limit.ts";
 
 const ALLOWED_ORIGINS = new Set([
   "https://gastinho-simples.lovable.app",
@@ -97,6 +98,21 @@ Deno.serve(async (req) => {
         status: 403,
         headers: { ...buildCorsHeaders(req), "Content-Type": "application/json" },
       });
+    }
+
+    // Rate limit (fail-open): 30 req/60s per admin user.
+    const rlKey = await buildBucketKey({ functionName: "admin-subscriptions", userId: callerId });
+    if (rlKey) {
+      const rl = await checkRateLimit(rlKey, {
+        functionName: "admin-subscriptions",
+        maxRequests: 30,
+        windowSeconds: 60,
+        failOpen: true,
+      });
+      if (!rl.allowed) {
+        console.warn(`[admin-subscriptions] rate-limited admin=${callerId} retry=${rl.retryAfterSeconds}s`);
+        return rateLimitResponse(rl, buildCorsHeaders(req));
+      }
     }
 
     if (req.method === "GET") {

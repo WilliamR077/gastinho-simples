@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildBucketKey, checkRateLimit, rateLimitResponse } from "../_shared/rate-limit.ts";
 
 const ALLOWED_ORIGINS = new Set([
   "https://gastinho-simples.lovable.app",
@@ -76,6 +77,20 @@ serve(async (req) => {
       throw new Error('Não autorizado');
     }
 
+    // Rate limit (fail-open): 30 req/60s per user.
+    const rlKey = await buildBucketKey({ functionName: "sync-subscription", userId: user.id });
+    if (rlKey) {
+      const rl = await checkRateLimit(rlKey, {
+        functionName: "sync-subscription",
+        maxRequests: 30,
+        windowSeconds: 60,
+        failOpen: true,
+      });
+      if (!rl.allowed) {
+        console.warn(`[sync-subscription] rate-limited user=${user.id} retry=${rl.retryAfterSeconds}s`);
+        return rateLimitResponse(rl, buildCorsHeaders(req));
+      }
+    }
     // Parse do body
     const { productId, tier: providedTier, platform }: SyncRequest = await req.json();
 

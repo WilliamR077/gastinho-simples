@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildBucketKey, checkRateLimit, rateLimitResponse } from "../_shared/rate-limit.ts";
 
 const ALLOWED_ORIGINS = new Set([
   "https://gastinho-simples.lovable.app",
@@ -76,6 +77,21 @@ serve(async (req) => {
     if (!user) {
       console.error('❌ Usuário não autenticado - Authorization header inválido ou ausente');
       throw new Error('Não autorizado');
+    }
+
+    // Rate limit (fail-closed): 10 req/60s per user.
+    const rlKey = await buildBucketKey({ functionName: "validate-purchase", userId: user.id });
+    if (rlKey) {
+      const rl = await checkRateLimit(rlKey, {
+        functionName: "validate-purchase",
+        maxRequests: 10,
+        windowSeconds: 60,
+        failOpen: false,
+      });
+      if (!rl.allowed) {
+        console.warn(`[validate-purchase] rate-limited user=${user.id} retry=${rl.retryAfterSeconds}s`);
+        return rateLimitResponse(rl, buildCorsHeaders(req));
+      }
     }
 
     // Parse do body

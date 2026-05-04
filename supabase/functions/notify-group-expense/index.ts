@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { create, getNumericDate } from "https://deno.land/x/djwt@v3.0.1/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildBucketKey, checkRateLimit, rateLimitResponse } from "../_shared/rate-limit.ts";
 
 const FIREBASE_SERVICE_ACCOUNT_JSON = Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -128,6 +129,21 @@ serve(async (req) => {
     }
     const callerId = userData.user.id;
     const callerEmail = userData.user.email ?? "Alguém";
+
+    // Rate limit (fail-open): 30 req/60s per user.
+    const rlKey = await buildBucketKey({ functionName: "notify-group-expense", userId: callerId });
+    if (rlKey) {
+      const rl = await checkRateLimit(rlKey, {
+        functionName: "notify-group-expense",
+        maxRequests: 30,
+        windowSeconds: 60,
+        failOpen: true,
+      });
+      if (!rl.allowed) {
+        console.warn(`[notify-group-expense] rate-limited user=${callerId} retry=${rl.retryAfterSeconds}s`);
+        return rateLimitResponse(rl, corsHeaders);
+      }
+    }
 
     // 2) Parse payload — never trust user_id from body.
     const payload: NotifyGroupExpensePayload = await req.json();
