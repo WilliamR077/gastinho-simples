@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildBucketKey, checkRateLimit, rateLimitResponse } from "../_shared/rate-limit.ts";
 
 const ALLOWED_ORIGINS = new Set([
   "https://gastinho-simples.lovable.app",
