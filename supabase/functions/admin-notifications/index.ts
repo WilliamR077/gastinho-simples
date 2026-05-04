@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { create, getNumericDate } from "https://deno.land/x/djwt@v3.0.1/mod.ts";
+import { buildBucketKey, checkRateLimit, rateLimitResponse } from "../_shared/rate-limit.ts";
 // shared mask helpers available if needed
 
 const ALLOWED_ORIGINS = new Set([
