@@ -100,6 +100,21 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Rate limit (fail-open): 30 req/60s per admin user.
+    const rlKey = await buildBucketKey({ functionName: "admin-subscriptions", userId: callerId });
+    if (rlKey) {
+      const rl = await checkRateLimit(rlKey, {
+        functionName: "admin-subscriptions",
+        maxRequests: 30,
+        windowSeconds: 60,
+        failOpen: true,
+      });
+      if (!rl.allowed) {
+        console.warn(`[admin-subscriptions] rate-limited admin=${callerId} retry=${rl.retryAfterSeconds}s`);
+        return rateLimitResponse(rl, buildCorsHeaders(req));
+      }
+    }
+
     if (req.method === "GET") {
       const url = new URL(req.url);
       const email = url.searchParams.get("email");
