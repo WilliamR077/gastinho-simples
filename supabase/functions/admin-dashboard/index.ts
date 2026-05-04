@@ -75,7 +75,6 @@ Deno.serve(async (req) => {
   }
 
   try {
-  try {
     const { adminClient, callerId } = await validateAdmin(req);
 
     // Rate limit (fail-open): 60 req/60s per admin user.
