@@ -88,6 +88,21 @@ serve(async (req) => {
       );
     }
 
+    // Rate limit (fail-closed): 5 req/60s per user.
+    const rlKey = await buildBucketKey({ functionName: "recover-subscription", userId: user.id });
+    if (rlKey) {
+      const rl = await checkRateLimit(rlKey, {
+        functionName: "recover-subscription",
+        maxRequests: 5,
+        windowSeconds: 60,
+        failOpen: false,
+      });
+      if (!rl.allowed) {
+        console.warn(`[recover-subscription] rate-limited user=${user.id} retry=${rl.retryAfterSeconds}s`);
+        return rateLimitResponse(rl, buildCorsHeaders(req));
+      }
+    }
+
     const { productId, purchaseToken }: RecoverRequest = await req.json();
 
     console.log('🔄 Tentando recuperar assinatura:', {
