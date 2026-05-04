@@ -130,6 +130,21 @@ serve(async (req) => {
     const callerId = userData.user.id;
     const callerEmail = userData.user.email ?? "Alguém";
 
+    // Rate limit (fail-open): 30 req/60s per user.
+    const rlKey = await buildBucketKey({ functionName: "notify-group-expense", userId: callerId });
+    if (rlKey) {
+      const rl = await checkRateLimit(rlKey, {
+        functionName: "notify-group-expense",
+        maxRequests: 30,
+        windowSeconds: 60,
+        failOpen: true,
+      });
+      if (!rl.allowed) {
+        console.warn(`[notify-group-expense] rate-limited user=${callerId} retry=${rl.retryAfterSeconds}s`);
+        return rateLimitResponse(rl, corsHeaders);
+      }
+    }
+
     // 2) Parse payload — never trust user_id from body.
     const payload: NotifyGroupExpensePayload = await req.json();
     const { group_id, description, amount, category_name, group_name } = payload;
