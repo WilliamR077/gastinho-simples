@@ -165,8 +165,8 @@ serve(async (req) => {
     //   (b) End-user via Supabase JWT: Authorization: Bearer <token> → may only target self.
     const providedSecret = req.headers.get("x-internal-secret");
     const authHeader = req.headers.get("Authorization") ?? "";
-    const isInternal =
-      !!INTERNAL_API_SECRET && providedSecret === INTERNAL_API_SECRET;
+    // Constant-time comparison; never short-circuits on truthiness alone.
+    const isInternal = timingSafeEqual(providedSecret, INTERNAL_API_SECRET ?? null);
 
     let authenticatedUserId: string | null = null;
 
@@ -188,6 +188,25 @@ serve(async (req) => {
         );
       }
       authenticatedUserId = userData.user.id;
+
+      // Rate limit (fail-open): only end-users; cron bypass skips.
+      // 60 req/60s per user.
+      const rlKey = await buildBucketKey({
+        functionName: "send-notification",
+        userId: authenticatedUserId,
+      });
+      if (rlKey) {
+        const rl = await checkRateLimit(rlKey, {
+          functionName: "send-notification",
+          maxRequests: 60,
+          windowSeconds: 60,
+          failOpen: true,
+        });
+        if (!rl.allowed) {
+          console.warn(`[send-notification] rate-limited user=${authenticatedUserId} retry=${rl.retryAfterSeconds}s`);
+          return rateLimitResponse(rl, corsHeaders);
+        }
+      }
     }
 
     const payload: NotificationPayload = await req.json();
