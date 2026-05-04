@@ -72,6 +72,21 @@ serve(async (req) => {
     const userId = user.id;
     console.log(`Processing account deletion for user: ${userId}`);
 
+    // Rate limit (fail-closed): 3 attempts / 5 min per user.
+    const rlKey = await buildBucketKey({ functionName: "delete-user-account", userId });
+    if (rlKey) {
+      const rl = await checkRateLimit(rlKey, {
+        functionName: "delete-user-account",
+        maxRequests: 3,
+        windowSeconds: 300,
+        failOpen: false,
+      });
+      if (!rl.allowed) {
+        console.warn(`[delete-user-account] rate-limited user=${userId} retry=${rl.retryAfterSeconds}s`);
+        return rateLimitResponse(rl, buildCorsHeaders(req));
+      }
+    }
+
     // Create admin client for data deletion
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
