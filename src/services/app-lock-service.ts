@@ -89,18 +89,119 @@ class AppLockService {
     localStorage.setItem(USE_BIOMETRIC_KEY, use ? "true" : "false");
   }
 
-  // Salvar PIN (em produção, considerar criptografar)
-  setPin(pin: string): void {
-    // Simple hash para não salvar o PIN em texto puro
-    const hashedPin = this.hashPin(pin);
-    localStorage.setItem(PIN_KEY, hashedPin);
+  // PBKDF2-SHA256 com salt aleatório de 16B e 200k iterações.
+  // Formato: v2.pbkdf2.<iterations>.<saltB64>.<hashB64>
+  private static readonly PBKDF2_ITERATIONS = 200_000;
+  private static readonly PBKDF2_SALT_BYTES = 16;
+  private static readonly PBKDF2_HASH_BITS = 256;
+
+  private getSubtle(): SubtleCrypto {
+    const subtle = (globalThis.crypto as Crypto | undefined)?.subtle;
+    if (!subtle) {
+      // Falha controlada: não cair em hash fraco como fallback.
+      throw new Error("Secure crypto unavailable");
+    }
+    return subtle;
   }
 
-  // Verificar PIN
-  verifyPin(pin: string): boolean {
-    const storedHash = localStorage.getItem(PIN_KEY);
-    if (!storedHash) return false;
-    return this.hashPin(pin) === storedHash;
+  private bytesToB64(bytes: Uint8Array): string {
+    let bin = "";
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin);
+  }
+
+  private b64ToBytes(b64: string): Uint8Array {
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  // Comparação em tempo constante.
+  private constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
+    if (a.length !== b.length) return false;
+    let diff = 0;
+    for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+    return diff === 0;
+  }
+
+  private async derivePbkdf2(pin: string, salt: Uint8Array, iterations: number): Promise<Uint8Array> {
+    const subtle = this.getSubtle();
+    const keyMaterial = await subtle.importKey(
+      "raw",
+      new TextEncoder().encode(pin),
+      { name: "PBKDF2" },
+      false,
+      ["deriveBits"]
+    );
+    const bits = await subtle.deriveBits(
+      { name: "PBKDF2", salt, iterations, hash: "SHA-256" },
+      keyMaterial,
+      AppLockService.PBKDF2_HASH_BITS
+    );
+    return new Uint8Array(bits);
+  }
+
+  // Hash legado (apenas para verificar PINs antigos durante a migração).
+  private legacyHash(pin: string): string {
+    let hash = 0;
+    for (let i = 0; i < pin.length; i++) {
+      const char = pin.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    return hash.toString(36);
+  }
+
+  private async buildV2Record(pin: string): Promise<string> {
+    const salt = new Uint8Array(AppLockService.PBKDF2_SALT_BYTES);
+    crypto.getRandomValues(salt);
+    const iterations = AppLockService.PBKDF2_ITERATIONS;
+    const hash = await this.derivePbkdf2(pin, salt, iterations);
+    return `v2.pbkdf2.${iterations}.${this.bytesToB64(salt)}.${this.bytesToB64(hash)}`;
+  }
+
+  // Salvar PIN com PBKDF2-SHA256.
+  async setPin(pin: string): Promise<void> {
+    const record = await this.buildV2Record(pin);
+    localStorage.setItem(PIN_KEY, record);
+  }
+
+  // Verificar PIN. Suporta formato v2 e legado (com migração transparente).
+  async verifyPin(pin: string): Promise<boolean> {
+    const stored = localStorage.getItem(PIN_KEY);
+    if (!stored) return false;
+
+    if (stored.startsWith("v2.")) {
+      // Parser defensivo: formato malformado retorna false sem quebrar.
+      try {
+        const parts = stored.split(".");
+        if (parts.length !== 5 || parts[1] !== "pbkdf2") return false;
+        const iterations = parseInt(parts[2], 10);
+        if (!Number.isFinite(iterations) || iterations <= 0) return false;
+        const salt = this.b64ToBytes(parts[3]);
+        const expected = this.b64ToBytes(parts[4]);
+        if (salt.length === 0 || expected.length === 0) return false;
+        const actual = await this.derivePbkdf2(pin, salt, iterations);
+        return this.constantTimeEqual(actual, expected);
+      } catch {
+        // Não logar conteúdo bruto / salt / hash.
+        return false;
+      }
+    }
+
+    // Formato legado: comparar e migrar para v2 se bater.
+    const legacyOk = this.legacyHash(pin) === stored;
+    if (!legacyOk) return false;
+
+    try {
+      const newRecord = await this.buildV2Record(pin);
+      // Só sobrescreve depois de derivar com sucesso.
+      localStorage.setItem(PIN_KEY, newRecord);
+    } catch {
+      // Migração falhou (ex.: subtle indisponível): mantém legado e segue ok.
+    }
+    return true;
   }
 
   // Verificar se tem PIN configurado
@@ -111,17 +212,6 @@ class AppLockService {
   // Remover PIN
   removePin(): void {
     localStorage.removeItem(PIN_KEY);
-  }
-
-  // Simple hash function (em produção, usar algo mais robusto)
-  private hashPin(pin: string): string {
-    let hash = 0;
-    for (let i = 0; i < pin.length; i++) {
-      const char = pin.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash;
-    }
-    return hash.toString(36);
   }
 
   // Registrar última atividade
