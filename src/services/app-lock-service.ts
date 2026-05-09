@@ -135,7 +135,7 @@ class AppLockService {
       ["deriveBits"]
     );
     const bits = await subtle.deriveBits(
-      { name: "PBKDF2", salt, iterations, hash: "SHA-256" },
+      { name: "PBKDF2", salt: salt.buffer.slice(salt.byteOffset, salt.byteOffset + salt.byteLength) as ArrayBuffer, iterations, hash: "SHA-256" },
       keyMaterial,
       AppLockService.PBKDF2_HASH_BITS
     );
