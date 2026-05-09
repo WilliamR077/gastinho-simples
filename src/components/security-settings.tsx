@@ -94,7 +94,7 @@ export function SecuritySettings() {
     appLockService.setLockTimeout(parseInt(value, 10));
   };
 
-  const handleSavePin = () => {
+  const handleSavePin = async () => {
     if (newPin.length < 4 || newPin.length > 6) {
       toast({
         title: "PIN inválido",
@@ -113,7 +113,16 @@ export function SecuritySettings() {
       return;
     }
 
-    appLockService.setPin(newPin);
+    try {
+      await appLockService.setPin(newPin);
+    } catch {
+      toast({
+        title: "Erro de segurança",
+        description: "Não foi possível salvar o PIN com segurança neste dispositivo.",
+        variant: "destructive",
+      });
+      return;
+    }
     setHasPin(true);
     setShowPinDialog(false);
     setNewPin("");
