@@ -74,7 +74,7 @@ export function AppLockScreen({ onUnlock }: AppLockScreenProps) {
     // Se foi cancelamento, não mostra nada - usuário quer usar PIN
   };
 
-  const handlePinSubmit = () => {
+  const handlePinSubmit = async () => {
     if (pin.length < 4) {
       toast({
         title: "PIN inválido",
@@ -84,7 +84,7 @@ export function AppLockScreen({ onUnlock }: AppLockScreenProps) {
       return;
     }
 
-    if (appLockService.verifyPin(pin)) {
+    if (await appLockService.verifyPin(pin)) {
       toast({
         title: "Desbloqueado!",
         description: "PIN correto",
