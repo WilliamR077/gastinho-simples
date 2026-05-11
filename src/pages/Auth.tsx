@@ -8,8 +8,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useEffect } from "react";
+import { safeInternalPath } from "@/utils/safe-redirect";
 import { validatePasswordStrength, sanitizeErrorMessage, isEmailValid } from "@/utils/security";
 import { Progress } from "@/components/ui/progress";
 import { Eye, EyeOff } from "lucide-react";
@@ -32,17 +33,27 @@ export default function Auth() {
   const [showEmailForm, setShowEmailForm] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Destino pós-login: prioriza location.state.from (RequireAuth) e
+  // aceita ?redirect= apenas se for path interno seguro.
+  const getRedirectPath = (): string => {
+    const fromState = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
+    if (fromState) return safeInternalPath(fromState, "/");
+    const params = new URLSearchParams(location.search);
+    return safeInternalPath(params.get("redirect"), "/");
+  };
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
-        navigate("/");
+        navigate(getRedirectPath(), { replace: true });
       }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session) {
-        navigate("/");
+        navigate(getRedirectPath(), { replace: true });
       }
     });
 
@@ -100,7 +111,7 @@ export default function Auth() {
         title: "Login realizado com sucesso!",
         description: "Redirecionando...",
       });
-      navigate("/");
+      navigate(getRedirectPath(), { replace: true });
     }
 
     setIsLoading(false);
