@@ -36,6 +36,8 @@ import Landing from "./pages/Landing";
 import About from "./pages/About";
 import Contact from "./pages/Contact";
 import Admin from "./pages/Admin";
+import { RequireAuth } from "@/components/auth/require-auth";
+import { RequireAdmin } from "@/components/auth/require-admin";
 
 const queryClient = new QueryClient();
 
@@ -212,20 +214,30 @@ const AppContent = () => {
       <Sonner />
       <OnboardingTour />
       <Routes>
-        <Route path="/" element={<Index />} />
+        {/* Públicas */}
         <Route path="/landing" element={<Landing />} />
         <Route path="/about" element={<About />} />
         <Route path="/contact" element={<Contact />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/auth" element={<Auth />} />
         <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/account" element={<Account />} />
-        <Route path="/cards" element={<Cards />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/reports" element={<Reports />} />
-        <Route path="/subscription" element={<Subscription />} />
-        <Route path="/privacy" element={<PrivacyPolicy />} />
-        <Route path="/notification-debug" element={<NotificationDebug />} />
-        <Route path="/admin" element={<Admin />} />
+
+        {/* Autenticadas */}
+        <Route element={<RequireAuth />}>
+          <Route path="/" element={<Index />} />
+          <Route path="/account" element={<Account />} />
+          <Route path="/cards" element={<Cards />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/reports" element={<Reports />} />
+          <Route path="/subscription" element={<Subscription />} />
+          <Route path="/notification-debug" element={<NotificationDebug />} />
+        </Route>
+
+        {/* Admin (defesa em profundidade: Admin.tsx mantém seu próprio gate via useIsAdmin) */}
+        <Route element={<RequireAdmin />}>
+          <Route path="/admin" element={<Admin />} />
+        </Route>
+
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>
