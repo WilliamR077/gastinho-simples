@@ -354,7 +354,7 @@ export function SpreadsheetImportSheet({ open, onOpenChange, onSuccess }: Spread
           <div className={`h-2 w-2 rounded-full ${step === "result" ? "bg-primary" : "bg-muted"}`} />
         </div>
         
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 min-h-0 overflow-hidden">
           {/* Step 1: Upload */}
           {step === "upload" && (
             <div className="flex flex-col items-center justify-center h-full gap-6 p-4">
