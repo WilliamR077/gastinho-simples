@@ -151,33 +151,55 @@ function detectColumn(columns: string[], patterns: string[]): string | null {
 }
 
 // Parse de arquivo Excel/CSV
+// E1 hardening: try/catch isolado, sem logar conteúdo, sem fetch remoto.
+// Apenas processa o File local recebido do <input type="file">.
 export async function parseSpreadsheet(file: File): Promise<ParseResult> {
+  if (!(file instanceof File)) {
+    throw new Error("Arquivo inválido");
+  }
+  if (file.size === 0) throw new Error("Arquivo vazio");
+  if (file.size > 5 * 1024 * 1024) throw new Error("Arquivo excede 5MB");
+
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    
+
     reader.onload = (e) => {
       try {
         const data = e.target?.result;
+        if (!data) {
+          reject(new Error("Falha ao ler o conteúdo do arquivo"));
+          return;
+        }
+
         const workbook = XLSX.read(data, { type: "binary", cellDates: true });
-        
-        // Pegar primeira planilha
+        if (!workbook?.SheetNames?.length) {
+          reject(new Error("Planilha sem abas"));
+          return;
+        }
+
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        
-        // Converter para JSON
-        const jsonData = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet, { 
-          raw: false,
-          defval: ""
-        });
-        
-        if (jsonData.length === 0) {
-          throw new Error("Planilha vazia ou formato inválido");
+        if (!worksheet) {
+          reject(new Error("Aba inicial inválida"));
+          return;
         }
-        
-        // Pegar nomes das colunas
-        const columns = Object.keys(jsonData[0]);
-        
-        // Sugerir mapeamento automático
+
+        const jsonData = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet, {
+          raw: false,
+          defval: "",
+        });
+
+        if (!Array.isArray(jsonData) || jsonData.length === 0) {
+          reject(new Error("Planilha vazia ou formato inválido"));
+          return;
+        }
+
+        const columns = Object.keys(jsonData[0] ?? {});
+        if (columns.length === 0) {
+          reject(new Error("Não foi possível identificar colunas"));
+          return;
+        }
+
         const suggestedMapping: ColumnMapping = {
           description: detectColumn(columns, COLUMN_PATTERNS.description),
           amount: detectColumn(columns, COLUMN_PATTERNS.amount),
@@ -185,17 +207,14 @@ export async function parseSpreadsheet(file: File): Promise<ParseResult> {
           category: detectColumn(columns, COLUMN_PATTERNS.category),
           paymentMethod: detectColumn(columns, COLUMN_PATTERNS.paymentMethod),
         };
-        
-        resolve({
-          columns,
-          rows: jsonData,
-          suggestedMapping,
-        });
-      } catch (error) {
-        reject(error);
+
+        resolve({ columns, rows: jsonData, suggestedMapping });
+      } catch {
+        // Não propagar mensagem original (pode conter conteúdo do usuário)
+        reject(new Error("Falha ao processar planilha"));
       }
     };
-    
+
     reader.onerror = () => reject(new Error("Erro ao ler arquivo"));
     reader.readAsBinaryString(file);
   });
