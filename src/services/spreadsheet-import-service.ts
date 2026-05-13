@@ -431,32 +431,46 @@ export async function importExpenses(
 
 // Gerar template de exemplo
 export function generateTemplateSpreadsheet(): void {
+  // E1.1: datas dinâmicas baseadas em hoje (linha 1 = hoje, linha 2 = -1d, ...)
+  const formatBR = (d: Date) => {
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  };
+  const dateAt = (offsetDays: number) => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - offsetDays);
+    return formatBR(d);
+  };
+
   const templateData = [
     {
       "Descrição": "Mercado Pão de Açúcar",
       "Valor": "R$ 250,00",
-      "Data": "15/01/2025",
+      "Data": dateAt(0),
       "Categoria": "Alimentação",
       "Pagamento": "Crédito"
     },
     {
       "Descrição": "Uber - trabalho",
       "Valor": "R$ 35,50",
-      "Data": "16/01/2025",
+      "Data": dateAt(1),
       "Categoria": "Transporte",
       "Pagamento": "PIX"
     },
     {
       "Descrição": "Netflix mensalidade",
       "Valor": "R$ 55,90",
-      "Data": "17/01/2025",
+      "Data": dateAt(2),
       "Categoria": "Lazer",
       "Pagamento": "Crédito"
     },
     {
       "Descrição": "Farmácia Drogasil",
       "Valor": "R$ 89,00",
-      "Data": "18/01/2025",
+      "Data": dateAt(3),
       "Categoria": "Saúde",
       "Pagamento": "Débito"
     },
