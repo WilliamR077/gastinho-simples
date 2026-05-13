@@ -99,43 +99,84 @@ export function SpreadsheetImportSheet({ open, onOpenChange, onSuccess }: Spread
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
-    // Validate file size (5MB)
-    if (file.size > 5 * 1024 * 1024) {
+
+    // E1: Reject empty file
+    if (file.size === 0) {
       toast({
-        title: "Arquivo muito grande",
-        description: "O arquivo deve ter no máximo 5MB",
+        title: "Arquivo vazio",
+        description: "O arquivo selecionado não contém dados.",
         variant: "destructive",
       });
+      e.target.value = "";
       return;
     }
-    
-    // Validate file type
-    const validTypes = [
+
+    // E1: Validate file size (5MB hard limit)
+    const MAX_BYTES = 5 * 1024 * 1024;
+    if (file.size > MAX_BYTES) {
+      toast({
+        title: "Arquivo muito grande",
+        description: "O arquivo deve ter no máximo 5MB.",
+        variant: "destructive",
+      });
+      e.target.value = "";
+      return;
+    }
+
+    // E1: Validate extension (whitelist) — required
+    const validExtensions = [".xlsx", ".xls", ".csv"];
+    const lowerName = file.name.toLowerCase();
+    const hasValidExtension = validExtensions.some((ext) => lowerName.endsWith(ext));
+    if (!hasValidExtension) {
+      toast({
+        title: "Formato inválido",
+        description: "Use arquivos .xlsx, .xls ou .csv.",
+        variant: "destructive",
+      });
+      e.target.value = "";
+      return;
+    }
+
+    // E1: Validate MIME when available (some browsers/Android leave it empty — só bloqueia se vier preenchido com algo incompatível)
+    const validMimes = [
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "application/vnd.ms-excel",
       "text/csv",
+      "application/csv",
+      "text/plain", // alguns SOs reportam CSV assim
+      "application/octet-stream", // fallback genérico permitido
+      "",
     ];
-    const validExtensions = [".xlsx", ".xls", ".csv"];
-    const hasValidExtension = validExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
-    
-    if (!validTypes.includes(file.type) && !hasValidExtension) {
+    if (file.type && !validMimes.includes(file.type)) {
       toast({
-        title: "Formato inválido",
-        description: "Use arquivos .xlsx, .xls ou .csv",
+        title: "Tipo de arquivo não suportado",
+        description: "Tipo MIME incompatível com planilhas .xlsx, .xls ou .csv.",
         variant: "destructive",
       });
+      e.target.value = "";
       return;
     }
-    
+
     setLoading(true);
     try {
-      const result = await parseSpreadsheet(file);
-      
-      if (result.rows.length === 0) {
+      // E1: try/catch isolado para parse — não loga conteúdo da planilha
+      let result: ParseResult;
+      try {
+        result = await parseSpreadsheet(file);
+      } catch (parseErr: any) {
+        toast({
+          title: "Planilha inválida",
+          description:
+            "Não foi possível ler o arquivo. Verifique se está em formato .xlsx, .xls ou .csv válido e não está corrompido.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!result || !Array.isArray(result.rows) || result.rows.length === 0) {
         toast({
           title: "Planilha vazia",
-          description: "O arquivo não contém dados para importar",
+          description: "O arquivo não contém dados para importar.",
           variant: "destructive",
         });
         return;
