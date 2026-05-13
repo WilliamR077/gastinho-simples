@@ -330,7 +330,7 @@ export function SpreadsheetImportSheet({ open, onOpenChange, onSuccess }: Spread
         side="bottom"
         className="h-[90dvh] max-h-[90dvh] flex flex-col p-0 pb-[env(safe-area-inset-bottom)]"
       >
-        <SheetHeader>
+        <SheetHeader className="px-6 pt-6">
           <SheetTitle className="flex items-center gap-2">
             <FileSpreadsheet className="h-5 w-5" />
             Importar Planilha
@@ -344,7 +344,7 @@ export function SpreadsheetImportSheet({ open, onOpenChange, onSuccess }: Spread
         </SheetHeader>
         
         {/* Progress indicator */}
-        <div className="flex items-center gap-2 py-4">
+        <div className="flex items-center gap-2 py-4 px-6">
           <div className={`h-2 w-2 rounded-full ${step === "upload" ? "bg-primary" : "bg-muted"}`} />
           <div className={`h-0.5 flex-1 ${step !== "upload" ? "bg-primary" : "bg-muted"}`} />
           <div className={`h-2 w-2 rounded-full ${step === "mapping" ? "bg-primary" : step !== "upload" ? "bg-primary" : "bg-muted"}`} />
