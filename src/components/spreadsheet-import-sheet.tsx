@@ -326,7 +326,10 @@ export function SpreadsheetImportSheet({ open, onOpenChange, onSuccess }: Spread
   
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent side="bottom" className="h-[90vh] flex flex-col">
+      <SheetContent
+        side="bottom"
+        className="h-[90dvh] max-h-[90dvh] flex flex-col p-0 pb-[env(safe-area-inset-bottom)]"
+      >
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <FileSpreadsheet className="h-5 w-5" />
