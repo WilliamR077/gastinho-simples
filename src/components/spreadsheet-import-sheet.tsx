@@ -326,8 +326,11 @@ export function SpreadsheetImportSheet({ open, onOpenChange, onSuccess }: Spread
   
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent side="bottom" className="h-[90vh] flex flex-col">
-        <SheetHeader>
+      <SheetContent
+        side="bottom"
+        className="h-[90dvh] max-h-[90dvh] flex flex-col p-0 pb-[env(safe-area-inset-bottom)]"
+      >
+        <SheetHeader className="px-6 pt-6">
           <SheetTitle className="flex items-center gap-2">
             <FileSpreadsheet className="h-5 w-5" />
             Importar Planilha
@@ -341,7 +344,7 @@ export function SpreadsheetImportSheet({ open, onOpenChange, onSuccess }: Spread
         </SheetHeader>
         
         {/* Progress indicator */}
-        <div className="flex items-center gap-2 py-4">
+        <div className="flex items-center gap-2 py-4 px-6">
           <div className={`h-2 w-2 rounded-full ${step === "upload" ? "bg-primary" : "bg-muted"}`} />
           <div className={`h-0.5 flex-1 ${step !== "upload" ? "bg-primary" : "bg-muted"}`} />
           <div className={`h-2 w-2 rounded-full ${step === "mapping" ? "bg-primary" : step !== "upload" ? "bg-primary" : "bg-muted"}`} />
@@ -351,7 +354,7 @@ export function SpreadsheetImportSheet({ open, onOpenChange, onSuccess }: Spread
           <div className={`h-2 w-2 rounded-full ${step === "result" ? "bg-primary" : "bg-muted"}`} />
         </div>
         
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 min-h-0 overflow-hidden">
           {/* Step 1: Upload */}
           {step === "upload" && (
             <div className="flex flex-col items-center justify-center h-full gap-6 p-4">
@@ -416,105 +419,107 @@ export function SpreadsheetImportSheet({ open, onOpenChange, onSuccess }: Spread
           
           {/* Step 2: Column Mapping */}
           {step === "mapping" && parseResult && (
-            <div className="space-y-4 p-4">
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  {parseResult.rows.length} linhas encontradas. Mapeie as colunas abaixo.
-                </AlertDescription>
-              </Alert>
-              
-              <div className="grid gap-4">
-                <div className="grid gap-2">
-                  <Label>Descrição *</Label>
-                  <Select
-                    value={mapping.description || ""}
-                    onValueChange={(v) => setMapping({ ...mapping, description: v || null })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione a coluna" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {parseResult.columns.map((col) => (
-                        <SelectItem key={col} value={col}>{col}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="grid gap-2">
-                  <Label>Valor *</Label>
-                  <Select
-                    value={mapping.amount || ""}
-                    onValueChange={(v) => setMapping({ ...mapping, amount: v || null })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione a coluna" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {parseResult.columns.map((col) => (
-                        <SelectItem key={col} value={col}>{col}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="grid gap-2">
-                  <Label>Data (opcional)</Label>
-                  <Select
-                    value={mapping.date || "__none__"}
-                    onValueChange={(v) => setMapping({ ...mapping, date: v === "__none__" ? null : v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Usar data de hoje" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Usar data de hoje</SelectItem>
-                      {parseResult.columns.map((col) => (
-                        <SelectItem key={col} value={col}>{col}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="grid gap-2">
-                  <Label>Categoria (opcional)</Label>
-                  <Select
-                    value={mapping.category || "__none__"}
-                    onValueChange={(v) => setMapping({ ...mapping, category: v === "__none__" ? null : v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Usar 'Outros'" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Usar "Outros"</SelectItem>
-                      {parseResult.columns.map((col) => (
-                        <SelectItem key={col} value={col}>{col}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="grid gap-2">
-                  <Label>Forma de Pagamento (opcional)</Label>
-                  <Select
-                    value={mapping.paymentMethod || "__none__"}
-                    onValueChange={(v) => setMapping({ ...mapping, paymentMethod: v === "__none__" ? null : v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Usar PIX" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Usar PIX</SelectItem>
-                      {parseResult.columns.map((col) => (
-                        <SelectItem key={col} value={col}>{col}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+            <div className="flex flex-col h-full min-h-0">
+              <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    {parseResult.rows.length} linhas encontradas. Mapeie as colunas abaixo.
+                  </AlertDescription>
+                </Alert>
+
+                <div className="grid gap-4">
+                  <div className="grid gap-2">
+                    <Label>Descrição *</Label>
+                    <Select
+                      value={mapping.description || ""}
+                      onValueChange={(v) => setMapping({ ...mapping, description: v || null })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione a coluna" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {parseResult.columns.map((col) => (
+                          <SelectItem key={col} value={col}>{col}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label>Valor *</Label>
+                    <Select
+                      value={mapping.amount || ""}
+                      onValueChange={(v) => setMapping({ ...mapping, amount: v || null })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione a coluna" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {parseResult.columns.map((col) => (
+                          <SelectItem key={col} value={col}>{col}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label>Data (opcional)</Label>
+                    <Select
+                      value={mapping.date || "__none__"}
+                      onValueChange={(v) => setMapping({ ...mapping, date: v === "__none__" ? null : v })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Usar data de hoje" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Usar data de hoje</SelectItem>
+                        {parseResult.columns.map((col) => (
+                          <SelectItem key={col} value={col}>{col}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label>Categoria (opcional)</Label>
+                    <Select
+                      value={mapping.category || "__none__"}
+                      onValueChange={(v) => setMapping({ ...mapping, category: v === "__none__" ? null : v })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Usar 'Outros'" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Usar "Outros"</SelectItem>
+                        {parseResult.columns.map((col) => (
+                          <SelectItem key={col} value={col}>{col}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label>Forma de Pagamento (opcional)</Label>
+                    <Select
+                      value={mapping.paymentMethod || "__none__"}
+                      onValueChange={(v) => setMapping({ ...mapping, paymentMethod: v === "__none__" ? null : v })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Usar PIX" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Usar PIX</SelectItem>
+                        {parseResult.columns.map((col) => (
+                          <SelectItem key={col} value={col}>{col}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
-              
-              <div className="flex gap-2 pt-4">
+
+              <div className="flex gap-2 p-4 border-t bg-background">
                 <Button variant="outline" onClick={() => setStep("upload")} className="flex-1">
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   Voltar
