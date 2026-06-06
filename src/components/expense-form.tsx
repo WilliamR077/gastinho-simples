@@ -9,16 +9,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { PlusCircle, CalendarIcon, AlertTriangle, CreditCard } from "lucide-react"
-import { useNavigate } from "react-router-dom"
+import { PlusCircle, CalendarIcon, AlertTriangle } from "lucide-react"
 import { PaymentMethod, ExpenseFormData, Expense } from "@/types/expense"
 import { cn, normalizeToLocalDate, parseLocalDate } from "@/lib/utils"
-import { supabase } from "@/integrations/supabase/client"
 import { Card as CardType } from "@/types/card"
 import { BudgetGoal } from "@/types/budget-goal"
 import { RecurringExpense } from "@/types/recurring-expense"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { CategorySelector } from "@/components/category-selector"
+import { CardSelector } from "@/components/card-selector"
 import { useCategories } from "@/hooks/use-categories"
 import { DescriptionAutocomplete } from "@/components/description-autocomplete"
 import {
@@ -50,41 +49,6 @@ export function ExpenseForm({
   const [cardId, setCardId] = useState<string>("")
   const { activeCategories } = useCategories()
   const [cards, setCards] = useState<CardType[]>([])
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    loadCards()
-  }, [])
-
-  const loadCards = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-
-      const { data, error } = await supabase
-        .from("cards")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("is_active", true)
-        .order("created_at", { ascending: false })
-
-      if (error) throw error
-      setCards(data || [])
-    } catch (error) {
-      console.error("Erro ao carregar cartões:", error)
-    }
-  }
-
-  const getAvailableCards = () => {
-    if (!paymentMethod || !requiresCard(paymentMethod)) return [];
-
-    return cards.filter(card => {
-      if (card.card_type === 'both') return true;
-      if (paymentMethod === 'credit') return card.card_type === 'credit';
-      if (paymentMethod === 'debit') return card.card_type === 'debit';
-      return false;
-    });
-  };
 
   // Encontrar a categoria selecionada para verificação de orçamento
   const selectedCategory = activeCategories.find(c => c.id === categoryId);
