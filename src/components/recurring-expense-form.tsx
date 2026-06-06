@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -6,9 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { RecurringExpenseFormData, PaymentMethod } from "@/types/recurring-expense"
 import { Calendar } from "lucide-react"
-import { supabase } from "@/integrations/supabase/client"
-import { Card as CardType } from "@/types/card"
 import { CategorySelector } from "@/components/category-selector"
+import { CardSelector } from "@/components/card-selector"
 import { useCategories } from "@/hooks/use-categories"
 import {
   PAYMENT_METHOD_LIST,
@@ -27,42 +26,7 @@ export function RecurringExpenseForm({ onAddRecurringExpense }: RecurringExpense
   const [dayOfMonth, setDayOfMonth] = useState("1")
   const [categoryId, setCategoryId] = useState<string>("")
   const [cardId, setCardId] = useState<string>("")
-  const [cards, setCards] = useState<CardType[]>([])
   const { activeCategories } = useCategories()
-
-  useEffect(() => {
-    loadCards()
-  }, [])
-
-  const loadCards = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-
-      const { data, error } = await supabase
-        .from("cards")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("is_active", true)
-        .order("created_at", { ascending: false })
-
-      if (error) throw error
-      setCards(data || [])
-    } catch (error) {
-      console.error("Erro ao carregar cartões:", error)
-    }
-  }
-
-  const getAvailableCards = () => {
-    if (!paymentMethod || !requiresCard(paymentMethod)) return [];
-
-    return cards.filter(card => {
-      if (card.card_type === 'both') return true;
-      if (paymentMethod === 'credit') return card.card_type === 'credit';
-      if (paymentMethod === 'debit') return card.card_type === 'debit';
-      return false;
-    });
-  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -71,9 +35,8 @@ export function RecurringExpenseForm({ onAddRecurringExpense }: RecurringExpense
       return
     }
 
-    if (requiresCard(paymentMethod) && !cardId) {
-      return
-    }
+    // Cartão é opcional: se o método exige cartão mas nenhum foi selecionado,
+    // a despesa é gravada sem vínculo.
 
     const sanitizedCardId = requiresCard(paymentMethod) ? (cardId || undefined) : undefined;
     const selectedCategory = activeCategories.find(c => c.id === categoryId);
