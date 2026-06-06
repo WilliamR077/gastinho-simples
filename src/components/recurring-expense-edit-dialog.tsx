@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -8,9 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RecurringExpense, RecurringExpenseFormData } from "@/types/recurring-expense";
-import { supabase } from "@/integrations/supabase/client";
-import { Card as CardType } from "@/types/card";
 import { CategorySelector } from "@/components/category-selector";
+import { CardSelector } from "@/components/card-selector";
 import { useCategories } from "@/hooks/use-categories";
 import {
   PAYMENT_METHOD_LIST,
@@ -37,7 +36,6 @@ interface RecurringExpenseEditDialogProps {
 }
 
 export function RecurringExpenseEditDialog({ expense, open, onOpenChange, onSave }: RecurringExpenseEditDialogProps) {
-  const [cards, setCards] = useState<CardType[]>([]);
   const { activeCategories } = useCategories();
   const lastExpenseIdRef = useRef<string | null>(null);
 
@@ -52,41 +50,6 @@ export function RecurringExpenseEditDialog({ expense, open, onOpenChange, onSave
       cardId: "",
     },
   });
-
-  useEffect(() => {
-    loadCards();
-  }, []);
-
-  const loadCards = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data, error } = await supabase
-        .from("cards")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("is_active", true)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      setCards(data || []);
-    } catch (error) {
-      console.error("Erro ao carregar cartões:", error);
-    }
-  };
-
-  const getAvailableCards = () => {
-    const paymentMethod = form.watch("paymentMethod");
-    if (!paymentMethod || !requiresCard(paymentMethod)) return [];
-
-    return cards.filter(card => {
-      if (card.card_type === 'both') return true;
-      if (paymentMethod === 'credit') return card.card_type === 'credit';
-      if (paymentMethod === 'debit') return card.card_type === 'debit';
-      return false;
-    });
-  };
 
   // Preencher formulário quando a despesa mudar
   useEffect(() => {
@@ -123,13 +86,9 @@ export function RecurringExpenseEditDialog({ expense, open, onOpenChange, onSave
   const handleSubmit = (data: RecurringExpenseEditFormData) => {
     if (!expense) return;
 
-    // Defesa em profundidade: card_id sempre null para métodos sem cartão.
-    const sanitizedCardId = requiresCard(data.paymentMethod) ? data.cardId : undefined;
-
-    if (requiresCard(data.paymentMethod) && !sanitizedCardId) {
-      form.setError("cardId", { message: "Selecione um cartão" });
-      return;
-    }
+    // Cartão é opcional: se o método exige cartão mas nenhum foi selecionado,
+    // a despesa é salva sem vínculo. Para métodos sem cartão (pix/cash), garante undefined.
+    const sanitizedCardId = requiresCard(data.paymentMethod) ? (data.cardId || undefined) : undefined;
 
     const selectedCategory = activeCategories.find(c => c.id === data.categoryId);
 
@@ -246,26 +205,11 @@ export function RecurringExpenseEditDialog({ expense, open, onOpenChange, onSave
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Cartão</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione o cartão" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent className="bg-background">
-                        {getAvailableCards().map((card) => (
-                          <SelectItem key={card.id} value={card.id}>
-                            <div className="flex items-center gap-2">
-                              <div 
-                                style={{ backgroundColor: card.color }} 
-                                className="w-3 h-3 rounded-full"
-                              />
-                              {card.name}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <CardSelector
+                      value={field.value || ""}
+                      onValueChange={field.onChange}
+                      paymentMethod={form.watch("paymentMethod")}
+                    />
                     <FormMessage />
                   </FormItem>
                 )}
