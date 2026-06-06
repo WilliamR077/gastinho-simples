@@ -205,24 +205,11 @@ export function RecurringExpenseFormSheet({
           {requiresCard(paymentMethod) && (
             <div className="space-y-2">
               <Label htmlFor="recurring-sheet-card">Selecione o Cartão</Label>
-              <Select value={cardId} onValueChange={setCardId}>
-                <SelectTrigger id="recurring-sheet-card">
-                  <SelectValue placeholder="Selecione o cartão" />
-                </SelectTrigger>
-                <SelectContent>
-                  {getAvailableCards().map((card) => (
-                    <SelectItem key={card.id} value={card.id}>
-                      <div className="flex items-center gap-2">
-                        <div
-                          style={{ backgroundColor: card.color }}
-                          className="w-3 h-3 rounded-full"
-                        />
-                        {card.name}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <CardSelector
+                value={cardId}
+                onValueChange={setCardId}
+                paymentMethod={paymentMethod}
+              />
             </div>
           )}
 
