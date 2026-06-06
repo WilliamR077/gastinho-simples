@@ -16,9 +16,8 @@ import { Expense, PaymentMethod, ExpenseFormData } from "@/types/expense";
 import { SplitType, SplitParticipant } from "@/types/expense-split";
 import { SharedGroupMember } from "@/types/shared-group";
 import { cn, parseLocalDate, normalizeToLocalDate, stripInstallmentSuffix } from "@/lib/utils";
-import { supabase } from "@/integrations/supabase/client";
-import { Card as CardType } from "@/types/card";
 import { CategorySelector } from "@/components/category-selector";
+import { CardSelector } from "@/components/card-selector";
 import { useCategories } from "@/hooks/use-categories";
 import { ExpenseSplitSection } from "@/components/expense-split-section";
 import {
@@ -58,7 +57,6 @@ export function ExpenseEditDialog({
   currentUserId = '',
   isGroupContext = false,
 }: ExpenseEditDialogProps) {
-  const [cards, setCards] = useState<CardType[]>([]);
   const { activeCategories } = useCategories();
   const lastExpenseIdRef = useRef<string | null>(null);
 
@@ -80,41 +78,6 @@ export function ExpenseEditDialog({
       cardId: "",
     },
   });
-
-  useEffect(() => {
-    loadCards();
-  }, []);
-
-  const loadCards = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data, error } = await supabase
-        .from("cards")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("is_active", true)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      setCards(data || []);
-    } catch (error) {
-      console.error("Erro ao carregar cartões:", error);
-    }
-  };
-
-  const getAvailableCards = () => {
-    const paymentMethod = form.watch("paymentMethod");
-    if (!paymentMethod || !requiresCard(paymentMethod)) return [];
-
-    return cards.filter(card => {
-      if (card.card_type === 'both') return true;
-      if (paymentMethod === 'credit') return card.card_type === 'credit';
-      if (paymentMethod === 'debit') return card.card_type === 'debit';
-      return false;
-    });
-  };
 
   // Populate form when expense changes
   useEffect(() => {
