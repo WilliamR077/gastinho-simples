@@ -298,31 +298,11 @@ export function ExpenseEditDialog({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Cartão</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione o cartão (opcional)" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent className="bg-background">
-                        {getAvailableCards().map((card) => (
-                          <SelectItem key={card.id} value={card.id}>
-                            <div className="flex items-center gap-2">
-                              <div 
-                                style={{ backgroundColor: card.color }} 
-                                className="w-3 h-3 rounded-full"
-                              />
-                              {card.name}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {!field.value && (
-                      <p className="text-xs text-muted-foreground">
-                        Sem cartão selecionado. A despesa será salva sem vínculo a um cartão.
-                      </p>
-                    )}
+                    <CardSelector
+                      value={field.value || ""}
+                      onValueChange={field.onChange}
+                      paymentMethod={form.watch("paymentMethod")}
+                    />
                     <FormMessage />
                   </FormItem>
                 )}
