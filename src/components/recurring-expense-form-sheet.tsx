@@ -5,12 +5,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { RecurringExpenseFormData, PaymentMethod } from "@/types/recurring-expense";
-import { supabase } from "@/integrations/supabase/client";
-import { Card as CardType } from "@/types/card";
 import { useSharedGroups } from "@/hooks/use-shared-groups";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Users, User } from "lucide-react";
 import { CategorySelector } from "@/components/category-selector";
+import { CardSelector } from "@/components/card-selector";
 import { useCategories } from "@/hooks/use-categories";
 import {
   PAYMENT_METHOD_LIST,
@@ -35,7 +34,6 @@ export function RecurringExpenseFormSheet({
   const [dayOfMonth, setDayOfMonth] = useState("1");
   const [category, setCategory] = useState<string>("");
   const [cardId, setCardId] = useState<string>("");
-  const [cards, setCards] = useState<CardType[]>([]);
   const [selectedDestination, setSelectedDestination] = useState<string>("personal");
 
   const { groups, currentContext } = useSharedGroups();
@@ -51,42 +49,6 @@ export function RecurringExpenseFormSheet({
       }
     }
   }, [open, currentContext]);
-
-  useEffect(() => {
-    if (open) {
-      loadCards();
-    }
-  }, [open]);
-
-  const loadCards = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data, error } = await supabase
-        .from("cards")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("is_active", true)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      setCards(data || []);
-    } catch (error) {
-      console.error("Erro ao carregar cartões:", error);
-    }
-  };
-
-  const getAvailableCards = () => {
-    if (!paymentMethod || !requiresCard(paymentMethod)) return [];
-
-    return cards.filter((card) => {
-      if (card.card_type === "both") return true;
-      if (paymentMethod === "credit") return card.card_type === "credit";
-      if (paymentMethod === "debit") return card.card_type === "debit";
-      return false;
-    });
-  };
 
   const resetForm = () => {
     setDescription("");
@@ -110,10 +72,8 @@ export function RecurringExpenseFormSheet({
       return;
     }
 
-    if (requiresCard(paymentMethod) && !cardId) {
-      return;
-    }
-
+    // Cartão é opcional: se o método exige cartão mas nenhum foi selecionado,
+    // a despesa é gravada sem vínculo (cardId = undefined).
     const sanitizedCardId = requiresCard(paymentMethod) ? (cardId || undefined) : undefined;
 
     onAddRecurringExpense({
