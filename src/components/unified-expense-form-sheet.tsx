@@ -8,15 +8,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { CalendarIcon, AlertTriangle, Users, User, CreditCard } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { CalendarIcon, AlertTriangle, Users, User } from "lucide-react";
 import { ExpenseSplitSection } from "@/components/expense-split-section";
 import { SplitType, SplitParticipant } from "@/types/expense-split";
 import { SharedGroupMember } from "@/types/shared-group";
 import { PaymentMethod, ExpenseFormData, Expense } from "@/types/expense";
 import { RecurringExpenseFormData } from "@/types/recurring-expense";
 import { cn, normalizeToLocalDate, parseLocalDate } from "@/lib/utils";
-import { supabase } from "@/integrations/supabase/client";
 import { Card as CardType } from "@/types/card";
 import { BudgetGoal } from "@/types/budget-goal";
 import { RecurringExpense } from "@/types/recurring-expense";
@@ -24,6 +22,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useSharedGroups } from "@/hooks/use-shared-groups";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { CategorySelector } from "@/components/category-selector";
+import { CardSelector } from "@/components/card-selector";
 import { useCategories } from "@/hooks/use-categories";
 import { useOnboardingTour } from "@/hooks/use-onboarding-tour";
 import { DescriptionAutocomplete } from "@/components/description-autocomplete";
@@ -106,7 +105,6 @@ export function UnifiedExpenseFormSheet({
   
   const { activeCategories } = useCategories();
   const { groups, currentContext } = useSharedGroups();
-  const navigate = useNavigate();
   const { isOpen: isOnboardingOpen, currentStep, currentSubstep } = useOnboardingTour();
   const selectedCardLimitSummary = paymentMethod === "credit" && cardId
     ? cardLimitSummaries?.get(cardId)
@@ -141,13 +139,6 @@ export function UnifiedExpenseFormSheet({
       }
     }
   }, [open, currentContext, defaultAmount, initialData]);
-
-  useEffect(() => {
-    if (open) {
-      loadCards();
-    }
-  }, [open]);
-
   // Lock expense type based on which onboarding step is active
   const lockedType: ExpenseType | null =
     isOnboardingOpen && currentStep?.id === "add-recurring-expense" ? "recurring" :
@@ -172,36 +163,6 @@ export function UnifiedExpenseFormSheet({
     }, 200);
     return () => clearTimeout(timer);
   }, [open]);
-
-  const loadCards = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data, error } = await supabase
-        .from("cards")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("is_active", true)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      setCards(data || []);
-    } catch (error) {
-      console.error("Erro ao carregar cartões:", error);
-    }
-  };
-
-  const getAvailableCards = () => {
-    if (!paymentMethod || !requiresCard(paymentMethod)) return [];
-
-    return cards.filter((card) => {
-      if (card.card_type === "both") return true;
-      if (paymentMethod === "credit") return card.card_type === "credit";
-      if (paymentMethod === "debit") return card.card_type === "debit";
-      return false;
-    });
-  };
 
   const budgetWarning = useMemo(() => {
     if (!category) return null;
