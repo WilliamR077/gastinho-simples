@@ -167,15 +167,10 @@ export function ExpenseEditDialog({
     if (!expense) return;
     setSplitError(null);
 
-    // Defesa em profundidade: garante card_id null para métodos sem cartão
-    // mesmo se o estado do form estiver sujo.
-    const sanitizedCardId = requiresCard(data.paymentMethod) ? data.cardId : undefined;
-
-    // Bloqueia submit quando cartão é obrigatório e não foi selecionado.
-    if (requiresCard(data.paymentMethod) && !sanitizedCardId) {
-      form.setError("cardId", { message: "Selecione um cartão" });
-      return;
-    }
+    // Cartão é opcional: se o método exige cartão mas nenhum foi selecionado,
+    // a despesa é salva sem vínculo. Para métodos que não exigem cartão (pix/cash),
+    // garante card_id sempre undefined.
+    const sanitizedCardId = requiresCard(data.paymentMethod) ? (data.cardId || undefined) : undefined;
 
     const selectedCategory = activeCategories.find(c => c.id === data.categoryId);
     
@@ -343,7 +338,7 @@ export function ExpenseEditDialog({
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Selecione o cartão" />
+                          <SelectValue placeholder="Selecione o cartão (opcional)" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent className="bg-background">
@@ -360,6 +355,11 @@ export function ExpenseEditDialog({
                         ))}
                       </SelectContent>
                     </Select>
+                    {!field.value && (
+                      <p className="text-xs text-muted-foreground">
+                        Sem cartão selecionado. A despesa será salva sem vínculo a um cartão.
+                      </p>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}
