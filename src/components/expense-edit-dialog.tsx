@@ -338,7 +338,7 @@ export function ExpenseEditDialog({
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Selecione o cartão" />
+                          <SelectValue placeholder="Selecione o cartão (opcional)" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent className="bg-background">
@@ -355,6 +355,11 @@ export function ExpenseEditDialog({
                         ))}
                       </SelectContent>
                     </Select>
+                    {!field.value && (
+                      <p className="text-xs text-muted-foreground">
+                        Sem cartão selecionado. A despesa será salva sem vínculo a um cartão.
+                      </p>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}
