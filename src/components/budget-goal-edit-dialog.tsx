@@ -137,13 +137,11 @@ export function BudgetGoalEditDialog({ goal, open, onOpenChange, onSave }: Budge
                 <FormItem>
                   <FormLabel>Valor Limite (R$)</FormLabel>
                   <FormControl>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="0.00"
-                      {...field}
-                      onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                    <DecimalInput
+                      value={field.value || 0}
+                      onChange={field.onChange}
                     />
+
                   </FormControl>
                   <FormMessage />
                 </FormItem>
