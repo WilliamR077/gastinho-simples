@@ -5,6 +5,7 @@ import * as z from "zod";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { DecimalInput } from "@/components/ui/decimal-input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BudgetGoal } from "@/types/budget-goal";
@@ -136,13 +137,11 @@ export function BudgetGoalEditDialog({ goal, open, onOpenChange, onSave }: Budge
                 <FormItem>
                   <FormLabel>Valor Limite (R$)</FormLabel>
                   <FormControl>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="0.00"
-                      {...field}
-                      onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                    <DecimalInput
+                      value={field.value || 0}
+                      onChange={field.onChange}
                     />
+
                   </FormControl>
                   <FormMessage />
                 </FormItem>
