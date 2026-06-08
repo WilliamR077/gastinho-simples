@@ -130,13 +130,11 @@ export function IncomeEditDialog({ income, open, onOpenChange, onSave }: IncomeE
                 <FormItem>
                   <FormLabel>Valor (R$)</FormLabel>
                   <FormControl>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="0.00"
-                      {...field}
-                      onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                    <DecimalInput
+                      value={field.value || 0}
+                      onChange={field.onChange}
                     />
+
                   </FormControl>
                   <FormMessage />
                 </FormItem>
