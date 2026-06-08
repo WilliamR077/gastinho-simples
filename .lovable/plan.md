@@ -1,107 +1,84 @@
-# Plano — Gerenciar cartões direto do campo "Cartão"
+# Bug: campo "Valor" apaga ao digitar vírgula ou ponto na edição
 
-## Objetivo
-Replicar o padrão do campo de Categoria (CategorySelector → CategoryManager) no campo Cartão dos formulários de despesa. Ao abrir o select de cartões, o usuário verá uma opção "Gerenciar cartões..." que abre um modal com a mesma experiência da página `/cards`, sem precisar sair do formulário.
+## Causa raiz
 
-## Escopo
+Nos diálogos de edição, o campo de valor usa:
 
-### Em escopo
-- Criar componente reutilizável `CardSelector` (UI do campo de cartão + botão "Gerenciar cartões..." dentro do SelectContent).
-- Criar wrapper `CardManagerSheet` que abre um Sheet bottom contendo o componente `CardManager` existente, sem duplicar lógica.
-- Substituir o bloco atual de seleção de cartão (Select + Alert "cadastrar cartão agora →") nestes formulários para usar `CardSelector`:
-  - `src/components/expense-form-sheet.tsx`
-  - `src/components/expense-form.tsx`
-  - `src/components/unified-expense-form-sheet.tsx`
-  - `src/components/expense-edit-dialog.tsx`
-  - `src/components/recurring-expense-form-sheet.tsx`
-  - `src/components/recurring-expense-form.tsx`
-  - `src/components/recurring-expense-edit-dialog.tsx`
-- Após fechar o modal de gerenciamento, recarregar a lista de cartões e:
-  - manter o `cardId` atual se o cartão ainda existir e for compatível com o `paymentMethod`;
-  - se um único novo cartão compatível foi criado durante a sessão do modal, pré-selecioná-lo (conveniência);
-  - caso contrário, manter o select vazio (cartão continua opcional, conforme correção anterior).
-- Respeitar o limite do plano: o botão "Adicionar Cartão" dentro do modal continua usando a mesma checagem de `useSubscription` já existente em `CardManager` (redireciona para `/subscription` se atingiu o limite). Nenhuma mudança em billing.
-
-### Fora de escopo
-- Backend, Supabase, Edge Functions, RLS, rate limit, PIN, Auth Guards, billing, dependências.
-- Mudanças em CategorySelector/CategoryManager.
-- Mudanças na página `/cards` em si.
-- Mudanças no fluxo de receitas (não há campo de cartão lá).
-- Refatorar `CardManager` (será reaproveitado como está, apenas embrulhado em Sheet).
-
-## Detalhes técnicos
-
-### Novo componente: `src/components/card-selector.tsx`
-Props:
+```tsx
+<Input
+  type="number"
+  {...field}
+  onChange={(e) => field.onChange(parseFloat(e.target.value))}
+/>
 ```
-{
-  value: string;                    // cardId atual ("" = sem cartão)
-  onValueChange: (id: string) => void;
-  paymentMethod: PaymentMethod;     // para filtrar credit/debit/both
-  className?: string;
-  onboardingTarget?: string;
-}
-```
-Comportamento:
-- Carrega `cards` via supabase (mesma query usada hoje nos forms: `user_id`, `is_active=true`).
-- Filtra por `paymentMethod` (mesma lógica de `getAvailableCards`).
-- Renderiza `<Select>` com placeholder "Selecione o cartão (opcional)".
-- Sempre exibe um `<Separator />` + `<Button variant="ghost">` "Gerenciar cartões..." no final do `SelectContent`.
-- Se a lista filtrada está vazia, mostra uma `<Alert>` curta acima do botão: "Você ainda não tem cartões cadastrados." + CTA "Cadastrar cartão" que abre o `CardManagerSheet` (em vez de navegar para `/cards`).
-- Mantém helper text "Sem cartão selecionado. A despesa será salva sem vínculo a um cartão." quando `value` está vazio.
-- Ao fechar o `CardManagerSheet`, recarrega `cards` e aplica a lógica de pré-seleção descrita acima.
 
-### Novo componente: `src/components/card-manager-sheet.tsx`
-```
-<Sheet open onOpenChange>
-  <SheetContent side="bottom" className="h-[90dvh] ... flex flex-col p-0">
-    <SheetHeader>... "Gerenciar Cartões"</SheetHeader>
-    <div className="flex-1 overflow-y-auto px-4 pb-6">
-      <CardManager />
-    </div>
-  </SheetContent>
-</Sheet>
-```
-- Sem nenhuma alteração no componente `CardManager`.
-- Safe-area inferior para não cortar botões em Android.
+Dois problemas combinados:
 
-### Integração nos formulários
-Cada formulário hoje renderiza algo como:
-```
-{requiresCard(paymentMethod) && (
-  <div>... Select de cartões + Alert "cadastrar agora →" ...</div>
-)}
-```
-Substituir por:
-```
-{requiresCard(paymentMethod) && (
-  <CardSelector
-    value={cardId}
-    onValueChange={setCardId}
-    paymentMethod={paymentMethod}
-  />
-)}
-```
-Remover dos forms: estado `cards`, `loadCards`, `getAvailableCards`, import de `useNavigate` se não usado em outro lugar, e o Alert/CTA antigo (passa para dentro do `CardSelector`).
+1. `<input type="number">` em pt-BR/Android rejeita vírgula — `e.target.value` vira `""`. `parseFloat("")` retorna `NaN`, que é gravado no form e re-renderizado como vazio. Resultado: o campo "some" ao apertar vírgula.
+2. Estados intermediários como `"44."` também viram `NaN` em alguns navegadores móveis, com o mesmo efeito.
 
-### Comportamento de cartão opcional (mantido)
-Nenhuma alteração na lógica de submit: `requiresCard(paymentMethod) ? (cardId || undefined) : undefined`. Continua possível salvar despesa Crédito/Débito sem cartão (correção do bug anterior preservada).
+O formulário de **criação** (`expense-form.tsx`) não tem esse problema porque guarda o valor como string e só faz `parseFloat` no submit.
 
-## Critérios de aprovação
-1. Em qualquer form de despesa (nova, edição, recorrente), ao selecionar "Crédito" ou "Débito", o select de cartão mostra os cartões compatíveis + opção "Gerenciar cartões...".
-2. Clicar em "Gerenciar cartões..." abre um Sheet com a mesma experiência da página `/cards` (criar, editar, excluir, ver limites, com respeito ao limite do plano).
-3. Ao fechar o Sheet, a lista no select é atualizada automaticamente; se o usuário criou um único cartão novo compatível, ele já fica pré-selecionado.
-4. Salvar despesa sem cartão continua funcionando (Crédito/Débito); Pix/Dinheiro continuam sem mostrar o campo.
-5. Limite de cartões do plano free continua sendo respeitado dentro do modal (mesmo fluxo de upgrade já existente).
-6. Nenhuma alteração em backend, Supabase, RLS, Edge Functions, billing, PIN, Auth Guards, dependências, ou no fluxo de importação/exportação de planilhas.
+## Correção
 
-## Checklist manual sugerido
-- [ ] Nova despesa → Crédito → "Gerenciar cartões..." → criar cartão → fechar → cartão novo aparece e fica selecionado.
-- [ ] Nova despesa → Débito → mesmo fluxo.
-- [ ] Edição de despesa Crédito com cartão excluído → abrir modal, criar novo → seleciona ou deixa vazio; salvar funciona.
-- [ ] Plano free com limite atingido → botão "Adicionar Cartão" dentro do modal mostra aviso de upgrade.
-- [ ] Despesa recorrente (form e edição) → mesmo comportamento.
-- [ ] Pix/Dinheiro → campo de cartão segue oculto.
-- [ ] Página `/cards` continua funcionando idêntica.
+Trocar `type="number"` por `inputMode="decimal"` (teclado numérico no mobile, aceita vírgula e ponto) e manter um estado de string local, convertendo só para número no momento certo. Aplicar o mesmo padrão em todos os diálogos de edição que sofrem do mesmo bug.
 
-Aguardando aprovação para implementar.
+### Arquivos a alterar
+
+- `src/components/expense-edit-dialog.tsx` — campo `amount`.
+- `src/components/recurring-expense-edit-dialog.tsx` — campo `amount`.
+- `src/components/income-edit-dialog.tsx` — campo `amount`.
+- `src/components/recurring-income-edit-dialog.tsx` — campo `amount`.
+- `src/components/budget-goal-edit-dialog.tsx` — campo de valor da meta.
+
+### Padrão do novo `onChange`
+
+```tsx
+<Input
+  type="text"
+  inputMode="decimal"
+  placeholder="0,00"
+  value={field.value === 0 || field.value == null ? "" : String(field.value).replace(".", ",")}
+  onChange={(e) => {
+    // Aceita dígitos, uma vírgula OU um ponto. Mantém estado intermediário (ex.: "44,").
+    const raw = e.target.value.replace(/[^\d.,]/g, "");
+    // Normaliza para formato numérico (vírgula -> ponto) sem perder o que o usuário digitou.
+    const normalized = raw.replace(",", ".");
+    if (raw === "" || raw === "," || raw === ".") {
+      field.onChange(0);
+      return;
+    }
+    const num = parseFloat(normalized);
+    if (!isNaN(num)) {
+      field.onChange(num);
+    }
+    // Se ainda for inválido (ex.: termina em separador), não chama onChange:
+    // o input continua mostrando o que o usuário digitou via valor não-controlado.
+  }}
+/>
+```
+
+Como o RHF re-renderiza o `value`, para permitir estados intermediários (`"44,"`) o input precisa ser **não-controlado** durante a digitação. Implementação: manter um `useState<string>` local sincronizado com `field.value` no `form.reset`, e gravar no form somente quando a string parsear para número válido.
+
+### Detalhe de implementação por diálogo
+
+Em cada arquivo:
+1. Adicionar `const [amountText, setAmountText] = useState("")`.
+2. No `useEffect` que faz `form.reset`, também setar `setAmountText(String(expense.amount).replace(".", ","))`.
+3. Substituir o `<Input>` do `amount` por versão com `inputMode="decimal"`, `value={amountText}`, `onChange` que atualiza `amountText` e tenta `field.onChange(parseFloat(normalized))` quando válido.
+4. Manter `FormMessage` para validação Zod (positive).
+
+## Fora de escopo
+
+- Formulários de criação (não têm o bug).
+- `expense-filters.tsx`, `compact-filter-bar.tsx`, `spreadsheet-import-sheet.tsx`, `card-manager.tsx` — não foram reportados; alguns são filtros numéricos puros.
+- Backend, RLS, Supabase, billing, dependências.
+
+## Checklist de teste manual
+
+- [ ] Editar despesa → apagar valor → digitar `44,25` → campo mostra `44,25` e salva como 44.25.
+- [ ] Editar despesa → digitar `44.25` (ponto) → idem.
+- [ ] Editar despesa → digitar `44,` → campo NÃO some; ao continuar digitando `25` fica `44,25`.
+- [ ] Editar despesa → apagar tudo → mensagem de erro "Valor deve ser positivo" aparece.
+- [ ] Mesma bateria em despesa fixa, receita, receita fixa e meta.
+- [ ] Criar nova despesa continua funcionando como antes.
