@@ -151,6 +151,24 @@ export default function Account() {
     setPasswordStrength(validatePasswordStrength(value));
   };
 
+  // Sincroniza input do nome com o valor atual do perfil
+  useEffect(() => {
+    setNameInput(displayName || "");
+  }, [displayName]);
+
+  const handleUpdateName = async () => {
+    const trimmed = nameInput.trim();
+    if (trimmed === (displayName || "")) return;
+    setNameLoading(true);
+    const { error } = await updateDisplayName(trimmed);
+    setNameLoading(false);
+    if (error) {
+      toast({ title: "Erro ao salvar nome", description: error, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Nome atualizado!", description: "Suas informações foram salvas." });
+  };
+
   // Audit log helper function
   const logAuditAction = async (action: string, details?: any) => {
     try {
@@ -326,6 +344,47 @@ export default function Account() {
               <Separator />
             </>
           )}
+
+          {/* Password Management */}
+          <Card>
+            <CardHeader>
+          {/* Profile / Name */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <UserCircle2 className="w-5 h-5" />
+                Nome de Exibição
+              </CardTitle>
+              <CardDescription>
+                Aparece para outras pessoas nos grupos compartilhados, no lugar do seu e-mail.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-2">
+                <Label htmlFor="display-name">Nome</Label>
+                <Input
+                  id="display-name"
+                  type="text"
+                  placeholder="Ex.: Maria Silva"
+                  value={nameInput}
+                  onChange={(e) => setNameInput(e.target.value)}
+                  maxLength={60}
+                />
+              </div>
+              <Button
+                onClick={handleUpdateName}
+                disabled={
+                  nameLoading ||
+                  nameInput.trim().length < 2 ||
+                  nameInput.trim().length > 60 ||
+                  nameInput.trim() === (displayName || "")
+                }
+                className="w-full"
+              >
+                {nameLoading ? "Salvando..." : "Salvar Nome"}
+              </Button>
+            </CardContent>
+          </Card>
 
           {/* Password Management */}
           <Card>
