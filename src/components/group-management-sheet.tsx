@@ -53,11 +53,10 @@ const roleLabels: Record<GroupMemberRole, { label: string; icon: React.ReactNode
   member: { label: 'Membro', icon: <User className="h-3 w-3 text-muted-foreground" /> },
 };
 
-// Extrai o nome de exibição do email (parte antes do @)
-const getDisplayName = (email: string | undefined): string => {
-  if (!email) return 'Membro';
-  return email.split('@')[0];
-};
+// Extrai o nome de exibição: prioriza display_name, cai no prefixo do email.
+import { getMemberDisplayName } from "@/utils/member-display";
+const getDisplayName = (member: { display_name?: string | null; user_email?: string }): string =>
+  getMemberDisplayName(member, "Membro");
 
 export function GroupManagementSheet({ open, onOpenChange, groupId }: GroupManagementSheetProps) {
   const { user } = useAuth();
@@ -302,7 +301,7 @@ export function GroupManagementSheet({ open, onOpenChange, groupId }: GroupManag
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">
-                            {isCurrentUser ? 'Você' : getDisplayName(member.user_email)}
+                            {isCurrentUser ? 'Você' : getDisplayName(member)}
                           </p>
                           <p className="text-xs text-muted-foreground flex items-center gap-1">
                             {roleInfo.icon}

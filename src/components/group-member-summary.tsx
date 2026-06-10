@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users } from "lucide-react";
 import { useValuesVisibility } from "@/hooks/use-values-visibility";
+import { getMemberDisplayName } from "@/utils/member-display";
 import { Expense } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
 import { SharedGroupMember } from "@/types/shared-group";
@@ -58,7 +59,7 @@ export function GroupMemberSummary({ expenses, recurringExpenses, groupMembers }
     return groupMembers
       .map((member) => ({
         userId: member.user_id,
-        email: member.user_email || "Sem email",
+        name: getMemberDisplayName(member),
         total: totals[member.user_id] || 0,
         color: getMemberColor(member.user_id, groupMembers),
       }))
