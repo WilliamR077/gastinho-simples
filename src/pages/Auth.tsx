@@ -359,6 +359,21 @@ export default function Auth() {
                     <TabsContent value="signup">
                       <form onSubmit={handleSignUp} className="space-y-4">
                         <div className="space-y-2">
+                          <Label htmlFor="signup-name">Nome</Label>
+                          <Input
+                            id="signup-name"
+                            type="text"
+                            placeholder="Ex.: Maria Silva"
+                            value={fullName}
+                            onChange={(e) => setFullName(e.target.value)}
+                            maxLength={60}
+                            required
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Esse nome aparece para outras pessoas nos grupos compartilhados.
+                          </p>
+                        </div>
+                        <div className="space-y-2">
                           <Label htmlFor="signup-email">Email</Label>
                           <Input
                             id="signup-email"
