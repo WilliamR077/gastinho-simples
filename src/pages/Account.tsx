@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,9 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, User, Mail, Lock, Trash2, Crown, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, User, Mail, Lock, Trash2, Crown, Eye, EyeOff, UserCircle2 } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import { useSubscription } from "@/hooks/use-subscription";
+import { useProfile } from "@/hooks/use-profile";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { validatePasswordStrength, sanitizeErrorMessage, isEmailValid } from "@/utils/security";
 import { Progress } from "@/components/ui/progress";
@@ -20,9 +21,12 @@ export default function Account() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const { tier, features } = useSubscription();
+  const { displayName, updateDisplayName } = useProfile();
   const [loading, setLoading] = useState(false);
   const [emailLoading, setEmailLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+  const [nameLoading, setNameLoading] = useState(false);
 
   // Form states
   const [newEmail, setNewEmail] = useState(user?.email || "");
