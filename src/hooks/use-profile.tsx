@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase as supabaseClient } from "@/integrations/supabase/client";
+// Cast to any: types for `profiles` haven't been regenerated yet.
+const supabase = supabaseClient as any;
 import { useAuth } from "./use-auth";
 
 interface ProfileContextType {
