@@ -21,6 +21,7 @@ export default function Auth() {
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordStrength, setPasswordStrength] = useState(validatePasswordStrength(""));
@@ -129,6 +130,16 @@ export default function Auth() {
       return;
     }
 
+    const trimmedName = fullName.trim();
+    if (trimmedName.length < 2 || trimmedName.length > 60) {
+      toast({
+        title: "Nome obrigatório",
+        description: "Digite um nome com 2 a 60 caracteres",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (password !== confirmPassword) {
       toast({
         title: "Senhas não coincidem",
@@ -156,6 +167,9 @@ export default function Auth() {
       password,
       options: {
         emailRedirectTo: redirectUrl,
+        data: {
+          full_name: trimmedName,
+        },
       },
     });
 
