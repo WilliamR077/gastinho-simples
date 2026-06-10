@@ -928,6 +928,7 @@ export type Database = {
       get_group_members_with_email: {
         Args: { group_id_param: string }
         Returns: {
+          display_name: string
           group_id: string
           id: string
           joined_at: string

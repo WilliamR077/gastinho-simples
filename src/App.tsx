@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { ThemeProvider } from "@/hooks/use-theme";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { SharedGroupsProvider } from "@/hooks/use-shared-groups";
+import { ProfileProvider } from "@/hooks/use-profile";
 import { ValuesVisibilityProvider } from "@/hooks/use-values-visibility";
 import { CategoriesProvider } from "@/hooks/use-categories";
 import { IncomeCategoriesProvider } from "@/hooks/use-income-categories";
@@ -250,19 +251,21 @@ const App = () => (
     <ThemeProvider defaultTheme="dark">
       <AuthProvider>
         <BrowserRouter>
-          <CategoriesProvider>
-            <IncomeCategoriesProvider>
-              <SharedGroupsProvider>
-                <ValuesVisibilityProvider>
-                  <TooltipProvider>
-                    <OnboardingProvider>
-                      <AppContent />
-                    </OnboardingProvider>
-                  </TooltipProvider>
-                </ValuesVisibilityProvider>
-              </SharedGroupsProvider>
-            </IncomeCategoriesProvider>
-          </CategoriesProvider>
+          <ProfileProvider>
+            <CategoriesProvider>
+              <IncomeCategoriesProvider>
+                <SharedGroupsProvider>
+                  <ValuesVisibilityProvider>
+                    <TooltipProvider>
+                      <OnboardingProvider>
+                        <AppContent />
+                      </OnboardingProvider>
+                    </TooltipProvider>
+                  </ValuesVisibilityProvider>
+                </SharedGroupsProvider>
+              </IncomeCategoriesProvider>
+            </CategoriesProvider>
+          </ProfileProvider>
         </BrowserRouter>
       </AuthProvider>
     </ThemeProvider>

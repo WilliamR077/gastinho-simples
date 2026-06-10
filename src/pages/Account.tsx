@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,9 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, User, Mail, Lock, Trash2, Crown, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, User, Mail, Lock, Trash2, Crown, Eye, EyeOff, UserCircle2 } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import { useSubscription } from "@/hooks/use-subscription";
+import { useProfile } from "@/hooks/use-profile";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { validatePasswordStrength, sanitizeErrorMessage, isEmailValid } from "@/utils/security";
 import { Progress } from "@/components/ui/progress";
@@ -20,9 +21,12 @@ export default function Account() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const { tier, features } = useSubscription();
+  const { displayName, updateDisplayName } = useProfile();
   const [loading, setLoading] = useState(false);
   const [emailLoading, setEmailLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+  const [nameLoading, setNameLoading] = useState(false);
 
   // Form states
   const [newEmail, setNewEmail] = useState(user?.email || "");
@@ -145,6 +149,24 @@ export default function Account() {
   const handlePasswordChange = (value: string) => {
     setNewPassword(value);
     setPasswordStrength(validatePasswordStrength(value));
+  };
+
+  // Sincroniza input do nome com o valor atual do perfil
+  useEffect(() => {
+    setNameInput(displayName || "");
+  }, [displayName]);
+
+  const handleUpdateName = async () => {
+    const trimmed = nameInput.trim();
+    if (trimmed === (displayName || "")) return;
+    setNameLoading(true);
+    const { error } = await updateDisplayName(trimmed);
+    setNameLoading(false);
+    if (error) {
+      toast({ title: "Erro ao salvar nome", description: error, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Nome atualizado!", description: "Suas informações foram salvas." });
   };
 
   // Audit log helper function
@@ -322,6 +344,44 @@ export default function Account() {
               <Separator />
             </>
           )}
+
+          {/* Profile / Name */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <UserCircle2 className="w-5 h-5" />
+                Nome de Exibição
+              </CardTitle>
+              <CardDescription>
+                Aparece para outras pessoas nos grupos compartilhados, no lugar do seu e-mail.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-2">
+                <Label htmlFor="display-name">Nome</Label>
+                <Input
+                  id="display-name"
+                  type="text"
+                  placeholder="Ex.: Maria Silva"
+                  value={nameInput}
+                  onChange={(e) => setNameInput(e.target.value)}
+                  maxLength={60}
+                />
+              </div>
+              <Button
+                onClick={handleUpdateName}
+                disabled={
+                  nameLoading ||
+                  nameInput.trim().length < 2 ||
+                  nameInput.trim().length > 60 ||
+                  nameInput.trim() === (displayName || "")
+                }
+                className="w-full"
+              >
+                {nameLoading ? "Salvando..." : "Salvar Nome"}
+              </Button>
+            </CardContent>
+          </Card>
 
           {/* Password Management */}
           <Card>
