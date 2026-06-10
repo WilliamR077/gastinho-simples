@@ -345,9 +345,6 @@ export default function Account() {
             </>
           )}
 
-          {/* Password Management */}
-          <Card>
-            <CardHeader>
           {/* Profile / Name */}
           <Card>
             <CardHeader>
