@@ -454,6 +454,7 @@ export function SharedGroupsProvider({ children }: { children: ReactNode }) {
         role: member.role as GroupMemberRole,
         joined_at: member.joined_at,
         user_email: member.user_email,
+        display_name: member.display_name ?? null,
       }));
     } catch (error) {
       console.error('Erro ao buscar membros:', error);
