@@ -97,7 +97,7 @@ export function GroupMemberSummary({ expenses, recurringExpenses, groupMembers }
                   style={{ backgroundColor: member.color }}
                 />
                 <span className="text-sm truncate max-w-[180px]">
-                  {member.email}
+                  {member.name}
                 </span>
               </div>
               <span className="text-sm font-semibold whitespace-nowrap">

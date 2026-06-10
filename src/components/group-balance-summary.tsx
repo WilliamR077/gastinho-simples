@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Scale, ChevronRight } from "lucide-react";
 import { useValuesVisibility } from "@/hooks/use-values-visibility";
+import { getMemberDisplayName } from "@/utils/member-display";
 import { Expense } from "@/types/expense";
 import { SharedGroupMember } from "@/types/shared-group";
 import { getMemberColor } from "@/components/group-member-summary";
@@ -40,7 +41,7 @@ export function GroupBalanceSummary({ expenses, groupMembers, groupName, current
         const balance = totalPaid - totalOwed;
         return {
           userId: m.user_id,
-          email: m.user_email || 'Sem email',
+          name: getMemberDisplayName(m),
           totalPaid,
           totalOwed,
           balance,
@@ -80,7 +81,7 @@ export function GroupBalanceSummary({ expenses, groupMembers, groupName, current
                     style={{ backgroundColor: m.color }}
                   />
                   <span className="text-sm truncate max-w-[140px]">
-                    {m.email.split('@')[0]}
+                    {m.name}
                   </span>
                 </div>
                 <span

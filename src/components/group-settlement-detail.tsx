@@ -66,7 +66,7 @@ export function GroupSettlementDetail({
 
   const getName = (userId: string) => {
     const member = groupMembers.find(m => m.user_id === userId);
-    return member?.user_email?.split("@")[0] || "?";
+    return getMemberDisplayName(member, "?");
   };
 
   const { transfers, breakdowns, totalToSettle } = useMemo(() => {
