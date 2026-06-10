@@ -3,6 +3,7 @@ import { Expense } from "@/types/expense";
 import { SharedGroupMember } from "@/types/shared-group";
 import { useValuesVisibility } from "@/hooks/use-values-visibility";
 import { getMemberColor } from "@/components/group-member-summary";
+import { getMemberDisplayName } from "@/utils/member-display";
 import { TransactionDetailSheet } from "@/components/transaction-detail-sheet";
 import { ArrowRight, Share2, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
