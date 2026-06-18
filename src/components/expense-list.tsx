@@ -36,8 +36,8 @@ interface ExpenseListProps {
 
 const getUserDisplayName = (userId: string, members: SharedGroupMember[]): string | null => {
   const member = members.find(m => m.user_id === userId);
-  if (!member?.user_email) return null;
-  return member.user_email.split('@')[0];
+  if (!member) return null;
+  return getMemberDisplayName(member);
 };
 
 const parseLocalDate = (dateString: string) => {
