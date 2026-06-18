@@ -1,41 +1,32 @@
-## Problema
+## Objetivo
+Migrar todos os locais restantes que ainda usam `email.split('@')[0]` para o helper `getMemberDisplayName`, garantindo que o `display_name` do `profiles` apareça em transações, divisões, relatórios e PDFs.
 
-O modal "Como podemos te chamar?" falha ao salvar com:
-> Could not find the table 'public.profiles' in the schema cache
+## Lugares a ajustar
 
-Causa: a migração que cria `public.profiles` (tabela, RLS, trigger e backfill) nunca foi efetivamente aplicada no banco. Apenas a função `get_group_members_with_email` foi atualizada, e ela referencia `public.profiles` via `LEFT JOIN` (resolvido em runtime, então não quebrou na criação).
+1. **`src/utils/report-view-model.ts`** (linha ~432)
+   - No bloco `memberData`, ao montar `mTotals`, usar `getMemberDisplayName(member)` em vez de `email.split('@')[0]`. Preservar o campo `email` para compatibilidade.
 
-## Correção
+2. **`src/components/expense-list.tsx`** (linha ~36)
+   - Reescrever `getUserDisplayName(userId, members)` para delegar a `getMemberDisplayName(member)` (retornando `null` se membro não encontrado).
 
-Rodar uma migração única que cria toda a infraestrutura de `profiles` que o frontend já espera:
+3. **`src/components/recurring-expense-list.tsx`** (linha ~27) — mesma refatoração.
+4. **`src/components/recurring-income-list.tsx`** (linha ~23) — mesma refatoração.
+5. **`src/components/income-list.tsx`** (linha ~37) — mesma refatoração.
 
-1. **Tabela `public.profiles`**
-   - `user_id uuid PK` → FK `auth.users(id) ON DELETE CASCADE`
-   - `display_name text`
-   - `created_at`, `updated_at` com trigger de update
+6. **`src/components/transaction-detail-sheet.tsx`**
+   - `getUserDisplayName` (linha 57): delegar a `getMemberDisplayName`.
+   - Render de splits (linha ~489): resolver o membro em `groupMembers` por `s.user_id` e usar `getMemberDisplayName(member ?? { user_email: s.user_email })`.
 
-2. **GRANTs** (obrigatório p/ PostgREST enxergar):
-   - `GRANT SELECT, INSERT, UPDATE ON public.profiles TO authenticated`
-   - `GRANT ALL ON public.profiles TO service_role`
+7. **`src/components/expense-split-section.tsx`**
+   - `getMemberName` (linha 131): usar `getMemberDisplayName(member, '?')`.
+   - Preview equal split (linha ~256): trocar `p.email.split('@')[0]` por lookup em `groupMembers` por `p.userId` + `getMemberDisplayName`, com fallback para `p.email`.
 
-3. **Função `shares_group_with(_a uuid, _b uuid)`** SECURITY DEFINER — true se dois usuários compartilham algum `shared_group_members`.
+8. **`src/components/unified-expense-form-sheet.tsx`** (linhas ~659 e ~688)
+   - Resolver membro a partir de `groupMembers` por `m.user_id` (ou usar `m` direto se já é membro) e usar `getMemberDisplayName(m, '?')`.
 
-4. **RLS em `profiles`:**
-   - SELECT: `auth.uid() = user_id OR public.shares_group_with(auth.uid(), user_id)`
-   - INSERT/UPDATE: `auth.uid() = user_id`
+## Não-mudanças
+- `src/utils/member-display.ts`: a única ocorrência restante de `email.split("@")[0]` permanece — é o fallback canônico do helper.
+- `pdf-export-service.ts`: não usa o split diretamente; consome o `report-view-model`, então herdará a correção automaticamente.
 
-5. **Trigger `handle_new_user_profile()` em `auth.users` AFTER INSERT**
-   - Insere `display_name` a partir de `NEW.raw_user_meta_data->>'full_name'` ou `->>'name'`, com `trim`/null-safe (`NULLIF(trim(...), '')`).
-   - `ON CONFLICT (user_id) DO NOTHING`.
-
-6. **Backfill** de todos os `auth.users` em `profiles`, usando `COALESCE(full_name, name)` trimado.
-
-7. Não precisa mexer em `get_group_members_with_email` (já está correta).
-
-Depois que a migração rodar, o salvar do nome funciona e o modal fecha normalmente. Nenhum código frontend precisa mudar.
-
-## Detalhes técnicos
-
-- A função `shares_group_with` deve ser `STABLE SECURITY DEFINER SET search_path = public` para evitar recursão de RLS ao consultar `shared_group_members` dentro da policy de `profiles`.
-- O trigger em `auth.users` requer SECURITY DEFINER e `SET search_path = public`.
-- Backfill deve usar `ON CONFLICT (user_id) DO NOTHING` para ser idempotente.
+## Verificação
+Após as edições: `rg "split\(['\"]@['\"]" src/` deve retornar apenas `src/utils/member-display.ts`.

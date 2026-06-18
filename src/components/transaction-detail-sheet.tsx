@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/drawer";
 import { getMemberColor } from "@/components/group-member-summary";
 import { SharedGroupMember } from "@/types/shared-group";
+import { getMemberDisplayName } from "@/utils/member-display";
 
 interface TransactionDetailSheetProps {
   expense?: Expense | null;
@@ -56,8 +57,8 @@ const parseLocalDate = (dateString: string): Date => {
 
 const getUserDisplayName = (userId: string, members: SharedGroupMember[]): string | null => {
   const member = members.find((m) => m.user_id === userId);
-  if (!member?.user_email) return null;
-  return member.user_email.split("@")[0];
+  if (!member) return null;
+  return getMemberDisplayName(member);
 };
 
 export function TransactionDetailSheet({
@@ -486,7 +487,8 @@ const createdByColor =
               />
               <div className="space-y-1 ml-7">
                 {expense.splits.map(s => {
-                  const name = s.user_email?.split('@')[0] || '?';
+                  const member = groupMembers.find(m => m.user_id === s.user_id);
+                  const name = getMemberDisplayName(member ?? { user_email: s.user_email }, '?');
                   const color = getMemberColor(s.user_id, groupMembers);
                   const isMe = s.user_id === user?.id;
                   return (

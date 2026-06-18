@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { SharedGroupMember } from "@/types/shared-group";
 import { SplitType, SplitParticipant, calculateEqualSplit, splitTypeLabels } from "@/types/expense-split";
 import { getMemberColor } from "@/components/group-member-summary";
+import { getMemberDisplayName } from "@/utils/member-display";
 import { Users, AlertTriangle } from "lucide-react";
 
 interface ExpenseSplitSectionProps {
@@ -129,7 +130,7 @@ export function ExpenseSplitSection({
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
   const getMemberName = (member: SharedGroupMember) =>
-    member.user_email?.split('@')[0] || '?';
+    getMemberDisplayName(member, '?');
 
   return (
     <div className="space-y-3 p-3 rounded-lg bg-muted/50 border border-border">
@@ -253,7 +254,7 @@ export function ExpenseSplitSection({
                         className="h-2 w-2 rounded-full"
                         style={{ backgroundColor: getMemberColor(p.userId, groupMembers) }}
                       />
-                      <span className="text-xs">{p.email.split('@')[0]}</span>
+                      <span className="text-xs">{getMemberDisplayName(groupMembers.find(m => m.user_id === p.userId) ?? { user_email: p.email }, '?')}</span>
                     </div>
                     <span className="text-xs font-medium">{formatCurrency(p.amount)}</span>
                   </div>

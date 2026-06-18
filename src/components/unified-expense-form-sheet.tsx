@@ -29,6 +29,7 @@ import { DescriptionAutocomplete } from "@/components/description-autocomplete";
 import { calculateBillingPeriod, formatBillingPeriodLabel, CreditCardConfig } from "@/utils/billing-period";
 import { CardLimitSummary } from "@/components/card-limit-summary";
 import { type CardLimitSummary as CardLimitSummaryData } from "@/utils/card-limit-view-model";
+import { getMemberDisplayName } from "@/utils/member-display";
 import {
   PAYMENT_METHOD_LIST,
   requiresCard,
@@ -656,7 +657,7 @@ export function UnifiedExpenseFormSheet({
                   <SelectContent>
                     {groupMembers.map((m) => (
                       <SelectItem key={m.user_id} value={m.user_id}>
-                        {m.user_email?.split("@")[0] || "?"}{m.user_id === currentUserId ? " (você)" : ""}
+                        {getMemberDisplayName(m, "?")}{m.user_id === currentUserId ? " (você)" : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -685,7 +686,7 @@ export function UnifiedExpenseFormSheet({
                           <SelectContent>
                             {groupMembers.map((m) => (
                               <SelectItem key={m.user_id} value={m.user_id}>
-                                {m.user_email?.split("@")[0] || "?"}{m.user_id === currentUserId ? " (você)" : ""}
+                                {getMemberDisplayName(m, "?")}{m.user_id === currentUserId ? " (você)" : ""}
                               </SelectItem>
                             ))}
                           </SelectContent>

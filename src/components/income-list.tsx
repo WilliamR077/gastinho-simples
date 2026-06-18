@@ -20,6 +20,7 @@ import {
 import { User, AlertTriangle } from "lucide-react";
 import { SharedGroupMember } from "@/types/shared-group";
 import { getMemberColor } from "@/components/group-member-summary";
+import { getMemberDisplayName } from "@/utils/member-display";
 
 interface IncomeListProps {
   incomes: Income[];
@@ -33,8 +34,8 @@ interface IncomeListProps {
 
 const getUserDisplayName = (userId: string, members: SharedGroupMember[]): string | null => {
   const member = members.find((m) => m.user_id === userId);
-  if (!member?.user_email) return null;
-  return member.user_email.split("@")[0];
+  if (!member) return null;
+  return getMemberDisplayName(member);
 };
 
 export function IncomeList({
