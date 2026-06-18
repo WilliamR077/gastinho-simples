@@ -430,7 +430,7 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
     filteredExpenses.forEach(e => {
       const member = groupMembers.find(m => m.user_id === e.user_id);
       const email = member?.user_email || 'Desconhecido';
-      if (!mTotals[e.user_id]) mTotals[e.user_id] = { name: email.split('@')[0], email, value: 0 };
+      if (!mTotals[e.user_id]) mTotals[e.user_id] = { name: getMemberDisplayName(member ?? { user_email: email }), email, value: 0 };
       mTotals[e.user_id].value += Number(e.amount);
     });
     const mTotal = Object.values(mTotals).reduce((s, i) => s + i.value, 0);
