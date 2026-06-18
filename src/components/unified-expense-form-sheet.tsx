@@ -686,7 +686,7 @@ export function UnifiedExpenseFormSheet({
                           <SelectContent>
                             {groupMembers.map((m) => (
                               <SelectItem key={m.user_id} value={m.user_id}>
-                                {m.user_email?.split("@")[0] || "?"}{m.user_id === currentUserId ? " (você)" : ""}
+                                {getMemberDisplayName(m, "?")}{m.user_id === currentUserId ? " (você)" : ""}
                               </SelectItem>
                             ))}
                           </SelectContent>
