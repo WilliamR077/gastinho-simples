@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { SharedGroupMember } from "@/types/shared-group";
 import { SplitType, SplitParticipant, calculateEqualSplit, splitTypeLabels } from "@/types/expense-split";
 import { getMemberColor } from "@/components/group-member-summary";
+import { getMemberDisplayName } from "@/utils/member-display";
 import { Users, AlertTriangle } from "lucide-react";
 
 interface ExpenseSplitSectionProps {
