@@ -254,7 +254,7 @@ export function ExpenseSplitSection({
                         className="h-2 w-2 rounded-full"
                         style={{ backgroundColor: getMemberColor(p.userId, groupMembers) }}
                       />
-                      <span className="text-xs">{p.email.split('@')[0]}</span>
+                      <span className="text-xs">{getMemberDisplayName(groupMembers.find(m => m.user_id === p.userId) ?? { user_email: p.email }, '?')}</span>
                     </div>
                     <span className="text-xs font-medium">{formatCurrency(p.amount)}</span>
                   </div>
