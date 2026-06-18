@@ -487,7 +487,8 @@ const createdByColor =
               />
               <div className="space-y-1 ml-7">
                 {expense.splits.map(s => {
-                  const name = s.user_email?.split('@')[0] || '?';
+                  const member = groupMembers.find(m => m.user_id === s.user_id);
+                  const name = getMemberDisplayName(member ?? { user_email: s.user_email }, '?');
                   const color = getMemberColor(s.user_id, groupMembers);
                   const isMe = s.user_id === user?.id;
                   return (
