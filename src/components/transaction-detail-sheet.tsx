@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/drawer";
 import { getMemberColor } from "@/components/group-member-summary";
 import { SharedGroupMember } from "@/types/shared-group";
+import { getMemberDisplayName } from "@/utils/member-display";
 
 interface TransactionDetailSheetProps {
   expense?: Expense | null;
