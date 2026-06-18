@@ -8,6 +8,7 @@ import { paymentMethodIcon, paymentMethodLabel } from "@/lib/payment-methods"
 import { SharedGroupMember } from "@/types/shared-group"
 import { useCategories } from "@/hooks/use-categories"
 import { getMemberColor } from "@/components/group-member-summary"
+import { getMemberDisplayName } from "@/utils/member-display"
 import { useValuesVisibility } from "@/hooks/use-values-visibility"
 import { TransactionDetailSheet } from "@/components/transaction-detail-sheet"
 import {
