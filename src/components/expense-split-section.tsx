@@ -130,7 +130,7 @@ export function ExpenseSplitSection({
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
   const getMemberName = (member: SharedGroupMember) =>
-    member.user_email?.split('@')[0] || '?';
+    getMemberDisplayName(member, '?');
 
   return (
     <div className="space-y-3 p-3 rounded-lg bg-muted/50 border border-border">
