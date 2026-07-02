@@ -920,6 +920,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_add_budget_goal: { Args: { user_id_param: string }; Returns: boolean }
+      can_add_card: { Args: { user_id_param: string }; Returns: boolean }
       can_create_group: { Args: { user_id_param: string }; Returns: boolean }
       check_rate_limit: {
         Args: {
