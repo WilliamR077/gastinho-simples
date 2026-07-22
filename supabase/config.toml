@@ -41,3 +41,7 @@ verify_jwt = true
 # Auth handled in code; verify_jwt=false to allow both paths.
 [functions.send-notification]
 verify_jwt = false
+
+# MCP server: auth handled in-code by @lovable.dev/mcp-js (OAuth 2.1 bearer).
+[functions.mcp]
+verify_jwt = false
