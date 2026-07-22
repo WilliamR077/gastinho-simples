@@ -16,7 +16,6 @@ dependencies {
     implementation project(':capacitor-local-notifications')
     implementation project(':capacitor-share')
     implementation project(':capacitor-toast')
-    implementation project(':capgo-capacitor-purchases')
     implementation project(':capacitor-native-biometric')
     implementation "com.android.billingclient:billing:8.3.0"
 }
