@@ -63,9 +63,12 @@ export default function Auth() {
 
   const handleGoogleSignIn = async () => {
     setIsGoogleLoading(true);
+    // Preserva o destino (ex.: /.lovable/oauth/consent?authorization_id=…)
+    // no redirect do Google, senão o provider cai em "/" após o round-trip.
+    const nextPath = getRedirectPath();
     const redirectTo = Capacitor.isNativePlatform()
       ? 'com.gastinhosimples.app://'
-      : window.location.origin;
+      : `${window.location.origin}${nextPath}`;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
