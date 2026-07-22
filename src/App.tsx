@@ -37,6 +37,7 @@ import Landing from "./pages/Landing";
 import About from "./pages/About";
 import Contact from "./pages/Contact";
 import Admin from "./pages/Admin";
+import OAuthConsent from "./pages/OAuthConsent";
 import { RequireAuth } from "@/components/auth/require-auth";
 import { RequireAdmin } from "@/components/auth/require-admin";
 
@@ -222,6 +223,7 @@ const AppContent = () => {
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/auth" element={<Auth />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
 
         {/* Autenticadas */}
         <Route element={<RequireAuth />}>
