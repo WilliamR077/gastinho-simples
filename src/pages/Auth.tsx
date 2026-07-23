@@ -8,8 +8,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useEffect } from "react";
+import { safeInternalPath } from "@/utils/safe-redirect";
 import { validatePasswordStrength, sanitizeErrorMessage, isEmailValid } from "@/utils/security";
 import { Progress } from "@/components/ui/progress";
 import { Eye, EyeOff } from "lucide-react";
@@ -20,6 +21,7 @@ export default function Auth() {
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordStrength, setPasswordStrength] = useState(validatePasswordStrength(""));
@@ -32,17 +34,27 @@ export default function Auth() {
   const [showEmailForm, setShowEmailForm] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Destino pós-login: prioriza location.state.from (RequireAuth) e
+  // aceita ?redirect= apenas se for path interno seguro.
+  const getRedirectPath = (): string => {
+    const fromState = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
+    if (fromState) return safeInternalPath(fromState, "/");
+    const params = new URLSearchParams(location.search);
+    return safeInternalPath(params.get("redirect"), "/");
+  };
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
-        navigate("/");
+        navigate(getRedirectPath(), { replace: true });
       }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session) {
-        navigate("/");
+        navigate(getRedirectPath(), { replace: true });
       }
     });
 
@@ -51,9 +63,12 @@ export default function Auth() {
 
   const handleGoogleSignIn = async () => {
     setIsGoogleLoading(true);
+    // Preserva o destino (ex.: /.lovable/oauth/consent?authorization_id=…)
+    // no redirect do Google, senão o provider cai em "/" após o round-trip.
+    const nextPath = getRedirectPath();
     const redirectTo = Capacitor.isNativePlatform()
       ? 'com.gastinhosimples.app://'
-      : window.location.origin;
+      : `${window.location.origin}${nextPath}`;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
@@ -100,7 +115,7 @@ export default function Auth() {
         title: "Login realizado com sucesso!",
         description: "Redirecionando...",
       });
-      navigate("/");
+      navigate(getRedirectPath(), { replace: true });
     }
 
     setIsLoading(false);
@@ -113,6 +128,16 @@ export default function Auth() {
       toast({
         title: "Email inválido",
         description: "Digite um email válido",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const trimmedName = fullName.trim();
+    if (trimmedName.length < 2 || trimmedName.length > 60) {
+      toast({
+        title: "Nome obrigatório",
+        description: "Digite um nome com 2 a 60 caracteres",
         variant: "destructive",
       });
       return;
@@ -145,6 +170,9 @@ export default function Auth() {
       password,
       options: {
         emailRedirectTo: redirectUrl,
+        data: {
+          full_name: trimmedName,
+        },
       },
     });
 
@@ -333,6 +361,21 @@ export default function Auth() {
 
                     <TabsContent value="signup">
                       <form onSubmit={handleSignUp} className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="signup-name">Nome</Label>
+                          <Input
+                            id="signup-name"
+                            type="text"
+                            placeholder="Ex.: Maria Silva"
+                            value={fullName}
+                            onChange={(e) => setFullName(e.target.value)}
+                            maxLength={60}
+                            required
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Esse nome aparece para outras pessoas nos grupos compartilhados.
+                          </p>
+                        </div>
                         <div className="space-y-2">
                           <Label htmlFor="signup-email">Email</Label>
                           <Input

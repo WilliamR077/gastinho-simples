@@ -8,6 +8,7 @@ import { paymentMethodIcon, paymentMethodLabel } from "@/lib/payment-methods"
 import { SharedGroupMember } from "@/types/shared-group"
 import { useCategories } from "@/hooks/use-categories"
 import { getMemberColor } from "@/components/group-member-summary"
+import { getMemberDisplayName } from "@/utils/member-display"
 import { useValuesVisibility } from "@/hooks/use-values-visibility"
 import { TransactionDetailSheet } from "@/components/transaction-detail-sheet"
 import {
@@ -35,8 +36,8 @@ interface ExpenseListProps {
 
 const getUserDisplayName = (userId: string, members: SharedGroupMember[]): string | null => {
   const member = members.find(m => m.user_id === userId);
-  if (!member?.user_email) return null;
-  return member.user_email.split('@')[0];
+  if (!member) return null;
+  return getMemberDisplayName(member);
 };
 
 const parseLocalDate = (dateString: string) => {

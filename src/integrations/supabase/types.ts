@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "13.0.5"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -477,6 +477,27 @@ export type Database = {
         }
         Relationships: []
       }
+      profiles: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       rate_limit_events: {
         Row: {
           bucket_key: string
@@ -899,6 +920,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_add_budget_goal: { Args: { user_id_param: string }; Returns: boolean }
+      can_add_card: { Args: { user_id_param: string }; Returns: boolean }
       can_create_group: { Args: { user_id_param: string }; Returns: boolean }
       check_rate_limit: {
         Args: {
@@ -928,6 +951,7 @@ export type Database = {
       get_group_members_with_email: {
         Args: { group_id_param: string }
         Returns: {
+          display_name: string
           group_id: string
           id: string
           joined_at: string
@@ -973,6 +997,7 @@ export type Database = {
         Args: { user_id_param: string }
         Returns: undefined
       }
+      shares_group_with: { Args: { _a: string; _b: string }; Returns: boolean }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"

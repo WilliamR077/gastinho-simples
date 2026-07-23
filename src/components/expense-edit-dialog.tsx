@@ -5,6 +5,7 @@ import * as z from "zod";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { DecimalInput } from "@/components/ui/decimal-input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
@@ -16,9 +17,8 @@ import { Expense, PaymentMethod, ExpenseFormData } from "@/types/expense";
 import { SplitType, SplitParticipant } from "@/types/expense-split";
 import { SharedGroupMember } from "@/types/shared-group";
 import { cn, parseLocalDate, normalizeToLocalDate, stripInstallmentSuffix } from "@/lib/utils";
-import { supabase } from "@/integrations/supabase/client";
-import { Card as CardType } from "@/types/card";
 import { CategorySelector } from "@/components/category-selector";
+import { CardSelector } from "@/components/card-selector";
 import { useCategories } from "@/hooks/use-categories";
 import { ExpenseSplitSection } from "@/components/expense-split-section";
 import {
@@ -58,7 +58,6 @@ export function ExpenseEditDialog({
   currentUserId = '',
   isGroupContext = false,
 }: ExpenseEditDialogProps) {
-  const [cards, setCards] = useState<CardType[]>([]);
   const { activeCategories } = useCategories();
   const lastExpenseIdRef = useRef<string | null>(null);
 
@@ -80,41 +79,6 @@ export function ExpenseEditDialog({
       cardId: "",
     },
   });
-
-  useEffect(() => {
-    loadCards();
-  }, []);
-
-  const loadCards = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data, error } = await supabase
-        .from("cards")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("is_active", true)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      setCards(data || []);
-    } catch (error) {
-      console.error("Erro ao carregar cartões:", error);
-    }
-  };
-
-  const getAvailableCards = () => {
-    const paymentMethod = form.watch("paymentMethod");
-    if (!paymentMethod || !requiresCard(paymentMethod)) return [];
-
-    return cards.filter(card => {
-      if (card.card_type === 'both') return true;
-      if (paymentMethod === 'credit') return card.card_type === 'credit';
-      if (paymentMethod === 'debit') return card.card_type === 'debit';
-      return false;
-    });
-  };
 
   // Populate form when expense changes
   useEffect(() => {
@@ -167,15 +131,10 @@ export function ExpenseEditDialog({
     if (!expense) return;
     setSplitError(null);
 
-    // Defesa em profundidade: garante card_id null para métodos sem cartão
-    // mesmo se o estado do form estiver sujo.
-    const sanitizedCardId = requiresCard(data.paymentMethod) ? data.cardId : undefined;
-
-    // Bloqueia submit quando cartão é obrigatório e não foi selecionado.
-    if (requiresCard(data.paymentMethod) && !sanitizedCardId) {
-      form.setError("cardId", { message: "Selecione um cartão" });
-      return;
-    }
+    // Cartão é opcional: se o método exige cartão mas nenhum foi selecionado,
+    // a despesa é salva sem vínculo. Para métodos que não exigem cartão (pix/cash),
+    // garante card_id sempre undefined.
+    const sanitizedCardId = requiresCard(data.paymentMethod) ? (data.cardId || undefined) : undefined;
 
     const selectedCategory = activeCategories.find(c => c.id === data.categoryId);
     
@@ -268,12 +227,9 @@ export function ExpenseEditDialog({
                 <FormItem>
                   <FormLabel>Valor (R$)</FormLabel>
                   <FormControl>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="0.00"
-                      {...field}
-                      onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                    <DecimalInput
+                      value={field.value || 0}
+                      onChange={field.onChange}
                     />
                   </FormControl>
                   <FormMessage />
@@ -340,26 +296,11 @@ export function ExpenseEditDialog({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Cartão</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione o cartão" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent className="bg-background">
-                        {getAvailableCards().map((card) => (
-                          <SelectItem key={card.id} value={card.id}>
-                            <div className="flex items-center gap-2">
-                              <div 
-                                style={{ backgroundColor: card.color }} 
-                                className="w-3 h-3 rounded-full"
-                              />
-                              {card.name}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <CardSelector
+                      value={field.value || ""}
+                      onValueChange={field.onChange}
+                      paymentMethod={form.watch("paymentMethod")}
+                    />
                     <FormMessage />
                   </FormItem>
                 )}

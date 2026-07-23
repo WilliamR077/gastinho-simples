@@ -151,33 +151,55 @@ function detectColumn(columns: string[], patterns: string[]): string | null {
 }
 
 // Parse de arquivo Excel/CSV
+// E1 hardening: try/catch isolado, sem logar conteúdo, sem fetch remoto.
+// Apenas processa o File local recebido do <input type="file">.
 export async function parseSpreadsheet(file: File): Promise<ParseResult> {
+  if (!(file instanceof File)) {
+    throw new Error("Arquivo inválido");
+  }
+  if (file.size === 0) throw new Error("Arquivo vazio");
+  if (file.size > 5 * 1024 * 1024) throw new Error("Arquivo excede 5MB");
+
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    
+
     reader.onload = (e) => {
       try {
         const data = e.target?.result;
+        if (!data) {
+          reject(new Error("Falha ao ler o conteúdo do arquivo"));
+          return;
+        }
+
         const workbook = XLSX.read(data, { type: "binary", cellDates: true });
-        
-        // Pegar primeira planilha
+        if (!workbook?.SheetNames?.length) {
+          reject(new Error("Planilha sem abas"));
+          return;
+        }
+
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        
-        // Converter para JSON
-        const jsonData = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet, { 
-          raw: false,
-          defval: ""
-        });
-        
-        if (jsonData.length === 0) {
-          throw new Error("Planilha vazia ou formato inválido");
+        if (!worksheet) {
+          reject(new Error("Aba inicial inválida"));
+          return;
         }
-        
-        // Pegar nomes das colunas
-        const columns = Object.keys(jsonData[0]);
-        
-        // Sugerir mapeamento automático
+
+        const jsonData = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet, {
+          raw: false,
+          defval: "",
+        });
+
+        if (!Array.isArray(jsonData) || jsonData.length === 0) {
+          reject(new Error("Planilha vazia ou formato inválido"));
+          return;
+        }
+
+        const columns = Object.keys(jsonData[0] ?? {});
+        if (columns.length === 0) {
+          reject(new Error("Não foi possível identificar colunas"));
+          return;
+        }
+
         const suggestedMapping: ColumnMapping = {
           description: detectColumn(columns, COLUMN_PATTERNS.description),
           amount: detectColumn(columns, COLUMN_PATTERNS.amount),
@@ -185,17 +207,14 @@ export async function parseSpreadsheet(file: File): Promise<ParseResult> {
           category: detectColumn(columns, COLUMN_PATTERNS.category),
           paymentMethod: detectColumn(columns, COLUMN_PATTERNS.paymentMethod),
         };
-        
-        resolve({
-          columns,
-          rows: jsonData,
-          suggestedMapping,
-        });
-      } catch (error) {
-        reject(error);
+
+        resolve({ columns, rows: jsonData, suggestedMapping });
+      } catch {
+        // Não propagar mensagem original (pode conter conteúdo do usuário)
+        reject(new Error("Falha ao processar planilha"));
       }
     };
-    
+
     reader.onerror = () => reject(new Error("Erro ao ler arquivo"));
     reader.readAsBinaryString(file);
   });
@@ -412,32 +431,46 @@ export async function importExpenses(
 
 // Gerar template de exemplo
 export function generateTemplateSpreadsheet(): void {
+  // E1.1: datas dinâmicas baseadas em hoje (linha 1 = hoje, linha 2 = -1d, ...)
+  const formatBR = (d: Date) => {
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  };
+  const dateAt = (offsetDays: number) => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - offsetDays);
+    return formatBR(d);
+  };
+
   const templateData = [
     {
       "Descrição": "Mercado Pão de Açúcar",
       "Valor": "R$ 250,00",
-      "Data": "15/01/2025",
+      "Data": dateAt(0),
       "Categoria": "Alimentação",
       "Pagamento": "Crédito"
     },
     {
       "Descrição": "Uber - trabalho",
       "Valor": "R$ 35,50",
-      "Data": "16/01/2025",
+      "Data": dateAt(1),
       "Categoria": "Transporte",
       "Pagamento": "PIX"
     },
     {
       "Descrição": "Netflix mensalidade",
       "Valor": "R$ 55,90",
-      "Data": "17/01/2025",
+      "Data": dateAt(2),
       "Categoria": "Lazer",
       "Pagamento": "Crédito"
     },
     {
       "Descrição": "Farmácia Drogasil",
       "Valor": "R$ 89,00",
-      "Data": "18/01/2025",
+      "Data": dateAt(3),
       "Categoria": "Saúde",
       "Pagamento": "Débito"
     },

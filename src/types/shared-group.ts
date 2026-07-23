@@ -24,6 +24,7 @@ export interface SharedGroupMember {
   joined_at: string;
   // Campos de join (opcional)
   user_email?: string;
+  display_name?: string | null;
 }
 
 export interface SharedGroupContext {
