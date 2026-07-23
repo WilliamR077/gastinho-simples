@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, Settings as SettingsIcon, FileDown, FileSpreadsheet, Crown, Lock, GraduationCap, Upload, Check } from "lucide-react";
+import { ArrowLeft, Settings as SettingsIcon, FileDown, FileSpreadsheet, Crown, Lock, GraduationCap, Upload, Check, Bot } from "lucide-react";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useState, useEffect } from "react";
 import { SpreadsheetImportSheet } from "@/components/spreadsheet-import-sheet";
@@ -473,6 +473,28 @@ export default function Settings() {
         </Card>
 
         <Separator />
+
+        {/* Seção: Integrações com IA */}
+        <Link
+          to="/settings/ai-integrations"
+          aria-label="Abrir Integrações com IA"
+          className="group block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        >
+          <Card className="transition-colors group-hover:border-primary/50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bot className="h-5 w-5 text-primary" />
+                Integrações com IA
+              </CardTitle>
+              <CardDescription>
+                Conecte o Gastinho a assistentes compatíveis com servidores MCP remotos
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+
+        <Separator />
+
         <Card data-onboarding="settings-tutorial-card">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

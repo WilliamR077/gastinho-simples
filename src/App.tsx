@@ -28,6 +28,7 @@ import ResetPassword from "./pages/ResetPassword";
 import Account from "./pages/Account";
 import Cards from "./pages/Cards";
 import Settings from "./pages/Settings";
+import AiIntegrations from "./pages/AiIntegrations";
 import Reports from "./pages/Reports";
 import Subscription from "./pages/Subscription";
 import NotFound from "./pages/NotFound";
@@ -231,6 +232,7 @@ const AppContent = () => {
           <Route path="/account" element={<Account />} />
           <Route path="/cards" element={<Cards />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/settings/ai-integrations" element={<AiIntegrations />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/subscription" element={<Subscription />} />
           <Route path="/notification-debug" element={<NotificationDebug />} />
