@@ -7,15 +7,30 @@ export type AiClientStatus =
   | "unavailable"
   | "advanced";
 
-export type AiClientIcon =
-  | "sparkles"
-  | "search"
-  | "message"
-  | "gem"
-  | "building"
-  | "brain"
-  | "cursor"
-  | "github";
+export type AiBrandIconId =
+  | "claude"
+  | "perplexity"
+  | "chatgpt"
+  | "gemini"
+  | "microsoft-copilot"
+  | "deepseek";
+
+export type AiAdvancedIconId = "cursor" | "github";
+
+export type AiClientIcon = AiBrandIconId | AiAdvancedIconId;
+
+const aiBrandIconIds = new Set<AiClientIcon>([
+  "claude",
+  "perplexity",
+  "chatgpt",
+  "gemini",
+  "microsoft-copilot",
+  "deepseek",
+]);
+
+export function isAiBrandIcon(icon: AiClientIcon): icon is AiBrandIconId {
+  return aiBrandIconIds.has(icon);
+}
 
 export type AiClientInstructionsDisplay = "list" | "collapsible";
 
@@ -69,7 +84,7 @@ export const AI_CLIENTS: AiClient[] = [
     notes: [
       "Esta integração já foi testada com consultas e criação de receitas e despesas.",
     ],
-    icon: "sparkles",
+    icon: "claude",
   },
   {
     id: "perplexity",
@@ -100,7 +115,7 @@ export const AI_CLIENTS: AiClient[] = [
     notes: [
       "A disponibilidade pode depender do plano do Perplexity. Consulte as condições do seu plano antes de configurar.",
     ],
-    icon: "search",
+    icon: "perplexity",
   },
   {
     id: "chatgpt",
@@ -128,7 +143,7 @@ export const AI_CLIENTS: AiClient[] = [
     notes: [
       "O procedimento e a disponibilidade podem ser controlados pelo administrador da organização.",
     ],
-    icon: "message",
+    icon: "chatgpt",
   },
   {
     id: "gemini",
@@ -145,7 +160,7 @@ export const AI_CLIENTS: AiClient[] = [
     notes: [
       "Quando houver suporte direto para usuários comuns, esta página poderá ser atualizada.",
     ],
-    icon: "gem",
+    icon: "gemini",
   },
   {
     id: "microsoft-copilot",
@@ -174,7 +189,7 @@ export const AI_CLIENTS: AiClient[] = [
     instructionsTitle: "Usar com Copilot Studio",
     instructionsIntro: "Configuração avançada para ambientes empresariais.",
     notes: [],
-    icon: "building",
+    icon: "microsoft-copilot",
   },
   {
     id: "deepseek",
@@ -191,7 +206,7 @@ export const AI_CLIENTS: AiClient[] = [
     notes: [
       "Modelos DeepSeek podem ser usados dentro de outras ferramentas de agentes compatíveis com MCP, mas isso não representa uma conexão direta no aplicativo DeepSeek.",
     ],
-    icon: "brain",
+    icon: "deepseek",
   },
   {
     id: "cursor",

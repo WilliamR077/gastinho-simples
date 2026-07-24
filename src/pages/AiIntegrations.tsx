@@ -3,25 +3,20 @@ import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   Bot,
-  BrainCircuit,
-  Building2,
   Check,
   ChevronDown,
   Copy,
-  Gem,
   Github,
   Link2,
   LockKeyhole,
-  MessageSquare,
   MessageSquareText,
   MousePointer2,
-  Search,
   ShieldCheck,
-  Sparkles,
   Unplug,
   UserRoundCheck,
   type LucideIcon,
 } from "lucide-react";
+import { AiBrandIcon } from "@/components/ai/AiBrandIcon";
 import {
   Accordion,
   AccordionContent,
@@ -43,9 +38,11 @@ import { toast } from "@/hooks/use-toast";
 import {
   ADVANCED_AI_CLIENTS,
   CONSUMER_AI_CLIENTS,
+  type AiAdvancedIconId,
   type AiClient,
   type AiClientIcon,
   type AiClientStatus,
+  isAiBrandIcon,
 } from "@/lib/mcp/aiClients";
 import { MCP_SERVER_URL } from "@/lib/mcp/config";
 import { cn } from "@/lib/utils";
@@ -75,13 +72,7 @@ const privacyItems = [
   "Nunca envie senhas em conversas.",
 ];
 
-const iconById: Record<AiClientIcon, LucideIcon> = {
-  sparkles: Sparkles,
-  search: Search,
-  message: MessageSquare,
-  gem: Gem,
-  building: Building2,
-  brain: BrainCircuit,
+const advancedIconById: Record<AiAdvancedIconId, LucideIcon> = {
   cursor: MousePointer2,
   github: Github,
 };
@@ -142,7 +133,11 @@ function ClientIcon({
   icon: AiClientIcon;
   className?: string;
 }) {
-  const Icon = iconById[icon];
+  if (isAiBrandIcon(icon)) {
+    return <AiBrandIcon icon={icon} className={className} />;
+  }
+
+  const Icon = advancedIconById[icon];
   return <Icon className={className} aria-hidden="true" />;
 }
 
@@ -448,7 +443,7 @@ export default function AiIntegrations() {
                   <div className="flex w-full items-start justify-between gap-2">
                     <ClientIcon
                       icon={client.icon}
-                      className="h-5 w-5 shrink-0 text-primary"
+                      className="h-7 w-7 text-foreground lg:h-8 lg:w-8"
                     />
                     {isSelected && (
                       <span className="inline-flex items-center gap-1 text-xs font-medium">
