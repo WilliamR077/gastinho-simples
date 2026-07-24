@@ -17,6 +17,22 @@
     },
     "tools": [
       {
+        "name": "get_connection_identity",
+        "title": "Identidade da conexão",
+        "description": "Mostra qual conta do Gastinho Simples está conectada ao assistente atual. Retorna apenas identificadores mascarados — nunca tokens, UUID completo ou claims.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      },
+      {
         "name": "list_expenses",
         "title": "Listar despesas",
         "description": "Lista as despesas do usuário autenticado. Aceita intervalo de datas opcional (ISO YYYY-MM-DD) e limite. Retorna descrição, valor, data, categoria e método de pagamento.",
