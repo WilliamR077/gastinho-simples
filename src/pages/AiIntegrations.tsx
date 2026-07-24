@@ -3,44 +3,52 @@ import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   Bot,
+  BrainCircuit,
+  Building2,
   Check,
+  ChevronDown,
   Copy,
+  Gem,
+  Github,
   Link2,
   LockKeyhole,
+  MessageSquare,
   MessageSquareText,
+  MousePointer2,
+  Search,
   ShieldCheck,
   Sparkles,
   Unplug,
   UserRoundCheck,
+  type LucideIcon,
 } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import { Footer } from "@/components/footer";
 import { toast } from "@/hooks/use-toast";
+import {
+  ADVANCED_AI_CLIENTS,
+  CONSUMER_AI_CLIENTS,
+  type AiClient,
+  type AiClientIcon,
+  type AiClientStatus,
+} from "@/lib/mcp/aiClients";
 import { MCP_SERVER_URL } from "@/lib/mcp/config";
-
-const claudeSteps = [
-  "Abra o Claude.",
-  "Entre em Configurações.",
-  "Abra Personalizar e depois Conectores.",
-  "Escolha adicionar um conector personalizado.",
-  "Use o nome “Gastinho Simples”.",
-  "Cole o link disponibilizado nesta página.",
-  "Clique em adicionar ou vincular.",
-  "Entre na sua conta do Gastinho.",
-  "Confira se você está usando a conta correta.",
-  "Leia a tela de autorização e clique em Aprovar.",
-  "Volte ao Claude, abra uma nova conversa e habilite o conector Gastinho Simples.",
-];
+import { cn } from "@/lib/utils";
 
 const accountChangeSteps = [
   "Desconecte ou remova o Gastinho nas configurações de conectores do assistente.",
@@ -63,10 +71,31 @@ const privacyItems = [
   "O assistente não recebe a senha do Gastinho.",
   "A autorização utiliza OAuth.",
   "A conexão fica associada à conta do Gastinho que foi autenticada e aprovada.",
-  "Confira a conta do Gastinho antes de aprovar o acesso.",
-  "Você pode remover ou desconectar o conector nas configurações do assistente.",
+  "Confira a identidade e a conta do Gastinho antes de aprovar o acesso.",
   "Nunca envie senhas em conversas.",
 ];
+
+const iconById: Record<AiClientIcon, LucideIcon> = {
+  sparkles: Sparkles,
+  search: Search,
+  message: MessageSquare,
+  gem: Gem,
+  building: Building2,
+  brain: BrainCircuit,
+  cursor: MousePointer2,
+  github: Github,
+};
+
+const statusVariant: Record<
+  AiClientStatus,
+  "default" | "secondary" | "outline"
+> = {
+  tested: "default",
+  supported: "secondary",
+  restricted: "outline",
+  unavailable: "outline",
+  advanced: "secondary",
+};
 
 function copyWithFallback(text: string) {
   const textArea = document.createElement("textarea");
@@ -94,10 +123,151 @@ function copyWithFallback(text: string) {
   }
 }
 
+function NumberedSteps({ steps }: { steps: string[] }) {
+  return (
+    <ol className="list-decimal space-y-2 pl-5 text-sm text-muted-foreground marker:font-semibold marker:text-foreground">
+      {steps.map((step) => (
+        <li key={step} className="pl-1">
+          {step}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function ClientIcon({
+  icon,
+  className,
+}: {
+  icon: AiClientIcon;
+  className?: string;
+}) {
+  const Icon = iconById[icon];
+  return <Icon className={className} aria-hidden="true" />;
+}
+
+function ClientInstructions({ client }: { client: AiClient }) {
+  return (
+    <section
+      id={`instructions-${client.id}`}
+      aria-labelledby={`instructions-title-${client.id}`}
+      className="space-y-4"
+    >
+      <div className="flex items-start gap-3">
+        <div className="rounded-lg bg-primary/10 p-2 text-primary">
+          <ClientIcon icon={client.icon} className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 space-y-2">
+          <h3
+            id={`instructions-title-${client.id}`}
+            className="text-lg font-semibold"
+          >
+            {client.panelTitle}
+          </h3>
+          <Badge variant={statusVariant[client.status]} className="whitespace-normal">
+            {client.panelStatusLabel}
+          </Badge>
+        </div>
+      </div>
+
+      <p className="text-sm leading-relaxed text-muted-foreground">
+        {client.availability}
+      </p>
+
+      {client.instructionsDisplay === "collapsible" ? (
+        <Collapsible>
+          <CollapsibleTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-auto min-h-11 w-full justify-between whitespace-normal py-2 text-left motion-reduce:transition-none [&[data-state=open]>svg]:rotate-180"
+            >
+              {client.instructionsTitle}
+              <ChevronDown
+                className="h-4 w-4 shrink-0 transition-transform motion-reduce:transition-none"
+                aria-hidden="true"
+              />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-3 pt-4 motion-reduce:animate-none">
+            {client.instructionsIntro && (
+              <p className="text-sm font-medium">{client.instructionsIntro}</p>
+            )}
+            <NumberedSteps steps={client.instructions} />
+          </CollapsibleContent>
+        </Collapsible>
+      ) : (
+        client.instructions.length > 0 && (
+          <NumberedSteps steps={client.instructions} />
+        )
+      )}
+
+      {client.notes.map((note) => (
+        <p
+          key={note}
+          className={cn(
+            "rounded-lg border bg-muted/40 p-3 text-sm leading-relaxed",
+            client.status === "tested" && "border-primary/30 bg-primary/5",
+          )}
+        >
+          {note}
+        </p>
+      ))}
+    </section>
+  );
+}
+
+function AdvancedClient({ client }: { client: AiClient }) {
+  const cursorConfig = JSON.stringify(
+    {
+      mcpServers: {
+        "gastinho-simples": {
+          url: MCP_SERVER_URL,
+        },
+      },
+    },
+    null,
+    2,
+  );
+
+  return (
+    <article className="space-y-3 rounded-lg border bg-card p-4">
+      <div className="flex items-start gap-3">
+        <ClientIcon
+          icon={client.icon}
+          className="mt-0.5 h-5 w-5 shrink-0 text-primary"
+        />
+        <div className="min-w-0">
+          <h3 className="font-semibold">{client.name}</h3>
+          <Badge variant="secondary" className="mt-1">
+            {client.statusLabel}
+          </Badge>
+        </div>
+      </div>
+      <p className="text-sm text-muted-foreground">{client.availability}</p>
+      <NumberedSteps steps={client.instructions} />
+      {client.example === "mcp-server-json" && (
+        <pre className="max-w-full whitespace-pre-wrap break-all rounded-lg bg-muted p-3 text-xs text-foreground">
+          <code>{cursorConfig}</code>
+        </pre>
+      )}
+      {client.notes.map((note) => (
+        <p key={note} className="text-sm font-medium">
+          {note}
+        </p>
+      ))}
+    </article>
+  );
+}
+
 export default function AiIntegrations() {
   const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const instructionsPanelRef = useRef<HTMLDivElement>(null);
+  const selectedClient =
+    CONSUMER_AI_CLIENTS.find((client) => client.id === selectedClientId) ?? null;
 
   useEffect(() => {
     return () => {
@@ -106,6 +276,31 @@ export default function AiIntegrations() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!selectedClient || !instructionsPanelRef.current) return;
+
+    const animationFrame = requestAnimationFrame(() => {
+      const panel = instructionsPanelRef.current;
+      if (!panel) return;
+
+      const bounds = panel.getBoundingClientRect();
+      const panelIsOutsideViewport =
+        bounds.top < 0 || bounds.top > window.innerHeight * 0.75;
+
+      if (panelIsOutsideViewport) {
+        const reduceMotion = window.matchMedia(
+          "(prefers-reduced-motion: reduce)",
+        ).matches;
+        panel.scrollIntoView({
+          behavior: reduceMotion ? "auto" : "smooth",
+          block: "start",
+        });
+      }
+    });
+
+    return () => cancelAnimationFrame(animationFrame);
+  }, [selectedClient]);
 
   const handleCopy = async () => {
     try {
@@ -146,77 +341,53 @@ export default function AiIntegrations() {
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-background pb-24">
-      <main className="container mx-auto max-w-4xl space-y-6 p-4">
+      <main className="container mx-auto max-w-4xl space-y-4 p-3 sm:space-y-6 sm:p-4">
         <nav aria-label="Navegação da página">
           <Button
             type="button"
             variant="ghost"
             onClick={() => navigate("/settings")}
-            className="gap-2"
+            className="min-h-11 gap-2 px-2"
           >
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             Voltar para Configurações
           </Button>
         </nav>
 
-        <header className="space-y-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <Bot className="h-7 w-7 shrink-0 text-primary" aria-hidden="true" />
-            <h1 className="text-3xl font-bold">
-              Conecte o Gastinho ao seu assistente de IA
-            </h1>
+        <header className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Bot className="h-6 w-6 shrink-0 text-primary" aria-hidden="true" />
+            <h1 className="text-2xl font-bold sm:text-3xl">Integrações com IA</h1>
           </div>
-          <p className="max-w-3xl text-muted-foreground">
-            Registre despesas, consulte receitas e acompanhe seu resumo financeiro
-            conversando com um assistente compatível. Você continuará no controle e
-            precisará autorizar o acesso à sua conta.
+          <p className="max-w-3xl text-sm text-muted-foreground sm:text-base">
+            Conecte sua conta a um assistente compatível para registrar e consultar
+            suas finanças por conversa.
           </p>
-          <span className="inline-flex rounded-full border border-border bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
-            Integração em fase de testes
-          </span>
         </header>
 
-        <Alert className="border-primary/40 bg-primary/5">
+        <Alert className="border-primary/40 bg-primary/5 p-3 sm:p-4">
           <ShieldCheck className="h-4 w-4" aria-hidden="true" />
           <AlertDescription>
             <h2 className="mb-1 font-semibold text-foreground">Acesso protegido</h2>
-            <div className="space-y-2 text-muted-foreground">
-              <p>
-                O assistente só poderá acessar os dados da conta do Gastinho que você
-                autorizar. Nunca informe sua senha diretamente em uma conversa com o
-                assistente.
-              </p>
-              <p>
-                Antes de aprovar a conexão, confira se você está conectado à conta
-                correta do Gastinho.
-              </p>
-            </div>
+            <p className="text-muted-foreground">
+              Autorize somente a conta correta do Gastinho e nunca informe senhas
+              em conversas. O acesso usa OAuth e depende da sua aprovação.
+            </p>
           </AlertDescription>
         </Alert>
 
         <Card>
-          <CardHeader>
-            <CardTitle
-              role="heading"
-              aria-level={2}
-              className="flex items-center gap-2 text-xl"
-            >
-              <Link2 className="h-5 w-5" aria-hidden="true" />
-              Link do servidor MCP
-            </CardTitle>
-            <CardDescription>
-              Use este endereço ao adicionar o Gastinho como conector personalizado.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <label htmlFor="mcp-server-url" className="text-sm font-medium">
-              Endereço do servidor
-            </label>
+          <CardContent className="space-y-2 p-3 sm:p-4">
+            <div className="flex items-center gap-2">
+              <Link2 className="h-4 w-4 text-primary" aria-hidden="true" />
+              <h2 className="font-semibold">Link do servidor MCP</h2>
+            </div>
             <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
               <Input
                 id="mcp-server-url"
                 value={MCP_SERVER_URL}
                 readOnly
+                aria-label="Endereço do servidor MCP"
                 aria-describedby="mcp-server-help"
                 className="min-w-0 font-mono text-xs"
               />
@@ -224,7 +395,7 @@ export default function AiIntegrations() {
                 type="button"
                 onClick={handleCopy}
                 aria-label={copied ? "Link MCP copiado" : "Copiar link do servidor MCP"}
-                className="w-full shrink-0 sm:w-auto"
+                className="min-h-11 w-full shrink-0 sm:w-auto"
               >
                 {copied ? (
                   <Check className="h-4 w-4" aria-hidden="true" />
@@ -235,7 +406,7 @@ export default function AiIntegrations() {
               </Button>
             </div>
             <p id="mcp-server-help" className="text-xs text-muted-foreground">
-              O endereço é público e o acesso à sua conta é protegido por autorização.
+              O endereço é público; o acesso à conta exige autorização.
             </p>
             <p className="sr-only" role="status" aria-live="polite">
               {copied ? "Link do servidor MCP copiado para a área de transferência." : ""}
@@ -243,160 +414,173 @@ export default function AiIntegrations() {
           </CardContent>
         </Card>
 
-        <Separator />
+        <section aria-labelledby="client-picker-title" className="space-y-3">
+          <div>
+            <h2 id="client-picker-title" className="text-lg font-semibold sm:text-xl">
+              Escolha seu assistente
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Selecione uma opção para ver disponibilidade e instruções.
+            </p>
+          </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle
-              role="heading"
-              aria-level={2}
-              className="flex items-center gap-2 text-xl"
-            >
-              <Sparkles className="h-5 w-5" aria-hidden="true" />
-              Como conectar ao Claude
-            </CardTitle>
-            <CardDescription>
-              Siga estes passos nas configurações de conectores do Claude.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ol className="list-decimal space-y-2 pl-5 text-sm text-muted-foreground marker:font-semibold marker:text-foreground">
-              {claudeSteps.map((step) => (
-                <li key={step} className="pl-1">
-                  {step}
-                </li>
-              ))}
-            </ol>
-          </CardContent>
-        </Card>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6">
+            {CONSUMER_AI_CLIENTS.map((client) => {
+              const isSelected = selectedClientId === client.id;
 
-        <Card>
-          <CardHeader>
-            <CardTitle
-              role="heading"
-              aria-level={2}
-              className="flex items-center gap-2 text-xl"
-            >
-              <MessageSquareText className="h-5 w-5" aria-hidden="true" />
-              Exemplos de comandos
-            </CardTitle>
-            <CardDescription>
-              Exemplos de como iniciar uma conversa sobre suas finanças.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <ul className="grid gap-3 sm:grid-cols-2">
-              {commandExamples.map((example) => (
-                <li
-                  key={example}
-                  className="min-w-0 break-words rounded-lg border border-border bg-muted/40 p-3 text-sm"
+              return (
+                <button
+                  key={client.id}
+                  type="button"
+                  aria-expanded={isSelected}
+                  aria-controls={`instructions-${client.id}`}
+                  onClick={() =>
+                    setSelectedClientId((current) =>
+                      current === client.id ? null : client.id,
+                    )
+                  }
+                  className={cn(
+                    "relative flex min-h-28 min-w-0 flex-col items-start gap-2 rounded-lg border bg-card p-3 text-left shadow-sm transition-colors motion-reduce:transition-none",
+                    "hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                    isSelected && "border-primary ring-1 ring-primary",
+                  )}
                 >
-                  “{example}”
-                </li>
-              ))}
-            </ul>
-            <p className="text-sm text-muted-foreground">
-              O assistente poderá solicitar informações que estejam faltando, como
-              forma de pagamento, categoria ou cartão utilizado.
-            </p>
-          </CardContent>
-        </Card>
+                  <div className="flex w-full items-start justify-between gap-2">
+                    <ClientIcon
+                      icon={client.icon}
+                      className="h-5 w-5 shrink-0 text-primary"
+                    />
+                    {isSelected && (
+                      <span className="inline-flex items-center gap-1 text-xs font-medium">
+                        <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                        <span className="sr-only sm:not-sr-only">Aberto</span>
+                      </span>
+                    )}
+                  </div>
+                  <span className="min-w-0 text-sm font-semibold leading-tight">
+                    {client.name}
+                  </span>
+                  <Badge
+                    variant={statusVariant[client.status]}
+                    className="mt-auto max-w-full whitespace-normal px-2 py-0.5 text-[10px] leading-tight"
+                  >
+                    {client.statusLabel}
+                  </Badge>
+                </button>
+              );
+            })}
+          </div>
 
-        <Separator />
+          {selectedClient && (
+            <Card ref={instructionsPanelRef} className="scroll-mt-3">
+              <CardContent className="p-4 sm:p-6">
+                <ClientInstructions client={selectedClient} />
+              </CardContent>
+            </Card>
+          )}
+        </section>
 
-        <Card>
-          <CardHeader>
-            <CardTitle
-              role="heading"
-              aria-level={2}
-              className="flex items-center gap-2 text-xl"
-            >
-              <UserRoundCheck className="h-5 w-5" aria-hidden="true" />
-              Como conectar outra conta
-            </CardTitle>
-            <CardDescription>
-              Troque a conta conectada com atenção antes de autorizar novamente.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <ol className="list-decimal space-y-2 pl-5 text-sm text-muted-foreground marker:font-semibold marker:text-foreground">
-              {accountChangeSteps.map((step) => (
-                <li key={step} className="pl-1">
-                  {step}
-                </li>
-              ))}
-            </ol>
-            <p className="rounded-lg bg-muted p-3 text-sm">
-              Remover o conector do assistente não exclui nenhum dado do Gastinho.
-            </p>
-          </CardContent>
-        </Card>
+        <section aria-labelledby="advanced-options-title">
+          <h2 id="advanced-options-title" className="sr-only">
+            Ferramentas para desenvolvedores
+          </h2>
+          <Accordion type="single" collapsible>
+            <AccordionItem value="advanced" className="rounded-lg border px-4">
+              <AccordionTrigger className="min-h-12 gap-3 text-left hover:no-underline">
+                <span className="flex items-center gap-2">
+                  <MousePointer2 className="h-4 w-4 text-primary" aria-hidden="true" />
+                  Opções avançadas para desenvolvedores
+                </span>
+              </AccordionTrigger>
+              <AccordionContent className="space-y-3 motion-reduce:animate-none">
+                {ADVANCED_AI_CLIENTS.map((client) => (
+                  <AdvancedClient key={client.id} client={client} />
+                ))}
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </section>
 
-        <Card>
-          <CardHeader>
-            <CardTitle
-              role="heading"
-              aria-level={2}
-              className="flex items-center gap-2 text-xl"
-            >
-              <Unplug className="h-5 w-5" aria-hidden="true" />
-              Como encerrar o acesso
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Para parar de usar a integração, remova ou desconecte o Gastinho nas
-              configurações de conectores do assistente.
-            </p>
-          </CardContent>
-        </Card>
+        <section aria-labelledby="more-information-title">
+          <h2 id="more-information-title" className="sr-only">
+            Mais informações
+          </h2>
+          <Accordion type="single" collapsible className="rounded-lg border px-4">
+            <AccordionItem value="commands">
+              <AccordionTrigger className="min-h-12 gap-3 text-left hover:no-underline">
+                <span className="flex items-center gap-2">
+                  <MessageSquareText className="h-4 w-4 text-primary" aria-hidden="true" />
+                  Exemplos de comandos
+                </span>
+              </AccordionTrigger>
+              <AccordionContent className="space-y-4 motion-reduce:animate-none">
+                <ul className="grid gap-2 sm:grid-cols-2">
+                  {commandExamples.map((example) => (
+                    <li
+                      key={example}
+                      className="break-words rounded-lg bg-muted/50 p-3 text-sm"
+                    >
+                      “{example}”
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-sm text-muted-foreground">
+                  O assistente pode solicitar dados ausentes, como forma de
+                  pagamento, categoria ou cartão utilizado.
+                </p>
+              </AccordionContent>
+            </AccordionItem>
 
-        <Card>
-          <CardHeader>
-            <CardTitle
-              role="heading"
-              aria-level={2}
-              className="flex items-center gap-2 text-xl"
-            >
-              <Bot className="h-5 w-5" aria-hidden="true" />
-              Outros clientes MCP
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              O mesmo endereço pode ser utilizado em outros assistentes compatíveis
-              com servidores MCP remotos. A disponibilidade depende do aplicativo,
-              da versão e do plano utilizado pelo usuário.
-            </p>
-          </CardContent>
-        </Card>
+            <AccordionItem value="another-account">
+              <AccordionTrigger className="min-h-12 gap-3 text-left hover:no-underline">
+                <span className="flex items-center gap-2">
+                  <UserRoundCheck className="h-4 w-4 text-primary" aria-hidden="true" />
+                  Como conectar outra conta
+                </span>
+              </AccordionTrigger>
+              <AccordionContent className="space-y-4 motion-reduce:animate-none">
+                <NumberedSteps steps={accountChangeSteps} />
+                <p className="rounded-lg bg-muted/50 p-3 text-sm">
+                  Remover o conector do assistente não exclui nenhum dado do Gastinho.
+                </p>
+              </AccordionContent>
+            </AccordionItem>
 
-        <Separator />
+            <AccordionItem value="disconnect">
+              <AccordionTrigger className="min-h-12 gap-3 text-left hover:no-underline">
+                <span className="flex items-center gap-2">
+                  <Unplug className="h-4 w-4 text-primary" aria-hidden="true" />
+                  Como encerrar o acesso
+                </span>
+              </AccordionTrigger>
+              <AccordionContent className="motion-reduce:animate-none">
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  Desconecte ou remova o Gastinho nas configurações do assistente.
+                  Recursos adicionais de gerenciamento de autorizações poderão ser
+                  disponibilizados futuramente.
+                </p>
+              </AccordionContent>
+            </AccordionItem>
 
-        <Card>
-          <CardHeader>
-            <CardTitle
-              role="heading"
-              aria-level={2}
-              className="flex items-center gap-2 text-xl"
-            >
-              <LockKeyhole className="h-5 w-5" aria-hidden="true" />
-              Privacidade e controle
-            </CardTitle>
-            <CardDescription>
-              Entenda quais cuidados tomar durante a conexão.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ul className="list-disc space-y-2 pl-5 text-sm text-muted-foreground marker:text-foreground">
-              {privacyItems.map((item) => (
-                <li key={item} className="pl-1">
-                  {item}
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
+            <AccordionItem value="privacy" className="border-b-0">
+              <AccordionTrigger className="min-h-12 gap-3 text-left hover:no-underline">
+                <span className="flex items-center gap-2">
+                  <LockKeyhole className="h-4 w-4 text-primary" aria-hidden="true" />
+                  Privacidade e segurança
+                </span>
+              </AccordionTrigger>
+              <AccordionContent className="motion-reduce:animate-none">
+                <ul className="list-disc space-y-2 pl-5 text-sm text-muted-foreground marker:text-foreground">
+                  {privacyItems.map((item) => (
+                    <li key={item} className="pl-1">
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </section>
       </main>
 
       <Footer />
