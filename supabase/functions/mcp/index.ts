@@ -78,7 +78,7 @@ var list_expenses_default = defineTool({
     if (!ctx.isAuthenticated()) return mcpError("UNAUTHENTICATED");
     if (start_date || end_date) {
       const range = resolveDateRange(start_date, end_date);
-      if (!range.ok) return mcpError(range.code);
+      if (range.ok === false) return mcpError(range.code);
     }
     const supabase = supabaseForUser(ctx);
     let query = supabase.from("expenses").select(
@@ -123,7 +123,7 @@ var list_incomes_default = defineTool2({
     if (!ctx.isAuthenticated()) return mcpError("UNAUTHENTICATED");
     if (start_date || end_date) {
       const range = resolveDateRange(start_date, end_date);
-      if (!range.ok) return mcpError(range.code);
+      if (range.ok === false) return mcpError(range.code);
     }
     const supabase = supabaseForUser(ctx);
     let query = supabase.from("incomes").select("id, description, amount, income_date, category_name").eq("user_id", ctx.getUserId()).order("income_date", { ascending: false }).limit(limit ?? 50);
@@ -243,7 +243,7 @@ var get_summary_default = defineTool5({
   handler: async ({ start_date, end_date }, ctx) => {
     if (!ctx.isAuthenticated()) return mcpError("UNAUTHENTICATED");
     const range = resolveDateRange(start_date, end_date);
-    if (!range.ok) return mcpError(range.code);
+    if (range.ok === false) return mcpError(range.code);
     const { from, to } = range;
     const supabase = supabaseForUser(ctx);
     const uid = ctx.getUserId();

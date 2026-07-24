@@ -17,7 +17,7 @@ export default defineTool({
   handler: async ({ start_date, end_date }, ctx) => {
     if (!ctx.isAuthenticated()) return mcpError("UNAUTHENTICATED");
     const range = resolveDateRange(start_date, end_date);
-    if (!range.ok) return mcpError(range.code);
+    if (range.ok === false) return mcpError(range.code);
     const { from, to } = range;
 
     const supabase = supabaseForUser(ctx);

@@ -19,7 +19,7 @@ export default defineTool({
     if (!ctx.isAuthenticated()) return mcpError("UNAUTHENTICATED");
     if (start_date || end_date) {
       const range = resolveDateRange(start_date, end_date);
-      if (!range.ok) return mcpError(range.code);
+      if (range.ok === false) return mcpError(range.code);
     }
     const supabase = supabaseForUser(ctx);
     let query = supabase
