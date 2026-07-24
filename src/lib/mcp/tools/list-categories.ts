@@ -1,17 +1,7 @@
-import { createClient } from "@supabase/supabase-js";
-import { defineTool, type ToolContext } from "@lovable.dev/mcp-js";
+import { defineTool } from "@lovable.dev/mcp-js";
 import { z } from "zod";
-
-function supabaseForUser(ctx: ToolContext) {
-  return createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY!,
-    {
-      global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
-      auth: { persistSession: false, autoRefreshToken: false },
-    },
-  );
-}
+import { supabaseForUser } from "../shared/supabase-client";
+import { mcpError } from "../shared/errors";
 
 export default defineTool({
   name: "list_categories",
@@ -23,9 +13,7 @@ export default defineTool({
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async ({ kind }, ctx) => {
-    if (!ctx.isAuthenticated()) {
-      return { content: [{ type: "text", text: "Não autenticado" }], isError: true };
-    }
+    if (!ctx.isAuthenticated()) return mcpError("UNAUTHENTICATED");
     const supabase = supabaseForUser(ctx);
     const table = kind === "expense" ? "user_categories" : "user_income_categories";
     const { data, error } = await supabase
@@ -34,7 +22,7 @@ export default defineTool({
       .eq("user_id", ctx.getUserId())
       .eq("is_active", true)
       .order("display_order", { ascending: true });
-    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    if (error) return mcpError("INTERNAL_ERROR", error.message);
     return {
       content: [{ type: "text", text: JSON.stringify(data ?? []) }],
       structuredContent: { categories: data ?? [] },

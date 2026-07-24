@@ -6,82 +6,131 @@
 import { auth, defineMcp } from "npm:@lovable.dev/mcp-js@0.24.0";
 
 // src/lib/mcp/tools/list-expenses.ts
-import { createClient } from "npm:@supabase/supabase-js@^2.57.0";
 import { defineTool } from "npm:@lovable.dev/mcp-js@0.24.0";
 import { z } from "npm:zod@^3.25.76";
+
+// src/lib/mcp/shared/supabase-client.ts
+import { createClient } from "npm:@supabase/supabase-js@^2.57.0";
 function supabaseForUser(ctx) {
-  return createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY,
-    {
-      global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
-      auth: { persistSession: false, autoRefreshToken: false }
-    }
-  );
+  const url = process.env.SUPABASE_URL;
+  const anon = process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY;
+  if (!url || !anon) {
+    throw new Error("SUPABASE_URL/PUBLISHABLE_KEY n\xE3o configurados");
+  }
+  return createClient(url, anon, {
+    global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
 }
+
+// src/lib/mcp/shared/errors.ts
+var MESSAGES = {
+  UNAUTHENTICATED: "N\xE3o autenticado. Conecte sua conta do Gastinho Simples.",
+  FORBIDDEN: "Voc\xEA n\xE3o tem permiss\xE3o para acessar este recurso.",
+  INVALID_DATE: "Data inv\xE1lida. Use o formato YYYY-MM-DD.",
+  INVALID_DATE_RANGE: "Intervalo de datas inv\xE1lido: start_date deve ser <= end_date.",
+  INVALID_LIMIT: "Limite inv\xE1lido.",
+  INTERNAL_ERROR: "Erro interno ao processar a solicita\xE7\xE3o."
+};
+function mcpError(code, override) {
+  const message = override ?? MESSAGES[code];
+  return {
+    isError: true,
+    content: [{ type: "text", text: message }],
+    structuredContent: { error: { code, message } }
+  };
+}
+
+// src/lib/mcp/shared/dates.ts
+var ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+function isValidIsoDate(s) {
+  if (!s || !ISO_DATE_RE.test(s)) return false;
+  const d = /* @__PURE__ */ new Date(`${s}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && s === d.toISOString().slice(0, 10);
+}
+function currentMonthRange(now = /* @__PURE__ */ new Date()) {
+  const first = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const last = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0));
+  return { from: first.toISOString().slice(0, 10), to: last.toISOString().slice(0, 10) };
+}
+function resolveDateRange(start, end) {
+  if (start && !isValidIsoDate(start)) return { ok: false, code: "INVALID_DATE" };
+  if (end && !isValidIsoDate(end)) return { ok: false, code: "INVALID_DATE" };
+  const { from: defFrom, to: defTo } = currentMonthRange();
+  const from = start ?? defFrom;
+  const to = end ?? defTo;
+  if (from > to) return { ok: false, code: "INVALID_DATE_RANGE" };
+  return { ok: true, from, to };
+}
+
+// src/lib/mcp/tools/list-expenses.ts
 var list_expenses_default = defineTool({
   name: "list_expenses",
   title: "Listar despesas",
   description: "Lista as despesas do usu\xE1rio autenticado. Aceita intervalo de datas opcional (ISO YYYY-MM-DD) e limite. Retorna descri\xE7\xE3o, valor, data, categoria e m\xE9todo de pagamento.",
   inputSchema: {
-    start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Data inicial (YYYY-MM-DD), inclusive."),
-    end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Data final (YYYY-MM-DD), inclusive."),
+    start_date: z.string().regex(ISO_DATE_RE).optional().describe("Data inicial (YYYY-MM-DD), inclusive."),
+    end_date: z.string().regex(ISO_DATE_RE).optional().describe("Data final (YYYY-MM-DD), inclusive."),
     limit: z.number().int().min(1).max(200).optional().describe("M\xE1ximo de registros (padr\xE3o 50).")
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async ({ start_date, end_date, limit }, ctx) => {
-    if (!ctx.isAuthenticated()) {
-      return { content: [{ type: "text", text: "N\xE3o autenticado" }], isError: true };
+    if (!ctx.isAuthenticated()) return mcpError("UNAUTHENTICATED");
+    if (start_date || end_date) {
+      const range = resolveDateRange(start_date, end_date);
+      if (!range.ok) return mcpError(range.code);
     }
     const supabase = supabaseForUser(ctx);
     let query = supabase.from("expenses").select(
-      "id, description, amount, expense_date, payment_method, category_name, card_name, is_shared"
+      // is_shared é derivado no cliente a partir de shared_group_id
+      "id, description, amount, expense_date, payment_method, category_name, card_name, shared_group_id"
     ).eq("user_id", ctx.getUserId()).order("expense_date", { ascending: false }).limit(limit ?? 50);
     if (start_date) query = query.gte("expense_date", start_date);
     if (end_date) query = query.lte("expense_date", end_date);
     const { data, error } = await query;
-    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    if (error) return mcpError("INTERNAL_ERROR", error.message);
+    const rows = (data ?? []).map((r) => ({
+      id: r.id,
+      description: r.description,
+      amount: r.amount,
+      expense_date: r.expense_date,
+      payment_method: r.payment_method,
+      category_name: r.category_name,
+      card_name: r.card_name,
+      is_shared: r.shared_group_id !== null
+    }));
     return {
-      content: [{ type: "text", text: JSON.stringify(data ?? []) }],
-      structuredContent: { expenses: data ?? [], count: data?.length ?? 0 }
+      content: [{ type: "text", text: JSON.stringify(rows) }],
+      structuredContent: { expenses: rows, count: rows.length }
     };
   }
 });
 
 // src/lib/mcp/tools/list-incomes.ts
-import { createClient as createClient2 } from "npm:@supabase/supabase-js@^2.57.0";
 import { defineTool as defineTool2 } from "npm:@lovable.dev/mcp-js@0.24.0";
 import { z as z2 } from "npm:zod@^3.25.76";
-function supabaseForUser2(ctx) {
-  return createClient2(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY,
-    {
-      global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
-      auth: { persistSession: false, autoRefreshToken: false }
-    }
-  );
-}
 var list_incomes_default = defineTool2({
   name: "list_incomes",
   title: "Listar receitas",
   description: "Lista as receitas (entradas) do usu\xE1rio autenticado. Aceita intervalo de datas opcional (ISO YYYY-MM-DD) e limite.",
   inputSchema: {
-    start_date: z2.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-    end_date: z2.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    start_date: z2.string().regex(ISO_DATE_RE).optional(),
+    end_date: z2.string().regex(ISO_DATE_RE).optional(),
     limit: z2.number().int().min(1).max(200).optional()
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async ({ start_date, end_date, limit }, ctx) => {
-    if (!ctx.isAuthenticated()) {
-      return { content: [{ type: "text", text: "N\xE3o autenticado" }], isError: true };
+    if (!ctx.isAuthenticated()) return mcpError("UNAUTHENTICATED");
+    if (start_date || end_date) {
+      const range = resolveDateRange(start_date, end_date);
+      if (!range.ok) return mcpError(range.code);
     }
-    const supabase = supabaseForUser2(ctx);
+    const supabase = supabaseForUser(ctx);
     let query = supabase.from("incomes").select("id, description, amount, income_date, category_name").eq("user_id", ctx.getUserId()).order("income_date", { ascending: false }).limit(limit ?? 50);
     if (start_date) query = query.gte("income_date", start_date);
     if (end_date) query = query.lte("income_date", end_date);
     const { data, error } = await query;
-    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    if (error) return mcpError("INTERNAL_ERROR", error.message);
     return {
       content: [{ type: "text", text: JSON.stringify(data ?? []) }],
       structuredContent: { incomes: data ?? [], count: data?.length ?? 0 }
@@ -90,19 +139,8 @@ var list_incomes_default = defineTool2({
 });
 
 // src/lib/mcp/tools/create-expense.ts
-import { createClient as createClient3 } from "npm:@supabase/supabase-js@^2.57.0";
 import { defineTool as defineTool3 } from "npm:@lovable.dev/mcp-js@0.24.0";
 import { z as z3 } from "npm:zod@^3.25.76";
-function supabaseForUser3(ctx) {
-  return createClient3(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY,
-    {
-      global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
-      auth: { persistSession: false, autoRefreshToken: false }
-    }
-  );
-}
 var create_expense_default = defineTool3({
   name: "create_expense",
   title: "Criar despesa",
@@ -116,10 +154,8 @@ var create_expense_default = defineTool3({
   },
   annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
   handler: async (input, ctx) => {
-    if (!ctx.isAuthenticated()) {
-      return { content: [{ type: "text", text: "N\xE3o autenticado" }], isError: true };
-    }
-    const supabase = supabaseForUser3(ctx);
+    if (!ctx.isAuthenticated()) return mcpError("UNAUTHENTICATED");
+    const supabase = supabaseForUser(ctx);
     let category_name = null;
     let category_icon = null;
     if (input.category_id) {
@@ -140,7 +176,7 @@ var create_expense_default = defineTool3({
       category_name,
       category_icon
     }).select().single();
-    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    if (error) return mcpError("INTERNAL_ERROR", error.message);
     return {
       content: [{ type: "text", text: `Despesa criada: ${data.id}` }],
       structuredContent: { expense: data }
@@ -149,19 +185,8 @@ var create_expense_default = defineTool3({
 });
 
 // src/lib/mcp/tools/create-income.ts
-import { createClient as createClient4 } from "npm:@supabase/supabase-js@^2.57.0";
 import { defineTool as defineTool4 } from "npm:@lovable.dev/mcp-js@0.24.0";
 import { z as z4 } from "npm:zod@^3.25.76";
-function supabaseForUser4(ctx) {
-  return createClient4(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY,
-    {
-      global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
-      auth: { persistSession: false, autoRefreshToken: false }
-    }
-  );
-}
 var create_income_default = defineTool4({
   name: "create_income",
   title: "Criar receita",
@@ -174,10 +199,8 @@ var create_income_default = defineTool4({
   },
   annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
   handler: async (input, ctx) => {
-    if (!ctx.isAuthenticated()) {
-      return { content: [{ type: "text", text: "N\xE3o autenticado" }], isError: true };
-    }
-    const supabase = supabaseForUser4(ctx);
+    if (!ctx.isAuthenticated()) return mcpError("UNAUTHENTICATED");
+    const supabase = supabaseForUser(ctx);
     let category_name = null;
     let category_icon = null;
     if (input.income_category_id) {
@@ -197,7 +220,7 @@ var create_income_default = defineTool4({
       category_name,
       category_icon
     }).select().single();
-    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    if (error) return mcpError("INTERNAL_ERROR", error.message);
     return {
       content: [{ type: "text", text: `Receita criada: ${data.id}` }],
       structuredContent: { income: data }
@@ -206,49 +229,29 @@ var create_income_default = defineTool4({
 });
 
 // src/lib/mcp/tools/get-summary.ts
-import { createClient as createClient5 } from "npm:@supabase/supabase-js@^2.57.0";
 import { defineTool as defineTool5 } from "npm:@lovable.dev/mcp-js@0.24.0";
 import { z as z5 } from "npm:zod@^3.25.76";
-function supabaseForUser5(ctx) {
-  return createClient5(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY,
-    {
-      global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
-      auth: { persistSession: false, autoRefreshToken: false }
-    }
-  );
-}
 var get_summary_default = defineTool5({
   name: "get_summary",
   title: "Resumo financeiro",
   description: "Retorna o total de receitas, total de despesas e saldo do usu\xE1rio para um intervalo (YYYY-MM-DD). Padr\xE3o: m\xEAs corrente.",
   inputSchema: {
-    start_date: z5.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-    end_date: z5.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
+    start_date: z5.string().regex(ISO_DATE_RE).optional(),
+    end_date: z5.string().regex(ISO_DATE_RE).optional()
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async ({ start_date, end_date }, ctx) => {
-    if (!ctx.isAuthenticated()) {
-      return { content: [{ type: "text", text: "N\xE3o autenticado" }], isError: true };
-    }
-    const now = /* @__PURE__ */ new Date();
-    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
-    const from = start_date ?? firstDay;
-    const to = end_date ?? lastDay;
-    const supabase = supabaseForUser5(ctx);
+    if (!ctx.isAuthenticated()) return mcpError("UNAUTHENTICATED");
+    const range = resolveDateRange(start_date, end_date);
+    if (!range.ok) return mcpError(range.code);
+    const { from, to } = range;
+    const supabase = supabaseForUser(ctx);
     const uid = ctx.getUserId();
     const [{ data: exp, error: eErr }, { data: inc, error: iErr }] = await Promise.all([
       supabase.from("expenses").select("amount").eq("user_id", uid).gte("expense_date", from).lte("expense_date", to),
       supabase.from("incomes").select("amount").eq("user_id", uid).gte("income_date", from).lte("income_date", to)
     ]);
-    if (eErr || iErr) {
-      return {
-        content: [{ type: "text", text: (eErr ?? iErr).message }],
-        isError: true
-      };
-    }
+    if (eErr || iErr) return mcpError("INTERNAL_ERROR", (eErr ?? iErr).message);
     const totalExpenses = (exp ?? []).reduce((s, r) => s + Number(r.amount), 0);
     const totalIncomes = (inc ?? []).reduce((s, r) => s + Number(r.amount), 0);
     const balance = totalIncomes - totalExpenses;
@@ -261,19 +264,8 @@ var get_summary_default = defineTool5({
 });
 
 // src/lib/mcp/tools/list-categories.ts
-import { createClient as createClient6 } from "npm:@supabase/supabase-js@^2.57.0";
 import { defineTool as defineTool6 } from "npm:@lovable.dev/mcp-js@0.24.0";
 import { z as z6 } from "npm:zod@^3.25.76";
-function supabaseForUser6(ctx) {
-  return createClient6(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY,
-    {
-      global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
-      auth: { persistSession: false, autoRefreshToken: false }
-    }
-  );
-}
 var list_categories_default = defineTool6({
   name: "list_categories",
   title: "Listar categorias",
@@ -283,16 +275,54 @@ var list_categories_default = defineTool6({
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async ({ kind }, ctx) => {
-    if (!ctx.isAuthenticated()) {
-      return { content: [{ type: "text", text: "N\xE3o autenticado" }], isError: true };
-    }
-    const supabase = supabaseForUser6(ctx);
+    if (!ctx.isAuthenticated()) return mcpError("UNAUTHENTICATED");
+    const supabase = supabaseForUser(ctx);
     const table = kind === "expense" ? "user_categories" : "user_income_categories";
     const { data, error } = await supabase.from(table).select("id, name, icon").eq("user_id", ctx.getUserId()).eq("is_active", true).order("display_order", { ascending: true });
-    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    if (error) return mcpError("INTERNAL_ERROR", error.message);
     return {
       content: [{ type: "text", text: JSON.stringify(data ?? []) }],
       structuredContent: { categories: data ?? [] }
+    };
+  }
+});
+
+// src/lib/mcp/tools/get-connection-identity.ts
+import { defineTool as defineTool7 } from "npm:@lovable.dev/mcp-js@0.24.0";
+function maskEmail(email) {
+  if (!email) return null;
+  const [local, domain] = email.split("@");
+  if (!domain || !local) return null;
+  const head = local.slice(0, Math.min(2, local.length));
+  return `${head}***@${domain}`;
+}
+function uuidSuffix(uuid) {
+  if (!uuid) return null;
+  const clean = uuid.replace(/-/g, "");
+  return clean.slice(-8);
+}
+var get_connection_identity_default = defineTool7({
+  name: "get_connection_identity",
+  title: "Identidade da conex\xE3o",
+  description: "Mostra qual conta do Gastinho Simples est\xE1 conectada ao assistente atual. Retorna apenas identificadores mascarados \u2014 nunca tokens, UUID completo ou claims.",
+  inputSchema: {},
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async (_input, ctx) => {
+    if (!ctx.isAuthenticated()) return mcpError("UNAUTHENTICATED");
+    const userId = ctx.getUserId();
+    const email = typeof ctx.getUserEmail === "function" ? ctx.getUserEmail() : null;
+    const clientId = typeof ctx.getClientId === "function" ? ctx.getClientId() : null;
+    const identity = {
+      user_id_suffix: uuidSuffix(userId),
+      email_masked: maskEmail(email),
+      oauth_client_id_present: Boolean(clientId),
+      authenticated: true,
+      timestamp: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    const summaryEmail = identity.email_masked ?? "conta sem e-mail vis\xEDvel";
+    return {
+      content: [{ type: "text", text: `Voc\xEA est\xE1 conectado \xE0 conta ${summaryEmail}.` }],
+      structuredContent: identity
     };
   }
 });
@@ -303,12 +333,13 @@ var mcp_default = defineMcp({
   name: "gastinho-simples-mcp",
   title: "Gastinho Simples",
   version: "0.1.0",
-  instructions: "Ferramentas do Gastinho Simples. Use list_categories para descobrir UUIDs de categorias, list_expenses/list_incomes para consultar transa\xE7\xF5es, create_expense/create_income para registrar, e get_summary para totais e saldo do per\xEDodo.",
+  instructions: "Ferramentas do Gastinho Simples. Use get_connection_identity para confirmar qual conta est\xE1 conectada, list_categories para descobrir UUIDs de categorias, list_expenses/list_incomes para consultar transa\xE7\xF5es, create_expense/create_income para registrar, e get_summary para totais e saldo do per\xEDodo.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
   }),
   tools: [
+    get_connection_identity_default,
     list_expenses_default,
     list_incomes_default,
     create_expense_default,
