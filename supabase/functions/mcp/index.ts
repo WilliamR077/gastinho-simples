@@ -289,6 +289,7 @@ var list_categories_default = defineTool6({
 
 // src/lib/mcp/tools/get-connection-identity.ts
 import { defineTool as defineTool7 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z7 } from "npm:zod@^3.25.76";
 function maskEmail(email) {
   if (!email) return null;
   const [local, domain] = email.split("@");
@@ -296,32 +297,48 @@ function maskEmail(email) {
   const head = local.slice(0, Math.min(2, local.length));
   return `${head}***@${domain}`;
 }
-function uuidSuffix(uuid) {
-  if (!uuid) return null;
-  const clean = uuid.replace(/-/g, "");
-  return clean.slice(-8);
+async function connectionReference(userId) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(userId));
+  const hex = Array.from(
+    new Uint8Array(digest),
+    (byte) => byte.toString(16).padStart(2, "0")
+  ).join("").slice(0, 8).toUpperCase();
+  return `GS-${hex}`;
 }
 var get_connection_identity_default = defineTool7({
   name: "get_connection_identity",
   title: "Identidade da conex\xE3o",
-  description: "Mostra qual conta do Gastinho Simples est\xE1 conectada ao assistente atual. Retorna apenas identificadores mascarados \u2014 nunca tokens, UUID completo ou claims.",
+  description: "Mostra qual conta do Gastinho Simples est\xE1 conectada ao assistente atual. Retorna e-mail mascarado e uma refer\xEAncia opaca derivada por hash \u2014 nunca tokens, UUID ou claims.",
   inputSchema: {},
+  outputSchema: {
+    email_masked: z7.string().nullable(),
+    connection_reference: z7.string().regex(/^GS-[A-F0-9]{8}$/),
+    oauth_client_id_present: z7.boolean(),
+    authenticated: z7.boolean(),
+    timestamp: z7.string().datetime()
+  },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async (_input, ctx) => {
     if (!ctx.isAuthenticated()) return mcpError("UNAUTHENTICATED");
     const userId = ctx.getUserId();
+    if (!userId) return mcpError("UNAUTHENTICATED");
     const email = typeof ctx.getUserEmail === "function" ? ctx.getUserEmail() : null;
     const clientId = typeof ctx.getClientId === "function" ? ctx.getClientId() : null;
     const identity = {
-      user_id_suffix: uuidSuffix(userId),
       email_masked: maskEmail(email),
+      connection_reference: await connectionReference(userId),
       oauth_client_id_present: Boolean(clientId),
       authenticated: true,
       timestamp: (/* @__PURE__ */ new Date()).toISOString()
     };
     const summaryEmail = identity.email_masked ?? "conta sem e-mail vis\xEDvel";
     return {
-      content: [{ type: "text", text: `Voc\xEA est\xE1 conectado \xE0 conta ${summaryEmail}.` }],
+      content: [
+        {
+          type: "text",
+          text: `Conta conectada: ${summaryEmail}. Refer\xEAncia da conex\xE3o: ${identity.connection_reference}. Autenticada: sim. Cliente OAuth identificado: ${identity.oauth_client_id_present ? "sim" : "n\xE3o"}. Timestamp: ${identity.timestamp}.`
+        }
+      ],
       structuredContent: identity
     };
   }

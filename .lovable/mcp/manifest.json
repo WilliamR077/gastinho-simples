@@ -19,7 +19,7 @@
       {
         "name": "get_connection_identity",
         "title": "Identidade da conexão",
-        "description": "Mostra qual conta do Gastinho Simples está conectada ao assistente atual. Retorna apenas identificadores mascarados — nunca tokens, UUID completo ou claims.",
+        "description": "Mostra qual conta do Gastinho Simples está conectada ao assistente atual. Retorna e-mail mascarado e uma referência opaca derivada por hash — nunca tokens, UUID ou claims.",
         "annotations": {
           "readOnlyHint": true,
           "idempotentHint": true,
@@ -30,7 +30,40 @@
           "type": "object",
           "properties": {}
         },
-        "outputSchema": null
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "email_masked": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "connection_reference": {
+              "type": "string",
+              "pattern": "^GS-[A-F0-9]{8}$"
+            },
+            "oauth_client_id_present": {
+              "type": "boolean"
+            },
+            "authenticated": {
+              "type": "boolean"
+            },
+            "timestamp": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "email_masked",
+            "connection_reference",
+            "oauth_client_id_present",
+            "authenticated",
+            "timestamp"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
       },
       {
         "name": "list_expenses",
