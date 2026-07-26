@@ -30,6 +30,15 @@ var MESSAGES = {
   INVALID_DATE: "Data inv\xE1lida. Use o formato YYYY-MM-DD.",
   INVALID_DATE_RANGE: "Intervalo de datas inv\xE1lido: start_date deve ser <= end_date.",
   INVALID_LIMIT: "Limite inv\xE1lido.",
+  INVALID_AMOUNT_RANGE: "Intervalo de valores inv\xE1lido: min_amount deve ser <= max_amount.",
+  INVALID_CURSOR: "Cursor inv\xE1lido ou incompat\xEDvel com a ordena\xE7\xE3o solicitada.",
+  INVALID_SCOPE: "Escopo inv\xE1lido. Use personal, shared ou all_accessible.",
+  INVALID_TIME_SCOPE: "Escopo temporal inv\xE1lido. Use occurred, future ou all.",
+  INVALID_SORT: "Ordena\xE7\xE3o inv\xE1lida.",
+  INVALID_TRANSACTION_TYPE: "Tipo de transa\xE7\xE3o inv\xE1lido.",
+  INVALID_FILTER_COMBINATION: "card_id e payment_method s\xE3o exclusivos de despesas. Repita a consulta com transaction_type=expense.",
+  DATE_RANGE_TOO_LARGE: "Intervalo de datas excede o m\xE1ximo permitido de 366 dias.",
+  RESULT_SET_TOO_LARGE: "O conjunto de resultados excede o limite seguro. Reduza o intervalo ou refine os filtros.",
   INTERNAL_ERROR: "Erro interno ao processar a solicita\xE7\xE3o."
 };
 function mcpError(code, override) {
@@ -43,15 +52,43 @@ function mcpError(code, override) {
 
 // src/lib/mcp/shared/dates.ts
 var ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+var DEFAULT_TIME_ZONE = "America/Sao_Paulo";
 function isValidIsoDate(s) {
   if (!s || !ISO_DATE_RE.test(s)) return false;
   const d = /* @__PURE__ */ new Date(`${s}T00:00:00Z`);
   return !Number.isNaN(d.getTime()) && s === d.toISOString().slice(0, 10);
 }
-function currentMonthRange(now = /* @__PURE__ */ new Date()) {
-  const first = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  const last = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0));
-  return { from: first.toISOString().slice(0, 10), to: last.toISOString().slice(0, 10) };
+function civilDateParts(now, timeZone) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(now);
+  const value = (type) => Number(parts.find((part) => part.type === type)?.value);
+  return { year: value("year"), month: value("month"), day: value("day") };
+}
+function todayIso(now = /* @__PURE__ */ new Date(), timeZone = DEFAULT_TIME_ZONE) {
+  const { year, month, day } = civilDateParts(now, timeZone);
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+function currentMonthRange(now = /* @__PURE__ */ new Date(), timeZone = DEFAULT_TIME_ZONE) {
+  const { year, month } = civilDateParts(now, timeZone);
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const prefix = `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}`;
+  return { from: `${prefix}-01`, to: `${prefix}-${String(lastDay).padStart(2, "0")}` };
+}
+function validateOpenDateRange(start, end) {
+  if (start !== void 0 && !isValidIsoDate(start)) {
+    return { ok: false, code: "INVALID_DATE" };
+  }
+  if (end !== void 0 && !isValidIsoDate(end)) {
+    return { ok: false, code: "INVALID_DATE" };
+  }
+  if (start !== void 0 && end !== void 0 && start > end) {
+    return { ok: false, code: "INVALID_DATE_RANGE" };
+  }
+  return { ok: true };
 }
 function resolveDateRange(start, end) {
   if (start && !isValidIsoDate(start)) return { ok: false, code: "INVALID_DATE" };
@@ -63,45 +100,620 @@ function resolveDateRange(start, end) {
   return { ok: true, from, to };
 }
 
+// src/lib/mcp/shared/phase-1.1b-core.ts
+var MAX_QUERY_DAYS = 366;
+var INTERNAL_RESULT_CAP = 1e4;
+var CURSOR_VERSION = 2;
+var CURSOR_TTL_SECONDS = 24 * 60 * 60;
+var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+var ISO_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+var SHA256_HEX_RE = /^[0-9a-f]{64}$/;
+var BASE64URL_RE = /^[A-Za-z0-9_-]+$/;
+var UUID_FILTER_KEYS = /* @__PURE__ */ new Set([
+  "category_id",
+  "income_category_id",
+  "card_id",
+  "group_id"
+]);
+var CURSOR_KEYS = /* @__PURE__ */ new Set([
+  "version",
+  "context",
+  "sort_by",
+  "sort_order",
+  "sort_value",
+  "id",
+  "transaction_type",
+  "filters_fingerprint",
+  "issued_at",
+  "expires_at"
+]);
+function inclusiveDays(start, end) {
+  const startMs = Date.parse(`${start}T00:00:00Z`);
+  const endMs = Date.parse(`${end}T00:00:00Z`);
+  return Math.floor((endMs - startMs) / 864e5) + 1;
+}
+function validateBoundedDateRange(start, end, maxDays = MAX_QUERY_DAYS) {
+  if (!isValidIsoDate(start) || !isValidIsoDate(end)) {
+    return { ok: false, code: "INVALID_DATE" };
+  }
+  if (start > end) return { ok: false, code: "INVALID_DATE_RANGE" };
+  const days = inclusiveDays(start, end);
+  if (days > maxDays) return { ok: false, code: "DATE_RANGE_TOO_LARGE" };
+  return { ok: true, days };
+}
+function previousPeriod(start, end) {
+  const days = inclusiveDays(start, end);
+  const currentStart = Date.parse(`${start}T00:00:00Z`);
+  const previousEnd = new Date(currentStart - 864e5);
+  const previousStart = new Date(currentStart - days * 864e5);
+  return {
+    start: previousStart.toISOString().slice(0, 10),
+    end: previousEnd.toISOString().slice(0, 10)
+  };
+}
+function addIsoDays(date, days) {
+  const value = Date.parse(`${date}T00:00:00Z`) + days * 864e5;
+  return new Date(value).toISOString().slice(0, 10);
+}
+function effectiveDateRange(start, end, timeScope, today = todayIso()) {
+  const requested_period = { start_date: start, end_date: end };
+  let effectiveStart = start;
+  let effectiveEnd = end;
+  if (timeScope === "occurred" && effectiveEnd > today) effectiveEnd = today;
+  if (timeScope === "future") {
+    const tomorrow = addIsoDays(today, 1);
+    if (effectiveStart < tomorrow) effectiveStart = tomorrow;
+  }
+  if (effectiveStart > effectiveEnd) {
+    return {
+      requested_period,
+      effective_period: null,
+      coverage_warning: timeScope === "occurred" ? "O per\xEDodo solicitado n\xE3o cont\xE9m datas j\xE1 ocorridas." : "O per\xEDodo solicitado n\xE3o cont\xE9m datas futuras."
+    };
+  }
+  const changed = effectiveStart !== start || effectiveEnd !== end;
+  return {
+    requested_period,
+    effective_period: {
+      start_date: effectiveStart,
+      end_date: effectiveEnd,
+      days: inclusiveDays(effectiveStart, effectiveEnd)
+    },
+    coverage_warning: changed ? `O per\xEDodo efetivo foi limitado por time_scope=${timeScope}.` : null
+  };
+}
+function validateAmountRange(minAmount, maxAmount) {
+  return minAmount === void 0 || maxAmount === void 0 || minAmount <= maxAmount;
+}
+function hasInvalidExpenseOnlyFilters(transactionType, cardId, paymentMethod) {
+  return transactionType !== "expense" && (cardId !== void 0 || paymentMethod !== void 0);
+}
+function savingsRate(totalIncome, totalExpenses) {
+  if (totalIncome <= 0) return null;
+  return (totalIncome - totalExpenses) / totalIncome * 100;
+}
+function percentageChange(from, to) {
+  if (from === 0) return null;
+  return (to - from) / Math.abs(from) * 100;
+}
+function roundFinancial(value) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+function escapeIlikePattern(value) {
+  return value.trim().slice(0, 100).replace(/[\\%_]/g, "\\$&").replace(/[^\p{L}\p{N}\s'’-]/gu, " ").replace(/\s+/g, " ");
+}
+function cursorValueIsValid(sortBy, value) {
+  if (sortBy === "amount") {
+    return typeof value === "number" && Number.isFinite(value) && value >= 0;
+  }
+  if (typeof value !== "string") return false;
+  if (sortBy === "date") return isValidIsoDate(value);
+  return ISO_TIMESTAMP_RE.test(value) && Number.isFinite(Date.parse(value));
+}
+function bytesToBase64Url(bytes) {
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/u, "");
+}
+function base64UrlToBytes(value) {
+  if (!BASE64URL_RE.test(value)) return null;
+  try {
+    const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    return Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
+  } catch {
+    return null;
+  }
+}
+function canonicalValue(value) {
+  if (Array.isArray(value)) return value.map(canonicalValue);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).filter(([, entry]) => entry !== void 0).sort(([left], [right]) => left.localeCompare(right)).map(([key, entry]) => [key, canonicalValue(entry)])
+    );
+  }
+  return value;
+}
+function canonicalJson(value) {
+  return JSON.stringify(canonicalValue(value));
+}
+function normalizeUuidFilter(value) {
+  return typeof value === "string" && UUID_RE.test(value) ? value.toLowerCase() : value;
+}
+function normalizeFingerprintFilters(filters) {
+  return Object.fromEntries(
+    Object.entries(filters).map(([key, value]) => [
+      key,
+      UUID_FILTER_KEYS.has(key) ? normalizeUuidFilter(value) : value
+    ])
+  );
+}
+async function sha256Bytes(value) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return new Uint8Array(digest);
+}
+async function filtersFingerprint(context, filters) {
+  const resolvedFilters = normalizeFingerprintFilters(filters);
+  const normalized = {
+    context,
+    ...resolvedFilters,
+    query: typeof resolvedFilters.query === "string" ? escapeIlikePattern(resolvedFilters.query).toLocaleLowerCase("pt-BR") : null
+  };
+  return [...await sha256Bytes(canonicalJson(normalized))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+function getCursorSecret() {
+  const value = process.env.MCP_CURSOR_SECRET?.trim();
+  return value && value.length >= 32 ? value : null;
+}
+async function hmacKey(secret) {
+  return crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign", "verify"]
+  );
+}
+async function encodeCursor(payload, secret, now = /* @__PURE__ */ new Date()) {
+  const issuedAt = Math.floor(now.getTime() / 1e3);
+  const complete = {
+    version: CURSOR_VERSION,
+    ...payload,
+    id: String(normalizeUuidFilter(payload.id)),
+    issued_at: issuedAt,
+    expires_at: issuedAt + CURSOR_TTL_SECONDS
+  };
+  const payloadBytes = new TextEncoder().encode(canonicalJson(complete));
+  const signature = await crypto.subtle.sign("HMAC", await hmacKey(secret), payloadBytes);
+  return `${bytesToBase64Url(payloadBytes)}.${bytesToBase64Url(new Uint8Array(signature))}`;
+}
+async function decodeCursor(encoded, expected, secret, now = /* @__PURE__ */ new Date()) {
+  if (!encoded) return null;
+  try {
+    const segments = encoded.split(".");
+    if (segments.length !== 2) return null;
+    const payloadBytes = base64UrlToBytes(segments[0]);
+    const signatureBytes = base64UrlToBytes(segments[1]);
+    if (!payloadBytes || !signatureBytes || signatureBytes.length !== 32) return null;
+    const validSignature = await crypto.subtle.verify(
+      "HMAC",
+      await hmacKey(secret),
+      signatureBytes,
+      payloadBytes
+    );
+    if (!validSignature) return null;
+    const parsed = JSON.parse(new TextDecoder().decode(payloadBytes));
+    if (!parsed || typeof parsed !== "object" || Object.keys(parsed).some((key) => !CURSOR_KEYS.has(key))) {
+      return null;
+    }
+    const nowSeconds = Math.floor(now.getTime() / 1e3);
+    if (parsed.version !== CURSOR_VERSION || parsed.context !== expected.context || parsed.sort_by !== expected.sort_by || parsed.sort_order !== expected.sort_order || (expected.transaction_type === "any" ? parsed.transaction_type !== "expense" && parsed.transaction_type !== "income" : parsed.transaction_type !== expected.transaction_type) || parsed.filters_fingerprint !== expected.filters_fingerprint || typeof parsed.filters_fingerprint !== "string" || !SHA256_HEX_RE.test(parsed.filters_fingerprint) || typeof parsed.id !== "string" || !UUID_RE.test(parsed.id) || !cursorValueIsValid(expected.sort_by, parsed.sort_value) || typeof parsed.issued_at !== "number" || !Number.isInteger(parsed.issued_at) || typeof parsed.expires_at !== "number" || !Number.isInteger(parsed.expires_at) || parsed.expires_at <= parsed.issued_at || parsed.issued_at > nowSeconds + 60 || parsed.expires_at <= nowSeconds) {
+      return null;
+    }
+    return {
+      ...parsed,
+      id: String(normalizeUuidFilter(parsed.id))
+    };
+  } catch {
+    return null;
+  }
+}
+function sortValue(row, sortBy) {
+  if (sortBy === "amount") return row.amount;
+  if (sortBy === "created_at") return row.created_at;
+  return row.date;
+}
+function compareUnifiedTransactions(left, right, sortBy, sortOrder) {
+  const leftValue = sortValue(left, sortBy);
+  const rightValue = sortValue(right, sortBy);
+  const direction = sortOrder === "asc" ? 1 : -1;
+  if (leftValue < rightValue) return -1 * direction;
+  if (leftValue > rightValue) return 1 * direction;
+  if (left.transaction_type !== right.transaction_type) {
+    return left.transaction_type === "expense" ? -1 : 1;
+  }
+  return left.id.localeCompare(right.id) * direction;
+}
+function unifiedCursorEqualValueMode(cursorType, rowType) {
+  if (cursorType === rowType) return "same_type";
+  return cursorType === "expense" && rowType === "income" ? "include_all_equal" : "exclude_all_equal";
+}
+function cursorForRow(row, context, sortBy, sortOrder, filtersFingerprintValue, secret, transactionType) {
+  return encodeCursor({
+    context,
+    sort_by: sortBy,
+    sort_order: sortOrder,
+    sort_value: sortValue(row, sortBy),
+    id: row.id,
+    transaction_type: transactionType,
+    filters_fingerprint: filtersFingerprintValue
+  }, secret);
+}
+function cursorFilterExpression(column, cursor) {
+  const operator = cursor.sort_order === "asc" ? "gt" : "lt";
+  return `${column}.${operator}.${cursor.sort_value},and(${column}.eq.${cursor.sort_value},id.${operator}.${cursor.id})`;
+}
+function deduplicateById(items) {
+  return [...new Map(items.map((item) => [item.id, item])).values()];
+}
+function isoWeekStart(date) {
+  const parsed = /* @__PURE__ */ new Date(`${date}T00:00:00Z`);
+  const day = parsed.getUTCDay() || 7;
+  parsed.setUTCDate(parsed.getUTCDate() - day + 1);
+  return parsed.toISOString().slice(0, 10);
+}
+
+// src/lib/mcp/shared/transaction-query.ts
+function cursorFilterForTransactionType(query, column, cursor, rowType) {
+  if (!cursor.transaction_type) {
+    return query.or(cursorFilterExpression(column, cursor));
+  }
+  const equalValueMode = unifiedCursorEqualValueMode(cursor.transaction_type, rowType);
+  if (equalValueMode === "same_type") {
+    return query.or(cursorFilterExpression(column, cursor));
+  }
+  const operator = cursor.sort_order === "asc" ? "gt" : "lt";
+  if (equalValueMode === "include_all_equal") {
+    return query.or(
+      `${column}.${operator}.${cursor.sort_value},${column}.eq.${cursor.sort_value}`
+    );
+  }
+  return cursor.sort_order === "asc" ? query.gt(column, cursor.sort_value) : query.lt(column, cursor.sort_value);
+}
+var EXPENSE_COLUMNS = "id, user_id, description, amount, expense_date, created_at, category_id, category_name, category_icon, payment_method, card_id, card_name, installment_number, total_installments, shared_group_id";
+var INCOME_COLUMNS = "id, user_id, description, amount, income_date, created_at, income_category_id, category_name, category_icon, installment_number, total_installments, shared_group_id";
+function sortColumn(sortBy, dateColumn) {
+  if (sortBy === "created_at") return "created_at";
+  if (sortBy === "amount") return "amount";
+  return dateColumn;
+}
+function expenseItem(row, userId) {
+  return {
+    id: row.id,
+    description: row.description,
+    amount: Number(row.amount),
+    date: row.expense_date,
+    expense_date: row.expense_date,
+    created_at: row.created_at,
+    category_id: row.category_id,
+    category_name: row.category_name,
+    category_icon: row.category_icon,
+    payment_method: row.payment_method,
+    card_id: row.card_id,
+    card_name: row.card_name,
+    installment_number: row.installment_number,
+    total_installments: row.total_installments,
+    shared_group_id: row.shared_group_id,
+    is_shared: row.shared_group_id !== null,
+    is_owner: row.user_id === userId
+  };
+}
+function incomeItem(row, userId) {
+  return {
+    id: row.id,
+    description: row.description,
+    amount: Number(row.amount),
+    date: row.income_date,
+    income_date: row.income_date,
+    created_at: row.created_at,
+    income_category_id: row.income_category_id,
+    category_name: row.category_name,
+    category_icon: row.category_icon,
+    installment_number: row.installment_number,
+    total_installments: row.total_installments,
+    shared_group_id: row.shared_group_id,
+    is_shared: row.shared_group_id !== null,
+    is_owner: row.user_id === userId
+  };
+}
+async function queryExpensesPage(supabase, userId, filters, limit, cursor, cursorContext, cursorFingerprint, cursorSecret, cursorTransactionType) {
+  const column = sortColumn(filters.sort_by, "expense_date");
+  const ascending = filters.sort_order === "asc";
+  let query = supabase.from("expenses").select(EXPENSE_COLUMNS).order(column, { ascending }).order("id", { ascending }).limit(limit + 1);
+  if (filters.scope === "personal") query = query.eq("user_id", userId);
+  if (filters.scope === "shared") query = query.not("shared_group_id", "is", null);
+  if (filters.start_date) query = query.gte("expense_date", filters.start_date);
+  if (filters.end_date) query = query.lte("expense_date", filters.end_date);
+  if (filters.time_scope === "occurred") query = query.lte("expense_date", todayIso());
+  if (filters.time_scope === "future") query = query.gt("expense_date", todayIso());
+  if (filters.category_id) query = query.eq("category_id", filters.category_id);
+  if (filters.payment_method) query = query.eq("payment_method", filters.payment_method);
+  if (filters.card_id) query = query.eq("card_id", filters.card_id);
+  if (filters.group_id) query = query.eq("shared_group_id", filters.group_id);
+  if (filters.min_amount !== void 0) query = query.gte("amount", filters.min_amount);
+  if (filters.max_amount !== void 0) query = query.lte("amount", filters.max_amount);
+  if (filters.query) {
+    const pattern = `%${escapeIlikePattern(filters.query)}%`;
+    query = query.or(
+      `description.ilike.${pattern},category_name.ilike.${pattern},card_name.ilike.${pattern}`
+    );
+  }
+  if (cursor) {
+    query = cursorFilterForTransactionType(query, column, cursor, "expense");
+  }
+  const { data, error } = await query;
+  if (error) return { items: [], next_cursor: null, error: true };
+  const rows = data ?? [];
+  const hasMore = rows.length > limit;
+  const items = rows.slice(0, limit).map((row) => expenseItem(row, userId));
+  const nextCursor = hasMore && items.length > 0 ? await cursorForRow(
+    items[items.length - 1],
+    cursorContext,
+    filters.sort_by,
+    filters.sort_order,
+    cursorFingerprint,
+    cursorSecret,
+    cursorTransactionType
+  ) : null;
+  return {
+    items,
+    next_cursor: nextCursor,
+    error: false
+  };
+}
+async function queryIncomesPage(supabase, userId, filters, limit, cursor, cursorContext, cursorFingerprint, cursorSecret, cursorTransactionType) {
+  const column = sortColumn(filters.sort_by, "income_date");
+  const ascending = filters.sort_order === "asc";
+  let query = supabase.from("incomes").select(INCOME_COLUMNS).order(column, { ascending }).order("id", { ascending }).limit(limit + 1);
+  if (filters.scope === "personal") query = query.eq("user_id", userId);
+  if (filters.scope === "shared") query = query.not("shared_group_id", "is", null);
+  if (filters.start_date) query = query.gte("income_date", filters.start_date);
+  if (filters.end_date) query = query.lte("income_date", filters.end_date);
+  if (filters.time_scope === "occurred") query = query.lte("income_date", todayIso());
+  if (filters.time_scope === "future") query = query.gt("income_date", todayIso());
+  if (filters.income_category_id) {
+    query = query.eq("income_category_id", filters.income_category_id);
+  }
+  if (filters.group_id) query = query.eq("shared_group_id", filters.group_id);
+  if (filters.min_amount !== void 0) query = query.gte("amount", filters.min_amount);
+  if (filters.max_amount !== void 0) query = query.lte("amount", filters.max_amount);
+  if (filters.query) {
+    const pattern = `%${escapeIlikePattern(filters.query)}%`;
+    query = query.or(`description.ilike.${pattern},category_name.ilike.${pattern}`);
+  }
+  if (cursor) {
+    query = cursorFilterForTransactionType(query, column, cursor, "income");
+  }
+  const { data, error } = await query;
+  if (error) return { items: [], next_cursor: null, error: true };
+  const rows = data ?? [];
+  const hasMore = rows.length > limit;
+  const items = rows.slice(0, limit).map((row) => incomeItem(row, userId));
+  const nextCursor = hasMore && items.length > 0 ? await cursorForRow(
+    items[items.length - 1],
+    cursorContext,
+    filters.sort_by,
+    filters.sort_order,
+    cursorFingerprint,
+    cursorSecret,
+    cursorTransactionType
+  ) : null;
+  return {
+    items,
+    next_cursor: nextCursor,
+    error: false
+  };
+}
+async function fetchAllExpenses(supabase, userId, filters, hardCap, cursorSecret) {
+  const context = "internal_expense_scan";
+  const fingerprint = await filtersFingerprint(context, {
+    transaction_type: "expense",
+    ...filters
+  });
+  const items = [];
+  let cursor = null;
+  while (items.length < hardCap) {
+    const pageSize = Math.min(500, hardCap - items.length);
+    const page = await queryExpensesPage(
+      supabase,
+      userId,
+      filters,
+      pageSize,
+      cursor,
+      context,
+      fingerprint,
+      cursorSecret
+    );
+    if (page.error) return { items: [], error: true, too_large: false };
+    items.push(...page.items);
+    if (!page.next_cursor) {
+      return { items: deduplicateById(items), error: false, too_large: false };
+    }
+    cursor = await decodeCursor(
+      page.next_cursor,
+      {
+        context,
+        sort_by: filters.sort_by,
+        sort_order: filters.sort_order,
+        filters_fingerprint: fingerprint
+      },
+      cursorSecret
+    );
+    if (!cursor) return { items: [], error: true, too_large: false };
+  }
+  return { items: [], error: false, too_large: true };
+}
+async function fetchAllIncomes(supabase, userId, filters, hardCap, cursorSecret) {
+  const context = "internal_income_scan";
+  const fingerprint = await filtersFingerprint(context, {
+    transaction_type: "income",
+    ...filters
+  });
+  const items = [];
+  let cursor = null;
+  while (items.length < hardCap) {
+    const pageSize = Math.min(500, hardCap - items.length);
+    const page = await queryIncomesPage(
+      supabase,
+      userId,
+      filters,
+      pageSize,
+      cursor,
+      context,
+      fingerprint,
+      cursorSecret
+    );
+    if (page.error) return { items: [], error: true, too_large: false };
+    items.push(...page.items);
+    if (!page.next_cursor) {
+      return { items: deduplicateById(items), error: false, too_large: false };
+    }
+    cursor = await decodeCursor(
+      page.next_cursor,
+      {
+        context,
+        sort_by: filters.sort_by,
+        sort_order: filters.sort_order,
+        filters_fingerprint: fingerprint
+      },
+      cursorSecret
+    );
+    if (!cursor) return { items: [], error: true, too_large: false };
+  }
+  return { items: [], error: false, too_large: true };
+}
+
 // src/lib/mcp/tools/list-expenses.ts
+var CURSOR_CONTEXT = "list_expenses";
 var list_expenses_default = defineTool({
   name: "list_expenses",
   title: "Listar despesas",
-  description: "Lista as despesas do usu\xE1rio autenticado. Aceita intervalo de datas opcional (ISO YYYY-MM-DD) e limite. Retorna descri\xE7\xE3o, valor, data, categoria e m\xE9todo de pagamento.",
+  description: "Lista despesas com filtros e cursor est\xE1vel. O padr\xE3o preserva scope=personal e time_scope=all. Para 'recentes', '\xFAltimas' ou 'j\xE1 gastei', use time_scope=occurred; para parcelas futuras, future; para todos os lan\xE7amentos, all.",
   inputSchema: {
-    start_date: z.string().regex(ISO_DATE_RE).optional().describe("Data inicial (YYYY-MM-DD), inclusive."),
-    end_date: z.string().regex(ISO_DATE_RE).optional().describe("Data final (YYYY-MM-DD), inclusive."),
-    limit: z.number().int().min(1).max(200).optional().describe("M\xE1ximo de registros (padr\xE3o 50).")
+    start_date: z.string().regex(ISO_DATE_RE).optional(),
+    end_date: z.string().regex(ISO_DATE_RE).optional(),
+    query: z.string().trim().min(1).max(100).optional(),
+    category_id: z.string().uuid().optional(),
+    payment_method: z.enum(["pix", "credit", "debit", "cash"]).optional(),
+    card_id: z.string().uuid().optional(),
+    group_id: z.string().uuid().optional(),
+    min_amount: z.number().nonnegative().optional(),
+    max_amount: z.number().nonnegative().optional(),
+    scope: z.enum(["personal", "shared", "all_accessible"]).optional(),
+    time_scope: z.enum(["occurred", "future", "all"]).optional(),
+    sort_by: z.enum(["date", "created_at", "amount"]).optional(),
+    sort_order: z.enum(["asc", "desc"]).optional(),
+    limit: z.number().int().min(1).max(100).optional(),
+    cursor: z.string().min(1).max(1e3).optional()
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
-  handler: async ({ start_date, end_date, limit }, ctx) => {
-    if (!ctx.isAuthenticated()) return mcpError("UNAUTHENTICATED");
-    if (start_date || end_date) {
-      const range = resolveDateRange(start_date, end_date);
-      if (range.ok === false) return mcpError(range.code);
+  handler: async (input, ctx) => {
+    if (!ctx.isAuthenticated() || !ctx.getUserId()) return mcpError("UNAUTHENTICATED");
+    const range = validateOpenDateRange(input.start_date, input.end_date);
+    if (range.ok === false) return mcpError(range.code);
+    if (!validateAmountRange(input.min_amount, input.max_amount)) {
+      return mcpError("INVALID_AMOUNT_RANGE");
     }
-    const supabase = supabaseForUser(ctx);
-    let query = supabase.from("expenses").select(
-      // is_shared é derivado no cliente a partir de shared_group_id
-      "id, description, amount, expense_date, payment_method, category_name, card_name, shared_group_id"
-    ).eq("user_id", ctx.getUserId()).order("expense_date", { ascending: false }).limit(limit ?? 50);
-    if (start_date) query = query.gte("expense_date", start_date);
-    if (end_date) query = query.lte("expense_date", end_date);
-    const { data, error } = await query;
-    if (error) return mcpError("INTERNAL_ERROR", error.message);
-    const rows = (data ?? []).map((r) => ({
-      id: r.id,
-      description: r.description,
-      amount: r.amount,
-      expense_date: r.expense_date,
-      payment_method: r.payment_method,
-      category_name: r.category_name,
-      card_name: r.card_name,
-      is_shared: r.shared_group_id !== null
-    }));
+    const scope = input.scope ?? "personal";
+    const timeScope = input.time_scope ?? "all";
+    const sortBy = input.sort_by ?? "date";
+    const sortOrder = input.sort_order ?? "desc";
+    const limit = input.limit ?? 50;
+    const cursorSecret = getCursorSecret();
+    if (!cursorSecret) return mcpError("INTERNAL_ERROR");
+    const fingerprint = await filtersFingerprint(CURSOR_CONTEXT, {
+      transaction_type: "expense",
+      start_date: input.start_date ?? null,
+      end_date: input.end_date ?? null,
+      query: input.query ?? null,
+      category_id: input.category_id ?? null,
+      income_category_id: null,
+      payment_method: input.payment_method ?? null,
+      card_id: input.card_id ?? null,
+      group_id: input.group_id ?? null,
+      min_amount: input.min_amount ?? null,
+      max_amount: input.max_amount ?? null,
+      scope,
+      time_scope: timeScope,
+      sort_by: sortBy,
+      sort_order: sortOrder
+    });
+    const cursor = await decodeCursor(
+      input.cursor,
+      {
+        context: CURSOR_CONTEXT,
+        sort_by: sortBy,
+        sort_order: sortOrder,
+        filters_fingerprint: fingerprint
+      },
+      cursorSecret
+    );
+    if (input.cursor && !cursor) return mcpError("INVALID_CURSOR");
+    const filters = {
+      start_date: input.start_date,
+      end_date: input.end_date,
+      query: input.query,
+      category_id: input.category_id,
+      payment_method: input.payment_method,
+      card_id: input.card_id,
+      group_id: input.group_id,
+      min_amount: input.min_amount,
+      max_amount: input.max_amount,
+      scope,
+      time_scope: timeScope,
+      sort_by: sortBy,
+      sort_order: sortOrder
+    };
+    const page = await queryExpensesPage(
+      supabaseForUser(ctx),
+      ctx.getUserId(),
+      filters,
+      limit,
+      cursor,
+      CURSOR_CONTEXT,
+      fingerprint,
+      cursorSecret
+    );
+    if (page.error) return mcpError("INTERNAL_ERROR");
+    const result = {
+      items: page.items,
+      expenses: page.items,
+      count: page.items.length,
+      limit,
+      next_cursor: page.next_cursor,
+      cursor_version: CURSOR_VERSION,
+      applied_filters: {
+        start_date: input.start_date ?? null,
+        end_date: input.end_date ?? null,
+        query: input.query ?? null,
+        category_id: input.category_id ?? null,
+        payment_method: input.payment_method ?? null,
+        card_id: input.card_id ?? null,
+        group_id: input.group_id ?? null,
+        min_amount: input.min_amount ?? null,
+        max_amount: input.max_amount ?? null,
+        sort_by: sortBy,
+        sort_order: sortOrder
+      },
+      scope,
+      time_scope: timeScope
+    };
     return {
-      content: [{ type: "text", text: JSON.stringify(rows) }],
-      structuredContent: { expenses: rows, count: rows.length }
+      content: [
+        {
+          type: "text",
+          text: `Foram encontradas ${result.count} despesas (scope=${scope}, time_scope=${timeScope}). Itens: ${JSON.stringify(page.items)}`
+        }
+      ],
+      structuredContent: result
     };
   }
 });
@@ -109,31 +721,122 @@ var list_expenses_default = defineTool({
 // src/lib/mcp/tools/list-incomes.ts
 import { defineTool as defineTool2 } from "npm:@lovable.dev/mcp-js@0.24.0";
 import { z as z2 } from "npm:zod@^3.25.76";
+var CURSOR_CONTEXT2 = "list_incomes";
 var list_incomes_default = defineTool2({
   name: "list_incomes",
   title: "Listar receitas",
-  description: "Lista as receitas (entradas) do usu\xE1rio autenticado. Aceita intervalo de datas opcional (ISO YYYY-MM-DD) e limite.",
+  description: "Lista receitas com filtros e cursor est\xE1vel. O padr\xE3o preserva scope=personal e time_scope=all. Para receitas j\xE1 ocorridas use occurred; para lan\xE7amentos futuros use future.",
   inputSchema: {
     start_date: z2.string().regex(ISO_DATE_RE).optional(),
     end_date: z2.string().regex(ISO_DATE_RE).optional(),
-    limit: z2.number().int().min(1).max(200).optional()
+    query: z2.string().trim().min(1).max(100).optional(),
+    income_category_id: z2.string().uuid().optional(),
+    group_id: z2.string().uuid().optional(),
+    min_amount: z2.number().nonnegative().optional(),
+    max_amount: z2.number().nonnegative().optional(),
+    scope: z2.enum(["personal", "shared", "all_accessible"]).optional(),
+    time_scope: z2.enum(["occurred", "future", "all"]).optional(),
+    sort_by: z2.enum(["date", "created_at", "amount"]).optional(),
+    sort_order: z2.enum(["asc", "desc"]).optional(),
+    limit: z2.number().int().min(1).max(100).optional(),
+    cursor: z2.string().min(1).max(1e3).optional()
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
-  handler: async ({ start_date, end_date, limit }, ctx) => {
-    if (!ctx.isAuthenticated()) return mcpError("UNAUTHENTICATED");
-    if (start_date || end_date) {
-      const range = resolveDateRange(start_date, end_date);
-      if (range.ok === false) return mcpError(range.code);
+  handler: async (input, ctx) => {
+    if (!ctx.isAuthenticated() || !ctx.getUserId()) return mcpError("UNAUTHENTICATED");
+    const range = validateOpenDateRange(input.start_date, input.end_date);
+    if (range.ok === false) return mcpError(range.code);
+    if (!validateAmountRange(input.min_amount, input.max_amount)) {
+      return mcpError("INVALID_AMOUNT_RANGE");
     }
-    const supabase = supabaseForUser(ctx);
-    let query = supabase.from("incomes").select("id, description, amount, income_date, category_name").eq("user_id", ctx.getUserId()).order("income_date", { ascending: false }).limit(limit ?? 50);
-    if (start_date) query = query.gte("income_date", start_date);
-    if (end_date) query = query.lte("income_date", end_date);
-    const { data, error } = await query;
-    if (error) return mcpError("INTERNAL_ERROR", error.message);
+    const scope = input.scope ?? "personal";
+    const timeScope = input.time_scope ?? "all";
+    const sortBy = input.sort_by ?? "date";
+    const sortOrder = input.sort_order ?? "desc";
+    const limit = input.limit ?? 50;
+    const cursorSecret = getCursorSecret();
+    if (!cursorSecret) return mcpError("INTERNAL_ERROR");
+    const fingerprint = await filtersFingerprint(CURSOR_CONTEXT2, {
+      transaction_type: "income",
+      start_date: input.start_date ?? null,
+      end_date: input.end_date ?? null,
+      query: input.query ?? null,
+      category_id: null,
+      income_category_id: input.income_category_id ?? null,
+      payment_method: null,
+      card_id: null,
+      group_id: input.group_id ?? null,
+      min_amount: input.min_amount ?? null,
+      max_amount: input.max_amount ?? null,
+      scope,
+      time_scope: timeScope,
+      sort_by: sortBy,
+      sort_order: sortOrder
+    });
+    const cursor = await decodeCursor(
+      input.cursor,
+      {
+        context: CURSOR_CONTEXT2,
+        sort_by: sortBy,
+        sort_order: sortOrder,
+        filters_fingerprint: fingerprint
+      },
+      cursorSecret
+    );
+    if (input.cursor && !cursor) return mcpError("INVALID_CURSOR");
+    const filters = {
+      start_date: input.start_date,
+      end_date: input.end_date,
+      query: input.query,
+      income_category_id: input.income_category_id,
+      group_id: input.group_id,
+      min_amount: input.min_amount,
+      max_amount: input.max_amount,
+      scope,
+      time_scope: timeScope,
+      sort_by: sortBy,
+      sort_order: sortOrder
+    };
+    const page = await queryIncomesPage(
+      supabaseForUser(ctx),
+      ctx.getUserId(),
+      filters,
+      limit,
+      cursor,
+      CURSOR_CONTEXT2,
+      fingerprint,
+      cursorSecret
+    );
+    if (page.error) return mcpError("INTERNAL_ERROR");
+    const result = {
+      items: page.items,
+      incomes: page.items,
+      count: page.items.length,
+      limit,
+      next_cursor: page.next_cursor,
+      cursor_version: CURSOR_VERSION,
+      applied_filters: {
+        start_date: input.start_date ?? null,
+        end_date: input.end_date ?? null,
+        query: input.query ?? null,
+        income_category_id: input.income_category_id ?? null,
+        group_id: input.group_id ?? null,
+        min_amount: input.min_amount ?? null,
+        max_amount: input.max_amount ?? null,
+        sort_by: sortBy,
+        sort_order: sortOrder
+      },
+      scope,
+      time_scope: timeScope
+    };
     return {
-      content: [{ type: "text", text: JSON.stringify(data ?? []) }],
-      structuredContent: { incomes: data ?? [], count: data?.length ?? 0 }
+      content: [
+        {
+          type: "text",
+          text: `Foram encontradas ${result.count} receitas (scope=${scope}, time_scope=${timeScope}). Itens: ${JSON.stringify(page.items)}`
+        }
+      ],
+      structuredContent: result
     };
   }
 });
@@ -231,34 +934,172 @@ var create_income_default = defineTool4({
 // src/lib/mcp/tools/get-summary.ts
 import { defineTool as defineTool5 } from "npm:@lovable.dev/mcp-js@0.24.0";
 import { z as z5 } from "npm:zod@^3.25.76";
+function baseFilters(start, end, scope, timeScope) {
+  return {
+    start_date: start,
+    end_date: end,
+    scope,
+    time_scope: timeScope,
+    sort_by: "date",
+    sort_order: "asc"
+  };
+}
+async function periodMetrics(supabase, userId, start, end, scope, timeScope, cursorSecret) {
+  const filters = baseFilters(start, end, scope, timeScope);
+  const [expenses, incomes] = await Promise.all([
+    fetchAllExpenses(supabase, userId, filters, INTERNAL_RESULT_CAP, cursorSecret),
+    fetchAllIncomes(supabase, userId, filters, INTERNAL_RESULT_CAP, cursorSecret)
+  ]);
+  if (expenses.error || incomes.error) return { error: "INTERNAL_ERROR" };
+  if (expenses.too_large || incomes.too_large) return { error: "RESULT_SET_TOO_LARGE" };
+  const totalExpenses = roundFinancial(
+    expenses.items.reduce((sum, item) => sum + item.amount, 0)
+  );
+  const totalIncome = roundFinancial(
+    incomes.items.reduce((sum, item) => sum + item.amount, 0)
+  );
+  const balance = roundFinancial(totalIncome - totalExpenses);
+  return {
+    metrics: {
+      start_date: start,
+      end_date: end,
+      total_income: totalIncome,
+      total_expenses: totalExpenses,
+      balance,
+      savings_rate: savingsRate(totalIncome, totalExpenses),
+      expense_count: expenses.items.length,
+      income_count: incomes.items.length
+    }
+  };
+}
+function emptyPeriodMetrics(start, end) {
+  return {
+    start_date: start,
+    end_date: end,
+    total_income: 0,
+    total_expenses: 0,
+    balance: 0,
+    savings_rate: null,
+    expense_count: 0,
+    income_count: 0
+  };
+}
 var get_summary_default = defineTool5({
   name: "get_summary",
   title: "Resumo financeiro",
-  description: "Retorna o total de receitas, total de despesas e saldo do usu\xE1rio para um intervalo (YYYY-MM-DD). Padr\xE3o: m\xEAs corrente.",
+  description: "Retorna totais, saldo, taxa de poupan\xE7a e contagens para um intervalo. Sem datas usa o m\xEAs corrente; scope=personal e time_scope=all preservam o comportamento anterior. Pode comparar com per\xEDodo anterior de mesma dura\xE7\xE3o.",
   inputSchema: {
     start_date: z5.string().regex(ISO_DATE_RE).optional(),
-    end_date: z5.string().regex(ISO_DATE_RE).optional()
+    end_date: z5.string().regex(ISO_DATE_RE).optional(),
+    scope: z5.enum(["personal", "shared", "all_accessible"]).optional(),
+    include_previous_period: z5.boolean().optional(),
+    include_counts: z5.boolean().optional(),
+    time_scope: z5.enum(["occurred", "future", "all"]).optional()
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
-  handler: async ({ start_date, end_date }, ctx) => {
-    if (!ctx.isAuthenticated()) return mcpError("UNAUTHENTICATED");
-    const range = resolveDateRange(start_date, end_date);
+  handler: async (input, ctx) => {
+    if (!ctx.isAuthenticated() || !ctx.getUserId()) return mcpError("UNAUTHENTICATED");
+    const range = resolveDateRange(input.start_date, input.end_date);
     if (range.ok === false) return mcpError(range.code);
-    const { from, to } = range;
+    const bounded = validateBoundedDateRange(range.from, range.to);
+    if (bounded.ok === false) return mcpError(bounded.code);
+    const scope = input.scope ?? "personal";
+    const timeScope = input.time_scope ?? "all";
+    const includeCounts = input.include_counts ?? true;
     const supabase = supabaseForUser(ctx);
-    const uid = ctx.getUserId();
-    const [{ data: exp, error: eErr }, { data: inc, error: iErr }] = await Promise.all([
-      supabase.from("expenses").select("amount").eq("user_id", uid).gte("expense_date", from).lte("expense_date", to),
-      supabase.from("incomes").select("amount").eq("user_id", uid).gte("income_date", from).lte("income_date", to)
-    ]);
-    if (eErr || iErr) return mcpError("INTERNAL_ERROR", (eErr ?? iErr).message);
-    const totalExpenses = (exp ?? []).reduce((s, r) => s + Number(r.amount), 0);
-    const totalIncomes = (inc ?? []).reduce((s, r) => s + Number(r.amount), 0);
-    const balance = totalIncomes - totalExpenses;
-    const summary = { period: { from, to }, total_incomes: totalIncomes, total_expenses: totalExpenses, balance };
+    const cursorSecret = getCursorSecret();
+    if (!cursorSecret) return mcpError("INTERNAL_ERROR");
+    const coverage = effectiveDateRange(range.from, range.to, timeScope);
+    let metrics = emptyPeriodMetrics(range.from, range.to);
+    if (coverage.effective_period) {
+      const current = await periodMetrics(
+        supabase,
+        ctx.getUserId(),
+        coverage.effective_period.start_date,
+        coverage.effective_period.end_date,
+        scope,
+        "all",
+        cursorSecret
+      );
+      if (current.error) return mcpError(current.error);
+      metrics = current.metrics;
+    }
+    const warnings = [];
+    if (coverage.coverage_warning) warnings.push(coverage.coverage_warning);
+    if (metrics.total_income <= 0) {
+      warnings.push("savings_rate indispon\xEDvel porque total_income \xE9 zero ou negativo.");
+    }
+    let previous = null;
+    let changes = null;
+    if (input.include_previous_period && coverage.effective_period) {
+      const previousDates = previousPeriod(
+        coverage.effective_period.start_date,
+        coverage.effective_period.end_date
+      );
+      const previousResult = await periodMetrics(
+        supabase,
+        ctx.getUserId(),
+        previousDates.start,
+        previousDates.end,
+        scope,
+        "all",
+        cursorSecret
+      );
+      if (previousResult.error) return mcpError(previousResult.error);
+      previous = previousResult.metrics;
+      changes = {
+        absolute: {
+          total_income: roundFinancial(metrics.total_income - previous.total_income),
+          total_expenses: roundFinancial(metrics.total_expenses - previous.total_expenses),
+          balance: roundFinancial(metrics.balance - previous.balance)
+        },
+        percentage: {
+          total_income: percentageChange(previous.total_income, metrics.total_income),
+          total_expenses: percentageChange(previous.total_expenses, metrics.total_expenses),
+          balance: percentageChange(previous.balance, metrics.balance)
+        }
+      };
+      if (changes.percentage.total_income === null || changes.percentage.total_expenses === null || changes.percentage.balance === null) {
+        warnings.push("Uma ou mais diferen\xE7as percentuais n\xE3o foram calculadas porque a base anterior era zero.");
+      }
+      if (coverage.coverage_warning) {
+        warnings.push(
+          "A compara\xE7\xE3o anterior usa os dias imediatamente anteriores com a mesma dura\xE7\xE3o da cobertura efetiva."
+        );
+      }
+    } else if (input.include_previous_period) {
+      warnings.push(
+        "O per\xEDodo efetivo est\xE1 vazio; n\xE3o foi poss\xEDvel calcular um per\xEDodo anterior compar\xE1vel."
+      );
+    }
+    const result = {
+      start_date: range.from,
+      end_date: range.to,
+      period: { from: range.from, to: range.to },
+      requested_period: coverage.requested_period,
+      effective_period: coverage.effective_period,
+      coverage_warning: coverage.coverage_warning,
+      scope,
+      time_scope: timeScope,
+      total_income: metrics.total_income,
+      total_incomes: metrics.total_income,
+      total_expenses: metrics.total_expenses,
+      balance: metrics.balance,
+      savings_rate: metrics.savings_rate,
+      expense_count: includeCounts ? metrics.expense_count : null,
+      income_count: includeCounts ? metrics.income_count : null,
+      previous_period: previous,
+      changes,
+      warnings
+    };
     return {
-      content: [{ type: "text", text: JSON.stringify(summary) }],
-      structuredContent: summary
+      content: [
+        {
+          type: "text",
+          text: `Resumo solicitado de ${result.start_date} a ${result.end_date} (scope=${scope}, time_scope=${timeScope}): receitas=${result.total_income}, despesas=${result.total_expenses}, saldo=${result.balance}, savings_rate=${result.savings_rate ?? "indispon\xEDvel"}, expense_count=${result.expense_count ?? "n\xE3o solicitado"}, income_count=${result.income_count ?? "n\xE3o solicitado"}. ${previous ? `Per\xEDodo anterior: ${JSON.stringify(previous)}. Mudan\xE7as: ${JSON.stringify(changes)}.` : ""} Per\xEDodo efetivo: ${result.effective_period ? `${result.effective_period.start_date} a ${result.effective_period.end_date}` : "vazio"}. ${warnings.length ? `Avisos: ${warnings.join(" ")}` : ""}`
+        }
+      ],
+      structuredContent: result
     };
   }
 });
@@ -344,13 +1185,816 @@ var get_connection_identity_default = defineTool7({
   }
 });
 
+// src/lib/mcp/tools/search-transactions.ts
+import { defineTool as defineTool8 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z8 } from "npm:zod@^3.25.76";
+
+// src/lib/mcp/shared/content.ts
+function compactText(value, maxLength) {
+  const normalized = value.replace(/\s+/gu, " ").trim();
+  return normalized.length <= maxLength ? normalized : `${normalized.slice(0, Math.max(0, maxLength - 1))}\u2026`;
+}
+function transactionContent(items, scope, timeScope, transactionType, hasMore, nextCursor) {
+  const preview = items.slice(0, 10).map(
+    (item) => `${item.transaction_type} ${item.date}: ${compactText(item.description, 80)} \u2014 ${item.amount}`
+  ).join("; ");
+  return `Foram retornadas ${items.length} transa\xE7\xF5es (scope=${scope}, time_scope=${timeScope}, tipo=${transactionType}). Primeiros ${Math.min(items.length, 10)}: ${preview || "nenhum item"}. H\xE1 mais itens: ${hasMore ? "sim" : "n\xE3o"}. ${nextCursor ? `next_cursor=${nextCursor}` : "N\xE3o h\xE1 pr\xF3ximo cursor."}`;
+}
+function breakdownContent(groups, details) {
+  const preview = groups.slice(0, 10).map(
+    (group) => `${compactText(group.label, 60)}: ${group.total} (${group.percentage.toFixed(2)}%)`
+  ).join("; ");
+  const truncationNotice = details.groupsTruncated ? `A lista de grupos foi limitada a ${details.returnedGroupCount} de ${details.totalGroupCount}. Os totais gerais consideram todos os grupos, mas os percentuais dos grupos exibidos podem somar menos de 100% porque parte dos grupos n\xE3o aparece nesta resposta. ` : "";
+  return `Gastos solicitados de ${details.start} a ${details.end}: total=${details.total}, lan\xE7amentos=${details.transactionCount}, agrupamento=${details.groupBy}, scope=${details.scope}, time_scope=${details.timeScope}. Principais grupos: ${preview || "nenhum grupo"}. Grupos retornados=${details.returnedGroupCount} de ${details.totalGroupCount}; groups_truncated=${details.groupsTruncated}. ` + truncationNotice + `${details.coverageWarning ?? "Cobertura integral do per\xEDodo solicitado."}`;
+}
+function comparisonBreakdownContent(groups) {
+  if (groups === null) return "";
+  const preview = groups.slice(0, 10).map(
+    (group) => `${compactText(group.label, 60)}: ${group.period_a_total} \u2192 ${group.period_b_total}`
+  ).join("; ");
+  return `Principais grupos: ${preview || "nenhum"}; outros grupos=${Math.max(0, groups.length - 10)}.`;
+}
+
+// src/lib/mcp/tools/search-transactions.ts
+var CURSOR_CONTEXT3 = "search_transactions";
+var transactionItemSchema = z8.object({
+  id: z8.string().uuid(),
+  transaction_type: z8.enum(["expense", "income"]),
+  description: z8.string(),
+  amount: z8.number(),
+  date: z8.string(),
+  created_at: z8.string(),
+  category_id: z8.string().uuid().nullable(),
+  category_name: z8.string().nullable(),
+  category_icon: z8.string().nullable(),
+  payment_method: z8.enum(["pix", "credit", "debit", "cash"]).nullable(),
+  card_id: z8.string().uuid().nullable(),
+  card_name: z8.string().nullable(),
+  installment_number: z8.number().int().nullable(),
+  total_installments: z8.number().int().nullable(),
+  shared_group_id: z8.string().uuid().nullable(),
+  is_shared: z8.boolean(),
+  is_owner: z8.boolean()
+});
+var search_transactions_default = defineTool8({
+  name: "search_transactions",
+  title: "Pesquisar transa\xE7\xF5es",
+  description: "Pesquisa despesas e receitas em uma resposta unificada. Por padr\xE3o busca transa\xE7\xF5es j\xE1 ocorridas, pessoais, ordenadas por data decrescente. card_id e payment_method exigem transaction_type=expense. Use future para lan\xE7amentos futuros e all somente quando solicitado.",
+  inputSchema: {
+    query: z8.string().trim().min(1).max(100).optional(),
+    transaction_type: z8.enum(["expense", "income", "all"]).optional(),
+    start_date: z8.string().regex(ISO_DATE_RE).optional(),
+    end_date: z8.string().regex(ISO_DATE_RE).optional(),
+    category_id: z8.string().uuid().optional(),
+    payment_method: z8.enum(["pix", "credit", "debit", "cash"]).optional().describe("Filtro exclusivo de despesas; use transaction_type=expense."),
+    card_id: z8.string().uuid().optional().describe("Filtro exclusivo de despesas; use transaction_type=expense."),
+    group_id: z8.string().uuid().optional(),
+    min_amount: z8.number().nonnegative().optional(),
+    max_amount: z8.number().nonnegative().optional(),
+    scope: z8.enum(["personal", "shared", "all_accessible"]).optional(),
+    time_scope: z8.enum(["occurred", "future", "all"]).optional(),
+    sort_by: z8.enum(["date", "created_at", "amount"]).optional(),
+    sort_order: z8.enum(["asc", "desc"]).optional(),
+    limit: z8.number().int().min(1).max(100).optional(),
+    cursor: z8.string().min(1).max(1e3).optional()
+  },
+  outputSchema: {
+    items: z8.array(transactionItemSchema),
+    count: z8.number().int().nonnegative(),
+    limit: z8.number().int().positive(),
+    has_more: z8.boolean(),
+    cursor_version: z8.literal(2),
+    next_cursor: z8.string().nullable(),
+    applied_filters: z8.object({
+      query: z8.string().nullable(),
+      transaction_type: z8.enum(["expense", "income", "all"]),
+      start_date: z8.string().nullable(),
+      end_date: z8.string().nullable(),
+      category_id: z8.string().nullable(),
+      payment_method: z8.string().nullable(),
+      card_id: z8.string().nullable(),
+      group_id: z8.string().nullable(),
+      min_amount: z8.number().nullable(),
+      max_amount: z8.number().nullable(),
+      sort_by: z8.enum(["date", "created_at", "amount"]),
+      sort_order: z8.enum(["asc", "desc"])
+    }),
+    scope: z8.enum(["personal", "shared", "all_accessible"]),
+    time_scope: z8.enum(["occurred", "future", "all"])
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async (input, ctx) => {
+    if (!ctx.isAuthenticated() || !ctx.getUserId()) return mcpError("UNAUTHENTICATED");
+    const range = validateOpenDateRange(input.start_date, input.end_date);
+    if (range.ok === false) return mcpError(range.code);
+    if (!validateAmountRange(input.min_amount, input.max_amount)) {
+      return mcpError("INVALID_AMOUNT_RANGE");
+    }
+    const transactionType = input.transaction_type ?? "all";
+    if (hasInvalidExpenseOnlyFilters(
+      transactionType,
+      input.card_id,
+      input.payment_method
+    )) {
+      return mcpError("INVALID_FILTER_COMBINATION");
+    }
+    const scope = input.scope ?? "personal";
+    const timeScope = input.time_scope ?? "occurred";
+    const sortBy = input.sort_by ?? "date";
+    const sortOrder = input.sort_order ?? "desc";
+    const limit = input.limit ?? 20;
+    const cursorSecret = getCursorSecret();
+    if (!cursorSecret) return mcpError("INTERNAL_ERROR");
+    const fingerprint = await filtersFingerprint(CURSOR_CONTEXT3, {
+      transaction_type: transactionType,
+      start_date: input.start_date ?? null,
+      end_date: input.end_date ?? null,
+      query: input.query ?? null,
+      category_id: input.category_id ?? null,
+      income_category_id: input.category_id ?? null,
+      payment_method: input.payment_method ?? null,
+      card_id: input.card_id ?? null,
+      group_id: input.group_id ?? null,
+      min_amount: input.min_amount ?? null,
+      max_amount: input.max_amount ?? null,
+      scope,
+      time_scope: timeScope,
+      sort_by: sortBy,
+      sort_order: sortOrder
+    });
+    const cursor = await decodeCursor(
+      input.cursor,
+      {
+        context: CURSOR_CONTEXT3,
+        sort_by: sortBy,
+        sort_order: sortOrder,
+        transaction_type: transactionType === "all" ? "any" : transactionType,
+        filters_fingerprint: fingerprint
+      },
+      cursorSecret
+    );
+    if (input.cursor && !cursor) return mcpError("INVALID_CURSOR");
+    const common = {
+      start_date: input.start_date,
+      end_date: input.end_date,
+      query: input.query,
+      group_id: input.group_id,
+      min_amount: input.min_amount,
+      max_amount: input.max_amount,
+      scope,
+      time_scope: timeScope,
+      sort_by: sortBy,
+      sort_order: sortOrder
+    };
+    const expenseFilters = {
+      ...common,
+      category_id: input.category_id,
+      payment_method: input.payment_method,
+      card_id: input.card_id
+    };
+    const incomeFilters = {
+      ...common,
+      income_category_id: input.category_id
+    };
+    const supabase = supabaseForUser(ctx);
+    const userId = ctx.getUserId();
+    const [expensePage, incomePage] = await Promise.all([
+      transactionType === "income" ? Promise.resolve({ items: [], next_cursor: null, error: false }) : queryExpensesPage(
+        supabase,
+        userId,
+        expenseFilters,
+        limit + 1,
+        cursor,
+        CURSOR_CONTEXT3,
+        fingerprint,
+        cursorSecret,
+        "expense"
+      ),
+      transactionType === "expense" ? Promise.resolve({ items: [], next_cursor: null, error: false }) : queryIncomesPage(
+        supabase,
+        userId,
+        incomeFilters,
+        limit + 1,
+        cursor,
+        CURSOR_CONTEXT3,
+        fingerprint,
+        cursorSecret,
+        "income"
+      )
+    ]);
+    if (expensePage.error || incomePage.error) return mcpError("INTERNAL_ERROR");
+    const combined = [
+      ...expensePage.items.map((item) => ({
+        ...item,
+        transaction_type: "expense",
+        category_id: item.category_id
+      })),
+      ...incomePage.items.map((item) => ({
+        ...item,
+        transaction_type: "income",
+        category_id: item.income_category_id,
+        payment_method: null,
+        card_id: null,
+        card_name: null
+      }))
+    ].sort(
+      (left, right) => compareUnifiedTransactions(left, right, sortBy, sortOrder)
+    );
+    const hasMore = combined.length > limit || expensePage.next_cursor !== null || incomePage.next_cursor !== null;
+    const items = combined.slice(0, limit).map((item) => ({
+      id: item.id,
+      transaction_type: item.transaction_type,
+      description: item.description,
+      amount: item.amount,
+      date: item.date,
+      created_at: item.created_at,
+      category_id: item.category_id,
+      category_name: item.category_name,
+      category_icon: item.category_icon,
+      payment_method: item.transaction_type === "expense" ? item.payment_method : null,
+      card_id: item.transaction_type === "expense" ? item.card_id : null,
+      card_name: item.transaction_type === "expense" ? item.card_name : null,
+      installment_number: item.installment_number,
+      total_installments: item.total_installments,
+      shared_group_id: item.shared_group_id,
+      is_shared: item.is_shared,
+      is_owner: item.is_owner
+    }));
+    const nextCursor = hasMore && items.length > 0 ? await cursorForRow(
+      items[items.length - 1],
+      CURSOR_CONTEXT3,
+      sortBy,
+      sortOrder,
+      fingerprint,
+      cursorSecret,
+      items[items.length - 1].transaction_type
+    ) : null;
+    const result = {
+      items,
+      count: items.length,
+      limit,
+      has_more: hasMore,
+      cursor_version: CURSOR_VERSION,
+      next_cursor: nextCursor,
+      applied_filters: {
+        query: input.query ?? null,
+        transaction_type: transactionType,
+        start_date: input.start_date ?? null,
+        end_date: input.end_date ?? null,
+        category_id: input.category_id ?? null,
+        payment_method: input.payment_method ?? null,
+        card_id: input.card_id ?? null,
+        group_id: input.group_id ?? null,
+        min_amount: input.min_amount ?? null,
+        max_amount: input.max_amount ?? null,
+        sort_by: sortBy,
+        sort_order: sortOrder
+      },
+      scope,
+      time_scope: timeScope
+    };
+    return {
+      content: [
+        {
+          type: "text",
+          text: transactionContent(
+            items,
+            scope,
+            timeScope,
+            transactionType,
+            hasMore,
+            nextCursor
+          )
+        }
+      ],
+      structuredContent: result
+    };
+  }
+});
+
+// src/lib/mcp/tools/get-spending-breakdown.ts
+import { defineTool as defineTool9 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z9 } from "npm:zod@^3.25.76";
+
+// src/lib/mcp/shared/analytics.ts
+function groupIdentity(item, groupBy) {
+  if (groupBy === "category") {
+    return {
+      key: item.category_id ?? "unknown",
+      label: item.category_name ?? "Sem categoria"
+    };
+  }
+  if (groupBy === "payment_method") {
+    return { key: item.payment_method, label: item.payment_method };
+  }
+  if (groupBy === "card") {
+    return {
+      key: item.card_id ?? "unknown",
+      label: item.card_name ?? "Sem cart\xE3o"
+    };
+  }
+  if (groupBy === "day") return { key: item.date, label: item.date };
+  if (groupBy === "week") {
+    const start = isoWeekStart(item.date);
+    return { key: start, label: `Semana de ${start}` };
+  }
+  const month = item.date.slice(0, 7);
+  return { key: month, label: month };
+}
+function financialMetrics(expenses, incomes) {
+  const totalExpenses = roundFinancial(
+    expenses.reduce((sum, item) => sum + item.amount, 0)
+  );
+  const totalIncome = roundFinancial(
+    incomes.reduce((sum, item) => sum + item.amount, 0)
+  );
+  return {
+    income: totalIncome,
+    expenses: totalExpenses,
+    balance: roundFinancial(totalIncome - totalExpenses),
+    savings_rate: savingsRate(totalIncome, totalExpenses),
+    expense_count: expenses.length,
+    income_count: incomes.length
+  };
+}
+function spendingBreakdown(expenses, groupBy, limit) {
+  const total = roundFinancial(expenses.reduce((sum, item) => sum + item.amount, 0));
+  const grouped = /* @__PURE__ */ new Map();
+  for (const item of expenses) {
+    const identity = groupIdentity(item, groupBy);
+    const current = grouped.get(identity.key);
+    if (!current) {
+      grouped.set(identity.key, {
+        label: identity.label,
+        total: item.amount,
+        count: 1,
+        largest: item
+      });
+      continue;
+    }
+    current.total += item.amount;
+    current.count += 1;
+    if (item.amount > current.largest.amount) current.largest = item;
+  }
+  const allGroups = [...grouped.entries()].map(([key, group]) => ({
+    key,
+    label: group.label,
+    total: roundFinancial(group.total),
+    percentage: total > 0 ? group.total / total * 100 : 0,
+    transaction_count: group.count,
+    average: roundFinancial(group.total / group.count),
+    largest_transaction: {
+      id: group.largest.id,
+      description: group.largest.description,
+      amount: group.largest.amount,
+      date: group.largest.date
+    }
+  })).sort((left, right) => right.total - left.total || left.key.localeCompare(right.key));
+  const groups = allGroups.slice(0, limit);
+  return {
+    total,
+    groups,
+    total_group_count: allGroups.length,
+    returned_group_count: groups.length,
+    groups_truncated: allGroups.length > groups.length
+  };
+}
+function metricChanges(from, to) {
+  return {
+    absolute: {
+      income: roundFinancial(to.income - from.income),
+      expenses: roundFinancial(to.expenses - from.expenses),
+      balance: roundFinancial(to.balance - from.balance),
+      savings_rate: from.savings_rate === null || to.savings_rate === null ? null : to.savings_rate - from.savings_rate,
+      expense_count: to.expense_count - from.expense_count,
+      income_count: to.income_count - from.income_count
+    },
+    percentage: {
+      income: percentageChange(from.income, to.income),
+      expenses: percentageChange(from.expenses, to.expenses),
+      balance: percentageChange(from.balance, to.balance),
+      savings_rate: from.savings_rate === null || to.savings_rate === null ? null : percentageChange(from.savings_rate, to.savings_rate),
+      expense_count: percentageChange(from.expense_count, to.expense_count),
+      income_count: percentageChange(from.income_count, to.income_count)
+    }
+  };
+}
+
+// src/lib/mcp/tools/get-spending-breakdown.ts
+var largestTransactionSchema = z9.object({
+  id: z9.string().uuid(),
+  description: z9.string(),
+  amount: z9.number(),
+  date: z9.string()
+});
+var get_spending_breakdown_default = defineTool9({
+  name: "get_spending_breakdown",
+  title: "Detalhamento de gastos",
+  description: "Agrupa despesas por categoria, forma de pagamento, cart\xE3o, dia, semana ou m\xEAs. Padr\xE3o: m\xEAs corrente, categoria, scope=personal e time_scope=occurred. Intervalo m\xE1ximo de 366 dias.",
+  inputSchema: {
+    start_date: z9.string().regex(ISO_DATE_RE).optional(),
+    end_date: z9.string().regex(ISO_DATE_RE).optional(),
+    group_by: z9.enum(["category", "payment_method", "card", "day", "week", "month"]).optional(),
+    scope: z9.enum(["personal", "shared", "all_accessible"]).optional(),
+    time_scope: z9.enum(["occurred", "future", "all"]).optional(),
+    limit: z9.number().int().min(1).max(100).optional()
+  },
+  outputSchema: {
+    period: z9.object({ start_date: z9.string(), end_date: z9.string() }),
+    requested_period: z9.object({ start_date: z9.string(), end_date: z9.string() }),
+    effective_period: z9.object({
+      start_date: z9.string(),
+      end_date: z9.string(),
+      days: z9.number().int().positive()
+    }).nullable(),
+    coverage_warning: z9.string().nullable(),
+    total: z9.number(),
+    transaction_count: z9.number().int().nonnegative(),
+    groups: z9.array(
+      z9.object({
+        key: z9.string(),
+        label: z9.string(),
+        total: z9.number(),
+        percentage: z9.number(),
+        transaction_count: z9.number().int().nonnegative(),
+        average: z9.number(),
+        largest_transaction: largestTransactionSchema
+      })
+    ),
+    group_by: z9.enum(["category", "payment_method", "card", "day", "week", "month"]),
+    scope: z9.enum(["personal", "shared", "all_accessible"]),
+    time_scope: z9.enum(["occurred", "future", "all"]),
+    complete: z9.boolean(),
+    data_complete: z9.boolean(),
+    total_group_count: z9.number().int().nonnegative(),
+    returned_group_count: z9.number().int().nonnegative(),
+    groups_truncated: z9.boolean()
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async (input, ctx) => {
+    if (!ctx.isAuthenticated() || !ctx.getUserId()) return mcpError("UNAUTHENTICATED");
+    const defaults = currentMonthRange();
+    const range = resolveDateRange(input.start_date, input.end_date);
+    if (range.ok === false) return mcpError(range.code);
+    const start = input.start_date ?? defaults.from;
+    const end = input.end_date ?? defaults.to;
+    const bounded = validateBoundedDateRange(start, end);
+    if (bounded.ok === false) return mcpError(bounded.code);
+    const groupBy = input.group_by ?? "category";
+    const scope = input.scope ?? "personal";
+    const timeScope = input.time_scope ?? "occurred";
+    const coverage = effectiveDateRange(start, end, timeScope);
+    const cursorSecret = getCursorSecret();
+    if (!cursorSecret) return mcpError("INTERNAL_ERROR");
+    let expenseItems = [];
+    if (coverage.effective_period) {
+      const filters = {
+        start_date: coverage.effective_period.start_date,
+        end_date: coverage.effective_period.end_date,
+        scope,
+        time_scope: "all",
+        sort_by: "date",
+        sort_order: "asc"
+      };
+      const expenses = await fetchAllExpenses(
+        supabaseForUser(ctx),
+        ctx.getUserId(),
+        filters,
+        INTERNAL_RESULT_CAP,
+        cursorSecret
+      );
+      if (expenses.error) return mcpError("INTERNAL_ERROR");
+      if (expenses.too_large) return mcpError("RESULT_SET_TOO_LARGE");
+      expenseItems = expenses.items;
+    }
+    const breakdown = spendingBreakdown(expenseItems, groupBy, input.limit ?? 20);
+    const result = {
+      period: { start_date: start, end_date: end },
+      requested_period: coverage.requested_period,
+      effective_period: coverage.effective_period,
+      coverage_warning: coverage.coverage_warning,
+      total: breakdown.total,
+      transaction_count: expenseItems.length,
+      groups: breakdown.groups,
+      group_by: groupBy,
+      scope,
+      time_scope: timeScope,
+      complete: true,
+      data_complete: true,
+      total_group_count: breakdown.total_group_count,
+      returned_group_count: breakdown.returned_group_count,
+      groups_truncated: breakdown.groups_truncated
+    };
+    return {
+      content: [
+        {
+          type: "text",
+          text: breakdownContent(result.groups, {
+            start,
+            end,
+            total: result.total,
+            transactionCount: result.transaction_count,
+            groupBy,
+            scope,
+            timeScope,
+            returnedGroupCount: result.returned_group_count,
+            totalGroupCount: result.total_group_count,
+            groupsTruncated: result.groups_truncated,
+            coverageWarning: coverage.coverage_warning
+          })
+        }
+      ],
+      structuredContent: result
+    };
+  }
+});
+
+// src/lib/mcp/tools/compare-periods.ts
+import { defineTool as defineTool10 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z10 } from "npm:zod@^3.25.76";
+var metricsSchema = z10.object({
+  income: z10.number(),
+  expenses: z10.number(),
+  balance: z10.number(),
+  savings_rate: z10.number().nullable(),
+  expense_count: z10.number().int().nonnegative(),
+  income_count: z10.number().int().nonnegative()
+});
+var requestedPeriodSchema = z10.object({
+  start_date: z10.string(),
+  end_date: z10.string()
+});
+var effectivePeriodSchema = z10.object({
+  start_date: z10.string(),
+  end_date: z10.string(),
+  days: z10.number().int().positive()
+}).nullable();
+var compare_periods_default = defineTool10({
+  name: "compare_periods",
+  title: "Comparar per\xEDodos",
+  description: "Compara fatos financeiros de dois intervalos de at\xE9 366 dias. Retorna n\xFAmeros e varia\xE7\xF5es de A para B, sem diagn\xF3stico ou recomenda\xE7\xE3o.",
+  inputSchema: {
+    period_a_start: z10.string().regex(ISO_DATE_RE),
+    period_a_end: z10.string().regex(ISO_DATE_RE),
+    period_b_start: z10.string().regex(ISO_DATE_RE),
+    period_b_end: z10.string().regex(ISO_DATE_RE),
+    scope: z10.enum(["personal", "shared", "all_accessible"]).optional(),
+    time_scope: z10.enum(["occurred", "future", "all"]).optional(),
+    breakdown_by: z10.enum(["category", "payment_method", "card", "none"]).optional()
+  },
+  outputSchema: {
+    period_a: z10.object({
+      start_date: z10.string(),
+      end_date: z10.string(),
+      days: z10.number().int().nonnegative(),
+      requested_days: z10.number().int().positive(),
+      effective_days: z10.number().int().nonnegative(),
+      requested_period: requestedPeriodSchema,
+      effective_period: effectivePeriodSchema,
+      coverage_warning: z10.string().nullable(),
+      metrics: metricsSchema
+    }),
+    period_b: z10.object({
+      start_date: z10.string(),
+      end_date: z10.string(),
+      days: z10.number().int().nonnegative(),
+      requested_days: z10.number().int().positive(),
+      effective_days: z10.number().int().nonnegative(),
+      requested_period: requestedPeriodSchema,
+      effective_period: effectivePeriodSchema,
+      coverage_warning: z10.string().nullable(),
+      metrics: metricsSchema
+    }),
+    absolute_changes: z10.object({
+      income: z10.number(),
+      expenses: z10.number(),
+      balance: z10.number(),
+      savings_rate: z10.number().nullable(),
+      expense_count: z10.number().int(),
+      income_count: z10.number().int()
+    }),
+    percentage_changes: z10.object({
+      income: z10.number().nullable(),
+      expenses: z10.number().nullable(),
+      balance: z10.number().nullable(),
+      savings_rate: z10.number().nullable(),
+      expense_count: z10.number().nullable(),
+      income_count: z10.number().nullable()
+    }),
+    breakdown_changes: z10.array(
+      z10.object({
+        key: z10.string(),
+        label: z10.string(),
+        period_a_total: z10.number(),
+        period_b_total: z10.number(),
+        absolute_change: z10.number(),
+        percentage_change: z10.number().nullable()
+      })
+    ).nullable(),
+    scope: z10.enum(["personal", "shared", "all_accessible"]),
+    time_scope: z10.enum(["occurred", "future", "all"]),
+    coverage_warning: z10.array(z10.string()),
+    data_sufficiency_warnings: z10.array(z10.string())
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async (input, ctx) => {
+    if (!ctx.isAuthenticated() || !ctx.getUserId()) return mcpError("UNAUTHENTICATED");
+    const rangeA = validateBoundedDateRange(input.period_a_start, input.period_a_end);
+    if (rangeA.ok === false) return mcpError(rangeA.code);
+    const rangeB = validateBoundedDateRange(input.period_b_start, input.period_b_end);
+    if (rangeB.ok === false) return mcpError(rangeB.code);
+    const scope = input.scope ?? "personal";
+    const timeScope = input.time_scope ?? "occurred";
+    const breakdownBy = input.breakdown_by ?? "none";
+    const userId = ctx.getUserId();
+    const supabase = supabaseForUser(ctx);
+    const cursorSecret = getCursorSecret();
+    if (!cursorSecret) return mcpError("INTERNAL_ERROR");
+    const coverageA = effectiveDateRange(
+      input.period_a_start,
+      input.period_a_end,
+      timeScope
+    );
+    const coverageB = effectiveDateRange(
+      input.period_b_start,
+      input.period_b_end,
+      timeScope
+    );
+    const expenseFilters = (start, end) => ({
+      start_date: start,
+      end_date: end,
+      scope,
+      time_scope: "all",
+      sort_by: "date",
+      sort_order: "asc"
+    });
+    const incomeFilters = (start, end) => ({
+      start_date: start,
+      end_date: end,
+      scope,
+      time_scope: "all",
+      sort_by: "date",
+      sort_order: "asc"
+    });
+    const emptyExpenses = { items: [], error: false, too_large: false };
+    const emptyIncomes = { items: [], error: false, too_large: false };
+    const [expensesA, incomesA, expensesB, incomesB] = await Promise.all([
+      coverageA.effective_period ? fetchAllExpenses(
+        supabase,
+        userId,
+        expenseFilters(
+          coverageA.effective_period.start_date,
+          coverageA.effective_period.end_date
+        ),
+        INTERNAL_RESULT_CAP,
+        cursorSecret
+      ) : Promise.resolve(emptyExpenses),
+      coverageA.effective_period ? fetchAllIncomes(
+        supabase,
+        userId,
+        incomeFilters(
+          coverageA.effective_period.start_date,
+          coverageA.effective_period.end_date
+        ),
+        INTERNAL_RESULT_CAP,
+        cursorSecret
+      ) : Promise.resolve(emptyIncomes),
+      coverageB.effective_period ? fetchAllExpenses(
+        supabase,
+        userId,
+        expenseFilters(
+          coverageB.effective_period.start_date,
+          coverageB.effective_period.end_date
+        ),
+        INTERNAL_RESULT_CAP,
+        cursorSecret
+      ) : Promise.resolve(emptyExpenses),
+      coverageB.effective_period ? fetchAllIncomes(
+        supabase,
+        userId,
+        incomeFilters(
+          coverageB.effective_period.start_date,
+          coverageB.effective_period.end_date
+        ),
+        INTERNAL_RESULT_CAP,
+        cursorSecret
+      ) : Promise.resolve(emptyIncomes)
+    ]);
+    if (expensesA.error || incomesA.error || expensesB.error || incomesB.error) {
+      return mcpError("INTERNAL_ERROR");
+    }
+    if (expensesA.too_large || incomesA.too_large || expensesB.too_large || incomesB.too_large) {
+      return mcpError("RESULT_SET_TOO_LARGE");
+    }
+    const metricsA = financialMetrics(expensesA.items, incomesA.items);
+    const metricsB = financialMetrics(expensesB.items, incomesB.items);
+    const changes = metricChanges(metricsA, metricsB);
+    const warnings = [];
+    const coverageWarnings = [coverageA.coverage_warning, coverageB.coverage_warning].filter(
+      (warning) => warning !== null
+    );
+    warnings.push(...coverageWarnings);
+    if (rangeA.days !== rangeB.days) {
+      warnings.push(
+        `Os per\xEDodos t\xEAm dura\xE7\xF5es diferentes (${rangeA.days} dias em A e ${rangeB.days} dias em B).`
+      );
+    }
+    const effectiveDaysA = coverageA.effective_period?.days ?? 0;
+    const effectiveDaysB = coverageB.effective_period?.days ?? 0;
+    if (effectiveDaysA !== effectiveDaysB) {
+      warnings.push(
+        `As coberturas efetivas t\xEAm dura\xE7\xF5es diferentes (${effectiveDaysA} dias em A e ${effectiveDaysB} dias em B).`
+      );
+    }
+    if (metricsA.income <= 0 || metricsB.income <= 0) {
+      warnings.push("Savings rate indispon\xEDvel em per\xEDodo com receita total zero ou negativa.");
+    }
+    if (Object.values(changes.percentage).some((value) => value === null)) {
+      warnings.push("Varia\xE7\xF5es percentuais com base zero foram retornadas como null.");
+    }
+    let breakdownChanges = null;
+    if (breakdownBy !== "none") {
+      const breakdownA = spendingBreakdown(
+        expensesA.items,
+        breakdownBy,
+        INTERNAL_RESULT_CAP
+      );
+      const breakdownB = spendingBreakdown(
+        expensesB.items,
+        breakdownBy,
+        INTERNAL_RESULT_CAP
+      );
+      const groupsA = new Map(breakdownA.groups.map((group) => [group.key, group]));
+      const groupsB = new Map(breakdownB.groups.map((group) => [group.key, group]));
+      const keys = /* @__PURE__ */ new Set([...groupsA.keys(), ...groupsB.keys()]);
+      breakdownChanges = [...keys].map((key) => {
+        const groupA = groupsA.get(key);
+        const groupB = groupsB.get(key);
+        const totalA = groupA?.total ?? 0;
+        const totalB = groupB?.total ?? 0;
+        return {
+          key,
+          label: groupB?.label ?? groupA?.label ?? key,
+          period_a_total: totalA,
+          period_b_total: totalB,
+          absolute_change: roundFinancial(totalB - totalA),
+          percentage_change: percentageChange(totalA, totalB)
+        };
+      }).sort(
+        (left, right) => Math.abs(right.absolute_change) - Math.abs(left.absolute_change) || left.key.localeCompare(right.key)
+      );
+    }
+    const result = {
+      period_a: {
+        start_date: input.period_a_start,
+        end_date: input.period_a_end,
+        days: effectiveDaysA,
+        requested_days: inclusiveDays(input.period_a_start, input.period_a_end),
+        effective_days: effectiveDaysA,
+        requested_period: coverageA.requested_period,
+        effective_period: coverageA.effective_period,
+        coverage_warning: coverageA.coverage_warning,
+        metrics: metricsA
+      },
+      period_b: {
+        start_date: input.period_b_start,
+        end_date: input.period_b_end,
+        days: effectiveDaysB,
+        requested_days: inclusiveDays(input.period_b_start, input.period_b_end),
+        effective_days: effectiveDaysB,
+        requested_period: coverageB.requested_period,
+        effective_period: coverageB.effective_period,
+        coverage_warning: coverageB.coverage_warning,
+        metrics: metricsB
+      },
+      absolute_changes: changes.absolute,
+      percentage_changes: changes.percentage,
+      breakdown_changes: breakdownChanges,
+      scope,
+      time_scope: timeScope,
+      coverage_warning: coverageWarnings,
+      data_sufficiency_warnings: warnings
+    };
+    const breakdownText = comparisonBreakdownContent(breakdownChanges);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Compara\xE7\xE3o factual de A (${input.period_a_start} a ${input.period_a_end}) com B (${input.period_b_start} a ${input.period_b_end}), scope=${scope}, time_scope=${timeScope}. A: ${JSON.stringify(metricsA)}. B: ${JSON.stringify(metricsB)}. Mudan\xE7as absolutas: ${JSON.stringify(changes.absolute)}. Mudan\xE7as percentuais: ${JSON.stringify(changes.percentage)}. ${breakdownText} ${warnings.length ? `Avisos: ${warnings.join(" ")}` : ""}`
+        }
+      ],
+      structuredContent: result
+    };
+  }
+});
+
 // src/lib/mcp/index.ts
 var projectRef = "jaoldaqvbdllowepzwbr";
 var mcp_default = defineMcp({
   name: "gastinho-simples-mcp",
   title: "Gastinho Simples",
   version: "0.1.0",
-  instructions: "Ferramentas do Gastinho Simples. Use get_connection_identity para confirmar qual conta est\xE1 conectada, list_categories para descobrir UUIDs de categorias, list_expenses/list_incomes para consultar transa\xE7\xF5es, create_expense/create_income para registrar, e get_summary para totais e saldo do per\xEDodo.",
+  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para buscas unificadas, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. Use list_categories para UUIDs. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
@@ -362,7 +2006,10 @@ var mcp_default = defineMcp({
     create_expense_default,
     create_income_default,
     get_summary_default,
-    list_categories_default
+    list_categories_default,
+    search_transactions_default,
+    get_spending_breakdown_default,
+    compare_periods_default
   ]
 });
 

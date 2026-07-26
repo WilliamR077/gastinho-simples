@@ -6,9 +6,15 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:mcp": "vite build && lovable-mcp-extract-manifest && npm run check:mcp-bundle",
     "build:dev": "vite build --mode development",
+    "check:mcp-bundle": "node scripts/check-mcp-bundle.mjs",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "postinstall": "patch-package",
+    "preview": "vite preview",
+    "test:mcp:1.1b": "node scripts/mcp-phase-1.1b-tests.mjs",
+    "test:mcp:1.1b1": "node scripts/mcp-phase-1.1b1-tests.mjs",
+    "test:mcp:1.1b2": "node scripts/mcp-phase-1.1b2-tests.mjs"
   },
   "dependencies": {
     "@capacitor-community/admob": "^7.2.0",
@@ -67,6 +73,7 @@
     "jspdf-autotable": "^5.0.2",
     "lucide-react": "^0.462.0",
     "next-themes": "^0.3.0",
+    "patch-package": "^8.0.1",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",

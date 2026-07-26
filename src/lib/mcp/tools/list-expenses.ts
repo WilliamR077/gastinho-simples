@@ -2,57 +2,151 @@ import { defineTool } from "@lovable.dev/mcp-js";
 import { z } from "zod";
 import { supabaseForUser } from "../shared/supabase-client";
 import { mcpError } from "../shared/errors";
-import { ISO_DATE_RE, resolveDateRange } from "../shared/dates";
+import { ISO_DATE_RE, validateOpenDateRange } from "../shared/dates";
+import {
+  CURSOR_VERSION,
+  decodeCursor,
+  filtersFingerprint,
+  getCursorSecret,
+  validateAmountRange,
+  type McpSortBy,
+  type McpSortOrder,
+  type McpTimeScope,
+} from "../shared/phase-1.1b-core";
+import type { McpScope } from "../shared/scope";
+import {
+  queryExpensesPage,
+  type ExpenseQueryFilters,
+  type PaymentMethod,
+} from "../shared/transaction-query";
+
+const CURSOR_CONTEXT = "list_expenses";
 
 export default defineTool({
   name: "list_expenses",
   title: "Listar despesas",
   description:
-    "Lista as despesas do usuário autenticado. Aceita intervalo de datas opcional (ISO YYYY-MM-DD) e limite. Retorna descrição, valor, data, categoria e método de pagamento.",
+    "Lista despesas com filtros e cursor estável. O padrão preserva scope=personal e time_scope=all. Para 'recentes', 'últimas' ou 'já gastei', use time_scope=occurred; para parcelas futuras, future; para todos os lançamentos, all.",
   inputSchema: {
-    start_date: z.string().regex(ISO_DATE_RE).optional().describe("Data inicial (YYYY-MM-DD), inclusive."),
-    end_date: z.string().regex(ISO_DATE_RE).optional().describe("Data final (YYYY-MM-DD), inclusive."),
-    limit: z.number().int().min(1).max(200).optional().describe("Máximo de registros (padrão 50)."),
+    start_date: z.string().regex(ISO_DATE_RE).optional(),
+    end_date: z.string().regex(ISO_DATE_RE).optional(),
+    query: z.string().trim().min(1).max(100).optional(),
+    category_id: z.string().uuid().optional(),
+    payment_method: z.enum(["pix", "credit", "debit", "cash"]).optional(),
+    card_id: z.string().uuid().optional(),
+    group_id: z.string().uuid().optional(),
+    min_amount: z.number().nonnegative().optional(),
+    max_amount: z.number().nonnegative().optional(),
+    scope: z.enum(["personal", "shared", "all_accessible"]).optional(),
+    time_scope: z.enum(["occurred", "future", "all"]).optional(),
+    sort_by: z.enum(["date", "created_at", "amount"]).optional(),
+    sort_order: z.enum(["asc", "desc"]).optional(),
+    limit: z.number().int().min(1).max(100).optional(),
+    cursor: z.string().min(1).max(1000).optional(),
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
-  handler: async ({ start_date, end_date, limit }, ctx) => {
-    if (!ctx.isAuthenticated()) return mcpError("UNAUTHENTICATED");
-
-    // Datas: se ambas ausentes, seguimos sem filtro (comportamento pré-1.1A).
-    // Se apenas uma vier inválida, resolveDateRange marca o erro corretamente.
-    if (start_date || end_date) {
-      const range = resolveDateRange(start_date, end_date);
-      if (range.ok === false) return mcpError(range.code);
+  handler: async (input, ctx) => {
+    if (!ctx.isAuthenticated() || !ctx.getUserId()) return mcpError("UNAUTHENTICATED");
+    const range = validateOpenDateRange(input.start_date, input.end_date);
+    if (range.ok === false) return mcpError(range.code);
+    if (!validateAmountRange(input.min_amount, input.max_amount)) {
+      return mcpError("INVALID_AMOUNT_RANGE");
     }
 
-    const supabase = supabaseForUser(ctx);
-    let query = supabase
-      .from("expenses")
-      .select(
-        // is_shared é derivado no cliente a partir de shared_group_id
-        "id, description, amount, expense_date, payment_method, category_name, card_name, shared_group_id",
-      )
-      .eq("user_id", ctx.getUserId())
-      .order("expense_date", { ascending: false })
-      .limit(limit ?? 50);
-    if (start_date) query = query.gte("expense_date", start_date);
-    if (end_date) query = query.lte("expense_date", end_date);
-    const { data, error } = await query;
-    if (error) return mcpError("INTERNAL_ERROR", error.message);
+    const scope: McpScope = input.scope ?? "personal";
+    const timeScope: McpTimeScope = input.time_scope ?? "all";
+    const sortBy: McpSortBy = input.sort_by ?? "date";
+    const sortOrder: McpSortOrder = input.sort_order ?? "desc";
+    const limit = input.limit ?? 50;
+    const cursorSecret = getCursorSecret();
+    if (!cursorSecret) return mcpError("INTERNAL_ERROR");
+    const fingerprint = await filtersFingerprint(CURSOR_CONTEXT, {
+      transaction_type: "expense",
+      start_date: input.start_date ?? null,
+      end_date: input.end_date ?? null,
+      query: input.query ?? null,
+      category_id: input.category_id ?? null,
+      income_category_id: null,
+      payment_method: input.payment_method ?? null,
+      card_id: input.card_id ?? null,
+      group_id: input.group_id ?? null,
+      min_amount: input.min_amount ?? null,
+      max_amount: input.max_amount ?? null,
+      scope,
+      time_scope: timeScope,
+      sort_by: sortBy,
+      sort_order: sortOrder,
+    });
+    const cursor = await decodeCursor(
+      input.cursor,
+      {
+        context: CURSOR_CONTEXT,
+        sort_by: sortBy,
+        sort_order: sortOrder,
+        filters_fingerprint: fingerprint,
+      },
+      cursorSecret,
+    );
+    if (input.cursor && !cursor) return mcpError("INVALID_CURSOR");
 
-    const rows = (data ?? []).map((r) => ({
-      id: r.id,
-      description: r.description,
-      amount: r.amount,
-      expense_date: r.expense_date,
-      payment_method: r.payment_method,
-      category_name: r.category_name,
-      card_name: r.card_name,
-      is_shared: r.shared_group_id !== null,
-    }));
+    const filters: ExpenseQueryFilters = {
+      start_date: input.start_date,
+      end_date: input.end_date,
+      query: input.query,
+      category_id: input.category_id,
+      payment_method: input.payment_method as PaymentMethod | undefined,
+      card_id: input.card_id,
+      group_id: input.group_id,
+      min_amount: input.min_amount,
+      max_amount: input.max_amount,
+      scope,
+      time_scope: timeScope,
+      sort_by: sortBy,
+      sort_order: sortOrder,
+    };
+    const page = await queryExpensesPage(
+      supabaseForUser(ctx),
+      ctx.getUserId()!,
+      filters,
+      limit,
+      cursor,
+      CURSOR_CONTEXT,
+      fingerprint,
+      cursorSecret,
+    );
+    if (page.error) return mcpError("INTERNAL_ERROR");
+
+    const result = {
+      items: page.items,
+      expenses: page.items,
+      count: page.items.length,
+      limit,
+      next_cursor: page.next_cursor,
+      cursor_version: CURSOR_VERSION,
+      applied_filters: {
+        start_date: input.start_date ?? null,
+        end_date: input.end_date ?? null,
+        query: input.query ?? null,
+        category_id: input.category_id ?? null,
+        payment_method: input.payment_method ?? null,
+        card_id: input.card_id ?? null,
+        group_id: input.group_id ?? null,
+        min_amount: input.min_amount ?? null,
+        max_amount: input.max_amount ?? null,
+        sort_by: sortBy,
+        sort_order: sortOrder,
+      },
+      scope,
+      time_scope: timeScope,
+    };
     return {
-      content: [{ type: "text", text: JSON.stringify(rows) }],
-      structuredContent: { expenses: rows, count: rows.length },
+      content: [
+        {
+          type: "text",
+          text: `Foram encontradas ${result.count} despesas (scope=${scope}, time_scope=${timeScope}). Itens: ${JSON.stringify(page.items)}`,
+        },
+      ],
+      structuredContent: result,
     };
   },
 });
