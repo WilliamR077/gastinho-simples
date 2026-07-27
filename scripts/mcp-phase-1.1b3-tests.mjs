@@ -138,7 +138,7 @@ const searchResult = {
   count: transactionItems.length,
   limit: 20,
   has_more: true,
-  cursor_version: 2,
+  cursor_version: 3,
   next_cursor: "synthetic-signed-next-cursor",
   applied_filters: appliedFilters,
   scope: "personal",
@@ -246,7 +246,7 @@ test("search content carries all pagination data and at most ten summaries", () 
   for (const expected of [
     "Quantidade retornada=12",
     "has_more=true",
-    "cursor_version=2",
+    "cursor_version=3",
     "next_cursor=synthetic-signed-next-cursor",
     "scope=personal",
     "time_scope=occurred",

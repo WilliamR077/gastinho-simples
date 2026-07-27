@@ -61,7 +61,7 @@ export default defineTool({
     const cursorSecret = getCursorSecret();
     if (!cursorSecret) return mcpError("INTERNAL_ERROR");
     const fingerprint = await filtersFingerprint(CURSOR_CONTEXT, {
-      transaction_type: "expense",
+      query_transaction_type: "expense",
       start_date: input.start_date ?? null,
       end_date: input.end_date ?? null,
       query: input.query ?? null,
@@ -83,6 +83,7 @@ export default defineTool({
         context: CURSOR_CONTEXT,
         sort_by: sortBy,
         sort_order: sortOrder,
+        query_transaction_type: "expense",
         filters_fingerprint: fingerprint,
       },
       cursorSecret,

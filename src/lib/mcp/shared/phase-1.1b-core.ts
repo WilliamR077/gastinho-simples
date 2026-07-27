@@ -9,22 +9,24 @@ export type McpTimeScope = "occurred" | "future" | "all";
 export type McpSortBy = "date" | "created_at" | "amount";
 export type McpSortOrder = "asc" | "desc";
 export type McpTransactionType = "expense" | "income";
+export type McpQueryTransactionType = McpTransactionType | "all";
 
 export { DEFAULT_TIME_ZONE, todayIso };
 export const MAX_QUERY_DAYS = 366;
 export const MAX_PAGE_SIZE = 100;
 export const INTERNAL_RESULT_CAP = 10_000;
-export const CURSOR_VERSION = 2;
+export const CURSOR_VERSION = 3;
 export const CURSOR_TTL_SECONDS = 24 * 60 * 60;
 
 export interface CursorPayload {
-  version: 2;
+  version: 3;
   context: string;
   sort_by: McpSortBy;
   sort_order: McpSortOrder;
   sort_value: string | number;
   id: string;
-  transaction_type?: McpTransactionType;
+  query_transaction_type: McpQueryTransactionType;
+  last_item_type: McpTransactionType;
   filters_fingerprint: string;
   issued_at: number;
   expires_at: number;
@@ -34,7 +36,7 @@ export interface CursorExpectation {
   context: string;
   sort_by: McpSortBy;
   sort_order: McpSortOrder;
-  transaction_type?: McpTransactionType | "any";
+  query_transaction_type: McpQueryTransactionType;
   filters_fingerprint: string;
 }
 
@@ -63,7 +65,8 @@ const CURSOR_KEYS = new Set([
   "sort_order",
   "sort_value",
   "id",
-  "transaction_type",
+  "query_transaction_type",
+  "last_item_type",
   "filters_fingerprint",
   "issued_at",
   "expires_at",
@@ -379,9 +382,15 @@ export async function decodeCursor(
       parsed.context !== expected.context ||
       parsed.sort_by !== expected.sort_by ||
       parsed.sort_order !== expected.sort_order ||
-      (expected.transaction_type === "any"
-        ? parsed.transaction_type !== "expense" && parsed.transaction_type !== "income"
-        : parsed.transaction_type !== expected.transaction_type) ||
+      (parsed.query_transaction_type !== "expense" &&
+        parsed.query_transaction_type !== "income" &&
+        parsed.query_transaction_type !== "all") ||
+      parsed.query_transaction_type !== expected.query_transaction_type ||
+      (parsed.last_item_type !== "expense" && parsed.last_item_type !== "income") ||
+      (parsed.query_transaction_type === "expense" &&
+        parsed.last_item_type !== "expense") ||
+      (parsed.query_transaction_type === "income" &&
+        parsed.last_item_type !== "income") ||
       parsed.filters_fingerprint !== expected.filters_fingerprint ||
       typeof parsed.filters_fingerprint !== "string" ||
       !SHA256_HEX_RE.test(parsed.filters_fingerprint) ||
@@ -463,7 +472,8 @@ export function cursorForRow(
   sortOrder: McpSortOrder,
   filtersFingerprintValue: string,
   secret: string,
-  transactionType?: McpTransactionType,
+  queryTransactionType: McpQueryTransactionType,
+  lastItemType: McpTransactionType,
 ): Promise<string> {
   return encodeCursor({
     context,
@@ -471,7 +481,8 @@ export function cursorForRow(
     sort_order: sortOrder,
     sort_value: sortValue(row, sortBy),
     id: row.id,
-    transaction_type: transactionType,
+    query_transaction_type: queryTransactionType,
+    last_item_type: lastItemType,
     filters_fingerprint: filtersFingerprintValue,
   }, secret);
 }

@@ -36,7 +36,7 @@ const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
 
 const baseFilters = {
-  transaction_type: "expense",
+  query_transaction_type: "expense",
   start_date: "2026-07-01",
   end_date: "2026-07-31",
   query: "Mercado",
@@ -62,7 +62,8 @@ async function signedCursor(filters = baseFilters, overrides = {}) {
       sort_order: "asc",
       sort_value: row.date,
       id: row.id,
-      transaction_type: "expense",
+      query_transaction_type: "expense",
+      last_item_type: "expense",
       filters_fingerprint: fingerprint,
     },
     secret,
@@ -78,7 +79,7 @@ async function decode(cursor, fingerprint, overrides = {}, at = now) {
       context: "search_transactions",
       sort_by: "date",
       sort_order: "asc",
-      transaction_type: "expense",
+      query_transaction_type: "expense",
       filters_fingerprint: fingerprint,
       ...overrides,
     },
@@ -87,7 +88,7 @@ async function decode(cursor, fingerprint, overrides = {}, at = now) {
   );
 }
 
-test("accepts a valid signed v2 cursor", async () => {
+test("accepts a valid signed v3 cursor", async () => {
   const fingerprint = await core.filtersFingerprint("search_transactions", baseFilters);
   const cursor = await core.encodeCursor(
     {
@@ -96,13 +97,14 @@ test("accepts a valid signed v2 cursor", async () => {
       sort_order: "asc",
       sort_value: row.date,
       id: row.id,
-      transaction_type: "expense",
+      query_transaction_type: "expense",
+      last_item_type: "expense",
       filters_fingerprint: fingerprint,
     },
     secret,
     now,
   );
-  assert.equal((await decode(cursor, fingerprint)).version, 2);
+  assert.equal((await decode(cursor, fingerprint)).version, 3);
 });
 
 test("fails closed when the cursor secret is absent or too short", () => {
@@ -133,7 +135,7 @@ test("rejects changes to every relevant filter dimension", async () => {
   for (const change of [
     { scope: "shared" },
     { time_scope: "future" },
-    { transaction_type: "income" },
+    { query_transaction_type: "income" },
     { start_date: "2026-07-02" },
     { end_date: "2026-07-30" },
     { query: "Outro texto" },
@@ -162,7 +164,8 @@ test("rejects changed sort, other tool, expired cursor and v1 cursor", async () 
       sort_order: "asc",
       sort_value: row.date,
       id: row.id,
-      transaction_type: "expense",
+      query_transaction_type: "expense",
+      last_item_type: "expense",
       filters_fingerprint: fingerprint,
     },
     secret,

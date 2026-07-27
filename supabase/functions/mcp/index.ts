@@ -103,7 +103,7 @@ function resolveDateRange(start, end) {
 // src/lib/mcp/shared/phase-1.1b-core.ts
 var MAX_QUERY_DAYS = 366;
 var INTERNAL_RESULT_CAP = 1e4;
-var CURSOR_VERSION = 2;
+var CURSOR_VERSION = 3;
 var CURSOR_TTL_SECONDS = 24 * 60 * 60;
 var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 var ISO_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
@@ -122,7 +122,8 @@ var CURSOR_KEYS = /* @__PURE__ */ new Set([
   "sort_order",
   "sort_value",
   "id",
-  "transaction_type",
+  "query_transaction_type",
+  "last_item_type",
   "filters_fingerprint",
   "issued_at",
   "expires_at"
@@ -305,7 +306,7 @@ async function decodeCursor(encoded, expected, secret, now = /* @__PURE__ */ new
       return null;
     }
     const nowSeconds = Math.floor(now.getTime() / 1e3);
-    if (parsed.version !== CURSOR_VERSION || parsed.context !== expected.context || parsed.sort_by !== expected.sort_by || parsed.sort_order !== expected.sort_order || (expected.transaction_type === "any" ? parsed.transaction_type !== "expense" && parsed.transaction_type !== "income" : parsed.transaction_type !== expected.transaction_type) || parsed.filters_fingerprint !== expected.filters_fingerprint || typeof parsed.filters_fingerprint !== "string" || !SHA256_HEX_RE.test(parsed.filters_fingerprint) || typeof parsed.id !== "string" || !UUID_RE.test(parsed.id) || !cursorValueIsValid(expected.sort_by, parsed.sort_value) || typeof parsed.issued_at !== "number" || !Number.isInteger(parsed.issued_at) || typeof parsed.expires_at !== "number" || !Number.isInteger(parsed.expires_at) || parsed.expires_at <= parsed.issued_at || parsed.issued_at > nowSeconds + 60 || parsed.expires_at <= nowSeconds) {
+    if (parsed.version !== CURSOR_VERSION || parsed.context !== expected.context || parsed.sort_by !== expected.sort_by || parsed.sort_order !== expected.sort_order || parsed.query_transaction_type !== "expense" && parsed.query_transaction_type !== "income" && parsed.query_transaction_type !== "all" || parsed.query_transaction_type !== expected.query_transaction_type || parsed.last_item_type !== "expense" && parsed.last_item_type !== "income" || parsed.query_transaction_type === "expense" && parsed.last_item_type !== "expense" || parsed.query_transaction_type === "income" && parsed.last_item_type !== "income" || parsed.filters_fingerprint !== expected.filters_fingerprint || typeof parsed.filters_fingerprint !== "string" || !SHA256_HEX_RE.test(parsed.filters_fingerprint) || typeof parsed.id !== "string" || !UUID_RE.test(parsed.id) || !cursorValueIsValid(expected.sort_by, parsed.sort_value) || typeof parsed.issued_at !== "number" || !Number.isInteger(parsed.issued_at) || typeof parsed.expires_at !== "number" || !Number.isInteger(parsed.expires_at) || parsed.expires_at <= parsed.issued_at || parsed.issued_at > nowSeconds + 60 || parsed.expires_at <= nowSeconds) {
       return null;
     }
     return {
@@ -336,14 +337,15 @@ function unifiedCursorEqualValueMode(cursorType, rowType) {
   if (cursorType === rowType) return "same_type";
   return cursorType === "expense" && rowType === "income" ? "include_all_equal" : "exclude_all_equal";
 }
-function cursorForRow(row, context, sortBy, sortOrder, filtersFingerprintValue, secret, transactionType) {
+function cursorForRow(row, context, sortBy, sortOrder, filtersFingerprintValue, secret, queryTransactionType, lastItemType) {
   return encodeCursor({
     context,
     sort_by: sortBy,
     sort_order: sortOrder,
     sort_value: sortValue(row, sortBy),
     id: row.id,
-    transaction_type: transactionType,
+    query_transaction_type: queryTransactionType,
+    last_item_type: lastItemType,
     filters_fingerprint: filtersFingerprintValue
   }, secret);
 }
@@ -363,10 +365,7 @@ function isoWeekStart(date) {
 
 // src/lib/mcp/shared/transaction-query.ts
 function cursorFilterForTransactionType(query, column, cursor, rowType) {
-  if (!cursor.transaction_type) {
-    return query.or(cursorFilterExpression(column, cursor));
-  }
-  const equalValueMode = unifiedCursorEqualValueMode(cursor.transaction_type, rowType);
+  const equalValueMode = unifiedCursorEqualValueMode(cursor.last_item_type, rowType);
   if (equalValueMode === "same_type") {
     return query.or(cursorFilterExpression(column, cursor));
   }
@@ -424,7 +423,7 @@ function incomeItem(row, userId) {
     is_owner: row.user_id === userId
   };
 }
-async function queryExpensesPage(supabase, userId, filters, limit, cursor, cursorContext, cursorFingerprint, cursorSecret, cursorTransactionType) {
+async function queryExpensesPage(supabase, userId, filters, limit, cursor, cursorContext, cursorFingerprint, cursorSecret, queryTransactionType = "expense") {
   const column = sortColumn(filters.sort_by, "expense_date");
   const ascending = filters.sort_order === "asc";
   let query = supabase.from("expenses").select(EXPENSE_COLUMNS).order(column, { ascending }).order("id", { ascending }).limit(limit + 1);
@@ -461,7 +460,8 @@ async function queryExpensesPage(supabase, userId, filters, limit, cursor, curso
     filters.sort_order,
     cursorFingerprint,
     cursorSecret,
-    cursorTransactionType
+    queryTransactionType,
+    "expense"
   ) : null;
   return {
     items,
@@ -469,7 +469,7 @@ async function queryExpensesPage(supabase, userId, filters, limit, cursor, curso
     error: false
   };
 }
-async function queryIncomesPage(supabase, userId, filters, limit, cursor, cursorContext, cursorFingerprint, cursorSecret, cursorTransactionType) {
+async function queryIncomesPage(supabase, userId, filters, limit, cursor, cursorContext, cursorFingerprint, cursorSecret, queryTransactionType = "income") {
   const column = sortColumn(filters.sort_by, "income_date");
   const ascending = filters.sort_order === "asc";
   let query = supabase.from("incomes").select(INCOME_COLUMNS).order(column, { ascending }).order("id", { ascending }).limit(limit + 1);
@@ -504,7 +504,8 @@ async function queryIncomesPage(supabase, userId, filters, limit, cursor, cursor
     filters.sort_order,
     cursorFingerprint,
     cursorSecret,
-    cursorTransactionType
+    queryTransactionType,
+    "income"
   ) : null;
   return {
     items,
@@ -515,7 +516,7 @@ async function queryIncomesPage(supabase, userId, filters, limit, cursor, cursor
 async function fetchAllExpenses(supabase, userId, filters, hardCap, cursorSecret) {
   const context = "internal_expense_scan";
   const fingerprint = await filtersFingerprint(context, {
-    transaction_type: "expense",
+    query_transaction_type: "expense",
     ...filters
   });
   const items = [];
@@ -543,6 +544,7 @@ async function fetchAllExpenses(supabase, userId, filters, hardCap, cursorSecret
         context,
         sort_by: filters.sort_by,
         sort_order: filters.sort_order,
+        query_transaction_type: "expense",
         filters_fingerprint: fingerprint
       },
       cursorSecret
@@ -554,7 +556,7 @@ async function fetchAllExpenses(supabase, userId, filters, hardCap, cursorSecret
 async function fetchAllIncomes(supabase, userId, filters, hardCap, cursorSecret) {
   const context = "internal_income_scan";
   const fingerprint = await filtersFingerprint(context, {
-    transaction_type: "income",
+    query_transaction_type: "income",
     ...filters
   });
   const items = [];
@@ -582,6 +584,7 @@ async function fetchAllIncomes(supabase, userId, filters, hardCap, cursorSecret)
         context,
         sort_by: filters.sort_by,
         sort_order: filters.sort_order,
+        query_transaction_type: "income",
         filters_fingerprint: fingerprint
       },
       cursorSecret
@@ -630,7 +633,7 @@ var list_expenses_default = defineTool({
     const cursorSecret = getCursorSecret();
     if (!cursorSecret) return mcpError("INTERNAL_ERROR");
     const fingerprint = await filtersFingerprint(CURSOR_CONTEXT, {
-      transaction_type: "expense",
+      query_transaction_type: "expense",
       start_date: input.start_date ?? null,
       end_date: input.end_date ?? null,
       query: input.query ?? null,
@@ -652,6 +655,7 @@ var list_expenses_default = defineTool({
         context: CURSOR_CONTEXT,
         sort_by: sortBy,
         sort_order: sortOrder,
+        query_transaction_type: "expense",
         filters_fingerprint: fingerprint
       },
       cursorSecret
@@ -757,7 +761,7 @@ var list_incomes_default = defineTool2({
     const cursorSecret = getCursorSecret();
     if (!cursorSecret) return mcpError("INTERNAL_ERROR");
     const fingerprint = await filtersFingerprint(CURSOR_CONTEXT2, {
-      transaction_type: "income",
+      query_transaction_type: "income",
       start_date: input.start_date ?? null,
       end_date: input.end_date ?? null,
       query: input.query ?? null,
@@ -779,6 +783,7 @@ var list_incomes_default = defineTool2({
         context: CURSOR_CONTEXT2,
         sort_by: sortBy,
         sort_order: sortOrder,
+        query_transaction_type: "income",
         filters_fingerprint: fingerprint
       },
       cursorSecret
@@ -1194,11 +1199,11 @@ function compactText(value, maxLength) {
   const normalized = value.replace(/\s+/gu, " ").trim();
   return normalized.length <= maxLength ? normalized : `${normalized.slice(0, Math.max(0, maxLength - 1))}\u2026`;
 }
-function transactionContent(items, scope, timeScope, transactionType, hasMore, nextCursor, limit = items.length, cursorVersion = 2, appliedFilters = {}) {
+function transactionContent(items, scope, timeScope, transactionType, hasMore, nextCursor, limit = items.length, cursorVersion = 3, appliedFilters = {}) {
   const preview = items.slice(0, 10).map(
     (item) => `${item.transaction_type} ${item.date}: ${compactText(item.description, 80)} \u2014 ${item.amount}`
   ).join("; ");
-  return `Quantidade retornada=${items.length}; limit=${limit}; has_more=${hasMore}; cursor_version=${cursorVersion}; next_cursor=${nextCursor ?? "null"}; scope=${scope}; time_scope=${timeScope}; transaction_type=${transactionType}; applied_filters=${JSON.stringify(appliedFilters)}. Itens resumidos (m\xE1ximo 10): ${preview || "nenhum item"}.`;
+  return `Quantidade retornada=${items.length}; limit=${limit}; has_more=${hasMore}; cursor_version=${cursorVersion}; next_cursor=${nextCursor ?? "null"}; scope=${scope}; time_scope=${timeScope}; query_transaction_type=${transactionType}; applied_filters=${JSON.stringify(appliedFilters)}. Itens resumidos (m\xE1ximo 10): ${preview || "nenhum item"}.`;
 }
 function breakdownContent(groups, details) {
   const preview = groups.slice(0, 10).map(
@@ -1279,7 +1284,7 @@ var search_transactions_default = defineTool8({
     count: z8.number().int().nonnegative(),
     limit: z8.number().int().positive(),
     has_more: z8.boolean(),
-    cursor_version: z8.literal(2),
+    cursor_version: z8.literal(3),
     next_cursor: z8.string().nullable(),
     applied_filters: z8.object({
       query: z8.string().nullable(),
@@ -1322,7 +1327,7 @@ var search_transactions_default = defineTool8({
     const cursorSecret = getCursorSecret();
     if (!cursorSecret) return mcpError("INTERNAL_ERROR");
     const fingerprint = await filtersFingerprint(CURSOR_CONTEXT3, {
-      transaction_type: transactionType,
+      query_transaction_type: transactionType,
       start_date: input.start_date ?? null,
       end_date: input.end_date ?? null,
       query: input.query ?? null,
@@ -1344,7 +1349,7 @@ var search_transactions_default = defineTool8({
         context: CURSOR_CONTEXT3,
         sort_by: sortBy,
         sort_order: sortOrder,
-        transaction_type: transactionType === "all" ? "any" : transactionType,
+        query_transaction_type: transactionType,
         filters_fingerprint: fingerprint
       },
       cursorSecret
@@ -1384,7 +1389,7 @@ var search_transactions_default = defineTool8({
         CURSOR_CONTEXT3,
         fingerprint,
         cursorSecret,
-        "expense"
+        transactionType
       ),
       transactionType === "expense" ? Promise.resolve({ items: [], next_cursor: null, error: false }) : queryIncomesPage(
         supabase,
@@ -1395,7 +1400,7 @@ var search_transactions_default = defineTool8({
         CURSOR_CONTEXT3,
         fingerprint,
         cursorSecret,
-        "income"
+        transactionType
       )
     ]);
     if (expensePage.error || incomePage.error) return mcpError("INTERNAL_ERROR");
@@ -1443,6 +1448,7 @@ var search_transactions_default = defineTool8({
       sortOrder,
       fingerprint,
       cursorSecret,
+      transactionType,
       items[items.length - 1].transaction_type
     ) : null;
     const result = {

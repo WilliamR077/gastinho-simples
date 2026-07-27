@@ -23,12 +23,13 @@ do usuário por `is_group_member(...)`.
 - `get_summary` preserva o padrão histórico `time_scope=all`.
 - `compare_periods` usa `time_scope=occurred` por padrão, conforme seu schema e
   implementação.
-- Cursores v2 usam payload Base64URL assinado com HMAC-SHA256, expiração e
-  fingerprint SHA-256 dos filtros. Cursores v1 são rejeitados.
+- Cursores v3 usam payload Base64URL assinado com HMAC-SHA256, expiração e
+  fingerprint SHA-256 dos filtros. Cursores v1 e v2 são rejeitados.
 - A busca unificada usa valor, tipo (`expense` antes de `income`) e ID como
   ordenação total.
 - A busca unificada aplica o mesmo limite keyset a cada tabela, mescla e ordena
-  os candidatos. O tipo no cursor preserva despesas e receitas mesmo quando os
+  os candidatos. `query_transaction_type` preserva o filtro original e
+  `last_item_type` preserva despesas e receitas mesmo quando os
   UUIDs sintéticos são iguais.
 - A paginação não promete snapshot: inserções anteriores ao cursor podem exigir
   reinício da busca.

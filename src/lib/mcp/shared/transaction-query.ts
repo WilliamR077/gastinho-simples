@@ -12,6 +12,7 @@ import {
   type CursorPayload,
   type McpSortBy,
   type McpSortOrder,
+  type McpQueryTransactionType,
   type McpTimeScope,
   type McpTransactionType,
   type SortableTransaction,
@@ -128,11 +129,7 @@ function cursorFilterForTransactionType<
   cursor: CursorPayload,
   rowType: McpTransactionType,
 ): T {
-  if (!cursor.transaction_type) {
-    return query.or(cursorFilterExpression(column, cursor));
-  }
-
-  const equalValueMode = unifiedCursorEqualValueMode(cursor.transaction_type, rowType);
+  const equalValueMode = unifiedCursorEqualValueMode(cursor.last_item_type, rowType);
   if (equalValueMode === "same_type") {
     return query.or(cursorFilterExpression(column, cursor));
   }
@@ -208,7 +205,7 @@ export async function queryExpensesPage(
   cursorContext: string,
   cursorFingerprint: string,
   cursorSecret: string,
-  cursorTransactionType?: McpTransactionType,
+  queryTransactionType: McpQueryTransactionType = "expense",
 ): Promise<QueryPage<ExpenseItem>> {
   const column = sortColumn(filters.sort_by, "expense_date");
   const ascending = filters.sort_order === "asc";
@@ -255,7 +252,8 @@ export async function queryExpensesPage(
           filters.sort_order,
           cursorFingerprint,
           cursorSecret,
-          cursorTransactionType,
+          queryTransactionType,
+          "expense",
         )
       : null;
   return {
@@ -274,7 +272,7 @@ export async function queryIncomesPage(
   cursorContext: string,
   cursorFingerprint: string,
   cursorSecret: string,
-  cursorTransactionType?: McpTransactionType,
+  queryTransactionType: McpQueryTransactionType = "income",
 ): Promise<QueryPage<IncomeItem>> {
   const column = sortColumn(filters.sort_by, "income_date");
   const ascending = filters.sort_order === "asc";
@@ -319,7 +317,8 @@ export async function queryIncomesPage(
           filters.sort_order,
           cursorFingerprint,
           cursorSecret,
-          cursorTransactionType,
+          queryTransactionType,
+          "income",
         )
       : null;
   return {
@@ -338,7 +337,7 @@ export async function fetchAllExpenses(
 ): Promise<CompleteQuery<ExpenseItem>> {
   const context = "internal_expense_scan";
   const fingerprint = await filtersFingerprint(context, {
-    transaction_type: "expense",
+    query_transaction_type: "expense",
     ...filters,
   });
   const items: ExpenseItem[] = [];
@@ -367,6 +366,7 @@ export async function fetchAllExpenses(
         context,
         sort_by: filters.sort_by,
         sort_order: filters.sort_order,
+        query_transaction_type: "expense",
         filters_fingerprint: fingerprint,
       },
       cursorSecret,
@@ -385,7 +385,7 @@ export async function fetchAllIncomes(
 ): Promise<CompleteQuery<IncomeItem>> {
   const context = "internal_income_scan";
   const fingerprint = await filtersFingerprint(context, {
-    transaction_type: "income",
+    query_transaction_type: "income",
     ...filters,
   });
   const items: IncomeItem[] = [];
@@ -413,6 +413,7 @@ export async function fetchAllIncomes(
         context,
         sort_by: filters.sort_by,
         sort_order: filters.sort_order,
+        query_transaction_type: "income",
         filters_fingerprint: fingerprint,
       },
       cursorSecret,

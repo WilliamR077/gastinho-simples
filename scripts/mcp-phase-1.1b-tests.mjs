@@ -96,6 +96,8 @@ test("creates signed cursors and rejects incompatible cursors", async () => {
     "desc",
     fingerprint,
     cursorSecret,
+    "expense",
+    "expense",
   );
   assert.equal(
     (
@@ -105,6 +107,7 @@ test("creates signed cursors and rejects incompatible cursors", async () => {
           context: "test",
           sort_by: "date",
           sort_order: "desc",
+          query_transaction_type: "expense",
           filters_fingerprint: fingerprint,
         },
         cursorSecret,
@@ -119,6 +122,7 @@ test("creates signed cursors and rejects incompatible cursors", async () => {
         context: "test",
         sort_by: "amount",
         sort_order: "desc",
+        query_transaction_type: "expense",
         filters_fingerprint: fingerprint,
       },
       cursorSecret,
@@ -132,6 +136,7 @@ test("creates signed cursors and rejects incompatible cursors", async () => {
         context: "test",
         sort_by: "date",
         sort_order: "desc",
+        query_transaction_type: "expense",
         filters_fingerprint: fingerprint,
       },
       cursorSecret,

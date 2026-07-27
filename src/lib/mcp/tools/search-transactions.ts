@@ -83,7 +83,7 @@ export default defineTool({
     count: z.number().int().nonnegative(),
     limit: z.number().int().positive(),
     has_more: z.boolean(),
-    cursor_version: z.literal(2),
+    cursor_version: z.literal(3),
     next_cursor: z.string().nullable(),
     applied_filters: z.object({
       query: z.string().nullable(),
@@ -130,7 +130,7 @@ export default defineTool({
     const cursorSecret = getCursorSecret();
     if (!cursorSecret) return mcpError("INTERNAL_ERROR");
     const fingerprint = await filtersFingerprint(CURSOR_CONTEXT, {
-      transaction_type: transactionType,
+      query_transaction_type: transactionType,
       start_date: input.start_date ?? null,
       end_date: input.end_date ?? null,
       query: input.query ?? null,
@@ -152,7 +152,7 @@ export default defineTool({
         context: CURSOR_CONTEXT,
         sort_by: sortBy,
         sort_order: sortOrder,
-        transaction_type: transactionType === "all" ? "any" : transactionType,
+        query_transaction_type: transactionType,
         filters_fingerprint: fingerprint,
       },
       cursorSecret,
@@ -196,7 +196,7 @@ export default defineTool({
             CURSOR_CONTEXT,
             fingerprint,
             cursorSecret,
-            "expense",
+            transactionType,
           ),
       transactionType === "expense"
         ? Promise.resolve({ items: [], next_cursor: null, error: false })
@@ -209,7 +209,7 @@ export default defineTool({
             CURSOR_CONTEXT,
             fingerprint,
             cursorSecret,
-            "income",
+            transactionType,
           ),
     ]);
     if (expensePage.error || incomePage.error) return mcpError("INTERNAL_ERROR");
@@ -264,6 +264,7 @@ export default defineTool({
             sortOrder,
             fingerprint,
             cursorSecret,
+            transactionType,
             items[items.length - 1].transaction_type,
           )
         : null;

@@ -18,7 +18,7 @@ export function transactionContent(
   hasMore: boolean,
   nextCursor: string | null,
   limit: number = items.length,
-  cursorVersion: number = 2,
+  cursorVersion: number = 3,
   appliedFilters: Record<string, unknown> = {},
 ): string {
   const preview = items
@@ -31,7 +31,7 @@ export function transactionContent(
   return (
     `Quantidade retornada=${items.length}; limit=${limit}; has_more=${hasMore}; ` +
     `cursor_version=${cursorVersion}; next_cursor=${nextCursor ?? "null"}; ` +
-    `scope=${scope}; time_scope=${timeScope}; transaction_type=${transactionType}; ` +
+    `scope=${scope}; time_scope=${timeScope}; query_transaction_type=${transactionType}; ` +
     `applied_filters=${JSON.stringify(appliedFilters)}. ` +
     `Itens resumidos (máximo 10): ${preview || "nenhum item"}.`
   );
