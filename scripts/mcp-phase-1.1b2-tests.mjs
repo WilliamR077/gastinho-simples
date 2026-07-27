@@ -32,13 +32,18 @@ const test = (name, fn) => tests.push({ name, fn });
 
 function contentDetails(groupsTruncated) {
   return {
-    start: "2026-07-01",
-    end: "2026-07-31",
+    requestedPeriod: { start_date: "2026-07-01", end_date: "2026-07-31" },
+    effectivePeriod: {
+      start_date: "2026-07-01",
+      end_date: "2026-07-26",
+      days: 26,
+    },
     total: 100,
     transactionCount: 2,
     groupBy: "category",
     scope: "personal",
     timeScope: "occurred",
+    dataComplete: true,
     returnedGroupCount: groupsTruncated ? 1 : 2,
     totalGroupCount: 2,
     groupsTruncated,
@@ -48,7 +53,20 @@ function contentDetails(groupsTruncated) {
 
 test("explains truncated visible percentages without claiming incomplete data", () => {
   const text = core.breakdownContent(
-    [{ label: "Mercado", total: 80, percentage: 80 }],
+    [{
+      key: "mercado",
+      label: "Mercado",
+      total: 80,
+      percentage: 80,
+      transaction_count: 1,
+      average: 80,
+      largest_transaction: {
+        id: lowercaseUuid,
+        description: "Compra",
+        amount: 80,
+        date: "2026-07-10",
+      },
+    }],
     contentDetails(true),
   );
   assert.match(text, /lista de grupos foi limitada/iu);
@@ -61,8 +79,34 @@ test("explains truncated visible percentages without claiming incomplete data", 
 test("omits the truncation warning when every group is returned", () => {
   const text = core.breakdownContent(
     [
-      { label: "Mercado", total: 80, percentage: 80 },
-      { label: "Casa", total: 20, percentage: 20 },
+      {
+        key: "mercado",
+        label: "Mercado",
+        total: 80,
+        percentage: 80,
+        transaction_count: 1,
+        average: 80,
+        largest_transaction: {
+          id: lowercaseUuid,
+          description: "Compra",
+          amount: 80,
+          date: "2026-07-10",
+        },
+      },
+      {
+        key: "casa",
+        label: "Casa",
+        total: 20,
+        percentage: 20,
+        transaction_count: 1,
+        average: 20,
+        largest_transaction: {
+          id: differentUuid,
+          description: "Conta",
+          amount: 20,
+          date: "2026-07-11",
+        },
+      },
     ],
     contentDetails(false),
   );

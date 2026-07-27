@@ -130,13 +130,14 @@ export default defineTool({
         {
           type: "text",
           text: breakdownContent(result.groups, {
-            start,
-            end,
+            requestedPeriod: result.requested_period,
+            effectivePeriod: result.effective_period,
             total: result.total,
             transactionCount: result.transaction_count,
             groupBy,
             scope,
             timeScope,
+            dataComplete: result.data_complete,
             returnedGroupCount: result.returned_group_count,
             totalGroupCount: result.total_group_count,
             groupsTruncated: result.groups_truncated,

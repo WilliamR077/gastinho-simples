@@ -6,7 +6,7 @@ import {
   spendingBreakdown,
   type ExpenseBreakdownBy,
 } from "../shared/analytics";
-import { comparisonBreakdownContent } from "../shared/content";
+import { comparisonContent } from "../shared/content";
 import { ISO_DATE_RE } from "../shared/dates";
 import { mcpError } from "../shared/errors";
 import {
@@ -334,19 +334,21 @@ export default defineTool({
       coverage_warning: coverageWarnings,
       data_sufficiency_warnings: warnings,
     };
-    const breakdownText = comparisonBreakdownContent(breakdownChanges);
     return {
       content: [
         {
           type: "text",
-          text:
-            `Comparação factual de A (${input.period_a_start} a ${input.period_a_end}) com B ` +
-            `(${input.period_b_start} a ${input.period_b_end}), scope=${scope}, time_scope=${timeScope}. ` +
-            `A: ${JSON.stringify(metricsA)}. B: ${JSON.stringify(metricsB)}. ` +
-            `Mudanças absolutas: ${JSON.stringify(changes.absolute)}. ` +
-            `Mudanças percentuais: ${JSON.stringify(changes.percentage)}. ` +
-            `${breakdownText} ` +
-            `${warnings.length ? `Avisos: ${warnings.join(" ")}` : ""}`,
+          text: comparisonContent({
+            periodA: result.period_a,
+            periodB: result.period_b,
+            absoluteChanges: result.absolute_changes,
+            percentageChanges: result.percentage_changes,
+            breakdownChanges: result.breakdown_changes,
+            scope,
+            timeScope,
+            coverageWarnings: result.coverage_warning,
+            dataSufficiencyWarnings: result.data_sufficiency_warnings,
+          }),
         },
       ],
       structuredContent: result,
