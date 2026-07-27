@@ -1499,6 +1499,555 @@
           "additionalProperties": false,
           "$schema": "http://json-schema.org/draft-07/schema#"
         }
+      },
+      {
+        "name": "list_cards",
+        "title": "Listar cartões",
+        "description": "Lista factual dos cartões da conta autenticada. Por padrão retorna somente cartões ativos, ordenados por nome. Não calcula fatura, limite disponível ou resumo.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "include_inactive": {
+              "type": "boolean"
+            },
+            "card_type": {
+              "type": "string",
+              "enum": [
+                "credit",
+                "debit",
+                "both"
+              ]
+            },
+            "sort_by": {
+              "type": "string",
+              "enum": [
+                "name",
+                "created_at"
+              ]
+            },
+            "sort_order": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "cursor": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "cards": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "card_type": {
+                    "type": "string",
+                    "enum": [
+                      "credit",
+                      "debit",
+                      "both"
+                    ]
+                  },
+                  "color": {
+                    "type": "string"
+                  },
+                  "card_limit": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "opening_day": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "closing_day": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "due_day": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "days_before_due": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "is_active": {
+                    "type": "boolean"
+                  },
+                  "created_at": {
+                    "type": "string"
+                  },
+                  "updated_at": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "card_type",
+                  "color",
+                  "card_limit",
+                  "opening_day",
+                  "closing_day",
+                  "due_day",
+                  "days_before_due",
+                  "is_active",
+                  "created_at",
+                  "updated_at"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "has_more": {
+              "type": "boolean"
+            },
+            "next_cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "cursor_version": {
+              "type": "integer"
+            },
+            "applied_filters": {
+              "type": "object",
+              "properties": {
+                "include_inactive": {
+                  "type": "boolean"
+                },
+                "card_type": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "credit",
+                        "debit",
+                        "both"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "sort_by": {
+                  "type": "string",
+                  "enum": [
+                    "name",
+                    "created_at"
+                  ]
+                },
+                "sort_order": {
+                  "type": "string",
+                  "enum": [
+                    "asc",
+                    "desc"
+                  ]
+                }
+              },
+              "required": [
+                "include_inactive",
+                "card_type",
+                "sort_by",
+                "sort_order"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "cards",
+            "count",
+            "has_more",
+            "next_cursor",
+            "cursor_version",
+            "applied_filters"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      },
+      {
+        "name": "get_card_installments",
+        "title": "Consultar parcelas do cartão",
+        "description": "Lista lançamentos factuais com evidência de parcelamento para um cartão da conta autenticada. O padrão retorna parcelas futuras. Não representa fatura e não garante a completude histórica da série.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "card_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "time_scope": {
+              "type": "string",
+              "enum": [
+                "occurred",
+                "future",
+                "all"
+              ]
+            },
+            "start_date": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "end_date": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "sort_order": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "cursor": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "required": [
+            "card_id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "card": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "card_type": {
+                  "type": "string",
+                  "enum": [
+                    "credit",
+                    "debit",
+                    "both"
+                  ]
+                },
+                "is_active": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "card_type",
+                "is_active"
+              ],
+              "additionalProperties": false
+            },
+            "installments": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "transaction_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "installment_group_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "amount": {
+                    "type": "number"
+                  },
+                  "date": {
+                    "type": "string"
+                  },
+                  "installment_number": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "total_installments": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "category_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "category_name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "category_icon": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "payment_method": {
+                    "type": "string",
+                    "enum": [
+                      "pix",
+                      "credit",
+                      "debit",
+                      "cash"
+                    ]
+                  },
+                  "shared_group_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "is_shared": {
+                    "type": "boolean"
+                  },
+                  "card_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "card_name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "data_warnings": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "MISSING_INSTALLMENT_NUMBER",
+                        "MISSING_TOTAL_INSTALLMENTS",
+                        "INSTALLMENT_NUMBER_EXCEEDS_TOTAL",
+                        "TOTAL_INSTALLMENTS_BELOW_TWO",
+                        "MISSING_INSTALLMENT_GROUP_ID",
+                        "MISSING_CATEGORY",
+                        "NON_CREDIT_PAYMENT_METHOD"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "transaction_id",
+                  "installment_group_id",
+                  "description",
+                  "amount",
+                  "date",
+                  "installment_number",
+                  "total_installments",
+                  "category_id",
+                  "category_name",
+                  "category_icon",
+                  "payment_method",
+                  "shared_group_id",
+                  "is_shared",
+                  "card_id",
+                  "card_name",
+                  "data_warnings"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "has_more": {
+              "type": "boolean"
+            },
+            "next_cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "cursor_version": {
+              "type": "integer"
+            },
+            "time_scope": {
+              "type": "string",
+              "enum": [
+                "occurred",
+                "future",
+                "all"
+              ]
+            },
+            "applied_filters": {
+              "type": "object",
+              "properties": {
+                "card_id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "time_scope": {
+                  "type": "string",
+                  "enum": [
+                    "occurred",
+                    "future",
+                    "all"
+                  ]
+                },
+                "start_date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "end_date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "sort_order": {
+                  "type": "string",
+                  "enum": [
+                    "asc",
+                    "desc"
+                  ]
+                }
+              },
+              "required": [
+                "card_id",
+                "time_scope",
+                "start_date",
+                "end_date",
+                "sort_order"
+              ],
+              "additionalProperties": false
+            },
+            "series_warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "INACTIVE_CARD",
+                  "SERIES_COMPLETENESS_NOT_VERIFIED",
+                  "INCONSISTENT_INSTALLMENT_METADATA_PRESENT"
+                ]
+              }
+            }
+          },
+          "required": [
+            "card",
+            "installments",
+            "count",
+            "has_more",
+            "next_cursor",
+            "cursor_version",
+            "time_scope",
+            "applied_filters",
+            "series_warnings"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
       }
     ]
   }

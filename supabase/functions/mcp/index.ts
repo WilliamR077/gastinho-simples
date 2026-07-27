@@ -37,6 +37,9 @@ var MESSAGES = {
   INVALID_SORT: "Ordena\xE7\xE3o inv\xE1lida.",
   INVALID_TRANSACTION_TYPE: "Tipo de transa\xE7\xE3o inv\xE1lido.",
   INVALID_FILTER_COMBINATION: "card_id e payment_method s\xE3o exclusivos de despesas. Repita a consulta com transaction_type=expense.",
+  RESOURCE_NOT_FOUND: "Recurso n\xE3o encontrado para a conta autenticada.",
+  INVALID_CARD_TYPE: "Tipo de cart\xE3o inv\xE1lido. Use credit, debit ou both.",
+  INVALID_DATA: "Os dados informados s\xE3o inv\xE1lidos.",
   DATE_RANGE_TOO_LARGE: "Intervalo de datas excede o m\xE1ximo permitido de 366 dias.",
   RESULT_SET_TOO_LARGE: "O conjunto de resultados excede o limite seguro. Reduza o intervalo ou refine os filtros.",
   INTERNAL_ERROR: "Erro interno ao processar a solicita\xE7\xE3o."
@@ -2023,13 +2026,442 @@ var compare_periods_default = defineTool10({
   }
 });
 
+// src/lib/mcp/tools/list-cards.ts
+import { defineTool as defineTool11 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z11 } from "npm:zod@^3.25.76";
+
+// src/lib/mcp/shared/resource-cursor.ts
+var UUID_RE2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+var SHA256_HEX_RE2 = /^[0-9a-f]{64}$/;
+var BASE64URL_RE2 = /^[A-Za-z0-9_-]+$/;
+var CURSOR_KEYS2 = /* @__PURE__ */ new Set([
+  "version",
+  "context",
+  "sort_by",
+  "sort_order",
+  "sort_value",
+  "id",
+  "filters_fingerprint",
+  "issued_at",
+  "expires_at"
+]);
+function bytesToBase64Url2(bytes) {
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/u, "");
+}
+function base64UrlToBytes2(value) {
+  if (!BASE64URL_RE2.test(value)) return null;
+  try {
+    const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    return Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
+  } catch {
+    return null;
+  }
+}
+async function hmacKey2(secret) {
+  return crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign", "verify"]
+  );
+}
+async function encodeResourceCursor(payload, secret, now = /* @__PURE__ */ new Date()) {
+  const issuedAt = Math.floor(now.getTime() / 1e3);
+  const complete = {
+    version: CURSOR_VERSION,
+    ...payload,
+    id: String(normalizeUuidFilter(payload.id)),
+    issued_at: issuedAt,
+    expires_at: issuedAt + CURSOR_TTL_SECONDS
+  };
+  const payloadBytes = new TextEncoder().encode(canonicalJson(complete));
+  const signature = await crypto.subtle.sign("HMAC", await hmacKey2(secret), payloadBytes);
+  return `${bytesToBase64Url2(payloadBytes)}.${bytesToBase64Url2(new Uint8Array(signature))}`;
+}
+async function decodeResourceCursor(encoded, expected, secret, now = /* @__PURE__ */ new Date()) {
+  if (!encoded) return null;
+  try {
+    const segments = encoded.split(".");
+    if (segments.length !== 2) return null;
+    const payloadBytes = base64UrlToBytes2(segments[0]);
+    const signatureBytes = base64UrlToBytes2(segments[1]);
+    if (!payloadBytes || !signatureBytes || signatureBytes.length !== 32) return null;
+    const validSignature = await crypto.subtle.verify(
+      "HMAC",
+      await hmacKey2(secret),
+      signatureBytes,
+      payloadBytes
+    );
+    if (!validSignature) return null;
+    const parsed = JSON.parse(
+      new TextDecoder().decode(payloadBytes)
+    );
+    const nowSeconds = Math.floor(now.getTime() / 1e3);
+    if (!parsed || typeof parsed !== "object" || Object.keys(parsed).some((key) => !CURSOR_KEYS2.has(key)) || parsed.version !== CURSOR_VERSION || parsed.context !== expected.context || parsed.sort_by !== expected.sort_by || parsed.sort_order !== expected.sort_order || parsed.filters_fingerprint !== expected.filters_fingerprint || typeof parsed.filters_fingerprint !== "string" || !SHA256_HEX_RE2.test(parsed.filters_fingerprint) || typeof parsed.sort_value !== "string" || typeof parsed.id !== "string" || !UUID_RE2.test(parsed.id) || typeof parsed.issued_at !== "number" || !Number.isInteger(parsed.issued_at) || typeof parsed.expires_at !== "number" || !Number.isInteger(parsed.expires_at) || parsed.expires_at <= parsed.issued_at || parsed.issued_at > nowSeconds + 60 || parsed.expires_at <= nowSeconds) {
+      return null;
+    }
+    return {
+      ...parsed,
+      id: String(normalizeUuidFilter(parsed.id))
+    };
+  } catch {
+    return null;
+  }
+}
+function postgrestValue(value) {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+function resourceCursorFilterExpression(column, cursor) {
+  const operator = cursor.sort_order === "asc" ? "gt" : "lt";
+  const value = postgrestValue(cursor.sort_value);
+  return `${column}.${operator}.${value},and(${column}.eq.${value},id.${operator}.${cursor.id})`;
+}
+
+// src/lib/mcp/tools/list-cards.ts
+var CURSOR_CONTEXT4 = "list_cards";
+var cardSchema = z11.object({
+  id: z11.string().uuid(),
+  name: z11.string(),
+  card_type: z11.enum(["credit", "debit", "both"]),
+  color: z11.string(),
+  card_limit: z11.number().nullable(),
+  opening_day: z11.number().int().nullable(),
+  closing_day: z11.number().int().nullable(),
+  due_day: z11.number().int().nullable(),
+  days_before_due: z11.number().int().nullable(),
+  is_active: z11.boolean(),
+  created_at: z11.string(),
+  updated_at: z11.string()
+});
+var list_cards_default = defineTool11({
+  name: "list_cards",
+  title: "Listar cart\xF5es",
+  description: "Lista factual dos cart\xF5es da conta autenticada. Por padr\xE3o retorna somente cart\xF5es ativos, ordenados por nome. N\xE3o calcula fatura, limite dispon\xEDvel ou resumo.",
+  inputSchema: {
+    include_inactive: z11.boolean().optional(),
+    card_type: z11.enum(["credit", "debit", "both"]).optional(),
+    sort_by: z11.enum(["name", "created_at"]).optional(),
+    sort_order: z11.enum(["asc", "desc"]).optional(),
+    limit: z11.number().int().min(1).max(100).optional(),
+    cursor: z11.string().min(1).max(1e3).optional()
+  },
+  outputSchema: {
+    cards: z11.array(cardSchema),
+    count: z11.number().int().nonnegative(),
+    has_more: z11.boolean(),
+    next_cursor: z11.string().nullable(),
+    cursor_version: z11.number().int(),
+    applied_filters: z11.object({
+      include_inactive: z11.boolean(),
+      card_type: z11.enum(["credit", "debit", "both"]).nullable(),
+      sort_by: z11.enum(["name", "created_at"]),
+      sort_order: z11.enum(["asc", "desc"])
+    })
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async (input, ctx) => {
+    if (!ctx.isAuthenticated() || !ctx.getUserId()) return mcpError("UNAUTHENTICATED");
+    const includeInactive = input.include_inactive ?? false;
+    const sortBy = input.sort_by ?? "name";
+    const sortOrder = input.sort_order ?? "asc";
+    const limit = input.limit ?? 20;
+    const cursorSecret = getCursorSecret();
+    if (!cursorSecret) return mcpError("INTERNAL_ERROR");
+    const fingerprint = await filtersFingerprint(CURSOR_CONTEXT4, {
+      include_inactive: includeInactive,
+      card_type: input.card_type ?? null,
+      sort_by: sortBy,
+      sort_order: sortOrder
+    });
+    const cursor = await decodeResourceCursor(
+      input.cursor,
+      {
+        context: CURSOR_CONTEXT4,
+        sort_by: sortBy,
+        sort_order: sortOrder,
+        filters_fingerprint: fingerprint
+      },
+      cursorSecret
+    );
+    if (input.cursor && !cursor) return mcpError("INVALID_CURSOR");
+    let query = supabaseForUser(ctx).from("cards").select(
+      "id,name,card_type,color,card_limit,opening_day,closing_day,due_day,days_before_due,is_active,created_at,updated_at"
+    ).eq("user_id", ctx.getUserId());
+    if (!includeInactive) query = query.eq("is_active", true);
+    if (input.card_type) query = query.eq("card_type", input.card_type);
+    if (cursor) query = query.or(resourceCursorFilterExpression(sortBy, cursor));
+    const { data, error } = await query.order(sortBy, { ascending: sortOrder === "asc" }).order("id", { ascending: sortOrder === "asc" }).limit(limit + 1);
+    if (error) return mcpError("INTERNAL_ERROR");
+    const rows = data ?? [];
+    const hasMore = rows.length > limit;
+    const candidateCards = rows.slice(0, limit);
+    if (candidateCards.some((card) => !["credit", "debit", "both"].includes(card.card_type))) {
+      return mcpError("INVALID_CARD_TYPE");
+    }
+    const parsedCards = z11.array(cardSchema).safeParse(candidateCards);
+    if (!parsedCards.success) return mcpError("INVALID_DATA");
+    const cards = parsedCards.data;
+    const last = cards.at(-1);
+    const nextCursor = hasMore && last ? await encodeResourceCursor(
+      {
+        context: CURSOR_CONTEXT4,
+        sort_by: sortBy,
+        sort_order: sortOrder,
+        sort_value: String(last[sortBy]),
+        id: last.id,
+        filters_fingerprint: fingerprint
+      },
+      cursorSecret
+    ) : null;
+    const result = {
+      cards,
+      count: cards.length,
+      has_more: hasMore,
+      next_cursor: nextCursor,
+      cursor_version: CURSOR_VERSION,
+      applied_filters: {
+        include_inactive: includeInactive,
+        card_type: input.card_type ?? null,
+        sort_by: sortBy,
+        sort_order: sortOrder
+      }
+    };
+    const visible = cards.slice(0, 10);
+    const omitted = cards.length - visible.length;
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Cart\xF5es encontrados: ${cards.length}. Filtros aplicados: include_inactive=${includeInactive}, card_type=${input.card_type ?? "todos"}, sort_by=${sortBy}, sort_order=${sortOrder}. Dados: ${JSON.stringify(visible)}.` + (omitted > 0 ? ` H\xE1 ${omitted} cart\xE3o(\xF5es) adicional(is) nesta p\xE1gina.` : "") + ` has_more=${hasMore}; next_cursor=${nextCursor ?? "null"}.`
+        }
+      ],
+      structuredContent: result
+    };
+  }
+});
+
+// src/lib/mcp/tools/get-card-installments.ts
+import { defineTool as defineTool12 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z12 } from "npm:zod@^3.25.76";
+
+// src/lib/mcp/shared/card-factual.ts
+var INSTALLMENT_DATA_WARNINGS = [
+  "MISSING_INSTALLMENT_NUMBER",
+  "MISSING_TOTAL_INSTALLMENTS",
+  "INSTALLMENT_NUMBER_EXCEEDS_TOTAL",
+  "TOTAL_INSTALLMENTS_BELOW_TWO",
+  "MISSING_INSTALLMENT_GROUP_ID",
+  "MISSING_CATEGORY",
+  "NON_CREDIT_PAYMENT_METHOD"
+];
+var INSTALLMENT_SERIES_WARNINGS = [
+  "INACTIVE_CARD",
+  "SERIES_COMPLETENESS_NOT_VERIFIED",
+  "INCONSISTENT_INSTALLMENT_METADATA_PRESENT"
+];
+function installmentWarnings(row) {
+  const warnings = [];
+  if (row.installment_number === null) warnings.push("MISSING_INSTALLMENT_NUMBER");
+  if (row.total_installments === null) warnings.push("MISSING_TOTAL_INSTALLMENTS");
+  if (row.installment_number !== null && row.total_installments !== null && row.installment_number > row.total_installments) {
+    warnings.push("INSTALLMENT_NUMBER_EXCEEDS_TOTAL");
+  }
+  if (row.total_installments !== null && row.total_installments < 2) {
+    warnings.push("TOTAL_INSTALLMENTS_BELOW_TWO");
+  }
+  if (row.installment_group_id === null) warnings.push("MISSING_INSTALLMENT_GROUP_ID");
+  if (row.category_id === null || row.category_name === null) warnings.push("MISSING_CATEGORY");
+  if (row.payment_method !== "credit") warnings.push("NON_CREDIT_PAYMENT_METHOD");
+  return warnings;
+}
+
+// src/lib/mcp/tools/get-card-installments.ts
+var CURSOR_CONTEXT5 = "get_card_installments";
+var warningSchema = z12.enum(INSTALLMENT_DATA_WARNINGS);
+var seriesWarningSchema = z12.enum(INSTALLMENT_SERIES_WARNINGS);
+var cardSchema2 = z12.object({
+  id: z12.string().uuid(),
+  name: z12.string(),
+  card_type: z12.enum(["credit", "debit", "both"]),
+  is_active: z12.boolean()
+});
+var installmentSchema = z12.object({
+  transaction_id: z12.string().uuid(),
+  installment_group_id: z12.string().uuid().nullable(),
+  description: z12.string(),
+  amount: z12.number(),
+  date: z12.string(),
+  installment_number: z12.number().int().nullable(),
+  total_installments: z12.number().int().nullable(),
+  category_id: z12.string().uuid().nullable(),
+  category_name: z12.string().nullable(),
+  category_icon: z12.string().nullable(),
+  payment_method: z12.enum(["pix", "credit", "debit", "cash"]),
+  shared_group_id: z12.string().uuid().nullable(),
+  is_shared: z12.boolean(),
+  card_id: z12.string().uuid(),
+  card_name: z12.string().nullable(),
+  data_warnings: z12.array(warningSchema)
+});
+var get_card_installments_default = defineTool12({
+  name: "get_card_installments",
+  title: "Consultar parcelas do cart\xE3o",
+  description: "Lista lan\xE7amentos factuais com evid\xEAncia de parcelamento para um cart\xE3o da conta autenticada. O padr\xE3o retorna parcelas futuras. N\xE3o representa fatura e n\xE3o garante a completude hist\xF3rica da s\xE9rie.",
+  inputSchema: {
+    card_id: z12.string().uuid(),
+    time_scope: z12.enum(["occurred", "future", "all"]).optional(),
+    start_date: z12.string().regex(ISO_DATE_RE).optional(),
+    end_date: z12.string().regex(ISO_DATE_RE).optional(),
+    sort_order: z12.enum(["asc", "desc"]).optional(),
+    limit: z12.number().int().min(1).max(100).optional(),
+    cursor: z12.string().min(1).max(1e3).optional()
+  },
+  outputSchema: {
+    card: cardSchema2,
+    installments: z12.array(installmentSchema),
+    count: z12.number().int().nonnegative(),
+    has_more: z12.boolean(),
+    next_cursor: z12.string().nullable(),
+    cursor_version: z12.number().int(),
+    time_scope: z12.enum(["occurred", "future", "all"]),
+    applied_filters: z12.object({
+      card_id: z12.string().uuid(),
+      time_scope: z12.enum(["occurred", "future", "all"]),
+      start_date: z12.string().nullable(),
+      end_date: z12.string().nullable(),
+      sort_order: z12.enum(["asc", "desc"])
+    }),
+    series_warnings: z12.array(seriesWarningSchema)
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async (input, ctx) => {
+    if (!ctx.isAuthenticated() || !ctx.getUserId()) return mcpError("UNAUTHENTICATED");
+    const range = validateOpenDateRange(input.start_date, input.end_date);
+    if (range.ok === false) return mcpError(range.code);
+    const timeScope = input.time_scope ?? "future";
+    const sortOrder = input.sort_order ?? "asc";
+    const limit = input.limit ?? 20;
+    const cursorSecret = getCursorSecret();
+    if (!cursorSecret) return mcpError("INTERNAL_ERROR");
+    const fingerprint = await filtersFingerprint(CURSOR_CONTEXT5, {
+      card_id: input.card_id,
+      time_scope: timeScope,
+      start_date: input.start_date ?? null,
+      end_date: input.end_date ?? null,
+      sort_order: sortOrder
+    });
+    const cursor = await decodeResourceCursor(
+      input.cursor,
+      {
+        context: CURSOR_CONTEXT5,
+        sort_by: "expense_date",
+        sort_order: sortOrder,
+        filters_fingerprint: fingerprint
+      },
+      cursorSecret
+    );
+    if (input.cursor && !cursor) return mcpError("INVALID_CURSOR");
+    const supabase = supabaseForUser(ctx);
+    const { data: card, error: cardError } = await supabase.from("cards").select("id,name,card_type,is_active").eq("id", input.card_id).eq("user_id", ctx.getUserId()).maybeSingle();
+    if (cardError) return mcpError("INTERNAL_ERROR");
+    if (!card) return mcpError("RESOURCE_NOT_FOUND");
+    if (!["credit", "debit", "both"].includes(card.card_type)) {
+      return mcpError("INVALID_CARD_TYPE");
+    }
+    const parsedCard = cardSchema2.safeParse(card);
+    if (!parsedCard.success) return mcpError("INVALID_DATA");
+    let query = supabase.from("expenses").select(
+      "id,description,amount,expense_date,payment_method,card_id,card_name,category_id,category_name,category_icon,installment_group_id,installment_number,total_installments,shared_group_id"
+    ).eq("user_id", ctx.getUserId()).eq("card_id", input.card_id).or("installment_group_id.not.is.null,installment_number.gt.1,total_installments.gt.1");
+    const today = todayIso();
+    if (timeScope === "occurred") query = query.lte("expense_date", today);
+    if (timeScope === "future") query = query.gt("expense_date", today);
+    if (input.start_date) query = query.gte("expense_date", input.start_date);
+    if (input.end_date) query = query.lte("expense_date", input.end_date);
+    if (cursor) query = query.or(resourceCursorFilterExpression("expense_date", cursor));
+    const { data, error } = await query.order("expense_date", { ascending: sortOrder === "asc" }).order("id", { ascending: sortOrder === "asc" }).limit(limit + 1);
+    if (error) return mcpError("INTERNAL_ERROR");
+    const rows = data ?? [];
+    const hasMore = rows.length > limit;
+    const candidateInstallments = rows.slice(0, limit).map((row) => ({
+      transaction_id: row.id,
+      installment_group_id: row.installment_group_id,
+      description: row.description,
+      amount: row.amount,
+      date: row.expense_date,
+      installment_number: row.installment_number,
+      total_installments: row.total_installments,
+      category_id: row.category_id,
+      category_name: row.category_name,
+      category_icon: row.category_icon,
+      payment_method: row.payment_method,
+      shared_group_id: row.shared_group_id,
+      is_shared: row.shared_group_id !== null,
+      card_id: row.card_id,
+      card_name: row.card_name,
+      data_warnings: installmentWarnings(row)
+    }));
+    const parsedInstallments = z12.array(installmentSchema).safeParse(candidateInstallments);
+    if (!parsedInstallments.success) return mcpError("INVALID_DATA");
+    const installments = parsedInstallments.data;
+    const last = installments.at(-1);
+    const nextCursor = hasMore && last ? await encodeResourceCursor(
+      {
+        context: CURSOR_CONTEXT5,
+        sort_by: "expense_date",
+        sort_order: sortOrder,
+        sort_value: last.date,
+        id: last.transaction_id,
+        filters_fingerprint: fingerprint
+      },
+      cursorSecret
+    ) : null;
+    const seriesWarnings = [];
+    if (!parsedCard.data.is_active) seriesWarnings.push("INACTIVE_CARD");
+    if (installments.length > 0) seriesWarnings.push("SERIES_COMPLETENESS_NOT_VERIFIED");
+    if (installments.some((item) => item.data_warnings.length > 0)) {
+      seriesWarnings.push("INCONSISTENT_INSTALLMENT_METADATA_PRESENT");
+    }
+    const result = {
+      card: parsedCard.data,
+      installments,
+      count: installments.length,
+      has_more: hasMore,
+      next_cursor: nextCursor,
+      cursor_version: CURSOR_VERSION,
+      time_scope: timeScope,
+      applied_filters: {
+        card_id: input.card_id,
+        time_scope: timeScope,
+        start_date: input.start_date ?? null,
+        end_date: input.end_date ?? null,
+        sort_order: sortOrder
+      },
+      series_warnings: seriesWarnings
+    };
+    const visible = installments.slice(0, 10);
+    const omitted = installments.length - visible.length;
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Cart\xE3o: ${parsedCard.data.name} (${parsedCard.data.card_type}, ${parsedCard.data.is_active ? "ativo" : "inativo"}). Parcelas factuais encontradas: ${installments.length}; time_scope=${timeScope}. Filtros de data: start_date=${input.start_date ?? "sem limite"}, end_date=${input.end_date ?? "sem limite"}. Dados: ${JSON.stringify(visible)}.` + (omitted > 0 ? ` H\xE1 ${omitted} parcela(s) adicional(is) nesta p\xE1gina.` : "") + ` Avisos da s\xE9rie: ${JSON.stringify(seriesWarnings)}. has_more=${hasMore}; next_cursor=${nextCursor ?? "null"}.`
+        }
+      ],
+      structuredContent: result
+    };
+  }
+});
+
 // src/lib/mcp/index.ts
 var projectRef = "jaoldaqvbdllowepzwbr";
 var mcp_default = defineMcp({
   name: "gastinho-simples-mcp",
   title: "Gastinho Simples",
   version: "0.1.0",
-  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para buscas unificadas, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. Use list_categories para UUIDs. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
+  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para buscas unificadas, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. list_cards lista configura\xE7\xF5es de cart\xF5es cadastradas, n\xE3o saldos banc\xE1rios. get_card_installments consulta somente parcelas reais j\xE1 registradas; recorr\xEAncias n\xE3o fazem parte da resposta e cart\xF5es inativos podem aparecer no hist\xF3rico. N\xE3o afirme fatura paga, limite real dispon\xEDvel ou saldo banc\xE1rio. Use list_categories para UUIDs. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
@@ -2044,7 +2476,9 @@ var mcp_default = defineMcp({
     list_categories_default,
     search_transactions_default,
     get_spending_breakdown_default,
-    compare_periods_default
+    compare_periods_default,
+    list_cards_default,
+    get_card_installments_default
   ]
 });
 
