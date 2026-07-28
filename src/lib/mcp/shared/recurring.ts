@@ -29,6 +29,7 @@ export interface RecurringRow {
   start_date: string | null;
   end_date: string | null;
   is_active: boolean;
+  category?: string | null;
   category_id?: string | null;
   income_category_id?: string | null;
   category_name: string | null;

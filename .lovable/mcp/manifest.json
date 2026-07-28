@@ -3008,6 +3008,513 @@
           "additionalProperties": false,
           "$schema": "http://json-schema.org/draft-07/schema#"
         }
+      },
+      {
+        "name": "list_goals",
+        "title": "Listar metas mensais",
+        "description": "Lista metas ou limites mensais acessíveis à conta autenticada. Não representa contas de investimento, contribuições acumuladas ou metas de poupança com prazo.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string",
+              "enum": [
+                "personal",
+                "shared",
+                "all_accessible"
+              ]
+            },
+            "group_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "monthly_total",
+                "category",
+                "income_monthly_total",
+                "income_category",
+                "balance_target"
+              ]
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "cursor": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "goals": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "monthly_total",
+                      "category",
+                      "income_monthly_total",
+                      "income_category",
+                      "balance_target"
+                    ]
+                  },
+                  "category_reference": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "limit_amount": {
+                    "type": "number"
+                  },
+                  "shared_group_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "is_shared": {
+                    "type": "boolean"
+                  },
+                  "is_owner": {
+                    "type": "boolean"
+                  },
+                  "created_at": {
+                    "type": "string"
+                  },
+                  "updated_at": {
+                    "type": "string"
+                  },
+                  "data_warnings": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "INVALID_GOAL_CONFIGURATION",
+                        "CATEGORY_NOT_FOUND",
+                        "NON_POSITIVE_TARGET",
+                        "FUTURE_MONTH_NO_ACTUAL_DATA"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "id",
+                  "type",
+                  "category_reference",
+                  "limit_amount",
+                  "shared_group_id",
+                  "is_shared",
+                  "is_owner",
+                  "created_at",
+                  "updated_at",
+                  "data_warnings"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "has_more": {
+              "type": "boolean"
+            },
+            "next_cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "cursor_version": {
+              "type": "number",
+              "const": 3
+            },
+            "applied_filters": {
+              "type": "object",
+              "properties": {
+                "scope": {
+                  "type": "string",
+                  "enum": [
+                    "personal",
+                    "shared",
+                    "all_accessible"
+                  ]
+                },
+                "group_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/properties/goals/items/properties/type"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                }
+              },
+              "required": [
+                "scope",
+                "group_id",
+                "type",
+                "limit"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "goals",
+            "count",
+            "has_more",
+            "next_cursor",
+            "cursor_version",
+            "applied_filters"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      },
+      {
+        "name": "get_goal_progress",
+        "title": "Consultar progresso mensal da meta",
+        "description": "Calcula o progresso factual de uma meta ou limite mensal a partir dos lançamentos acessíveis. A projeção recorrente, quando solicitada, permanece separada e pode sobrepor lançamentos manuais.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "goal_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "reference_month": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+            },
+            "projection_mode": {
+              "type": "string",
+              "enum": [
+                "none",
+                "recurring_templates"
+              ]
+            }
+          },
+          "required": [
+            "goal_id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "goal": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "monthly_total",
+                    "category",
+                    "income_monthly_total",
+                    "income_category",
+                    "balance_target"
+                  ]
+                },
+                "category_reference": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "limit_amount": {
+                  "type": "number"
+                },
+                "shared_group_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "is_shared": {
+                  "type": "boolean"
+                },
+                "is_owner": {
+                  "type": "boolean"
+                },
+                "created_at": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "type": "string"
+                },
+                "data_warnings": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "INVALID_GOAL_CONFIGURATION",
+                      "CATEGORY_NOT_FOUND",
+                      "NON_POSITIVE_TARGET",
+                      "FUTURE_MONTH_NO_ACTUAL_DATA"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "type",
+                "category_reference",
+                "limit_amount",
+                "shared_group_id",
+                "is_shared",
+                "is_owner",
+                "created_at",
+                "updated_at",
+                "data_warnings"
+              ],
+              "additionalProperties": false
+            },
+            "reference_period": {
+              "type": "object",
+              "properties": {
+                "requested_period": {
+                  "type": "object",
+                  "properties": {
+                    "start_date": {
+                      "type": "string"
+                    },
+                    "end_date": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "start_date",
+                    "end_date"
+                  ],
+                  "additionalProperties": false
+                },
+                "effective_period": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "start_date": {
+                          "type": "string"
+                        },
+                        "end_date": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "start_date",
+                        "end_date"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "requested_period",
+                "effective_period"
+              ],
+              "additionalProperties": false
+            },
+            "actual_value": {
+              "type": "number"
+            },
+            "target_value": {
+              "type": "number"
+            },
+            "actual_percentage": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "actual_remaining": {
+              "type": "number"
+            },
+            "actual_excess": {
+              "type": "number"
+            },
+            "target_direction": {
+              "type": "string",
+              "enum": [
+                "maximum",
+                "minimum"
+              ]
+            },
+            "days_in_month": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "elapsed_days": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "remaining_days": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "transaction_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "$ref": "#/properties/goal/properties/data_warnings/items"
+              }
+            },
+            "projection_mode": {
+              "type": "string",
+              "enum": [
+                "none",
+                "recurring_templates"
+              ]
+            },
+            "recurring_projected_value": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "projected_value": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "projected_percentage": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "projected_remaining": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "projected_excess": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "recurring_templates_considered": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "projection_warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "POTENTIAL_RECURRING_OVERLAP",
+                  "MISSING_START_DATE_USING_CREATED_AT",
+                  "INVALID_START_DATE",
+                  "INVALID_END_DATE",
+                  "END_DATE_BEFORE_START_DATE",
+                  "INVALID_DAY_OF_MONTH",
+                  "NON_POSITIVE_AMOUNT",
+                  "DAY_NOT_PRESENT_IN_MONTH"
+                ]
+              }
+            }
+          },
+          "required": [
+            "goal",
+            "reference_period",
+            "actual_value",
+            "target_value",
+            "actual_percentage",
+            "actual_remaining",
+            "actual_excess",
+            "target_direction",
+            "days_in_month",
+            "elapsed_days",
+            "remaining_days",
+            "transaction_count",
+            "warnings",
+            "projection_mode",
+            "recurring_projected_value",
+            "projected_value",
+            "projected_percentage",
+            "projected_remaining",
+            "projected_excess",
+            "recurring_templates_considered",
+            "projection_warnings"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
       }
     ]
   }

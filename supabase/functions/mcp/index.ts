@@ -220,8 +220,8 @@ function bytesToBase64Url(bytes) {
 function base64UrlToBytes(value) {
   if (!BASE64URL_RE.test(value)) return null;
   try {
-    const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
-    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    const normalized2 = value.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized2.padEnd(Math.ceil(normalized2.length / 4) * 4, "=");
     return Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
   } catch {
     return null;
@@ -256,12 +256,12 @@ async function sha256Bytes(value) {
 }
 async function filtersFingerprint(context, filters) {
   const resolvedFilters = normalizeFingerprintFilters(filters);
-  const normalized = {
+  const normalized2 = {
     context,
     ...resolvedFilters,
     query: typeof resolvedFilters.query === "string" ? escapeIlikePattern(resolvedFilters.query).toLocaleLowerCase("pt-BR") : null
   };
-  return [...await sha256Bytes(canonicalJson(normalized))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return [...await sha256Bytes(canonicalJson(normalized2))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 function getCursorSecret() {
   const value = process.env.MCP_CURSOR_SECRET?.trim();
@@ -1199,8 +1199,8 @@ import { z as z8 } from "npm:zod@^3.25.76";
 
 // src/lib/mcp/shared/content.ts
 function compactText(value, maxLength) {
-  const normalized = value.replace(/\s+/gu, " ").trim();
-  return normalized.length <= maxLength ? normalized : `${normalized.slice(0, Math.max(0, maxLength - 1))}\u2026`;
+  const normalized2 = value.replace(/\s+/gu, " ").trim();
+  return normalized2.length <= maxLength ? normalized2 : `${normalized2.slice(0, Math.max(0, maxLength - 1))}\u2026`;
 }
 function transactionContent(items, scope, timeScope, transactionType, hasMore, nextCursor, limit = items.length, cursorVersion = 3, appliedFilters = {}) {
   const preview = items.slice(0, 10).map(
@@ -2051,8 +2051,8 @@ function bytesToBase64Url2(bytes) {
 function base64UrlToBytes2(value) {
   if (!BASE64URL_RE2.test(value)) return null;
   try {
-    const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
-    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    const normalized2 = value.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized2.padEnd(Math.ceil(normalized2.length / 4) * 4, "=");
     return Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
   } catch {
     return null;
@@ -3362,13 +3362,564 @@ var get_recurring_forecast_default = defineTool15({
   }
 });
 
+// src/lib/mcp/tools/list-goals.ts
+import { defineTool as defineTool16 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z16 } from "npm:zod@^3.25.76";
+
+// src/lib/mcp/shared/goals.ts
+var GOAL_TYPES = [
+  "monthly_total",
+  "category",
+  "income_monthly_total",
+  "income_category",
+  "balance_target"
+];
+var GOAL_WARNINGS = [
+  "INVALID_GOAL_CONFIGURATION",
+  "CATEGORY_NOT_FOUND",
+  "NON_POSITIVE_TARGET",
+  "FUTURE_MONTH_NO_ACTUAL_DATA"
+];
+var PROJECTION_WARNINGS = [
+  "POTENTIAL_RECURRING_OVERLAP",
+  "MISSING_START_DATE_USING_CREATED_AT",
+  "INVALID_START_DATE",
+  "INVALID_END_DATE",
+  "END_DATE_BEFORE_START_DATE",
+  "INVALID_DAY_OF_MONTH",
+  "NON_POSITIVE_AMOUNT",
+  "DAY_NOT_PRESENT_IN_MONTH"
+];
+var UUID_RE3 = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+var EXPENSE_CATEGORY_LABELS = {
+  alimentacao: "alimenta\xE7\xE3o",
+  transporte: "transporte",
+  lazer: "lazer",
+  saude: "sa\xFAde",
+  educacao: "educa\xE7\xE3o",
+  moradia: "moradia",
+  vestuario: "vestu\xE1rio",
+  servicos: "servi\xE7os",
+  outros: "outros"
+};
+var INCOME_CATEGORY_LABELS = {
+  salario: "sal\xE1rio",
+  freelance: "freelance",
+  investimentos: "investimentos",
+  vendas: "vendas",
+  bonus: "b\xF4nus",
+  presente: "presente",
+  reembolso: "reembolso",
+  aluguel: "aluguel",
+  outros: "outros"
+};
+function normalized(value) {
+  return (value ?? "").trim().toLocaleLowerCase("pt-BR");
+}
+function goalDataWarnings(row) {
+  const warnings = [];
+  const categoryType = row.type === "category" || row.type === "income_category";
+  if (categoryType && !row.category || !categoryType && row.category !== null) {
+    warnings.push("INVALID_GOAL_CONFIGURATION");
+  }
+  if (!Number.isFinite(Number(row.limit_amount)) || Number(row.limit_amount) <= 0) {
+    warnings.push("INVALID_GOAL_CONFIGURATION", "NON_POSITIVE_TARGET");
+  }
+  return [...new Set(warnings)];
+}
+function goalItem(row, userId) {
+  return {
+    id: row.id,
+    type: row.type,
+    category_reference: row.category,
+    limit_amount: Number(row.limit_amount),
+    shared_group_id: row.shared_group_id,
+    is_shared: row.shared_group_id !== null,
+    is_owner: row.user_id === userId,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    data_warnings: goalDataWarnings(row)
+  };
+}
+function compareGoals(left, right) {
+  return GOAL_TYPES.indexOf(left.type) - GOAL_TYPES.indexOf(right.type) || (left.category_reference ?? "").localeCompare(
+    right.category_reference ?? "",
+    "pt-BR"
+  ) || left.id.localeCompare(right.id);
+}
+function goalCursorSortValue(goal) {
+  return JSON.stringify([goal.type, goal.category_reference]);
+}
+function resolveGoalReferencePeriod(referenceMonth, now = /* @__PURE__ */ new Date()) {
+  const current = currentMonthRange(now);
+  const month = referenceMonth ?? current.from.slice(0, 7);
+  const [year, numericMonth] = month.split("-").map(Number);
+  const days = new Date(Date.UTC(year, numericMonth, 0)).getUTCDate();
+  const requested = {
+    start_date: `${month}-01`,
+    end_date: `${month}-${String(days).padStart(2, "0")}`
+  };
+  const today = todayIso(now);
+  if (requested.start_date > today) {
+    return {
+      requested_period: requested,
+      effective_period: null,
+      days_in_month: days,
+      elapsed_days: 0,
+      remaining_days: days,
+      is_future: true
+    };
+  }
+  const effectiveEnd = requested.end_date < today ? requested.end_date : today;
+  const elapsed = inclusiveDays(requested.start_date, effectiveEnd);
+  return {
+    requested_period: requested,
+    effective_period: {
+      start_date: requested.start_date,
+      end_date: effectiveEnd
+    },
+    days_in_month: days,
+    elapsed_days: elapsed,
+    remaining_days: days - elapsed,
+    is_future: false
+  };
+}
+function goalDirection(type) {
+  return type === "monthly_total" || type === "category" ? "maximum" : "minimum";
+}
+function expenseMatchesGoalCategory(row, reference) {
+  if (UUID_RE3.test(reference)) return row.category_id?.toLowerCase() === reference.toLowerCase();
+  const expected = normalized(EXPENSE_CATEGORY_LABELS[reference] ?? reference);
+  return normalized(row.category) === normalized(reference) || normalized(row.category_name) === expected || normalized(row.category_name) === normalized(reference);
+}
+function incomeMatchesGoalCategory(row, reference) {
+  if (UUID_RE3.test(reference)) {
+    return row.income_category_id?.toLowerCase() === reference.toLowerCase();
+  }
+  const expected = normalized(INCOME_CATEGORY_LABELS[reference] ?? reference);
+  return normalized(row.category) === normalized(reference) || normalized(row.category_name) === expected || normalized(row.category_name) === normalized(reference);
+}
+function goalMetrics(actualValue, targetValue) {
+  const actual = roundFinancial(actualValue);
+  const target = roundFinancial(targetValue);
+  return {
+    actual_value: actual,
+    target_value: target,
+    actual_percentage: target > 0 ? roundFinancial(actual / target * 100) : null,
+    actual_remaining: roundFinancial(Math.max(target - actual, 0)),
+    actual_excess: roundFinancial(Math.max(actual - target, 0))
+  };
+}
+
+// src/lib/mcp/tools/list-goals.ts
+var CURSOR_CONTEXT7 = "list_goals";
+var CURSOR_SORT2 = "type|category_reference|id";
+var goalTypeSchema = z16.enum(GOAL_TYPES);
+var warningSchema5 = z16.enum(GOAL_WARNINGS);
+var goalSchema = z16.object({
+  id: z16.string().uuid(),
+  type: goalTypeSchema,
+  category_reference: z16.string().nullable(),
+  limit_amount: z16.number(),
+  shared_group_id: z16.string().uuid().nullable(),
+  is_shared: z16.boolean(),
+  is_owner: z16.boolean(),
+  created_at: z16.string(),
+  updated_at: z16.string(),
+  data_warnings: z16.array(warningSchema5)
+}).strict();
+function postgrestString(value) {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+var list_goals_default = defineTool16({
+  name: "list_goals",
+  title: "Listar metas mensais",
+  description: "Lista metas ou limites mensais acess\xEDveis \xE0 conta autenticada. N\xE3o representa contas de investimento, contribui\xE7\xF5es acumuladas ou metas de poupan\xE7a com prazo.",
+  inputSchema: {
+    scope: z16.enum(["personal", "shared", "all_accessible"]).optional(),
+    group_id: z16.string().uuid().optional(),
+    type: goalTypeSchema.optional(),
+    limit: z16.number().int().min(1).max(100).optional(),
+    cursor: z16.string().min(1).max(1e3).optional()
+  },
+  outputSchema: {
+    goals: z16.array(goalSchema),
+    count: z16.number().int().nonnegative(),
+    has_more: z16.boolean(),
+    next_cursor: z16.string().nullable(),
+    cursor_version: z16.literal(3),
+    applied_filters: z16.object({
+      scope: z16.enum(["personal", "shared", "all_accessible"]),
+      group_id: z16.string().uuid().nullable(),
+      type: goalTypeSchema.nullable(),
+      limit: z16.number().int().min(1).max(100)
+    }).strict()
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async (input, ctx) => {
+    const userId = ctx.getUserId();
+    if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
+    const scope = input.scope ?? "personal";
+    const limit = input.limit ?? 20;
+    const appliedFilters = {
+      scope,
+      group_id: input.group_id ?? null,
+      type: input.type ?? null,
+      limit
+    };
+    const cursorSecret = getCursorSecret();
+    if (!cursorSecret) return mcpError("INTERNAL_ERROR");
+    const fingerprint = await filtersFingerprint(
+      CURSOR_CONTEXT7,
+      appliedFilters
+    );
+    const cursor = await decodeResourceCursor(
+      input.cursor,
+      {
+        context: CURSOR_CONTEXT7,
+        sort_by: CURSOR_SORT2,
+        sort_order: "asc",
+        filters_fingerprint: fingerprint
+      },
+      cursorSecret
+    );
+    if (input.cursor && !cursor) return mcpError("INVALID_CURSOR");
+    let query = supabaseForUser(ctx).from("budget_goals").select(
+      "id,user_id,type,category,limit_amount,shared_group_id,created_at,updated_at"
+    );
+    if (scope === "personal") query = query.eq("user_id", userId);
+    if (scope === "shared") query = query.not("shared_group_id", "is", null);
+    if (input.group_id) query = query.eq("shared_group_id", input.group_id);
+    if (input.type) query = query.eq("type", input.type);
+    if (cursor) {
+      let decoded;
+      try {
+        decoded = JSON.parse(cursor.sort_value);
+      } catch {
+        return mcpError("INVALID_CURSOR");
+      }
+      const [type, category] = decoded;
+      if (!GOAL_TYPES.includes(type) || category !== null && typeof category !== "string") {
+        return mcpError("INVALID_CURSOR");
+      }
+      const quotedType = postgrestString(type);
+      query = category === null ? query.or(
+        `type.gt.${quotedType},and(type.eq.${quotedType},category.not.is.null),and(type.eq.${quotedType},category.is.null,id.gt.${cursor.id})`
+      ) : query.or(
+        `type.gt.${quotedType},and(type.eq.${quotedType},category.gt.${postgrestString(category)}),and(type.eq.${quotedType},category.eq.${postgrestString(category)},id.gt.${cursor.id})`
+      );
+    }
+    const { data, error } = await query.order("type", { ascending: true }).order("category", { ascending: true, nullsFirst: true }).order("id", { ascending: true }).limit(limit + 1);
+    if (error) return mcpError("INTERNAL_ERROR");
+    const combined = (data ?? []).map((row) => goalItem(row, userId)).sort(compareGoals);
+    const hasMore = combined.length > limit;
+    const goals = combined.slice(0, limit);
+    const last = goals.at(-1);
+    const nextCursor = hasMore && last ? await encodeResourceCursor(
+      {
+        context: CURSOR_CONTEXT7,
+        sort_by: CURSOR_SORT2,
+        sort_order: "asc",
+        sort_value: goalCursorSortValue(last),
+        id: last.id,
+        filters_fingerprint: fingerprint
+      },
+      cursorSecret
+    ) : null;
+    const result = {
+      goals,
+      count: goals.length,
+      has_more: hasMore,
+      next_cursor: nextCursor,
+      cursor_version: CURSOR_VERSION,
+      applied_filters: appliedFilters
+    };
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Estas s\xE3o metas ou limites mensais. N\xE3o representam contas de investimento, contribui\xE7\xF5es acumuladas ou metas de poupan\xE7a com prazo. Filtros=${JSON.stringify(appliedFilters)}; count=${goals.length}; has_more=${hasMore}; cursor_version=${CURSOR_VERSION}; next_cursor=${nextCursor ?? "null"}. Metas (m\xE1ximo 10)=${JSON.stringify(goals.slice(0, 10))}; metas omitidas do content=${Math.max(0, goals.length - 10)}.`
+        }
+      ],
+      structuredContent: result
+    };
+  }
+});
+
+// src/lib/mcp/tools/get-goal-progress.ts
+import { defineTool as defineTool17 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z17 } from "npm:zod@^3.25.76";
+var TRANSACTION_CAP = 1e4;
+var TEMPLATE_CAP2 = 100;
+var MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+var goalTypeSchema2 = z17.enum(GOAL_TYPES);
+var goalWarningSchema = z17.enum(GOAL_WARNINGS);
+var projectionWarningSchema = z17.enum(PROJECTION_WARNINGS);
+var goalSchema2 = z17.object({
+  id: z17.string().uuid(),
+  type: goalTypeSchema2,
+  category_reference: z17.string().nullable(),
+  limit_amount: z17.number(),
+  shared_group_id: z17.string().uuid().nullable(),
+  is_shared: z17.boolean(),
+  is_owner: z17.boolean(),
+  created_at: z17.string(),
+  updated_at: z17.string(),
+  data_warnings: z17.array(goalWarningSchema)
+}).strict();
+var get_goal_progress_default = defineTool17({
+  name: "get_goal_progress",
+  title: "Consultar progresso mensal da meta",
+  description: "Calcula o progresso factual de uma meta ou limite mensal a partir dos lan\xE7amentos acess\xEDveis. A proje\xE7\xE3o recorrente, quando solicitada, permanece separada e pode sobrepor lan\xE7amentos manuais.",
+  inputSchema: {
+    goal_id: z17.string().uuid(),
+    reference_month: z17.string().regex(MONTH_RE).optional(),
+    projection_mode: z17.enum(["none", "recurring_templates"]).optional()
+  },
+  outputSchema: {
+    goal: goalSchema2,
+    reference_period: z17.object({
+      requested_period: z17.object({
+        start_date: z17.string(),
+        end_date: z17.string()
+      }).strict(),
+      effective_period: z17.object({
+        start_date: z17.string(),
+        end_date: z17.string()
+      }).strict().nullable()
+    }).strict(),
+    actual_value: z17.number(),
+    target_value: z17.number(),
+    actual_percentage: z17.number().nullable(),
+    actual_remaining: z17.number(),
+    actual_excess: z17.number(),
+    target_direction: z17.enum(["maximum", "minimum"]),
+    days_in_month: z17.number().int().positive(),
+    elapsed_days: z17.number().int().nonnegative(),
+    remaining_days: z17.number().int().nonnegative(),
+    transaction_count: z17.number().int().nonnegative(),
+    warnings: z17.array(goalWarningSchema),
+    projection_mode: z17.enum(["none", "recurring_templates"]),
+    recurring_projected_value: z17.number().nullable(),
+    projected_value: z17.number().nullable(),
+    projected_percentage: z17.number().nullable(),
+    projected_remaining: z17.number().nullable(),
+    projected_excess: z17.number().nullable(),
+    recurring_templates_considered: z17.number().int().nonnegative().nullable(),
+    projection_warnings: z17.array(projectionWarningSchema)
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async (input, ctx) => {
+    const userId = ctx.getUserId();
+    if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
+    const projectionMode = input.projection_mode ?? "none";
+    const supabase = supabaseForUser(ctx);
+    const { data: rawGoal, error: goalError } = await supabase.from("budget_goals").select(
+      "id,user_id,type,category,limit_amount,shared_group_id,created_at,updated_at"
+    ).eq("id", input.goal_id).maybeSingle();
+    if (goalError) return mcpError("INTERNAL_ERROR");
+    if (!rawGoal) return mcpError("RESOURCE_NOT_FOUND");
+    if (!GOAL_TYPES.includes(rawGoal.type)) return mcpError("INVALID_DATA");
+    const goalRow = rawGoal;
+    const publicGoal = goalItem(goalRow, userId);
+    const reference = resolveGoalReferencePeriod(input.reference_month);
+    const configureGoalScope = (query) => {
+      if (goalRow.shared_group_id !== null) {
+        return query.eq("shared_group_id", goalRow.shared_group_id);
+      }
+      return query.eq("user_id", goalRow.user_id).is("shared_group_id", null);
+    };
+    const fetchRows = async (table, columns, dateColumn) => {
+      if (!reference.effective_period) return { ok: true, rows: [] };
+      const rows = [];
+      let offset = 0;
+      while (offset <= TRANSACTION_CAP) {
+        const end = Math.min(offset + 999, TRANSACTION_CAP);
+        const query = configureGoalScope(
+          supabase.from(table).select(columns).gte(dateColumn, reference.effective_period.start_date).lte(dateColumn, reference.effective_period.end_date).order("id", { ascending: true })
+        ).range(offset, end);
+        const { data, error } = await query;
+        if (error) return { ok: false, tooLarge: false };
+        const page = data ?? [];
+        rows.push(...page);
+        if (rows.length > TRANSACTION_CAP) {
+          return { ok: false, tooLarge: true };
+        }
+        if (page.length < end - offset + 1) return { ok: true, rows };
+        offset = end + 1;
+      }
+      return { ok: false, tooLarge: true };
+    };
+    const needsExpenses = goalRow.type === "monthly_total" || goalRow.type === "category" || goalRow.type === "balance_target";
+    const needsIncomes = goalRow.type === "income_monthly_total" || goalRow.type === "income_category" || goalRow.type === "balance_target";
+    const [expenseResult, incomeResult] = await Promise.all([
+      needsExpenses ? fetchRows(
+        "expenses",
+        "id,amount,category,category_id,category_name",
+        "expense_date"
+      ) : Promise.resolve({ ok: true, rows: [] }),
+      needsIncomes ? fetchRows(
+        "incomes",
+        "id,amount,category,income_category_id,category_name",
+        "income_date"
+      ) : Promise.resolve({ ok: true, rows: [] })
+    ]);
+    if (!expenseResult.ok || !incomeResult.ok) {
+      return mcpError(
+        expenseResult.ok === false && expenseResult.tooLarge || incomeResult.ok === false && incomeResult.tooLarge ? "RESULT_SET_TOO_LARGE" : "INTERNAL_ERROR"
+      );
+    }
+    const categoryReference = goalRow.category;
+    const matchingExpenses = goalRow.type === "category" && categoryReference ? expenseResult.rows.filter((row) => expenseMatchesGoalCategory(row, categoryReference)) : expenseResult.rows;
+    const matchingIncomes = goalRow.type === "income_category" && categoryReference ? incomeResult.rows.filter((row) => incomeMatchesGoalCategory(row, categoryReference)) : incomeResult.rows;
+    const expenseTotal = roundFinancial(
+      matchingExpenses.reduce((sum, row) => sum + Number(row.amount), 0)
+    );
+    const incomeTotal = roundFinancial(
+      matchingIncomes.reduce((sum, row) => sum + Number(row.amount), 0)
+    );
+    const actualValue = goalRow.type === "balance_target" ? roundFinancial(incomeTotal - expenseTotal) : goalRow.type === "income_monthly_total" || goalRow.type === "income_category" ? incomeTotal : expenseTotal;
+    const transactionCount = goalRow.type === "balance_target" ? matchingExpenses.length + matchingIncomes.length : goalRow.type === "income_monthly_total" || goalRow.type === "income_category" ? matchingIncomes.length : matchingExpenses.length;
+    const warnings = goalDataWarnings(goalRow);
+    if (reference.is_future) warnings.push("FUTURE_MONTH_NO_ACTUAL_DATA");
+    if ((goalRow.type === "category" || goalRow.type === "income_category") && transactionCount === 0) {
+      warnings.push("CATEGORY_NOT_FOUND");
+    }
+    const uniqueWarnings = [...new Set(warnings)];
+    const actualMetrics = goalMetrics(actualValue, Number(goalRow.limit_amount));
+    let recurringProjectedValue = null;
+    let projectedValue = null;
+    let projectedPercentage = null;
+    let projectedRemaining = null;
+    let projectedExcess = null;
+    let recurringTemplatesConsidered = null;
+    let projectionWarnings = [];
+    if (projectionMode === "recurring_templates") {
+      const configureTemplateQuery = (query) => configureGoalScope(query.eq("is_active", true));
+      const expenseTemplatesPromise = needsExpenses ? configureTemplateQuery(
+        supabase.from("recurring_expenses").select(
+          "id,user_id,description,amount,day_of_month,start_date,end_date,is_active,category,category_id,category_name,shared_group_id,created_at,updated_at,payment_method,card_id,card_name"
+        )
+      ).limit(TEMPLATE_CAP2 + 1) : Promise.resolve({ data: [], error: null });
+      const incomeTemplatesPromise = needsIncomes ? configureTemplateQuery(
+        supabase.from("recurring_incomes").select(
+          "id,user_id,description,amount,day_of_month,start_date,end_date,is_active,category,income_category_id,category_name,shared_group_id,created_at,updated_at"
+        )
+      ).limit(TEMPLATE_CAP2 + 1) : Promise.resolve({ data: [], error: null });
+      const [expenseTemplatesResult, incomeTemplatesResult] = await Promise.all([
+        expenseTemplatesPromise,
+        incomeTemplatesPromise
+      ]);
+      if (expenseTemplatesResult.error || incomeTemplatesResult.error) {
+        return mcpError("INTERNAL_ERROR");
+      }
+      let expenseTemplateRows = expenseTemplatesResult.data ?? [];
+      let incomeTemplateRows = incomeTemplatesResult.data ?? [];
+      if (expenseTemplateRows.length + incomeTemplateRows.length > TEMPLATE_CAP2) {
+        return mcpError("RESULT_SET_TOO_LARGE");
+      }
+      if (goalRow.type === "category" && categoryReference) {
+        expenseTemplateRows = expenseTemplateRows.filter((row) => expenseMatchesGoalCategory(
+          {
+            category: row.category ?? null,
+            category_id: row.category_id ?? null,
+            category_name: row.category_name
+          },
+          categoryReference
+        ));
+      }
+      if (goalRow.type === "income_category" && categoryReference) {
+        incomeTemplateRows = incomeTemplateRows.filter((row) => incomeMatchesGoalCategory(
+          {
+            category: row.category ?? null,
+            income_category_id: row.income_category_id ?? null,
+            category_name: row.category_name
+          },
+          categoryReference
+        ));
+      }
+      const templates = [
+        ...expenseTemplateRows.map((row) => recurringItem(row, "expense", userId)),
+        ...incomeTemplateRows.map((row) => recurringItem(row, "income", userId))
+      ];
+      const projection = projectRecurringTemplates(
+        templates,
+        reference.requested_period.start_date,
+        reference.requested_period.end_date,
+        "month"
+      );
+      if (projection.ok === false) return mcpError(projection.code);
+      const today = reference.effective_period?.end_date ?? (reference.is_future ? "" : reference.requested_period.end_date);
+      const remainingOccurrences = projection.occurrences.filter(
+        (occurrence) => reference.is_future || occurrence.date > today
+      );
+      const validRemaining = remainingOccurrences.filter(
+        (occurrence) => !occurrence.data_warnings.includes("NON_POSITIVE_AMOUNT")
+      );
+      const recurringExpenses = roundFinancial(
+        validRemaining.filter((item) => item.transaction_type === "expense").reduce((sum, item) => sum + item.amount, 0)
+      );
+      const recurringIncome = roundFinancial(
+        validRemaining.filter((item) => item.transaction_type === "income").reduce((sum, item) => sum + item.amount, 0)
+      );
+      recurringProjectedValue = goalRow.type === "balance_target" ? roundFinancial(recurringIncome - recurringExpenses) : goalRow.type === "income_monthly_total" || goalRow.type === "income_category" ? recurringIncome : recurringExpenses;
+      projectedValue = roundFinancial(actualValue + recurringProjectedValue);
+      const projectedMetrics = goalMetrics(
+        projectedValue,
+        Number(goalRow.limit_amount)
+      );
+      projectedPercentage = projectedMetrics.actual_percentage;
+      projectedRemaining = projectedMetrics.actual_remaining;
+      projectedExcess = projectedMetrics.actual_excess;
+      recurringTemplatesConsidered = templates.length;
+      projectionWarnings = [
+        "POTENTIAL_RECURRING_OVERLAP",
+        ...projection.warnings
+      ];
+      projectionWarnings = [...new Set(projectionWarnings)];
+    }
+    const result = {
+      goal: publicGoal,
+      reference_period: {
+        requested_period: reference.requested_period,
+        effective_period: reference.effective_period
+      },
+      ...actualMetrics,
+      target_direction: goalDirection(goalRow.type),
+      days_in_month: reference.days_in_month,
+      elapsed_days: reference.elapsed_days,
+      remaining_days: reference.remaining_days,
+      transaction_count: transactionCount,
+      warnings: uniqueWarnings,
+      projection_mode: projectionMode,
+      recurring_projected_value: recurringProjectedValue,
+      projected_value: projectedValue,
+      projected_percentage: projectedPercentage,
+      projected_remaining: projectedRemaining,
+      projected_excess: projectedExcess,
+      recurring_templates_considered: recurringTemplatesConsidered,
+      projection_warnings: projectionWarnings
+    };
+    const projectionText = projectionMode === "recurring_templates" ? `Proje\xE7\xE3o recorrente separada: recurring_projected_value=${recurringProjectedValue}; projected_value=${projectedValue}; projected_percentage=${projectedPercentage ?? "null"}; projected_remaining=${projectedRemaining}; projected_excess=${projectedExcess}; recurring_templates_considered=${recurringTemplatesConsidered}; projection_warnings=${JSON.stringify(projectionWarnings)}. N\xE3o existe v\xEDnculo entre templates e lan\xE7amentos reais; a proje\xE7\xE3o pode contar um compromisso j\xE1 lan\xE7ado manualmente. ` : "Proje\xE7\xE3o recorrente n\xE3o solicitada. ";
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Meta mensal: type=${goalRow.type}; category_reference=${goalRow.category ?? "null"}; reference_month=${input.reference_month ?? reference.requested_period.start_date.slice(0, 7)}; requested_period=${JSON.stringify(reference.requested_period)}; effective_period=${JSON.stringify(reference.effective_period)}. Valor realizado=${actualMetrics.actual_value}; alvo=${actualMetrics.target_value}; percentual=${actualMetrics.actual_percentage ?? "null"}; restante=${actualMetrics.actual_remaining}; excesso=${actualMetrics.actual_excess}; dire\xE7\xE3o=${goalDirection(goalRow.type)}; transaction_count=${transactionCount}; dias decorridos=${reference.elapsed_days}; dias restantes=${reference.remaining_days}. ${projectionText}warnings=${JSON.stringify(uniqueWarnings)}. Estas s\xE3o metas ou limites mensais, n\xE3o contas de investimento, contribui\xE7\xF5es acumuladas ou metas de poupan\xE7a com prazo.`
+        }
+      ],
+      structuredContent: result
+    };
+  }
+});
+
 // src/lib/mcp/index.ts
 var projectRef = "jaoldaqvbdllowepzwbr";
 var mcp_default = defineMcp({
   name: "gastinho-simples-mcp",
   title: "Gastinho Simples",
   version: "0.1.0",
-  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para lan\xE7amentos reais, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. Use list_cards para localizar o cart\xE3o, get_card_installments para parcelas reais j\xE1 materializadas e get_card_summary para o total registrado no per\xEDodo calculado. Recorr\xEAncias s\xE3o templates mensais: use list_recurring_transactions para list\xE1-las e get_recurring_forecast apenas para proje\xE7\xF5es baseadas nesses templates. O forecast n\xE3o representa transa\xE7\xF5es efetivamente lan\xE7adas e nunca deve ser somado automaticamente a parcelas ou lan\xE7amentos futuros. Nunca chame resultados de saldo banc\xE1rio, limite real dispon\xEDvel ou fatura oficialmente paga/em aberto. Use list_categories para UUIDs. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
+  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para lan\xE7amentos reais, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. Use list_cards para localizar o cart\xE3o, get_card_installments para parcelas reais j\xE1 materializadas e get_card_summary para o total registrado no per\xEDodo calculado. Recorr\xEAncias s\xE3o templates mensais: use list_recurring_transactions para list\xE1-las e get_recurring_forecast apenas para proje\xE7\xF5es baseadas nesses templates. Metas tamb\xE9m s\xE3o mensais: use list_goals e get_goal_progress; elas n\xE3o s\xE3o metas de poupan\xE7a com contribui\xE7\xF5es. Mantenha realizado e recorrente separados, informe o risco de sobreposi\xE7\xE3o da proje\xE7\xE3o e n\xE3o gere recomenda\xE7\xE3o financeira. O forecast n\xE3o representa transa\xE7\xF5es efetivamente lan\xE7adas e nunca deve ser somado automaticamente a parcelas ou lan\xE7amentos futuros. Nunca chame resultados de saldo banc\xE1rio, limite real dispon\xEDvel ou fatura oficialmente paga/em aberto. Use list_categories para UUIDs. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
@@ -3388,7 +3939,9 @@ var mcp_default = defineMcp({
     get_card_installments_default,
     get_card_summary_default,
     list_recurring_transactions_default,
-    get_recurring_forecast_default
+    get_recurring_forecast_default,
+    list_goals_default,
+    get_goal_progress_default
   ]
 });
 
