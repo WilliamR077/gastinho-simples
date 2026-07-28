@@ -2261,6 +2261,9 @@ var INSTALLMENT_SERIES_WARNINGS = [
   "SERIES_COMPLETENESS_NOT_VERIFIED",
   "INCONSISTENT_INSTALLMENT_METADATA_PRESENT"
 ];
+function hasInstallmentEvidence(row) {
+  return row.installment_group_id !== null || (row.installment_number ?? 0) > 1 || (row.total_installments ?? 0) > 1;
+}
 function installmentWarnings(row) {
   const warnings = [];
   if (row.installment_number === null) warnings.push("MISSING_INSTALLMENT_NUMBER");
@@ -2455,13 +2458,310 @@ var get_card_installments_default = defineTool12({
   }
 });
 
+// src/lib/mcp/tools/get-card-summary.ts
+import { defineTool as defineTool13 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z13 } from "npm:zod@^3.25.76";
+
+// src/lib/mcp/shared/card-summary.ts
+import {
+  calculateBillingPeriod,
+  getClosingDateForBillingMonth
+} from "npm:@/utils/billing-period";
+var CARD_SUMMARY_WARNINGS = [
+  "INACTIVE_CARD",
+  "INVALID_CARD_CONFIGURATION",
+  "CREDIT_EXPENSE_WITHOUT_EXPECTED_METADATA",
+  "BILLING_TOTAL_IS_CALCULATED",
+  "PAYMENT_STATUS_NOT_AVAILABLE"
+];
+var BILLING_MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+function isValidDay(value) {
+  return Number.isInteger(value) && value !== null && value >= 1 && value <= 31;
+}
+function isValidDaysBeforeDue(value) {
+  return Number.isInteger(value) && value !== null && value >= 1 && value <= 31;
+}
+function localIso(date) {
+  return [
+    String(date.getFullYear()).padStart(4, "0"),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0")
+  ].join("-");
+}
+function addLocalDays(date, days) {
+  const result = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  result.setDate(result.getDate() + days);
+  return result;
+}
+function legacyPeriod(billingMonth, openingDay, closingDay) {
+  const [year, month] = billingMonth.split("-").map(Number);
+  const anchor = new Date(year, month - 1, 1);
+  const config = {
+    opening_day: openingDay,
+    closing_day: closingDay
+  };
+  const matchingDates = [];
+  for (let offset = -62; offset <= 62; offset += 1) {
+    const candidate = addLocalDays(anchor, offset);
+    if (calculateBillingPeriod(candidate, config) === billingMonth) {
+      matchingDates.push(candidate);
+    }
+  }
+  if (matchingDates.length === 0) return null;
+  for (let index = 1; index < matchingDates.length; index += 1) {
+    if (localIso(addLocalDays(matchingDates[index - 1], 1)) !== localIso(matchingDates[index])) {
+      return null;
+    }
+  }
+  return {
+    start_date: localIso(matchingDates[0]),
+    end_date: localIso(matchingDates.at(-1))
+  };
+}
+function resolveCardBillingPeriod(billingMonth, config) {
+  if (!BILLING_MONTH_RE.test(billingMonth)) return null;
+  const [year, month] = billingMonth.split("-").map(Number);
+  const zeroBasedMonth = month - 1;
+  const modernValid = isValidDay(config.due_day) && isValidDaysBeforeDue(config.days_before_due);
+  if (modernValid) {
+    const current = getClosingDateForBillingMonth(
+      year,
+      zeroBasedMonth,
+      config.due_day,
+      config.days_before_due
+    );
+    const previousMonth = zeroBasedMonth === 0 ? 11 : zeroBasedMonth - 1;
+    const previousYear = zeroBasedMonth === 0 ? year - 1 : year;
+    const previous = getClosingDateForBillingMonth(
+      previousYear,
+      previousMonth,
+      config.due_day,
+      config.days_before_due
+    );
+    return {
+      billing_month: billingMonth,
+      start_date: localIso(addLocalDays(previous.closingDate, 1)),
+      end_date: localIso(current.closingDate),
+      closing_date: localIso(current.closingDate),
+      due_date: localIso(current.dueDate),
+      calculation_mode: "due_date",
+      configuration_warning: false
+    };
+  }
+  if (!isValidDay(config.opening_day) || !isValidDay(config.closing_day)) {
+    return null;
+  }
+  const period = legacyPeriod(
+    billingMonth,
+    config.opening_day,
+    config.closing_day
+  );
+  if (!period) return null;
+  return {
+    billing_month: billingMonth,
+    ...period,
+    closing_date: period.end_date,
+    due_date: null,
+    calculation_mode: "legacy_opening_closing",
+    configuration_warning: true
+  };
+}
+
+// src/lib/mcp/tools/get-card-summary.ts
+var HARD_CAP = 1e4;
+var BILLING_MONTH_RE2 = /^\d{4}-(0[1-9]|1[0-2])$/;
+var warningSchema2 = z13.enum(CARD_SUMMARY_WARNINGS);
+var cardSchema3 = z13.object({
+  id: z13.string().uuid(),
+  name: z13.string(),
+  card_type: z13.enum(["credit", "debit", "both"]),
+  is_active: z13.boolean(),
+  card_limit: z13.number().nullable(),
+  opening_day: z13.number().int().nullable(),
+  closing_day: z13.number().int().nullable(),
+  due_day: z13.number().int().nullable(),
+  days_before_due: z13.number().int().nullable()
+}).strict();
+var billingPeriodSchema = z13.object({
+  billing_month: z13.string().regex(BILLING_MONTH_RE2),
+  start_date: z13.string(),
+  end_date: z13.string(),
+  closing_date: z13.string().nullable(),
+  due_date: z13.string().nullable(),
+  calculation_mode: z13.enum(["due_date", "legacy_opening_closing"])
+}).strict();
+var largestTransactionSchema2 = z13.object({
+  transaction_id: z13.string().uuid(),
+  description: z13.string(),
+  amount: z13.number(),
+  date: z13.string(),
+  category_name: z13.string().nullable(),
+  installment_number: z13.number().int().nullable(),
+  total_installments: z13.number().int().nullable()
+}).strict();
+var categorySummarySchema = z13.object({
+  category_name: z13.string(),
+  total: z13.number(),
+  transaction_count: z13.number().int().nonnegative(),
+  percentage: z13.number()
+}).strict();
+var get_card_summary_default = defineTool13({
+  name: "get_card_summary",
+  title: "Resumir lan\xE7amentos do cart\xE3o",
+  description: "Calcula um resumo factual dos lan\xE7amentos pr\xF3prios de cr\xE9dito registrados no Gastinho para o per\xEDodo do cart\xE3o. billing_month \xE9 o m\xEAs de refer\xEAncia da fatura calculada; n\xE3o informa pagamento, quita\xE7\xE3o, saldo banc\xE1rio ou fatura oficial do emissor.",
+  inputSchema: {
+    card_id: z13.string().uuid(),
+    billing_month: z13.string().regex(BILLING_MONTH_RE2).optional(),
+    time_scope: z13.enum(["occurred", "all"]).optional()
+  },
+  outputSchema: {
+    card: cardSchema3,
+    billing_period: billingPeriodSchema,
+    metrics: z13.object({
+      registered_total: z13.number(),
+      occurred_total: z13.number(),
+      future_materialized_total: z13.number(),
+      transaction_count: z13.number().int().nonnegative(),
+      occurred_transaction_count: z13.number().int().nonnegative(),
+      future_transaction_count: z13.number().int().nonnegative(),
+      installment_total: z13.number(),
+      non_installment_total: z13.number()
+    }).strict(),
+    largest_transaction: largestTransactionSchema2.nullable(),
+    categories_summary: z13.array(categorySummarySchema).max(10),
+    data_complete: z13.boolean(),
+    warnings: z13.array(warningSchema2)
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async (input, ctx) => {
+    const userId = ctx.getUserId();
+    if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
+    const billingMonth = input.billing_month ?? currentMonthRange().from.slice(0, 7);
+    const timeScope = input.time_scope ?? "all";
+    const supabase = supabaseForUser(ctx);
+    const { data: card, error: cardError } = await supabase.from("cards").select(
+      "id,name,card_type,is_active,card_limit,opening_day,closing_day,due_day,days_before_due"
+    ).eq("id", input.card_id).eq("user_id", userId).maybeSingle();
+    if (cardError) return mcpError("INTERNAL_ERROR");
+    if (!card) return mcpError("RESOURCE_NOT_FOUND");
+    if (!["credit", "debit", "both"].includes(card.card_type)) {
+      return mcpError("INVALID_CARD_TYPE");
+    }
+    const parsedCard = cardSchema3.safeParse(card);
+    if (!parsedCard.success) return mcpError("INVALID_DATA");
+    const resolvedPeriod = resolveCardBillingPeriod(billingMonth, parsedCard.data);
+    if (!resolvedPeriod) {
+      return mcpError(
+        "INVALID_DATA",
+        "A configura\xE7\xE3o do cart\xE3o n\xE3o permite determinar o per\xEDodo de cobran\xE7a com seguran\xE7a."
+      );
+    }
+    let query = supabase.from("expenses").select(
+      "id,description,amount,expense_date,payment_method,card_id,card_name,category_id,category_name,installment_group_id,installment_number,total_installments"
+    ).eq("user_id", userId).eq("card_id", input.card_id).eq("payment_method", "credit").gte("expense_date", resolvedPeriod.start_date).lte("expense_date", resolvedPeriod.end_date);
+    const today = todayIso();
+    if (timeScope === "occurred") query = query.lte("expense_date", today);
+    const { data, error } = await query.limit(HARD_CAP + 1);
+    if (error) return mcpError("INTERNAL_ERROR");
+    const rows = data ?? [];
+    if (rows.length > HARD_CAP) return mcpError("RESULT_SET_TOO_LARGE");
+    const occurred = rows.filter((row) => row.expense_date <= today);
+    const future = rows.filter((row) => row.expense_date > today);
+    const installmentRows = rows.filter(hasInstallmentEvidence);
+    const nonInstallmentRows = rows.filter((row) => !hasInstallmentEvidence(row));
+    const sum = (items) => roundFinancial(items.reduce((total, row) => total + Number(row.amount), 0));
+    const registeredTotal = sum(rows);
+    const largestRow = [...rows].sort(
+      (left, right) => Number(right.amount) - Number(left.amount) || left.expense_date.localeCompare(right.expense_date) || left.id.localeCompare(right.id)
+    )[0];
+    const largestTransaction = largestRow ? {
+      transaction_id: largestRow.id,
+      description: largestRow.description,
+      amount: roundFinancial(Number(largestRow.amount)),
+      date: largestRow.expense_date,
+      category_name: largestRow.category_name,
+      installment_number: largestRow.installment_number,
+      total_installments: largestRow.total_installments
+    } : null;
+    const categories = /* @__PURE__ */ new Map();
+    for (const row of rows) {
+      const name = row.category_name ?? "Sem categoria";
+      const current = categories.get(name) ?? { total: 0, count: 0 };
+      current.total += Number(row.amount);
+      current.count += 1;
+      categories.set(name, current);
+    }
+    const categoriesSummary = [...categories.entries()].map(([category_name, value]) => ({
+      category_name,
+      total: roundFinancial(value.total),
+      transaction_count: value.count,
+      percentage: registeredTotal === 0 ? 0 : roundFinancial(value.total / registeredTotal * 100)
+    })).sort(
+      (left, right) => right.total - left.total || left.category_name.localeCompare(right.category_name, "pt-BR")
+    ).slice(0, 10);
+    const warnings = [];
+    if (!parsedCard.data.is_active) warnings.push("INACTIVE_CARD");
+    if (resolvedPeriod.configuration_warning) {
+      warnings.push("INVALID_CARD_CONFIGURATION");
+    }
+    if (rows.some(
+      (row) => row.card_name === null || hasInstallmentEvidence(row) && installmentWarnings(row).some(
+        (warning) => warning !== "MISSING_CATEGORY" && warning !== "NON_CREDIT_PAYMENT_METHOD"
+      )
+    )) {
+      warnings.push("CREDIT_EXPENSE_WITHOUT_EXPECTED_METADATA");
+    }
+    warnings.push("BILLING_TOTAL_IS_CALCULATED", "PAYMENT_STATUS_NOT_AVAILABLE");
+    const billingPeriod = {
+      billing_month: resolvedPeriod.billing_month,
+      start_date: resolvedPeriod.start_date,
+      end_date: resolvedPeriod.end_date,
+      closing_date: resolvedPeriod.closing_date,
+      due_date: resolvedPeriod.due_date,
+      calculation_mode: resolvedPeriod.calculation_mode
+    };
+    const metrics = {
+      registered_total: registeredTotal,
+      occurred_total: sum(occurred),
+      future_materialized_total: sum(future),
+      transaction_count: rows.length,
+      occurred_transaction_count: occurred.length,
+      future_transaction_count: future.length,
+      installment_total: sum(installmentRows),
+      non_installment_total: sum(nonInstallmentRows)
+    };
+    const result = {
+      card: parsedCard.data,
+      billing_period: billingPeriod,
+      metrics,
+      largest_transaction: largestTransaction,
+      categories_summary: categoriesSummary,
+      data_complete: true,
+      warnings
+    };
+    const categoryText = categoriesSummary.map(
+      (category) => `${category.category_name}: ${category.total} (${category.transaction_count}; ${category.percentage}%)`
+    ).join("; ");
+    const largestText = largestTransaction ? `${largestTransaction.description}, ${largestTransaction.amount}, em ${largestTransaction.date}` : "nenhuma";
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Cart\xE3o: ${parsedCard.data.name}; status: ${parsedCard.data.is_active ? "ativo" : "inativo"}. Per\xEDodo calculado (${billingMonth}, m\xEAs de refer\xEAncia): ${billingPeriod.start_date} a ${billingPeriod.end_date}; fechamento=${billingPeriod.closing_date ?? "n\xE3o dispon\xEDvel"}; vencimento=${billingPeriod.due_date ?? "n\xE3o dispon\xEDvel"}; modo=${billingPeriod.calculation_mode}; time_scope=${timeScope}. Total registrado no Gastinho para o per\xEDodo calculado: ${metrics.registered_total}; parte j\xE1 ocorrida: ${metrics.occurred_total}; parte futura materializada: ${metrics.future_materialized_total}; lan\xE7amentos: ${metrics.transaction_count} (ocorridos=${metrics.occurred_transaction_count}, futuros=${metrics.future_transaction_count}); total parcelado=${metrics.installment_total}; total n\xE3o parcelado=${metrics.non_installment_total}. Maior transa\xE7\xE3o: ${largestText}. Principais categorias (m\xE1ximo 10): ${categoryText || "nenhuma"}. Avisos: ${warnings.join(", ")}. Os valores refletem somente lan\xE7amentos registrados no Gastinho; n\xE3o existe tabela real de faturas e pagamento ou quita\xE7\xE3o n\xE3o s\xE3o conhecidos.`
+        }
+      ],
+      structuredContent: result
+    };
+  }
+});
+
 // src/lib/mcp/index.ts
 var projectRef = "jaoldaqvbdllowepzwbr";
 var mcp_default = defineMcp({
   name: "gastinho-simples-mcp",
   title: "Gastinho Simples",
   version: "0.1.0",
-  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para buscas unificadas, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. list_cards lista configura\xE7\xF5es de cart\xF5es cadastradas, n\xE3o saldos banc\xE1rios. get_card_installments consulta somente parcelas reais j\xE1 registradas; recorr\xEAncias n\xE3o fazem parte da resposta e cart\xF5es inativos podem aparecer no hist\xF3rico. N\xE3o afirme fatura paga, limite real dispon\xEDvel ou saldo banc\xE1rio. Use list_categories para UUIDs. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
+  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para buscas unificadas, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. Use list_cards para localizar o cart\xE3o, get_card_installments para parcelas individuais registradas e get_card_summary para o total registrado no per\xEDodo calculado. Recorr\xEAncias n\xE3o fazem parte dessas respostas e cart\xF5es inativos podem aparecer no hist\xF3rico. Nunca chame o resumo de saldo banc\xE1rio, limite real dispon\xEDvel ou fatura oficialmente paga/em aberto. Use list_categories para UUIDs. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
@@ -2478,7 +2778,8 @@ var mcp_default = defineMcp({
     get_spending_breakdown_default,
     compare_periods_default,
     list_cards_default,
-    get_card_installments_default
+    get_card_installments_default,
+    get_card_summary_default
   ]
 });
 

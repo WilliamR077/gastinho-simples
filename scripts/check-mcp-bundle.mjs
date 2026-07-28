@@ -36,6 +36,7 @@ assert.match(source, /name:\s*"get_spending_breakdown"/u);
 assert.match(source, /name:\s*"compare_periods"/u);
 assert.match(source, /name:\s*"list_cards"/u);
 assert.match(source, /name:\s*"get_card_installments"/u);
+assert.match(source, /name:\s*"get_card_summary"/u);
 assert.match(source, /Deno\.serve/u);
 
 console.log("Bundle MCP autocontido e sem caminhos absolutos.");

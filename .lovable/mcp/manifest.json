@@ -2048,6 +2048,330 @@
           "additionalProperties": false,
           "$schema": "http://json-schema.org/draft-07/schema#"
         }
+      },
+      {
+        "name": "get_card_summary",
+        "title": "Resumir lançamentos do cartão",
+        "description": "Calcula um resumo factual dos lançamentos próprios de crédito registrados no Gastinho para o período do cartão. billing_month é o mês de referência da fatura calculada; não informa pagamento, quitação, saldo bancário ou fatura oficial do emissor.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "card_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "billing_month": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+            },
+            "time_scope": {
+              "type": "string",
+              "enum": [
+                "occurred",
+                "all"
+              ]
+            }
+          },
+          "required": [
+            "card_id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "card": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "card_type": {
+                  "type": "string",
+                  "enum": [
+                    "credit",
+                    "debit",
+                    "both"
+                  ]
+                },
+                "is_active": {
+                  "type": "boolean"
+                },
+                "card_limit": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "opening_day": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "closing_day": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "due_day": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "days_before_due": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "card_type",
+                "is_active",
+                "card_limit",
+                "opening_day",
+                "closing_day",
+                "due_day",
+                "days_before_due"
+              ],
+              "additionalProperties": false
+            },
+            "billing_period": {
+              "type": "object",
+              "properties": {
+                "billing_month": {
+                  "type": "string",
+                  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+                },
+                "start_date": {
+                  "type": "string"
+                },
+                "end_date": {
+                  "type": "string"
+                },
+                "closing_date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "due_date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "calculation_mode": {
+                  "type": "string",
+                  "enum": [
+                    "due_date",
+                    "legacy_opening_closing"
+                  ]
+                }
+              },
+              "required": [
+                "billing_month",
+                "start_date",
+                "end_date",
+                "closing_date",
+                "due_date",
+                "calculation_mode"
+              ],
+              "additionalProperties": false
+            },
+            "metrics": {
+              "type": "object",
+              "properties": {
+                "registered_total": {
+                  "type": "number"
+                },
+                "occurred_total": {
+                  "type": "number"
+                },
+                "future_materialized_total": {
+                  "type": "number"
+                },
+                "transaction_count": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "occurred_transaction_count": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "future_transaction_count": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "installment_total": {
+                  "type": "number"
+                },
+                "non_installment_total": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "registered_total",
+                "occurred_total",
+                "future_materialized_total",
+                "transaction_count",
+                "occurred_transaction_count",
+                "future_transaction_count",
+                "installment_total",
+                "non_installment_total"
+              ],
+              "additionalProperties": false
+            },
+            "largest_transaction": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "transaction_id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "amount": {
+                      "type": "number"
+                    },
+                    "date": {
+                      "type": "string"
+                    },
+                    "category_name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "installment_number": {
+                      "anyOf": [
+                        {
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "total_installments": {
+                      "anyOf": [
+                        {
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "transaction_id",
+                    "description",
+                    "amount",
+                    "date",
+                    "category_name",
+                    "installment_number",
+                    "total_installments"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "categories_summary": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "category_name": {
+                    "type": "string"
+                  },
+                  "total": {
+                    "type": "number"
+                  },
+                  "transaction_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "percentage": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "category_name",
+                  "total",
+                  "transaction_count",
+                  "percentage"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 10
+            },
+            "data_complete": {
+              "type": "boolean"
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "INACTIVE_CARD",
+                  "INVALID_CARD_CONFIGURATION",
+                  "CREDIT_EXPENSE_WITHOUT_EXPECTED_METADATA",
+                  "BILLING_TOTAL_IS_CALCULATED",
+                  "PAYMENT_STATUS_NOT_AVAILABLE"
+                ]
+              }
+            }
+          },
+          "required": [
+            "card",
+            "billing_period",
+            "metrics",
+            "largest_transaction",
+            "categories_summary",
+            "data_complete",
+            "warnings"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
       }
     ]
   }

@@ -450,7 +450,7 @@ test("rejects altered signature, payload and last_item_type", async () => {
   const first = await unifiedPage();
   const [payload, signature] = first.nextCursor.split(".");
   const alteredSignature =
-    `${payload}.${signature.slice(0, -1)}${signature.endsWith("A") ? "B" : "A"}`;
+    `${payload}.${signature.startsWith("A") ? "B" : "A"}${signature.slice(1)}`;
   assert.equal(
     await decode(alteredSignature, "all", "date", "desc", first.filtersFingerprint),
     null,
