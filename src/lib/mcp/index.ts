@@ -12,6 +12,8 @@ import comparePeriods from "./tools/compare-periods";
 import listCards from "./tools/list-cards";
 import getCardInstallments from "./tools/get-card-installments";
 import getCardSummary from "./tools/get-card-summary";
+import listRecurringTransactions from "./tools/list-recurring-transactions";
+import getRecurringForecast from "./tools/get-recurring-forecast";
 
 // O emissor OAuth precisa ser o host direto do Supabase — nunca o proxy do
 // Lovable Cloud. Construímos a partir do project ref, que o Vite substitui
@@ -23,7 +25,7 @@ export default defineMcp({
   title: "Gastinho Simples",
   version: "0.1.0",
   instructions:
-    "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Em pedidos sobre gastos recentes, últimos ou realizados, use time_scope=occurred; para próximas parcelas use future; use all somente quando o usuário pedir todos os registros. Use search_transactions para buscas unificadas, get_spending_breakdown para valores por categoria, cartão ou forma de pagamento e compare_periods para comparações factuais. Use list_cards para localizar o cartão, get_card_installments para parcelas individuais registradas e get_card_summary para o total registrado no período calculado. Recorrências não fazem parte dessas respostas e cartões inativos podem aparecer no histórico. Nunca chame o resumo de saldo bancário, limite real disponível ou fatura oficialmente paga/em aberto. Use list_categories para UUIDs. Não invente dados quando uma busca não retornar resultados.",
+    "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Em pedidos sobre gastos recentes, últimos ou realizados, use time_scope=occurred; para próximas parcelas use future; use all somente quando o usuário pedir todos os registros. Use search_transactions para lançamentos reais, get_spending_breakdown para valores por categoria, cartão ou forma de pagamento e compare_periods para comparações factuais. Use list_cards para localizar o cartão, get_card_installments para parcelas reais já materializadas e get_card_summary para o total registrado no período calculado. Recorrências são templates mensais: use list_recurring_transactions para listá-las e get_recurring_forecast apenas para projeções baseadas nesses templates. O forecast não representa transações efetivamente lançadas e nunca deve ser somado automaticamente a parcelas ou lançamentos futuros. Nunca chame resultados de saldo bancário, limite real disponível ou fatura oficialmente paga/em aberto. Use list_categories para UUIDs. Não invente dados quando uma busca não retornar resultados.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated",
@@ -42,5 +44,7 @@ export default defineMcp({
     listCards,
     getCardInstallments,
     getCardSummary,
+    listRecurringTransactions,
+    getRecurringForecast,
   ],
 });

@@ -880,11 +880,17 @@ check(
 
 const tools = manifest.mcp.tools;
 const names = tools.map((tool) => tool.name);
-equal(tools.length, 13, "manifest contém exatamente 13 tools");
+equal(tools.length, 15, "manifest contém exatamente 15 tools");
 equal(
-  names.slice(-3),
-  ["list_cards", "get_card_installments", "get_card_summary"],
-  "ordem das tools de cartões",
+  names.slice(-5),
+  [
+    "list_cards",
+    "get_card_installments",
+    "get_card_summary",
+    "list_recurring_transactions",
+    "get_recurring_forecast",
+  ],
+  "ordem das tools factuais",
 );
 for (const name of ["list_cards", "get_card_installments"]) {
   const tool = tools.find((candidate) => candidate.name === name);

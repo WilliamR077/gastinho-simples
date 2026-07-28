@@ -2817,13 +2817,558 @@ var get_card_summary_default = defineTool13({
   }
 });
 
+// src/lib/mcp/tools/list-recurring-transactions.ts
+import { defineTool as defineTool14 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z14 } from "npm:zod@^3.25.76";
+
+// src/lib/mcp/shared/recurring.ts
+var RECURRING_DATA_WARNINGS = [
+  "MISSING_START_DATE_USING_CREATED_AT",
+  "INVALID_START_DATE",
+  "INVALID_END_DATE",
+  "END_DATE_BEFORE_START_DATE",
+  "INVALID_DAY_OF_MONTH",
+  "NON_POSITIVE_AMOUNT",
+  "DAY_NOT_PRESENT_IN_MONTH"
+];
+function recurringDataWarnings(row) {
+  const warnings = [];
+  const fallbackStart = row.created_at.slice(0, 10);
+  if (row.start_date === null) {
+    warnings.push("MISSING_START_DATE_USING_CREATED_AT");
+    if (!isValidIsoDate(fallbackStart)) warnings.push("INVALID_START_DATE");
+  } else if (!isValidIsoDate(row.start_date)) {
+    warnings.push("INVALID_START_DATE");
+  }
+  if (row.end_date !== null && !isValidIsoDate(row.end_date)) {
+    warnings.push("INVALID_END_DATE");
+  }
+  const effectiveStart = row.start_date ?? fallbackStart;
+  if (isValidIsoDate(effectiveStart) && row.end_date !== null && isValidIsoDate(row.end_date) && row.end_date < effectiveStart) {
+    warnings.push("END_DATE_BEFORE_START_DATE");
+  }
+  if (!Number.isInteger(row.day_of_month) || row.day_of_month < 1 || row.day_of_month > 31) {
+    warnings.push("INVALID_DAY_OF_MONTH");
+  }
+  if (!Number.isFinite(Number(row.amount)) || Number(row.amount) <= 0) {
+    warnings.push("NON_POSITIVE_AMOUNT");
+  }
+  return warnings;
+}
+function recurringItem(row, transactionType, userId) {
+  const common = {
+    id: row.id,
+    transaction_type: transactionType,
+    description: row.description,
+    amount: Number(row.amount),
+    day_of_month: row.day_of_month,
+    start_date: row.start_date,
+    end_date: row.end_date,
+    is_active: row.is_active,
+    category_id: transactionType === "expense" ? row.category_id ?? null : row.income_category_id ?? null,
+    category_name: row.category_name,
+    shared_group_id: row.shared_group_id,
+    is_shared: row.shared_group_id !== null,
+    is_owner: row.user_id === userId,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    data_warnings: recurringDataWarnings(row)
+  };
+  if (transactionType === "income") return common;
+  return {
+    ...common,
+    transaction_type: "expense",
+    payment_method: row.payment_method,
+    card_id: row.card_id ?? null,
+    card_name: row.card_name ?? null
+  };
+}
+function compareRecurringItems(left, right) {
+  if (left.day_of_month !== right.day_of_month) {
+    return left.day_of_month - right.day_of_month;
+  }
+  if (left.transaction_type !== right.transaction_type) {
+    return left.transaction_type === "expense" ? -1 : 1;
+  }
+  return left.id.localeCompare(right.id);
+}
+function recurringCursorSortValue(item) {
+  return `${String(item.day_of_month).padStart(2, "0")}|${item.transaction_type}`;
+}
+function daysInUtcMonth(year, month) {
+  return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+}
+function monthKey(year, month) {
+  return `${String(year).padStart(4, "0")}-${String(month + 1).padStart(2, "0")}`;
+}
+function occurrencePeriod(date, granularity) {
+  if (granularity === "day") return date;
+  if (granularity === "week") return isoWeekStart(date);
+  return date.slice(0, 7);
+}
+function seriesPeriods(startDate, endDate, granularity) {
+  if (granularity === "day") {
+    return Array.from({ length: inclusiveDays(startDate, endDate) }, (_, index) => addIsoDays(startDate, index));
+  }
+  if (granularity === "week") {
+    const periods2 = [];
+    let current = isoWeekStart(startDate);
+    while (current <= endDate) {
+      periods2.push(current);
+      current = addIsoDays(current, 7);
+    }
+    return periods2;
+  }
+  const [startYear, startMonth] = startDate.split("-").map(Number);
+  const [endYear, endMonth] = endDate.split("-").map(Number);
+  const periods = [];
+  let year = startYear;
+  let month = startMonth - 1;
+  while (year < endYear || year === endYear && month <= endMonth - 1) {
+    periods.push(monthKey(year, month));
+    month += 1;
+    if (month > 11) {
+      year += 1;
+      month = 0;
+    }
+  }
+  return periods;
+}
+function projectRecurringTemplates(templates, startDate, endDate, granularity, occurrenceCap = 1e3) {
+  const occurrences = [];
+  const warnings = /* @__PURE__ */ new Set();
+  const [firstYear, firstMonth] = startDate.split("-").map(Number);
+  const [lastYear, lastMonth] = endDate.split("-").map(Number);
+  for (const template of templates) {
+    for (const warning of template.data_warnings) warnings.add(warning);
+    if (!template.is_active) continue;
+    if (template.data_warnings.includes("INVALID_START_DATE") || template.data_warnings.includes("INVALID_END_DATE") || template.data_warnings.includes("END_DATE_BEFORE_START_DATE") || template.data_warnings.includes("INVALID_DAY_OF_MONTH")) {
+      continue;
+    }
+    const effectiveStart = template.start_date ?? template.created_at.slice(0, 10);
+    let year = firstYear;
+    let month = firstMonth - 1;
+    while (year < lastYear || year === lastYear && month <= lastMonth - 1) {
+      if (template.day_of_month > daysInUtcMonth(year, month)) {
+        warnings.add("DAY_NOT_PRESENT_IN_MONTH");
+      } else {
+        const date = `${monthKey(year, month)}-${String(template.day_of_month).padStart(2, "0")}`;
+        if (date >= startDate && date <= endDate && date >= effectiveStart && (template.end_date === null || date <= template.end_date)) {
+          occurrences.push({
+            date,
+            transaction_type: template.transaction_type,
+            amount: template.amount,
+            recurring_transaction_id: template.id,
+            description: template.description,
+            category_name: template.category_name,
+            source: "recurring_template",
+            shared_group_id: template.shared_group_id,
+            is_owner: template.is_owner,
+            data_warnings: template.data_warnings
+          });
+          if (occurrences.length > occurrenceCap) {
+            return { ok: false, code: "RESULT_SET_TOO_LARGE" };
+          }
+        }
+      }
+      month += 1;
+      if (month > 11) {
+        year += 1;
+        month = 0;
+      }
+    }
+  }
+  occurrences.sort(
+    (left, right) => left.date.localeCompare(right.date) || (left.transaction_type === right.transaction_type ? left.recurring_transaction_id.localeCompare(right.recurring_transaction_id) : left.transaction_type === "expense" ? -1 : 1)
+  );
+  const points = new Map(
+    seriesPeriods(startDate, endDate, granularity).map((period) => [
+      period,
+      {
+        period,
+        projected_income: 0,
+        projected_expenses: 0,
+        projected_balance: 0,
+        occurrence_count: 0
+      }
+    ])
+  );
+  for (const occurrence of occurrences) {
+    const point = points.get(occurrencePeriod(occurrence.date, granularity));
+    point.occurrence_count += 1;
+    if (!occurrence.data_warnings.includes("NON_POSITIVE_AMOUNT")) {
+      if (occurrence.transaction_type === "income") {
+        point.projected_income += occurrence.amount;
+      } else {
+        point.projected_expenses += occurrence.amount;
+      }
+    }
+  }
+  const series = [...points.values()].map((point) => ({
+    ...point,
+    projected_income: roundFinancial(point.projected_income),
+    projected_expenses: roundFinancial(point.projected_expenses),
+    projected_balance: roundFinancial(
+      point.projected_income - point.projected_expenses
+    )
+  }));
+  const projectedIncome = roundFinancial(
+    series.reduce((total, point) => total + point.projected_income, 0)
+  );
+  const projectedExpenses = roundFinancial(
+    series.reduce((total, point) => total + point.projected_expenses, 0)
+  );
+  return {
+    ok: true,
+    occurrences,
+    series,
+    projected_income: projectedIncome,
+    projected_expenses: projectedExpenses,
+    projected_balance: roundFinancial(projectedIncome - projectedExpenses),
+    warnings: [...warnings]
+  };
+}
+
+// src/lib/mcp/tools/list-recurring-transactions.ts
+var CURSOR_CONTEXT6 = "list_recurring_transactions";
+var CURSOR_SORT = "day_of_month|transaction_type|id";
+var warningSchema3 = z14.enum(RECURRING_DATA_WARNINGS);
+var commonShape = {
+  id: z14.string().uuid(),
+  transaction_type: z14.enum(["expense", "income"]),
+  description: z14.string(),
+  amount: z14.number(),
+  day_of_month: z14.number().int(),
+  start_date: z14.string().nullable(),
+  end_date: z14.string().nullable(),
+  is_active: z14.boolean(),
+  category_id: z14.string().uuid().nullable(),
+  category_name: z14.string().nullable(),
+  shared_group_id: z14.string().uuid().nullable(),
+  is_shared: z14.boolean(),
+  is_owner: z14.boolean(),
+  created_at: z14.string(),
+  updated_at: z14.string(),
+  data_warnings: z14.array(warningSchema3)
+};
+var recurringItemSchema = z14.discriminatedUnion("transaction_type", [
+  z14.object({
+    ...commonShape,
+    transaction_type: z14.literal("expense"),
+    payment_method: z14.enum(["pix", "credit", "debit", "cash"]),
+    card_id: z14.string().uuid().nullable(),
+    card_name: z14.string().nullable()
+  }).strict(),
+  z14.object({
+    ...commonShape,
+    transaction_type: z14.literal("income")
+  }).strict()
+]);
+function applyCursor(query, transactionType, cursor) {
+  const [dayText, cursorType] = cursor.sort_value.split("|");
+  const day = Number(dayText);
+  if (cursorType === transactionType) {
+    return query.or(
+      `day_of_month.gt.${day},and(day_of_month.eq.${day},id.gt.${cursor.id})`
+    );
+  }
+  return cursorType === "expense" && transactionType === "income" ? query.gte("day_of_month", day) : query.gt("day_of_month", day);
+}
+var list_recurring_transactions_default = defineTool14({
+  name: "list_recurring_transactions",
+  title: "Listar templates recorrentes",
+  description: "Lista templates mensais de despesas e receitas recorrentes acess\xEDveis \xE0 conta autenticada. N\xE3o representa lan\xE7amentos financeiros j\xE1 realizados.",
+  inputSchema: {
+    transaction_type: z14.enum(["expense", "income", "all"]).optional(),
+    scope: z14.enum(["personal", "shared", "all_accessible"]).optional(),
+    group_id: z14.string().uuid().optional(),
+    status: z14.enum(["active", "inactive", "all"]).optional(),
+    query: z14.string().trim().min(1).max(100).optional(),
+    limit: z14.number().int().min(1).max(100).optional(),
+    cursor: z14.string().min(1).max(1e3).optional()
+  },
+  outputSchema: {
+    items: z14.array(recurringItemSchema),
+    count: z14.number().int().nonnegative(),
+    has_more: z14.boolean(),
+    next_cursor: z14.string().nullable(),
+    cursor_version: z14.literal(3),
+    applied_filters: z14.object({
+      transaction_type: z14.enum(["expense", "income", "all"]),
+      scope: z14.enum(["personal", "shared", "all_accessible"]),
+      group_id: z14.string().uuid().nullable(),
+      status: z14.enum(["active", "inactive", "all"]),
+      query: z14.string().nullable(),
+      limit: z14.number().int().min(1).max(100)
+    }).strict()
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async (input, ctx) => {
+    const userId = ctx.getUserId();
+    if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
+    const transactionType = input.transaction_type ?? "all";
+    const scope = input.scope ?? "personal";
+    const status = input.status ?? "active";
+    const limit = input.limit ?? 20;
+    const cursorSecret = getCursorSecret();
+    if (!cursorSecret) return mcpError("INTERNAL_ERROR");
+    const appliedFilters = {
+      transaction_type: transactionType,
+      scope,
+      group_id: input.group_id ?? null,
+      status,
+      query: input.query ?? null,
+      limit
+    };
+    const fingerprint = await filtersFingerprint(
+      CURSOR_CONTEXT6,
+      appliedFilters
+    );
+    const cursor = await decodeResourceCursor(
+      input.cursor,
+      {
+        context: CURSOR_CONTEXT6,
+        sort_by: CURSOR_SORT,
+        sort_order: "asc",
+        filters_fingerprint: fingerprint
+      },
+      cursorSecret
+    );
+    if (input.cursor && !cursor) return mcpError("INVALID_CURSOR");
+    const supabase = supabaseForUser(ctx);
+    const pageSize = limit + 1;
+    const configure = (query, rowType) => {
+      let configured = query;
+      if (scope === "personal") configured = configured.eq("user_id", userId);
+      if (scope === "shared") {
+        configured = configured.not("shared_group_id", "is", null);
+      }
+      if (input.group_id) {
+        configured = configured.eq("shared_group_id", input.group_id);
+      }
+      if (status !== "all") {
+        configured = configured.eq("is_active", status === "active");
+      }
+      if (input.query) {
+        const pattern = `%${escapeIlikePattern(input.query)}%`;
+        configured = configured.or(
+          rowType === "expense" ? `description.ilike.${pattern},category_name.ilike.${pattern},card_name.ilike.${pattern}` : `description.ilike.${pattern},category_name.ilike.${pattern}`
+        );
+      }
+      if (cursor) configured = applyCursor(configured, rowType, cursor);
+      return configured;
+    };
+    const expensePromise = transactionType === "income" ? Promise.resolve({ data: [], error: null }) : configure(
+      supabase.from("recurring_expenses").select(
+        "id,user_id,description,amount,day_of_month,start_date,end_date,is_active,category_id,category_name,shared_group_id,created_at,updated_at,payment_method,card_id,card_name"
+      ),
+      "expense"
+    ).order("day_of_month", { ascending: true }).order("id", { ascending: true }).limit(pageSize);
+    const incomePromise = transactionType === "expense" ? Promise.resolve({ data: [], error: null }) : configure(
+      supabase.from("recurring_incomes").select(
+        "id,user_id,description,amount,day_of_month,start_date,end_date,is_active,income_category_id,category_name,shared_group_id,created_at,updated_at"
+      ),
+      "income"
+    ).order("day_of_month", { ascending: true }).order("id", { ascending: true }).limit(pageSize);
+    const [expenseResult, incomeResult] = await Promise.all([
+      expensePromise,
+      incomePromise
+    ]);
+    if (expenseResult.error || incomeResult.error) return mcpError("INTERNAL_ERROR");
+    const combined = [
+      ...(expenseResult.data ?? []).map((row) => recurringItem(row, "expense", userId)),
+      ...(incomeResult.data ?? []).map((row) => recurringItem(row, "income", userId))
+    ].sort(compareRecurringItems);
+    const hasMore = combined.length > limit;
+    const items = combined.slice(0, limit);
+    const last = items.at(-1);
+    const nextCursor = hasMore && last ? await encodeResourceCursor(
+      {
+        context: CURSOR_CONTEXT6,
+        sort_by: CURSOR_SORT,
+        sort_order: "asc",
+        sort_value: recurringCursorSortValue(last),
+        id: last.id,
+        filters_fingerprint: fingerprint
+      },
+      cursorSecret
+    ) : null;
+    const result = {
+      items,
+      count: items.length,
+      has_more: hasMore,
+      next_cursor: nextCursor,
+      cursor_version: CURSOR_VERSION,
+      applied_filters: appliedFilters
+    };
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Estes itens s\xE3o templates mensais e n\xE3o lan\xE7amentos financeiros j\xE1 realizados. Filtros=${JSON.stringify(appliedFilters)}; count=${items.length}; has_more=${hasMore}; cursor_version=${CURSOR_VERSION}; next_cursor=${nextCursor ?? "null"}. Templates (m\xE1ximo 10)=${JSON.stringify(items.slice(0, 10))}; templates omitidos do content=${Math.max(0, items.length - 10)}.`
+        }
+      ],
+      structuredContent: result
+    };
+  }
+});
+
+// src/lib/mcp/tools/get-recurring-forecast.ts
+import { defineTool as defineTool15 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z15 } from "npm:zod@^3.25.76";
+var TEMPLATE_CAP = 100;
+var OCCURRENCE_CAP = 1e3;
+var warningSchema4 = z15.enum(RECURRING_DATA_WARNINGS);
+var occurrenceSchema = z15.object({
+  date: z15.string().regex(ISO_DATE_RE),
+  transaction_type: z15.enum(["expense", "income"]),
+  amount: z15.number(),
+  recurring_transaction_id: z15.string().uuid(),
+  description: z15.string(),
+  category_name: z15.string().nullable(),
+  source: z15.literal("recurring_template"),
+  shared_group_id: z15.string().uuid().nullable(),
+  is_owner: z15.boolean(),
+  data_warnings: z15.array(warningSchema4)
+}).strict();
+var seriesPointSchema = z15.object({
+  period: z15.string(),
+  projected_income: z15.number(),
+  projected_expenses: z15.number(),
+  projected_balance: z15.number(),
+  occurrence_count: z15.number().int().nonnegative()
+}).strict();
+var get_recurring_forecast_default = defineTool15({
+  name: "get_recurring_forecast",
+  title: "Projetar templates recorrentes",
+  description: "Projeta ocorr\xEAncias mensais exclusivamente a partir dos templates recorrentes cadastrados. N\xE3o consulta nem representa despesas, receitas ou parcelas j\xE1 materializadas.",
+  inputSchema: {
+    start_date: z15.string().regex(ISO_DATE_RE),
+    end_date: z15.string().regex(ISO_DATE_RE),
+    transaction_type: z15.enum(["expense", "income", "all"]).optional(),
+    scope: z15.enum(["personal", "shared", "all_accessible"]).optional(),
+    group_id: z15.string().uuid().optional(),
+    granularity: z15.enum(["day", "week", "month"]).optional(),
+    include_occurrences: z15.boolean().optional()
+  },
+  outputSchema: {
+    requested_period: z15.object({
+      start_date: z15.string().regex(ISO_DATE_RE),
+      end_date: z15.string().regex(ISO_DATE_RE)
+    }).strict(),
+    effective_period: z15.object({
+      start_date: z15.string().regex(ISO_DATE_RE),
+      end_date: z15.string().regex(ISO_DATE_RE),
+      days: z15.number().int().positive()
+    }).strict(),
+    scope: z15.enum(["personal", "shared", "all_accessible"]),
+    templates_considered: z15.number().int().nonnegative(),
+    occurrences: z15.array(occurrenceSchema),
+    series: z15.array(seriesPointSchema),
+    projected_income: z15.number(),
+    projected_expenses: z15.number(),
+    projected_balance: z15.number(),
+    warnings: z15.array(warningSchema4),
+    data_complete: z15.boolean()
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async (input, ctx) => {
+    const userId = ctx.getUserId();
+    if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
+    const range = validateBoundedDateRange(input.start_date, input.end_date);
+    if (range.ok === false) return mcpError(range.code);
+    const transactionType = input.transaction_type ?? "all";
+    const scope = input.scope ?? "personal";
+    const granularity = input.granularity ?? "month";
+    const includeOccurrences = input.include_occurrences ?? true;
+    const supabase = supabaseForUser(ctx);
+    const configure = (query) => {
+      let configured = query.eq("is_active", true);
+      if (scope === "personal") configured = configured.eq("user_id", userId);
+      if (scope === "shared") {
+        configured = configured.not("shared_group_id", "is", null);
+      }
+      if (input.group_id) {
+        configured = configured.eq("shared_group_id", input.group_id);
+      }
+      return configured;
+    };
+    const expensePromise = transactionType === "income" ? Promise.resolve({ data: [], error: null }) : configure(
+      supabase.from("recurring_expenses").select(
+        "id,user_id,description,amount,day_of_month,start_date,end_date,is_active,category_id,category_name,shared_group_id,created_at,updated_at,payment_method,card_id,card_name"
+      )
+    ).limit(TEMPLATE_CAP + 1);
+    const incomePromise = transactionType === "expense" ? Promise.resolve({ data: [], error: null }) : configure(
+      supabase.from("recurring_incomes").select(
+        "id,user_id,description,amount,day_of_month,start_date,end_date,is_active,income_category_id,category_name,shared_group_id,created_at,updated_at"
+      )
+    ).limit(TEMPLATE_CAP + 1);
+    const [expenseResult, incomeResult] = await Promise.all([
+      expensePromise,
+      incomePromise
+    ]);
+    if (expenseResult.error || incomeResult.error) return mcpError("INTERNAL_ERROR");
+    const templates = [
+      ...(expenseResult.data ?? []).map((row) => recurringItem(row, "expense", userId)),
+      ...(incomeResult.data ?? []).map((row) => recurringItem(row, "income", userId))
+    ];
+    if (templates.length > TEMPLATE_CAP) return mcpError("RESULT_SET_TOO_LARGE");
+    const projection = projectRecurringTemplates(
+      templates,
+      input.start_date,
+      input.end_date,
+      granularity,
+      OCCURRENCE_CAP
+    );
+    if (projection.ok === false) return mcpError(projection.code);
+    const requestedPeriod = {
+      start_date: input.start_date,
+      end_date: input.end_date
+    };
+    const effectivePeriod = {
+      ...requestedPeriod,
+      days: inclusiveDays(input.start_date, input.end_date)
+    };
+    const result = {
+      requested_period: requestedPeriod,
+      effective_period: effectivePeriod,
+      scope,
+      templates_considered: templates.length,
+      occurrences: includeOccurrences ? projection.occurrences : [],
+      series: projection.series,
+      projected_income: projection.projected_income,
+      projected_expenses: projection.projected_expenses,
+      projected_balance: projection.projected_balance,
+      warnings: projection.warnings,
+      data_complete: true
+    };
+    const templatePreview = templates.slice(0, 10).map((template) => ({
+      id: template.id,
+      transaction_type: template.transaction_type,
+      description: template.description,
+      amount: template.amount,
+      day_of_month: template.day_of_month,
+      data_warnings: template.data_warnings
+    }));
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Esta \xE9 uma proje\xE7\xE3o baseada somente nos templates recorrentes cadastrados. Ela n\xE3o inclui lan\xE7amentos reais nem parcelas futuras j\xE1 materializadas. Filtros={start_date=${input.start_date}; end_date=${input.end_date}; transaction_type=${transactionType}; scope=${scope}; group_id=${input.group_id ?? "null"}; granularity=${granularity}; include_occurrences=${includeOccurrences}}. Per\xEDodo efetivo=${JSON.stringify(effectivePeriod)}; templates_considered=${templates.length}. Templates (m\xE1ximo 10)=${JSON.stringify(templatePreview)}. Ocorr\xEAncias (m\xE1ximo 20)=${JSON.stringify(projection.occurrences.slice(0, 20))}; ocorr\xEAncias omitidas do content=${Math.max(0, projection.occurrences.length - 20)}. S\xE9rie (m\xE1ximo 12 pontos)=${JSON.stringify(projection.series.slice(0, 12))}; pontos omitidos do content=${Math.max(0, projection.series.length - 12)}. projected_income=${projection.projected_income}; projected_expenses=${projection.projected_expenses}; projected_balance=${projection.projected_balance}; warnings=${JSON.stringify(projection.warnings)}; data_complete=true.`
+        }
+      ],
+      structuredContent: result
+    };
+  }
+});
+
 // src/lib/mcp/index.ts
 var projectRef = "jaoldaqvbdllowepzwbr";
 var mcp_default = defineMcp({
   name: "gastinho-simples-mcp",
   title: "Gastinho Simples",
   version: "0.1.0",
-  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para buscas unificadas, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. Use list_cards para localizar o cart\xE3o, get_card_installments para parcelas individuais registradas e get_card_summary para o total registrado no per\xEDodo calculado. Recorr\xEAncias n\xE3o fazem parte dessas respostas e cart\xF5es inativos podem aparecer no hist\xF3rico. Nunca chame o resumo de saldo banc\xE1rio, limite real dispon\xEDvel ou fatura oficialmente paga/em aberto. Use list_categories para UUIDs. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
+  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para lan\xE7amentos reais, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. Use list_cards para localizar o cart\xE3o, get_card_installments para parcelas reais j\xE1 materializadas e get_card_summary para o total registrado no per\xEDodo calculado. Recorr\xEAncias s\xE3o templates mensais: use list_recurring_transactions para list\xE1-las e get_recurring_forecast apenas para proje\xE7\xF5es baseadas nesses templates. O forecast n\xE3o representa transa\xE7\xF5es efetivamente lan\xE7adas e nunca deve ser somado automaticamente a parcelas ou lan\xE7amentos futuros. Nunca chame resultados de saldo banc\xE1rio, limite real dispon\xEDvel ou fatura oficialmente paga/em aberto. Use list_categories para UUIDs. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
@@ -2841,7 +3386,9 @@ var mcp_default = defineMcp({
     compare_periods_default,
     list_cards_default,
     get_card_installments_default,
-    get_card_summary_default
+    get_card_summary_default,
+    list_recurring_transactions_default,
+    get_recurring_forecast_default
   ]
 });
 
