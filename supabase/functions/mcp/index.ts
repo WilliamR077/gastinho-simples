@@ -2474,9 +2474,9 @@ function daysInMonth(year, month) {
   return new Date(year, month + 1, 0).getDate();
 }
 function getClosingDateForBillingMonth(year, month, dueDay, daysBefore) {
-  const nextMonth = month + 1;
-  const ny = nextMonth > 11 ? year + 1 : year;
-  const nm = nextMonth > 11 ? 0 : nextMonth;
+  const nextMonth2 = month + 1;
+  const ny = nextMonth2 > 11 ? year + 1 : year;
+  const nm = nextMonth2 > 11 ? 0 : nextMonth2;
   const dueDate = new Date(ny, nm, Math.min(dueDay, daysInMonth(ny, nm)));
   const closingDate = new Date(dueDate);
   closingDate.setDate(closingDate.getDate() - daysBefore);
@@ -2510,8 +2510,8 @@ function calculateBillingPeriod(expenseDate, config) {
   const currentYear = expenseDate.getFullYear();
   if (opening_day > closing_day) {
     if (currentDay >= opening_day) {
-      const nextMonth = addMonths(new Date(currentYear, currentMonth, 1), 1);
-      return format(nextMonth, "yyyy-MM");
+      const nextMonth2 = addMonths(new Date(currentYear, currentMonth, 1), 1);
+      return format(nextMonth2, "yyyy-MM");
     } else {
       return format(new Date(currentYear, currentMonth, 1), "yyyy-MM");
     }
@@ -2522,8 +2522,8 @@ function calculateBillingPeriod(expenseDate, config) {
       const previousMonth = addMonths(new Date(currentYear, currentMonth, 1), -1);
       return format(previousMonth, "yyyy-MM");
     } else {
-      const nextMonth = addMonths(new Date(currentYear, currentMonth, 1), 1);
-      return format(nextMonth, "yyyy-MM");
+      const nextMonth2 = addMonths(new Date(currentYear, currentMonth, 1), 1);
+      return format(nextMonth2, "yyyy-MM");
     }
   }
 }
@@ -3873,7 +3873,7 @@ var get_goal_progress_default = defineTool17({
       projectedExcess = projectedMetrics.actual_excess;
       recurringTemplatesConsidered = templates.length;
       projectionWarnings = [
-        "POTENTIAL_RECURRING_OVERLAP",
+        ...templates.length > 0 ? ["POTENTIAL_RECURRING_OVERLAP"] : [],
         ...projection.warnings
       ];
       projectionWarnings = [...new Set(projectionWarnings)];
@@ -3913,13 +3913,311 @@ var get_goal_progress_default = defineTool17({
   }
 });
 
+// src/lib/mcp/tools/get-category-usage.ts
+import { defineTool as defineTool18 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z18 } from "npm:zod@^3.25.76";
+
+// src/lib/mcp/shared/category-usage.ts
+var CATEGORY_USAGE_WARNINGS = [
+  "DUPLICATE_CATEGORY_NAME",
+  "STALE_CATEGORY_SNAPSHOT",
+  "CATEGORY_REFERENCE_NOT_ACCESSIBLE",
+  "RESULT_SET_TOO_LARGE"
+];
+function nextMonth(month) {
+  const [year, numericMonth] = month.split("-").map(Number);
+  const next = new Date(Date.UTC(year, numericMonth, 1));
+  return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+function civilMonths(startDate, endDate) {
+  const result = [];
+  const last = endDate.slice(0, 7);
+  let current = startDate.slice(0, 7);
+  while (current <= last) {
+    result.push(current);
+    current = nextMonth(current);
+  }
+  return result;
+}
+function emptyUsage(category) {
+  return {
+    category_id: category.id,
+    name: category.name,
+    icon: category.icon,
+    color: category.color,
+    is_active: category.is_active !== false,
+    is_default: category.is_default === true,
+    dates: [],
+    total: 0,
+    monthly: /* @__PURE__ */ new Map()
+  };
+}
+function normalizedName(value) {
+  return value.trim().toLocaleLowerCase("pt-BR");
+}
+function calculateCategoryUsage(catalog, transactions, options) {
+  const months = civilMonths(options.start_date, options.end_date);
+  const warnings = /* @__PURE__ */ new Set();
+  const usages = new Map(
+    catalog.map((category) => [category.id, emptyUsage(category)])
+  );
+  const categoryById = new Map(catalog.map((category) => [category.id, category]));
+  const idsByName = /* @__PURE__ */ new Map();
+  for (const category of catalog) {
+    const key = normalizedName(category.name);
+    const ids = idsByName.get(key) ?? /* @__PURE__ */ new Set();
+    ids.add(category.id);
+    idsByName.set(key, ids);
+  }
+  if ([...idsByName.values()].some((ids) => ids.size > 1)) {
+    warnings.add("DUPLICATE_CATEGORY_NAME");
+  }
+  let uncategorizedCount = 0;
+  let uncategorizedTotal = 0;
+  for (const transaction of transactions) {
+    const amount = Number(transaction.amount);
+    if (transaction.category_id === null) {
+      uncategorizedCount += 1;
+      uncategorizedTotal += amount;
+      continue;
+    }
+    const catalogCategory = categoryById.get(transaction.category_id);
+    let usage = usages.get(transaction.category_id);
+    if (!usage) {
+      warnings.add("CATEGORY_REFERENCE_NOT_ACCESSIBLE");
+      warnings.add("STALE_CATEGORY_SNAPSHOT");
+      usage = {
+        category_id: transaction.category_id,
+        name: transaction.category_name ?? "Categoria inacess\xEDvel",
+        icon: transaction.category_icon,
+        color: null,
+        is_active: false,
+        is_default: false,
+        dates: [],
+        total: 0,
+        monthly: /* @__PURE__ */ new Map()
+      };
+      usages.set(transaction.category_id, usage);
+    } else if (catalogCategory && (transaction.category_name !== null && transaction.category_name !== catalogCategory.name || transaction.category_icon !== null && transaction.category_icon !== catalogCategory.icon)) {
+      warnings.add("STALE_CATEGORY_SNAPSHOT");
+    }
+    usage.total += amount;
+    usage.dates.push(transaction.date);
+    const month = transaction.date.slice(0, 7);
+    const point = usage.monthly.get(month) ?? { total: 0, count: 0 };
+    point.total += amount;
+    point.count += 1;
+    usage.monthly.set(month, point);
+  }
+  const totalAmount = roundFinancial(
+    transactions.reduce((sum, transaction) => sum + Number(transaction.amount), 0)
+  );
+  const allCategories = [...usages.values()].filter((usage) => options.include_inactive || usage.is_active).filter((usage) => options.include_unused || usage.dates.length > 0).map((usage) => {
+    const total = roundFinancial(usage.total);
+    const dates = [...usage.dates].sort();
+    return {
+      category_id: usage.category_id,
+      name: usage.name,
+      icon: usage.icon,
+      color: usage.color,
+      is_active: usage.is_active,
+      is_default: usage.is_default,
+      transaction_count: dates.length,
+      total,
+      percentage: totalAmount > 0 ? roundFinancial(total / totalAmount * 100) : 0,
+      first_used_at: dates.at(0) ?? null,
+      last_used_at: dates.at(-1) ?? null,
+      monthly_average: roundFinancial(total / months.length),
+      monthly_series: months.map((month) => {
+        const point = usage.monthly.get(month);
+        return {
+          month,
+          total: roundFinancial(point?.total ?? 0),
+          transaction_count: point?.count ?? 0
+        };
+      })
+    };
+  }).sort(
+    (left, right) => right.total - left.total || left.name.localeCompare(right.name, "pt-BR") || left.category_id.localeCompare(right.category_id)
+  );
+  const categories = allCategories.slice(0, options.limit);
+  return {
+    categories,
+    uncategorized: {
+      transaction_count: uncategorizedCount,
+      total: roundFinancial(uncategorizedTotal),
+      percentage: totalAmount > 0 ? roundFinancial(uncategorizedTotal / totalAmount * 100) : 0
+    },
+    total_amount: totalAmount,
+    total_transaction_count: transactions.length,
+    categories_truncated: allCategories.length > categories.length,
+    total_category_count: allCategories.length,
+    returned_category_count: categories.length,
+    warnings: [...warnings]
+  };
+}
+
+// src/lib/mcp/tools/get-category-usage.ts
+var TRANSACTION_CAP2 = 1e4;
+var warningSchema6 = z18.enum(CATEGORY_USAGE_WARNINGS);
+var monthlyPointSchema = z18.object({
+  month: z18.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+  total: z18.number(),
+  transaction_count: z18.number().int().nonnegative()
+}).strict();
+var categorySchema = z18.object({
+  category_id: z18.string().uuid(),
+  name: z18.string(),
+  icon: z18.string().nullable(),
+  color: z18.string().nullable(),
+  is_active: z18.boolean(),
+  is_default: z18.boolean(),
+  transaction_count: z18.number().int().nonnegative(),
+  total: z18.number(),
+  percentage: z18.number(),
+  first_used_at: z18.string().nullable(),
+  last_used_at: z18.string().nullable(),
+  monthly_average: z18.number(),
+  monthly_series: z18.array(monthlyPointSchema)
+}).strict();
+var get_category_usage_default = defineTool18({
+  name: "get_category_usage",
+  title: "Consultar uso pessoal de categorias",
+  description: "Apresenta fatos hist\xF3ricos sobre o uso das categorias pessoais de despesas ou receitas da conta autenticada. N\xE3o inclui categorias compartilhadas nem transa\xE7\xF5es de outros propriet\xE1rios.",
+  inputSchema: {
+    kind: z18.enum(["expense", "income"]),
+    start_date: z18.string(),
+    end_date: z18.string(),
+    include_inactive: z18.boolean().optional(),
+    include_unused: z18.boolean().optional(),
+    trend_granularity: z18.literal("month").optional(),
+    limit: z18.number().int().min(1).max(100).optional()
+  },
+  outputSchema: {
+    kind: z18.enum(["expense", "income"]),
+    requested_period: z18.object({
+      start_date: z18.string(),
+      end_date: z18.string()
+    }).strict(),
+    categories: z18.array(categorySchema),
+    uncategorized: z18.object({
+      transaction_count: z18.number().int().nonnegative(),
+      total: z18.number(),
+      percentage: z18.number()
+    }).strict(),
+    total_amount: z18.number(),
+    total_transaction_count: z18.number().int().nonnegative(),
+    categories_truncated: z18.boolean(),
+    total_category_count: z18.number().int().nonnegative(),
+    returned_category_count: z18.number().int().nonnegative(),
+    data_complete: z18.boolean(),
+    warnings: z18.array(warningSchema6)
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async (input, ctx) => {
+    const userId = ctx.getUserId();
+    if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
+    const range = validateBoundedDateRange(input.start_date, input.end_date);
+    if (!range.ok) return mcpError(range.code);
+    const includeInactive = input.include_inactive ?? true;
+    const includeUnused = input.include_unused ?? true;
+    const limit = input.limit ?? 50;
+    const supabase = supabaseForUser(ctx);
+    const categoryTable = input.kind === "expense" ? "user_categories" : "user_income_categories";
+    const { data: categoryData, error: categoryError } = await supabase.from(categoryTable).select("id,name,icon,color,is_active,is_default").eq("user_id", userId);
+    if (categoryError) return mcpError("INTERNAL_ERROR");
+    const fetchTransactions = async () => {
+      const rows = [];
+      let offset = 0;
+      while (offset <= TRANSACTION_CAP2) {
+        const end = Math.min(offset + 999, TRANSACTION_CAP2);
+        const dateColumn = input.kind === "expense" ? "expense_date" : "income_date";
+        const categoryColumn = input.kind === "expense" ? "category_id" : "income_category_id";
+        const columns = `id,amount,${dateColumn},${categoryColumn},category_name,category_icon`;
+        const { data, error } = await supabase.from(input.kind === "expense" ? "expenses" : "incomes").select(columns).eq("user_id", userId).gte(dateColumn, input.start_date).lte(dateColumn, input.end_date).order("id", { ascending: true }).range(offset, end);
+        if (error) return { ok: false, tooLarge: false };
+        const page = data ?? [];
+        for (const raw of page) {
+          if (input.kind === "expense") {
+            const row = raw;
+            rows.push({
+              id: row.id,
+              amount: Number(row.amount),
+              date: row.expense_date,
+              category_id: row.category_id,
+              category_name: row.category_name,
+              category_icon: row.category_icon
+            });
+          } else {
+            const row = raw;
+            rows.push({
+              id: row.id,
+              amount: Number(row.amount),
+              date: row.income_date,
+              category_id: row.income_category_id,
+              category_name: row.category_name,
+              category_icon: row.category_icon
+            });
+          }
+        }
+        if (rows.length > TRANSACTION_CAP2) {
+          return { ok: false, tooLarge: true };
+        }
+        if (page.length < end - offset + 1) return { ok: true, rows };
+        offset = end + 1;
+      }
+      return { ok: false, tooLarge: true };
+    };
+    const transactionResult = await fetchTransactions();
+    if (!transactionResult.ok) {
+      return mcpError(
+        transactionResult.tooLarge ? "RESULT_SET_TOO_LARGE" : "INTERNAL_ERROR"
+      );
+    }
+    const usage = calculateCategoryUsage(
+      categoryData ?? [],
+      transactionResult.rows,
+      {
+        start_date: input.start_date,
+        end_date: input.end_date,
+        include_inactive: includeInactive,
+        include_unused: includeUnused,
+        limit
+      }
+    );
+    const result = {
+      kind: input.kind,
+      requested_period: {
+        start_date: input.start_date,
+        end_date: input.end_date
+      },
+      ...usage,
+      data_complete: true
+    };
+    const contentCategories = usage.categories.slice(0, 10).map((category) => ({
+      ...category,
+      monthly_series: category.monthly_series.slice(0, 12),
+      monthly_series_omitted: Math.max(0, category.monthly_series.length - 12)
+    }));
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Uso hist\xF3rico de categorias pessoais de ${input.kind === "expense" ? "despesas" : "receitas"} no per\xEDodo ${input.start_date} a ${input.end_date}. Total=${usage.total_amount}; transa\xE7\xF5es=${usage.total_transaction_count}; categorias retornadas=${usage.returned_category_count}/${usage.total_category_count}; categories_truncated=${usage.categories_truncated}; data_complete=true. Categorias (m\xE1ximo 10; s\xE9rie mensal limitada a 12 pontos no texto)=${JSON.stringify(contentCategories)}. Sem classifica\xE7\xE3o=${JSON.stringify(usage.uncategorized)}. warnings=${JSON.stringify(usage.warnings)}. Categorias s\xE3o pessoais; transa\xE7\xF5es de outros propriet\xE1rios n\xE3o entram. Os valores s\xE3o fatos hist\xF3ricos, n\xE3o recomenda\xE7\xF5es ou julgamentos sobre gastos.`
+        }
+      ],
+      structuredContent: result
+    };
+  }
+});
+
 // src/lib/mcp/index.ts
 var projectRef = "jaoldaqvbdllowepzwbr";
 var mcp_default = defineMcp({
   name: "gastinho-simples-mcp",
   title: "Gastinho Simples",
   version: "0.1.0",
-  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para lan\xE7amentos reais, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. Use list_cards para localizar o cart\xE3o, get_card_installments para parcelas reais j\xE1 materializadas e get_card_summary para o total registrado no per\xEDodo calculado. Recorr\xEAncias s\xE3o templates mensais: use list_recurring_transactions para list\xE1-las e get_recurring_forecast apenas para proje\xE7\xF5es baseadas nesses templates. Metas tamb\xE9m s\xE3o mensais: use list_goals e get_goal_progress; elas n\xE3o s\xE3o metas de poupan\xE7a com contribui\xE7\xF5es. Mantenha realizado e recorrente separados, informe o risco de sobreposi\xE7\xE3o da proje\xE7\xE3o e n\xE3o gere recomenda\xE7\xE3o financeira. O forecast n\xE3o representa transa\xE7\xF5es efetivamente lan\xE7adas e nunca deve ser somado automaticamente a parcelas ou lan\xE7amentos futuros. Nunca chame resultados de saldo banc\xE1rio, limite real dispon\xEDvel ou fatura oficialmente paga/em aberto. Use list_categories para UUIDs. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
+  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para lan\xE7amentos reais, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. Use list_cards para localizar o cart\xE3o, get_card_installments para parcelas reais j\xE1 materializadas e get_card_summary para o total registrado no per\xEDodo calculado. Recorr\xEAncias s\xE3o templates mensais: use list_recurring_transactions para list\xE1-las e get_recurring_forecast apenas para proje\xE7\xF5es baseadas nesses templates. Metas tamb\xE9m s\xE3o mensais: use list_goals e get_goal_progress; elas n\xE3o s\xE3o metas de poupan\xE7a com contribui\xE7\xF5es. Mantenha realizado e recorrente separados, informe o risco de sobreposi\xE7\xE3o da proje\xE7\xE3o quando houver templates participantes e n\xE3o gere recomenda\xE7\xE3o financeira. Use get_category_usage somente para fatos hist\xF3ricos sobre categorias pessoais: categorias compartilhadas n\xE3o existem no modelo atual e transa\xE7\xF5es compartilhadas de outros propriet\xE1rios n\xE3o entram. O forecast n\xE3o representa transa\xE7\xF5es efetivamente lan\xE7adas e nunca deve ser somado automaticamente a parcelas ou lan\xE7amentos futuros. Nunca chame resultados de saldo banc\xE1rio, limite real dispon\xEDvel ou fatura oficialmente paga/em aberto. Use list_categories para UUIDs. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
@@ -3941,7 +4239,8 @@ var mcp_default = defineMcp({
     list_recurring_transactions_default,
     get_recurring_forecast_default,
     list_goals_default,
-    get_goal_progress_default
+    get_goal_progress_default,
+    get_category_usage_default
   ]
 });
 

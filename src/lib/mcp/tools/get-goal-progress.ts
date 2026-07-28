@@ -359,7 +359,7 @@ export default defineTool({
       projectedExcess = projectedMetrics.actual_excess;
       recurringTemplatesConsidered = templates.length;
       projectionWarnings = [
-        "POTENTIAL_RECURRING_OVERLAP",
+        ...(templates.length > 0 ? ["POTENTIAL_RECURRING_OVERLAP" as const] : []),
         ...projection.warnings,
       ];
       projectionWarnings = [...new Set(projectionWarnings)];

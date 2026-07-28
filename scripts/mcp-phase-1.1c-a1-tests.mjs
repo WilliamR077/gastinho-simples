@@ -880,9 +880,9 @@ check(
 
 const tools = manifest.mcp.tools;
 const names = tools.map((tool) => tool.name);
-equal(tools.length, 17, "manifest contém exatamente 17 tools");
+equal(tools.length, 18, "manifest contém exatamente 18 tools");
 equal(
-  names.slice(-7),
+  names.slice(-8),
   [
     "list_cards",
     "get_card_installments",
@@ -891,6 +891,7 @@ equal(
     "get_recurring_forecast",
     "list_goals",
     "get_goal_progress",
+    "get_category_usage",
   ],
   "ordem das tools factuais",
 );

@@ -645,6 +645,25 @@ for (const target of [0, -100]) {
   equal(response.structuredContent.error.code, "RESULT_SET_TOO_LARGE", "hard cap de templates");
 }
 
+{
+  useDatabase(baseTables([goal()]));
+  const response = await core.progressTool.handler(
+    {
+      goal_id: id(1),
+      reference_month: "2026-07",
+      projection_mode: "recurring_templates",
+    },
+    contextFor(userA),
+  );
+  equal(response.structuredContent.recurring_templates_considered, 0, "zero templates considerados");
+  check(
+    !response.structuredContent.projection_warnings.includes(
+      "POTENTIAL_RECURRING_OVERLAP",
+    ),
+    "sem warning de sobreposição quando nenhum template participa",
+  );
+}
+
 equal(
   core.todayIso(new Date("2026-01-01T01:30:00Z")),
   "2025-12-31",
@@ -652,11 +671,11 @@ equal(
 );
 
 const tools = manifest.mcp.tools;
-equal(tools.length, 17, "manifest contém exatamente 17 tools");
+equal(tools.length, 18, "manifest contém exatamente 18 tools");
 equal(
   tools.filter((tool) => tool.annotations?.readOnlyHint === true).length,
-  15,
-  "manifest contém 15 tools read-only",
+  16,
+  "manifest contém 16 tools read-only",
 );
 for (const name of ["list_goals", "get_goal_progress"]) {
   const tool = tools.find((candidate) => candidate.name === name);
