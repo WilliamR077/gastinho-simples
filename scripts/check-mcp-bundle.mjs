@@ -51,6 +51,8 @@ assert.match(source, /name:\s*"get_cashflow_series"/u);
 assert.match(source, /name:\s*"get_cashflow_projection"/u);
 assert.match(source, /name:\s*"update_expense"/u);
 assert.match(source, /name:\s*"update_income"/u);
+assert.match(source, /name:\s*"delete_expense"/u);
+assert.match(source, /name:\s*"delete_income"/u);
 assert.match(source, /Deno\.serve/u);
 
 console.log("Bundle MCP autocontido e sem caminhos absolutos.");

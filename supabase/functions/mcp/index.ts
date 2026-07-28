@@ -39,13 +39,13 @@ var MESSAGES = {
   INVALID_FILTER_COMBINATION: "card_id e payment_method s\xE3o exclusivos de despesas. Repita a consulta com transaction_type=expense.",
   RESOURCE_NOT_FOUND: "Recurso n\xE3o encontrado para a conta autenticada.",
   CONCURRENT_MODIFICATION: "O lan\xE7amento foi alterado desde a leitura. Releia o registro antes de tentar novamente.",
-  INVALID_INPUT: "Os par\xE2metros da atualiza\xE7\xE3o s\xE3o inv\xE1lidos.",
+  INVALID_INPUT: "Os par\xE2metros da opera\xE7\xE3o s\xE3o inv\xE1lidos.",
   INVALID_PATCH: "O conjunto de altera\xE7\xF5es \xE9 inv\xE1lido ou est\xE1 vazio.",
   CONFIRMATION_REQUIRED: "A opera\xE7\xE3o exige confirma\xE7\xE3o expl\xEDcita.",
   CATEGORY_NOT_FOUND: "Categoria n\xE3o encontrada para a conta autenticada.",
   CARD_NOT_FOUND: "Cart\xE3o n\xE3o encontrado para a conta autenticada.",
-  BUSINESS_RULE_VIOLATION: "A altera\xE7\xE3o viola uma regra do lan\xE7amento.",
-  WRITE_FAILED: "N\xE3o foi poss\xEDvel aplicar a atualiza\xE7\xE3o.",
+  BUSINESS_RULE_VIOLATION: "A opera\xE7\xE3o viola uma regra do lan\xE7amento.",
+  WRITE_FAILED: "N\xE3o foi poss\xEDvel concluir a opera\xE7\xE3o de escrita.",
   INVALID_CARD_TYPE: "Tipo de cart\xE3o inv\xE1lido. Use credit, debit ou both.",
   INVALID_DATA: "Os dados informados s\xE3o inv\xE1lidos.",
   DATE_RANGE_TOO_LARGE: "Intervalo de datas excede o m\xE1ximo permitido de 366 dias.",
@@ -5619,13 +5619,242 @@ var update_income_default = defineTool22({
   }
 });
 
+// src/lib/mcp/tools/delete-expense.ts
+import { defineTool as defineTool23 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z26 } from "npm:zod@^3.25.76";
+
+// src/lib/mcp/shared/transaction-delete.ts
+import { z as z25 } from "npm:zod@^3.25.76";
+var DELETE_WARNINGS = [
+  "ONLY_ONE_INSTALLMENT_DELETED",
+  "SHARED_RECORD_DELETED",
+  "PERMANENT_DELETION"
+];
+var deleteWarningSchema = z25.enum(DELETE_WARNINGS);
+function confirmationRequiredContent(resourceType, record, installmentConfirmationMissing) {
+  const label = resourceType === "expense" ? "despesa" : "receita";
+  const date = record.expense_date ?? record.income_date ?? "desconhecida";
+  const installment = record.installment_group_id !== null || (record.installment_number ?? 0) > 1 || (record.total_installments ?? 0) > 1;
+  const missing = installmentConfirmationMissing ? "Falta confirm_single_installment_delete=true. " : "Falta confirm_delete=true. ";
+  return `Nada foi exclu\xEDdo. ${missing}A exclus\xE3o desta ${label} \xE9 definitiva: description=${JSON.stringify(record.description)}; amount=${record.amount}; date=${date}; is_shared=${record.is_shared}; installment=${installment}; installment_number=${record.installment_number ?? "null"}; total_installments=${record.total_installments ?? "null"}. ` + (installment ? "Somente a parcela selecionada seria removida; nenhuma outra parcela seria exclu\xEDda. " : "") + "Releia os dados e repita a opera\xE7\xE3o com a confirma\xE7\xE3o expl\xEDcita necess\xE1ria.";
+}
+function deleteContent(result) {
+  const label = result.resource_type === "expense" ? "despesa" : "receita";
+  const record = result.deleted_record;
+  const date = record.expense_date ?? record.income_date ?? "desconhecida";
+  const installment = record.installment_group_id !== null || (record.installment_number ?? 0) > 1 || (record.total_installments ?? 0) > 1;
+  const installmentText = installment ? ` Foi exclu\xEDda somente a parcela ${record.installment_number ?? "desconhecida"}/${record.total_installments ?? "desconhecido"}; nenhuma outra parcela foi removida e a s\xE9rie poder\xE1 ficar incompleta.` : "";
+  const sharedText = record.is_shared ? " A transa\xE7\xE3o compartilhada criada por voc\xEA foi removida e deixar\xE1 de aparecer no grupo." : "";
+  return `Foi exclu\xEDda definitivamente a ${label} ${result.id}: description=${JSON.stringify(record.description)}; amount=${record.amount}; date=${date}.` + installmentText + sharedText + ` Cart\xE3o, categoria, grupo, meta e templates recorrentes n\xE3o foram exclu\xEDdos. warnings=${JSON.stringify(result.warnings)}; operation_completed_at=${result.operation_completed_at}.`;
+}
+
+// src/lib/mcp/tools/delete-expense.ts
+var EXPENSE_COLUMNS3 = "id,user_id,description,amount,expense_date,category_id,category_name,category_icon,payment_method,card_id,card_name,card_color,shared_group_id,is_shared,installment_group_id,installment_number,total_installments,created_at,updated_at";
+var inputProperties3 = {
+  expense_id: z26.string().uuid(),
+  expected_updated_at: expectedUpdatedAtSchema,
+  confirm_delete: z26.boolean(),
+  confirm_single_installment_delete: z26.boolean().optional()
+};
+var inputValidator3 = z26.object({
+  ...inputProperties3,
+  confirm_delete: z26.boolean().optional()
+}).strict();
+var delete_expense_default = defineTool23({
+  name: "delete_expense",
+  title: "Excluir despesa definitivamente",
+  description: "Exclui definitivamente uma \xFAnica despesa pertencente \xE0 conta autenticada. Exige confirm_delete=true, expected_updated_at atual e confirma\xE7\xE3o adicional para parcelas.",
+  inputSchema: inputProperties3,
+  outputSchema: {
+    resource_type: z26.literal("expense"),
+    id: z26.string().uuid(),
+    deleted: z26.literal(true),
+    deletion_mode: z26.literal("permanent"),
+    deleted_record: expenseViewSchema,
+    operation_completed_at: z26.string(),
+    warnings: z26.array(deleteWarningSchema),
+    data_complete: z26.literal(true)
+  },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: false
+  },
+  handler: async (rawInput, ctx) => {
+    if (!ctx.isAuthenticated() || !ctx.getUserId()) {
+      return mcpError("UNAUTHENTICATED");
+    }
+    const parsed = inputValidator3.safeParse(rawInput);
+    if (!parsed.success) return mcpError("INVALID_INPUT");
+    const input = parsed.data;
+    const userId = ctx.getUserId();
+    const supabase = supabaseForUser(ctx);
+    const currentResult = await supabase.from("expenses").select(EXPENSE_COLUMNS3).eq("id", input.expense_id).eq("user_id", userId).maybeSingle();
+    if (currentResult.error) return mcpError("INTERNAL_ERROR");
+    if (!currentResult.data) return mcpError("RESOURCE_NOT_FOUND");
+    const current = currentResult.data;
+    if (current.updated_at !== input.expected_updated_at) {
+      return mcpError("CONCURRENT_MODIFICATION");
+    }
+    const recognizable = expenseView(current);
+    if (!recognizable || !expenseViewSchema.safeParse(recognizable).success) {
+      return mcpError("INVALID_DATA");
+    }
+    if (input.confirm_delete !== true) {
+      return mcpError(
+        "CONFIRMATION_REQUIRED",
+        confirmationRequiredContent("expense", recognizable, false)
+      );
+    }
+    const installment = isInstallment(current);
+    if (installment && input.confirm_single_installment_delete !== true) {
+      return mcpError(
+        "CONFIRMATION_REQUIRED",
+        confirmationRequiredContent("expense", recognizable, true)
+      );
+    }
+    const deleteResult = await supabase.from("expenses").delete().eq("id", input.expense_id).eq("user_id", userId).eq("updated_at", input.expected_updated_at).select(EXPENSE_COLUMNS3).maybeSingle();
+    if (deleteResult.error) return mcpError("WRITE_FAILED");
+    if (!deleteResult.data) {
+      const existence = await supabase.from("expenses").select("id,updated_at").eq("id", input.expense_id).eq("user_id", userId).maybeSingle();
+      if (existence.error) return mcpError("INTERNAL_ERROR");
+      return mcpError(
+        existence.data ? "CONCURRENT_MODIFICATION" : "RESOURCE_NOT_FOUND"
+      );
+    }
+    const deletedRecord = expenseView(deleteResult.data);
+    if (!deletedRecord || !expenseViewSchema.safeParse(deletedRecord).success) {
+      return mcpError("INVALID_DATA");
+    }
+    const warnings = ["PERMANENT_DELETION"];
+    if (deletedRecord.is_shared) warnings.push("SHARED_RECORD_DELETED");
+    if (installment) warnings.push("ONLY_ONE_INSTALLMENT_DELETED");
+    const result = {
+      resource_type: "expense",
+      id: deletedRecord.id,
+      deleted: true,
+      deletion_mode: "permanent",
+      deleted_record: deletedRecord,
+      operation_completed_at: (/* @__PURE__ */ new Date()).toISOString(),
+      warnings,
+      data_complete: true
+    };
+    return {
+      content: [{ type: "text", text: deleteContent(result) }],
+      structuredContent: result
+    };
+  }
+});
+
+// src/lib/mcp/tools/delete-income.ts
+import { defineTool as defineTool24 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z27 } from "npm:zod@^3.25.76";
+var INCOME_COLUMNS3 = "id,user_id,description,amount,income_date,income_category_id,category_name,category_icon,shared_group_id,installment_group_id,installment_number,total_installments,created_at,updated_at";
+var inputProperties4 = {
+  income_id: z27.string().uuid(),
+  expected_updated_at: expectedUpdatedAtSchema,
+  confirm_delete: z27.boolean(),
+  confirm_single_installment_delete: z27.boolean().optional()
+};
+var inputValidator4 = z27.object({
+  ...inputProperties4,
+  confirm_delete: z27.boolean().optional()
+}).strict();
+var delete_income_default = defineTool24({
+  name: "delete_income",
+  title: "Excluir receita definitivamente",
+  description: "Exclui definitivamente uma \xFAnica receita pertencente \xE0 conta autenticada. Exige confirm_delete=true, expected_updated_at atual e confirma\xE7\xE3o adicional para parcelas.",
+  inputSchema: inputProperties4,
+  outputSchema: {
+    resource_type: z27.literal("income"),
+    id: z27.string().uuid(),
+    deleted: z27.literal(true),
+    deletion_mode: z27.literal("permanent"),
+    deleted_record: incomeViewSchema,
+    operation_completed_at: z27.string(),
+    warnings: z27.array(deleteWarningSchema),
+    data_complete: z27.literal(true)
+  },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: false
+  },
+  handler: async (rawInput, ctx) => {
+    if (!ctx.isAuthenticated() || !ctx.getUserId()) {
+      return mcpError("UNAUTHENTICATED");
+    }
+    const parsed = inputValidator4.safeParse(rawInput);
+    if (!parsed.success) return mcpError("INVALID_INPUT");
+    const input = parsed.data;
+    const userId = ctx.getUserId();
+    const supabase = supabaseForUser(ctx);
+    const currentResult = await supabase.from("incomes").select(INCOME_COLUMNS3).eq("id", input.income_id).eq("user_id", userId).maybeSingle();
+    if (currentResult.error) return mcpError("INTERNAL_ERROR");
+    if (!currentResult.data) return mcpError("RESOURCE_NOT_FOUND");
+    const current = currentResult.data;
+    if (current.updated_at !== input.expected_updated_at) {
+      return mcpError("CONCURRENT_MODIFICATION");
+    }
+    const recognizable = incomeView(current);
+    if (!incomeViewSchema.safeParse(recognizable).success) {
+      return mcpError("INVALID_DATA");
+    }
+    if (input.confirm_delete !== true) {
+      return mcpError(
+        "CONFIRMATION_REQUIRED",
+        confirmationRequiredContent("income", recognizable, false)
+      );
+    }
+    const installment = isInstallment(current);
+    if (installment && input.confirm_single_installment_delete !== true) {
+      return mcpError(
+        "CONFIRMATION_REQUIRED",
+        confirmationRequiredContent("income", recognizable, true)
+      );
+    }
+    const deleteResult = await supabase.from("incomes").delete().eq("id", input.income_id).eq("user_id", userId).eq("updated_at", input.expected_updated_at).select(INCOME_COLUMNS3).maybeSingle();
+    if (deleteResult.error) return mcpError("WRITE_FAILED");
+    if (!deleteResult.data) {
+      const existence = await supabase.from("incomes").select("id,updated_at").eq("id", input.income_id).eq("user_id", userId).maybeSingle();
+      if (existence.error) return mcpError("INTERNAL_ERROR");
+      return mcpError(
+        existence.data ? "CONCURRENT_MODIFICATION" : "RESOURCE_NOT_FOUND"
+      );
+    }
+    const deletedRecord = incomeView(deleteResult.data);
+    if (!incomeViewSchema.safeParse(deletedRecord).success) {
+      return mcpError("INVALID_DATA");
+    }
+    const warnings = ["PERMANENT_DELETION"];
+    if (deletedRecord.is_shared) warnings.push("SHARED_RECORD_DELETED");
+    if (installment) warnings.push("ONLY_ONE_INSTALLMENT_DELETED");
+    const result = {
+      resource_type: "income",
+      id: deletedRecord.id,
+      deleted: true,
+      deletion_mode: "permanent",
+      deleted_record: deletedRecord,
+      operation_completed_at: (/* @__PURE__ */ new Date()).toISOString(),
+      warnings,
+      data_complete: true
+    };
+    return {
+      content: [{ type: "text", text: deleteContent(result) }],
+      structuredContent: result
+    };
+  }
+});
+
 // src/lib/mcp/index.ts
 var projectRef = "jaoldaqvbdllowepzwbr";
 var mcp_default = defineMcp({
   name: "gastinho-simples-mcp",
   title: "Gastinho Simples",
   version: "0.1.0",
-  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Antes de update_expense ou update_income, localize o lan\xE7amento com search_transactions, list_expenses ou list_incomes e reutilize exatamente o updated_at retornado como expected_updated_at. Nunca tente editar recurso de outro propriet\xE1rio nem afirmar que uma s\xE9rie inteira foi alterada; update_expense altera uma \xFAnica parcela e exige confirma\xE7\xE3o quando aplic\xE1vel. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para lan\xE7amentos reais, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. get_cashflow_series representa somente realizado. get_cashflow_projection separa realizado, futuro materializado e templates recorrentes; futuro materializado s\xE3o linhas reais com data futura, recorr\xEAncias s\xE3o apenas templates, e a soma combinada pode conter sobreposi\xE7\xE3o. Ela n\xE3o representa saldo banc\xE1rio nem previs\xE3o garantida. Para templates isolados use get_recurring_forecast; para parcelas futuras j\xE1 materializadas use get_card_installments. Use list_cards para localizar o cart\xE3o e get_card_summary para o total registrado no per\xEDodo calculado. Recorr\xEAncias s\xE3o templates mensais: use list_recurring_transactions para list\xE1-las e get_recurring_forecast apenas para proje\xE7\xF5es baseadas nesses templates. Metas tamb\xE9m s\xE3o mensais: use list_goals e get_goal_progress; elas n\xE3o s\xE3o metas de poupan\xE7a com contribui\xE7\xF5es. Mantenha realizado e recorrente separados, informe o risco de sobreposi\xE7\xE3o da proje\xE7\xE3o quando houver templates participantes e n\xE3o gere recomenda\xE7\xE3o financeira. Use get_category_usage somente para fatos hist\xF3ricos sobre categorias pessoais: categorias compartilhadas n\xE3o existem no modelo atual e transa\xE7\xF5es compartilhadas de outros propriet\xE1rios n\xE3o entram. O forecast n\xE3o representa transa\xE7\xF5es efetivamente lan\xE7adas e nunca deve ser somado automaticamente a parcelas ou lan\xE7amentos futuros. Nunca chame resultados de saldo banc\xE1rio, limite real dispon\xEDvel ou fatura oficialmente paga/em aberto. Use list_categories para UUIDs. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
+  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Antes de update_expense, update_income, delete_expense ou delete_income, localize o lan\xE7amento com search_transactions, list_expenses ou list_incomes e reutilize exatamente o updated_at retornado como expected_updated_at. Exclus\xF5es s\xE3o definitivas, sempre exigem confirm_delete=true e, para parcelas, confirma\xE7\xE3o espec\xEDfica; elas removem somente a linha selecionada, nunca a s\xE9rie inteira. Nunca tente editar ou excluir recurso de outro propriet\xE1rio nem afirmar que uma s\xE9rie inteira foi alterada. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para lan\xE7amentos reais, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. get_cashflow_series representa somente realizado. get_cashflow_projection separa realizado, futuro materializado e templates recorrentes; futuro materializado s\xE3o linhas reais com data futura, recorr\xEAncias s\xE3o apenas templates, e a soma combinada pode conter sobreposi\xE7\xE3o. Ela n\xE3o representa saldo banc\xE1rio nem previs\xE3o garantida. Para templates isolados use get_recurring_forecast; para parcelas futuras j\xE1 materializadas use get_card_installments. Use list_cards para localizar o cart\xE3o e get_card_summary para o total registrado no per\xEDodo calculado. Recorr\xEAncias s\xE3o templates mensais: use list_recurring_transactions para list\xE1-las e get_recurring_forecast apenas para proje\xE7\xF5es baseadas nesses templates. Metas tamb\xE9m s\xE3o mensais: use list_goals e get_goal_progress; elas n\xE3o s\xE3o metas de poupan\xE7a com contribui\xE7\xF5es. Mantenha realizado e recorrente separados, informe o risco de sobreposi\xE7\xE3o da proje\xE7\xE3o quando houver templates participantes e n\xE3o gere recomenda\xE7\xE3o financeira. Use get_category_usage somente para fatos hist\xF3ricos sobre categorias pessoais: categorias compartilhadas n\xE3o existem no modelo atual e transa\xE7\xF5es compartilhadas de outros propriet\xE1rios n\xE3o entram. O forecast n\xE3o representa transa\xE7\xF5es efetivamente lan\xE7adas e nunca deve ser somado automaticamente a parcelas ou lan\xE7amentos futuros. Nunca chame resultados de saldo banc\xE1rio, limite real dispon\xEDvel ou fatura oficialmente paga/em aberto. Use list_categories para UUIDs. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
@@ -5652,7 +5881,9 @@ var mcp_default = defineMcp({
     get_cashflow_series_default,
     get_cashflow_projection_default,
     update_expense_default,
-    update_income_default
+    update_income_default,
+    delete_expense_default,
+    delete_income_default
   ]
 });
 

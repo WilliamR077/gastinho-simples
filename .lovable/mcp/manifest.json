@@ -5456,6 +5456,436 @@
           "additionalProperties": false,
           "$schema": "http://json-schema.org/draft-07/schema#"
         }
+      },
+      {
+        "name": "delete_expense",
+        "title": "Excluir despesa definitivamente",
+        "description": "Exclui definitivamente uma única despesa pertencente à conta autenticada. Exige confirm_delete=true, expected_updated_at atual e confirmação adicional para parcelas.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "expense_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "expected_updated_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "confirm_delete": {
+              "type": "boolean"
+            },
+            "confirm_single_installment_delete": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "expense_id",
+            "expected_updated_at",
+            "confirm_delete"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "expense"
+            },
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "deleted": {
+              "type": "boolean",
+              "const": true
+            },
+            "deletion_mode": {
+              "type": "string",
+              "const": "permanent"
+            },
+            "deleted_record": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "expense_date": {
+                  "type": "string"
+                },
+                "category_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "category_name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "category_icon": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "payment_method": {
+                  "type": "string",
+                  "enum": [
+                    "pix",
+                    "credit",
+                    "debit",
+                    "cash"
+                  ]
+                },
+                "card_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "card_name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "card_color": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "is_shared": {
+                  "type": "boolean"
+                },
+                "shared_group_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "installment_group_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "installment_number": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "total_installments": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "created_at": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "description",
+                "amount",
+                "expense_date",
+                "category_id",
+                "category_name",
+                "category_icon",
+                "payment_method",
+                "card_id",
+                "card_name",
+                "card_color",
+                "is_shared",
+                "shared_group_id",
+                "installment_group_id",
+                "installment_number",
+                "total_installments",
+                "created_at",
+                "updated_at"
+              ],
+              "additionalProperties": false
+            },
+            "operation_completed_at": {
+              "type": "string"
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "ONLY_ONE_INSTALLMENT_DELETED",
+                  "SHARED_RECORD_DELETED",
+                  "PERMANENT_DELETION"
+                ]
+              }
+            },
+            "data_complete": {
+              "type": "boolean",
+              "const": true
+            }
+          },
+          "required": [
+            "resource_type",
+            "id",
+            "deleted",
+            "deletion_mode",
+            "deleted_record",
+            "operation_completed_at",
+            "warnings",
+            "data_complete"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      },
+      {
+        "name": "delete_income",
+        "title": "Excluir receita definitivamente",
+        "description": "Exclui definitivamente uma única receita pertencente à conta autenticada. Exige confirm_delete=true, expected_updated_at atual e confirmação adicional para parcelas.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "income_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "expected_updated_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "confirm_delete": {
+              "type": "boolean"
+            },
+            "confirm_single_installment_delete": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "income_id",
+            "expected_updated_at",
+            "confirm_delete"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "income"
+            },
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "deleted": {
+              "type": "boolean",
+              "const": true
+            },
+            "deletion_mode": {
+              "type": "string",
+              "const": "permanent"
+            },
+            "deleted_record": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "income_date": {
+                  "type": "string"
+                },
+                "income_category_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "category_name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "category_icon": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "is_shared": {
+                  "type": "boolean"
+                },
+                "shared_group_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "installment_group_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "installment_number": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "total_installments": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "created_at": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "description",
+                "amount",
+                "income_date",
+                "income_category_id",
+                "category_name",
+                "category_icon",
+                "is_shared",
+                "shared_group_id",
+                "installment_group_id",
+                "installment_number",
+                "total_installments",
+                "created_at",
+                "updated_at"
+              ],
+              "additionalProperties": false
+            },
+            "operation_completed_at": {
+              "type": "string"
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "ONLY_ONE_INSTALLMENT_DELETED",
+                  "SHARED_RECORD_DELETED",
+                  "PERMANENT_DELETION"
+                ]
+              }
+            },
+            "data_complete": {
+              "type": "boolean",
+              "const": true
+            }
+          },
+          "required": [
+            "resource_type",
+            "id",
+            "deleted",
+            "deletion_mode",
+            "deleted_record",
+            "operation_completed_at",
+            "warnings",
+            "data_complete"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
       }
     ]
   }
