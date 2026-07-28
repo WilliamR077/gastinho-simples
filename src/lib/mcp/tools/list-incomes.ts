@@ -15,6 +15,7 @@ import {
 } from "../shared/phase-1.1b-core";
 import type { McpScope } from "../shared/scope";
 import { queryIncomesPage, type IncomeQueryFilters } from "../shared/transaction-query";
+import { incomeListItemSchema } from "../shared/transaction-read-schema";
 
 const CURSOR_CONTEXT = "list_incomes";
 
@@ -37,6 +38,27 @@ export default defineTool({
     sort_order: z.enum(["asc", "desc"]).optional(),
     limit: z.number().int().min(1).max(100).optional(),
     cursor: z.string().min(1).max(1000).optional(),
+  },
+  outputSchema: {
+    items: z.array(incomeListItemSchema),
+    incomes: z.array(incomeListItemSchema),
+    count: z.number().int().nonnegative(),
+    limit: z.number().int().positive(),
+    next_cursor: z.string().nullable(),
+    cursor_version: z.literal(3),
+    applied_filters: z.object({
+      start_date: z.string().nullable(),
+      end_date: z.string().nullable(),
+      query: z.string().nullable(),
+      income_category_id: z.string().uuid().nullable(),
+      group_id: z.string().uuid().nullable(),
+      min_amount: z.number().nullable(),
+      max_amount: z.number().nullable(),
+      sort_by: z.enum(["date", "created_at", "amount"]),
+      sort_order: z.enum(["asc", "desc"]),
+    }).strict(),
+    scope: z.enum(["personal", "shared", "all_accessible"]),
+    time_scope: z.enum(["occurred", "future", "all"]),
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async (input, ctx) => {

@@ -7,7 +7,7 @@ import { auth, defineMcp } from "npm:@lovable.dev/mcp-js@0.24.0";
 
 // src/lib/mcp/tools/list-expenses.ts
 import { defineTool } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z } from "npm:zod@^3.25.76";
+import { z as z2 } from "npm:zod@^3.25.76";
 
 // src/lib/mcp/shared/supabase-client.ts
 import { createClient } from "npm:@supabase/supabase-js@^2.57.0";
@@ -38,6 +38,14 @@ var MESSAGES = {
   INVALID_TRANSACTION_TYPE: "Tipo de transa\xE7\xE3o inv\xE1lido.",
   INVALID_FILTER_COMBINATION: "card_id e payment_method s\xE3o exclusivos de despesas. Repita a consulta com transaction_type=expense.",
   RESOURCE_NOT_FOUND: "Recurso n\xE3o encontrado para a conta autenticada.",
+  CONCURRENT_MODIFICATION: "O lan\xE7amento foi alterado desde a leitura. Releia o registro antes de tentar novamente.",
+  INVALID_INPUT: "Os par\xE2metros da atualiza\xE7\xE3o s\xE3o inv\xE1lidos.",
+  INVALID_PATCH: "O conjunto de altera\xE7\xF5es \xE9 inv\xE1lido ou est\xE1 vazio.",
+  CONFIRMATION_REQUIRED: "A opera\xE7\xE3o exige confirma\xE7\xE3o expl\xEDcita.",
+  CATEGORY_NOT_FOUND: "Categoria n\xE3o encontrada para a conta autenticada.",
+  CARD_NOT_FOUND: "Cart\xE3o n\xE3o encontrado para a conta autenticada.",
+  BUSINESS_RULE_VIOLATION: "A altera\xE7\xE3o viola uma regra do lan\xE7amento.",
+  WRITE_FAILED: "N\xE3o foi poss\xEDvel aplicar a atualiza\xE7\xE3o.",
   INVALID_CARD_TYPE: "Tipo de cart\xE3o inv\xE1lido. Use credit, debit ou both.",
   INVALID_DATA: "Os dados informados s\xE3o inv\xE1lidos.",
   DATE_RANGE_TOO_LARGE: "Intervalo de datas excede o m\xE1ximo permitido de 366 dias.",
@@ -380,8 +388,8 @@ function cursorFilterForTransactionType(query, column, cursor, rowType) {
   }
   return cursor.sort_order === "asc" ? query.gt(column, cursor.sort_value) : query.lt(column, cursor.sort_value);
 }
-var EXPENSE_COLUMNS = "id, user_id, description, amount, expense_date, created_at, category_id, category_name, category_icon, payment_method, card_id, card_name, installment_number, total_installments, shared_group_id";
-var INCOME_COLUMNS = "id, user_id, description, amount, income_date, created_at, income_category_id, category_name, category_icon, installment_number, total_installments, shared_group_id";
+var EXPENSE_COLUMNS = "id, user_id, description, amount, expense_date, created_at, updated_at, category_id, category_name, category_icon, payment_method, card_id, card_name, installment_number, total_installments, shared_group_id";
+var INCOME_COLUMNS = "id, user_id, description, amount, income_date, created_at, updated_at, income_category_id, category_name, category_icon, installment_number, total_installments, shared_group_id";
 function sortColumn(sortBy, dateColumn) {
   if (sortBy === "created_at") return "created_at";
   if (sortBy === "amount") return "amount";
@@ -395,6 +403,7 @@ function expenseItem(row, userId) {
     date: row.expense_date,
     expense_date: row.expense_date,
     created_at: row.created_at,
+    updated_at: row.updated_at,
     category_id: row.category_id,
     category_name: row.category_name,
     category_icon: row.category_icon,
@@ -416,6 +425,7 @@ function incomeItem(row, userId) {
     date: row.income_date,
     income_date: row.income_date,
     created_at: row.created_at,
+    updated_at: row.updated_at,
     income_category_id: row.income_category_id,
     category_name: row.category_name,
     category_icon: row.category_icon,
@@ -597,6 +607,37 @@ async function fetchAllIncomes(supabase, userId, filters, hardCap, cursorSecret)
   return { items: [], error: false, too_large: true };
 }
 
+// src/lib/mcp/shared/transaction-read-schema.ts
+import { z } from "npm:zod@^3.25.76";
+var common = {
+  id: z.string().uuid(),
+  description: z.string(),
+  amount: z.number(),
+  date: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  category_name: z.string().nullable(),
+  category_icon: z.string().nullable(),
+  installment_number: z.number().int().nullable(),
+  total_installments: z.number().int().nullable(),
+  shared_group_id: z.string().uuid().nullable(),
+  is_shared: z.boolean(),
+  is_owner: z.boolean()
+};
+var expenseListItemSchema = z.object({
+  ...common,
+  expense_date: z.string(),
+  category_id: z.string().uuid().nullable(),
+  payment_method: z.enum(["pix", "credit", "debit", "cash"]),
+  card_id: z.string().uuid().nullable(),
+  card_name: z.string().nullable()
+}).strict();
+var incomeListItemSchema = z.object({
+  ...common,
+  income_date: z.string(),
+  income_category_id: z.string().uuid().nullable()
+}).strict();
+
 // src/lib/mcp/tools/list-expenses.ts
 var CURSOR_CONTEXT = "list_expenses";
 var list_expenses_default = defineTool({
@@ -604,21 +645,44 @@ var list_expenses_default = defineTool({
   title: "Listar despesas",
   description: "Lista despesas com filtros e cursor est\xE1vel. O padr\xE3o preserva scope=personal e time_scope=all. Para 'recentes', '\xFAltimas' ou 'j\xE1 gastei', use time_scope=occurred; para parcelas futuras, future; para todos os lan\xE7amentos, all.",
   inputSchema: {
-    start_date: z.string().regex(ISO_DATE_RE).optional(),
-    end_date: z.string().regex(ISO_DATE_RE).optional(),
-    query: z.string().trim().min(1).max(100).optional(),
-    category_id: z.string().uuid().optional(),
-    payment_method: z.enum(["pix", "credit", "debit", "cash"]).optional(),
-    card_id: z.string().uuid().optional(),
-    group_id: z.string().uuid().optional(),
-    min_amount: z.number().nonnegative().optional(),
-    max_amount: z.number().nonnegative().optional(),
-    scope: z.enum(["personal", "shared", "all_accessible"]).optional(),
-    time_scope: z.enum(["occurred", "future", "all"]).optional(),
-    sort_by: z.enum(["date", "created_at", "amount"]).optional(),
-    sort_order: z.enum(["asc", "desc"]).optional(),
-    limit: z.number().int().min(1).max(100).optional(),
-    cursor: z.string().min(1).max(1e3).optional()
+    start_date: z2.string().regex(ISO_DATE_RE).optional(),
+    end_date: z2.string().regex(ISO_DATE_RE).optional(),
+    query: z2.string().trim().min(1).max(100).optional(),
+    category_id: z2.string().uuid().optional(),
+    payment_method: z2.enum(["pix", "credit", "debit", "cash"]).optional(),
+    card_id: z2.string().uuid().optional(),
+    group_id: z2.string().uuid().optional(),
+    min_amount: z2.number().nonnegative().optional(),
+    max_amount: z2.number().nonnegative().optional(),
+    scope: z2.enum(["personal", "shared", "all_accessible"]).optional(),
+    time_scope: z2.enum(["occurred", "future", "all"]).optional(),
+    sort_by: z2.enum(["date", "created_at", "amount"]).optional(),
+    sort_order: z2.enum(["asc", "desc"]).optional(),
+    limit: z2.number().int().min(1).max(100).optional(),
+    cursor: z2.string().min(1).max(1e3).optional()
+  },
+  outputSchema: {
+    items: z2.array(expenseListItemSchema),
+    expenses: z2.array(expenseListItemSchema),
+    count: z2.number().int().nonnegative(),
+    limit: z2.number().int().positive(),
+    next_cursor: z2.string().nullable(),
+    cursor_version: z2.literal(3),
+    applied_filters: z2.object({
+      start_date: z2.string().nullable(),
+      end_date: z2.string().nullable(),
+      query: z2.string().nullable(),
+      category_id: z2.string().uuid().nullable(),
+      payment_method: z2.enum(["pix", "credit", "debit", "cash"]).nullable(),
+      card_id: z2.string().uuid().nullable(),
+      group_id: z2.string().uuid().nullable(),
+      min_amount: z2.number().nullable(),
+      max_amount: z2.number().nullable(),
+      sort_by: z2.enum(["date", "created_at", "amount"]),
+      sort_order: z2.enum(["asc", "desc"])
+    }).strict(),
+    scope: z2.enum(["personal", "shared", "all_accessible"]),
+    time_scope: z2.enum(["occurred", "future", "all"])
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async (input, ctx) => {
@@ -727,26 +791,47 @@ var list_expenses_default = defineTool({
 
 // src/lib/mcp/tools/list-incomes.ts
 import { defineTool as defineTool2 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z2 } from "npm:zod@^3.25.76";
+import { z as z3 } from "npm:zod@^3.25.76";
 var CURSOR_CONTEXT2 = "list_incomes";
 var list_incomes_default = defineTool2({
   name: "list_incomes",
   title: "Listar receitas",
   description: "Lista receitas com filtros e cursor est\xE1vel. O padr\xE3o preserva scope=personal e time_scope=all. Para receitas j\xE1 ocorridas use occurred; para lan\xE7amentos futuros use future.",
   inputSchema: {
-    start_date: z2.string().regex(ISO_DATE_RE).optional(),
-    end_date: z2.string().regex(ISO_DATE_RE).optional(),
-    query: z2.string().trim().min(1).max(100).optional(),
-    income_category_id: z2.string().uuid().optional(),
-    group_id: z2.string().uuid().optional(),
-    min_amount: z2.number().nonnegative().optional(),
-    max_amount: z2.number().nonnegative().optional(),
-    scope: z2.enum(["personal", "shared", "all_accessible"]).optional(),
-    time_scope: z2.enum(["occurred", "future", "all"]).optional(),
-    sort_by: z2.enum(["date", "created_at", "amount"]).optional(),
-    sort_order: z2.enum(["asc", "desc"]).optional(),
-    limit: z2.number().int().min(1).max(100).optional(),
-    cursor: z2.string().min(1).max(1e3).optional()
+    start_date: z3.string().regex(ISO_DATE_RE).optional(),
+    end_date: z3.string().regex(ISO_DATE_RE).optional(),
+    query: z3.string().trim().min(1).max(100).optional(),
+    income_category_id: z3.string().uuid().optional(),
+    group_id: z3.string().uuid().optional(),
+    min_amount: z3.number().nonnegative().optional(),
+    max_amount: z3.number().nonnegative().optional(),
+    scope: z3.enum(["personal", "shared", "all_accessible"]).optional(),
+    time_scope: z3.enum(["occurred", "future", "all"]).optional(),
+    sort_by: z3.enum(["date", "created_at", "amount"]).optional(),
+    sort_order: z3.enum(["asc", "desc"]).optional(),
+    limit: z3.number().int().min(1).max(100).optional(),
+    cursor: z3.string().min(1).max(1e3).optional()
+  },
+  outputSchema: {
+    items: z3.array(incomeListItemSchema),
+    incomes: z3.array(incomeListItemSchema),
+    count: z3.number().int().nonnegative(),
+    limit: z3.number().int().positive(),
+    next_cursor: z3.string().nullable(),
+    cursor_version: z3.literal(3),
+    applied_filters: z3.object({
+      start_date: z3.string().nullable(),
+      end_date: z3.string().nullable(),
+      query: z3.string().nullable(),
+      income_category_id: z3.string().uuid().nullable(),
+      group_id: z3.string().uuid().nullable(),
+      min_amount: z3.number().nullable(),
+      max_amount: z3.number().nullable(),
+      sort_by: z3.enum(["date", "created_at", "amount"]),
+      sort_order: z3.enum(["asc", "desc"])
+    }).strict(),
+    scope: z3.enum(["personal", "shared", "all_accessible"]),
+    time_scope: z3.enum(["occurred", "future", "all"])
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async (input, ctx) => {
@@ -851,17 +936,17 @@ var list_incomes_default = defineTool2({
 
 // src/lib/mcp/tools/create-expense.ts
 import { defineTool as defineTool3 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z3 } from "npm:zod@^3.25.76";
+import { z as z4 } from "npm:zod@^3.25.76";
 var create_expense_default = defineTool3({
   name: "create_expense",
   title: "Criar despesa",
   description: "Cria uma nova despesa para o usu\xE1rio autenticado. Requer descri\xE7\xE3o, valor, data (YYYY-MM-DD) e m\xE9todo de pagamento. Opcionalmente aceita category_id (UUID de user_categories).",
   inputSchema: {
-    description: z3.string().trim().min(1).max(200),
-    amount: z3.number().positive(),
-    expense_date: z3.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    payment_method: z3.enum(["pix", "credit", "debit", "cash", "transfer"]),
-    category_id: z3.string().uuid().optional()
+    description: z4.string().trim().min(1).max(200),
+    amount: z4.number().positive(),
+    expense_date: z4.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    payment_method: z4.enum(["pix", "credit", "debit", "cash", "transfer"]),
+    category_id: z4.string().uuid().optional()
   },
   annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
   handler: async (input, ctx) => {
@@ -897,16 +982,16 @@ var create_expense_default = defineTool3({
 
 // src/lib/mcp/tools/create-income.ts
 import { defineTool as defineTool4 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z4 } from "npm:zod@^3.25.76";
+import { z as z5 } from "npm:zod@^3.25.76";
 var create_income_default = defineTool4({
   name: "create_income",
   title: "Criar receita",
   description: "Cria uma nova receita (entrada) para o usu\xE1rio autenticado. Requer descri\xE7\xE3o, valor e data (YYYY-MM-DD). Opcionalmente aceita income_category_id (UUID de user_income_categories).",
   inputSchema: {
-    description: z4.string().trim().min(1).max(200),
-    amount: z4.number().positive(),
-    income_date: z4.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    income_category_id: z4.string().uuid().optional()
+    description: z5.string().trim().min(1).max(200),
+    amount: z5.number().positive(),
+    income_date: z5.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    income_category_id: z5.string().uuid().optional()
   },
   annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
   handler: async (input, ctx) => {
@@ -941,7 +1026,7 @@ var create_income_default = defineTool4({
 
 // src/lib/mcp/tools/get-summary.ts
 import { defineTool as defineTool5 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z5 } from "npm:zod@^3.25.76";
+import { z as z6 } from "npm:zod@^3.25.76";
 function baseFilters(start, end, scope, timeScope) {
   return {
     start_date: start,
@@ -997,12 +1082,12 @@ var get_summary_default = defineTool5({
   title: "Resumo financeiro",
   description: "Retorna totais, saldo, taxa de poupan\xE7a e contagens para um intervalo. Sem datas usa o m\xEAs corrente; scope=personal e time_scope=all preservam o comportamento anterior. Pode comparar com per\xEDodo anterior de mesma dura\xE7\xE3o.",
   inputSchema: {
-    start_date: z5.string().regex(ISO_DATE_RE).optional(),
-    end_date: z5.string().regex(ISO_DATE_RE).optional(),
-    scope: z5.enum(["personal", "shared", "all_accessible"]).optional(),
-    include_previous_period: z5.boolean().optional(),
-    include_counts: z5.boolean().optional(),
-    time_scope: z5.enum(["occurred", "future", "all"]).optional()
+    start_date: z6.string().regex(ISO_DATE_RE).optional(),
+    end_date: z6.string().regex(ISO_DATE_RE).optional(),
+    scope: z6.enum(["personal", "shared", "all_accessible"]).optional(),
+    include_previous_period: z6.boolean().optional(),
+    include_counts: z6.boolean().optional(),
+    time_scope: z6.enum(["occurred", "future", "all"]).optional()
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async (input, ctx) => {
@@ -1114,13 +1199,13 @@ var get_summary_default = defineTool5({
 
 // src/lib/mcp/tools/list-categories.ts
 import { defineTool as defineTool6 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z6 } from "npm:zod@^3.25.76";
+import { z as z7 } from "npm:zod@^3.25.76";
 var list_categories_default = defineTool6({
   name: "list_categories",
   title: "Listar categorias",
   description: "Lista as categorias de despesa ou receita do usu\xE1rio autenticado (\xFAtil para descobrir o UUID a passar em create_expense / create_income).",
   inputSchema: {
-    kind: z6.enum(["expense", "income"]).describe("Tipo de categoria: expense ou income.")
+    kind: z7.enum(["expense", "income"]).describe("Tipo de categoria: expense ou income.")
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async ({ kind }, ctx) => {
@@ -1138,7 +1223,7 @@ var list_categories_default = defineTool6({
 
 // src/lib/mcp/tools/get-connection-identity.ts
 import { defineTool as defineTool7 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z7 } from "npm:zod@^3.25.76";
+import { z as z8 } from "npm:zod@^3.25.76";
 function maskEmail(email) {
   if (!email) return null;
   const [local, domain] = email.split("@");
@@ -1160,11 +1245,11 @@ var get_connection_identity_default = defineTool7({
   description: "Mostra qual conta do Gastinho Simples est\xE1 conectada ao assistente atual. Retorna e-mail mascarado e uma refer\xEAncia opaca derivada por hash \u2014 nunca tokens, UUID ou claims.",
   inputSchema: {},
   outputSchema: {
-    email_masked: z7.string().nullable(),
-    connection_reference: z7.string().regex(/^GS-[A-F0-9]{8}$/),
-    oauth_client_id_present: z7.boolean(),
-    authenticated: z7.boolean(),
-    timestamp: z7.string().datetime()
+    email_masked: z8.string().nullable(),
+    connection_reference: z8.string().regex(/^GS-[A-F0-9]{8}$/),
+    oauth_client_id_present: z8.boolean(),
+    authenticated: z8.boolean(),
+    timestamp: z8.string().datetime()
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async (_input, ctx) => {
@@ -1195,7 +1280,7 @@ var get_connection_identity_default = defineTool7({
 
 // src/lib/mcp/tools/search-transactions.ts
 import { defineTool as defineTool8 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z8 } from "npm:zod@^3.25.76";
+import { z as z9 } from "npm:zod@^3.25.76";
 
 // src/lib/mcp/shared/content.ts
 function compactText(value, maxLength) {
@@ -1204,7 +1289,7 @@ function compactText(value, maxLength) {
 }
 function transactionContent(items, scope, timeScope, transactionType, hasMore, nextCursor, limit = items.length, cursorVersion = 3, appliedFilters = {}) {
   const preview = items.slice(0, 10).map(
-    (item) => `${item.transaction_type} ${item.date}: ${compactText(item.description, 80)} \u2014 ${item.amount}`
+    (item) => `${item.transaction_type} ${item.date}: ${compactText(item.description, 80)} \u2014 ${item.amount}; updated_at=${item.updated_at}`
   ).join("; ");
   return `Quantidade retornada=${items.length}; limit=${limit}; has_more=${hasMore}; cursor_version=${cursorVersion}; next_cursor=${nextCursor ?? "null"}; scope=${scope}; time_scope=${timeScope}; query_transaction_type=${transactionType}; applied_filters=${JSON.stringify(appliedFilters)}. Itens resumidos (m\xE1ximo 10): ${preview || "nenhum item"}.`;
 }
@@ -1241,70 +1326,71 @@ data_sufficiency_warnings=${JSON.stringify(details.dataSufficiencyWarnings)}.
 
 // src/lib/mcp/tools/search-transactions.ts
 var CURSOR_CONTEXT3 = "search_transactions";
-var transactionItemSchema = z8.object({
-  id: z8.string().uuid(),
-  transaction_type: z8.enum(["expense", "income"]),
-  description: z8.string(),
-  amount: z8.number(),
-  date: z8.string(),
-  created_at: z8.string(),
-  category_id: z8.string().uuid().nullable(),
-  category_name: z8.string().nullable(),
-  category_icon: z8.string().nullable(),
-  payment_method: z8.enum(["pix", "credit", "debit", "cash"]).nullable(),
-  card_id: z8.string().uuid().nullable(),
-  card_name: z8.string().nullable(),
-  installment_number: z8.number().int().nullable(),
-  total_installments: z8.number().int().nullable(),
-  shared_group_id: z8.string().uuid().nullable(),
-  is_shared: z8.boolean(),
-  is_owner: z8.boolean()
+var transactionItemSchema = z9.object({
+  id: z9.string().uuid(),
+  transaction_type: z9.enum(["expense", "income"]),
+  description: z9.string(),
+  amount: z9.number(),
+  date: z9.string(),
+  created_at: z9.string(),
+  updated_at: z9.string(),
+  category_id: z9.string().uuid().nullable(),
+  category_name: z9.string().nullable(),
+  category_icon: z9.string().nullable(),
+  payment_method: z9.enum(["pix", "credit", "debit", "cash"]).nullable(),
+  card_id: z9.string().uuid().nullable(),
+  card_name: z9.string().nullable(),
+  installment_number: z9.number().int().nullable(),
+  total_installments: z9.number().int().nullable(),
+  shared_group_id: z9.string().uuid().nullable(),
+  is_shared: z9.boolean(),
+  is_owner: z9.boolean()
 });
 var search_transactions_default = defineTool8({
   name: "search_transactions",
   title: "Pesquisar transa\xE7\xF5es",
   description: "Pesquisa despesas e receitas em uma resposta unificada. Por padr\xE3o busca transa\xE7\xF5es j\xE1 ocorridas, pessoais, ordenadas por data decrescente. card_id e payment_method exigem transaction_type=expense. Use future para lan\xE7amentos futuros e all somente quando solicitado.",
   inputSchema: {
-    query: z8.string().trim().min(1).max(100).optional(),
-    transaction_type: z8.enum(["expense", "income", "all"]).optional(),
-    start_date: z8.string().regex(ISO_DATE_RE).optional(),
-    end_date: z8.string().regex(ISO_DATE_RE).optional(),
-    category_id: z8.string().uuid().optional(),
-    payment_method: z8.enum(["pix", "credit", "debit", "cash"]).optional().describe("Filtro exclusivo de despesas; use transaction_type=expense."),
-    card_id: z8.string().uuid().optional().describe("Filtro exclusivo de despesas; use transaction_type=expense."),
-    group_id: z8.string().uuid().optional(),
-    min_amount: z8.number().nonnegative().optional(),
-    max_amount: z8.number().nonnegative().optional(),
-    scope: z8.enum(["personal", "shared", "all_accessible"]).optional(),
-    time_scope: z8.enum(["occurred", "future", "all"]).optional(),
-    sort_by: z8.enum(["date", "created_at", "amount"]).optional(),
-    sort_order: z8.enum(["asc", "desc"]).optional(),
-    limit: z8.number().int().min(1).max(100).optional(),
-    cursor: z8.string().min(1).max(1e3).optional()
+    query: z9.string().trim().min(1).max(100).optional(),
+    transaction_type: z9.enum(["expense", "income", "all"]).optional(),
+    start_date: z9.string().regex(ISO_DATE_RE).optional(),
+    end_date: z9.string().regex(ISO_DATE_RE).optional(),
+    category_id: z9.string().uuid().optional(),
+    payment_method: z9.enum(["pix", "credit", "debit", "cash"]).optional().describe("Filtro exclusivo de despesas; use transaction_type=expense."),
+    card_id: z9.string().uuid().optional().describe("Filtro exclusivo de despesas; use transaction_type=expense."),
+    group_id: z9.string().uuid().optional(),
+    min_amount: z9.number().nonnegative().optional(),
+    max_amount: z9.number().nonnegative().optional(),
+    scope: z9.enum(["personal", "shared", "all_accessible"]).optional(),
+    time_scope: z9.enum(["occurred", "future", "all"]).optional(),
+    sort_by: z9.enum(["date", "created_at", "amount"]).optional(),
+    sort_order: z9.enum(["asc", "desc"]).optional(),
+    limit: z9.number().int().min(1).max(100).optional(),
+    cursor: z9.string().min(1).max(1e3).optional()
   },
   outputSchema: {
-    items: z8.array(transactionItemSchema),
-    count: z8.number().int().nonnegative(),
-    limit: z8.number().int().positive(),
-    has_more: z8.boolean(),
-    cursor_version: z8.literal(3),
-    next_cursor: z8.string().nullable(),
-    applied_filters: z8.object({
-      query: z8.string().nullable(),
-      transaction_type: z8.enum(["expense", "income", "all"]),
-      start_date: z8.string().nullable(),
-      end_date: z8.string().nullable(),
-      category_id: z8.string().nullable(),
-      payment_method: z8.string().nullable(),
-      card_id: z8.string().nullable(),
-      group_id: z8.string().nullable(),
-      min_amount: z8.number().nullable(),
-      max_amount: z8.number().nullable(),
-      sort_by: z8.enum(["date", "created_at", "amount"]),
-      sort_order: z8.enum(["asc", "desc"])
+    items: z9.array(transactionItemSchema),
+    count: z9.number().int().nonnegative(),
+    limit: z9.number().int().positive(),
+    has_more: z9.boolean(),
+    cursor_version: z9.literal(3),
+    next_cursor: z9.string().nullable(),
+    applied_filters: z9.object({
+      query: z9.string().nullable(),
+      transaction_type: z9.enum(["expense", "income", "all"]),
+      start_date: z9.string().nullable(),
+      end_date: z9.string().nullable(),
+      category_id: z9.string().nullable(),
+      payment_method: z9.string().nullable(),
+      card_id: z9.string().nullable(),
+      group_id: z9.string().nullable(),
+      min_amount: z9.number().nullable(),
+      max_amount: z9.number().nullable(),
+      sort_by: z9.enum(["date", "created_at", "amount"]),
+      sort_order: z9.enum(["asc", "desc"])
     }),
-    scope: z8.enum(["personal", "shared", "all_accessible"]),
-    time_scope: z8.enum(["occurred", "future", "all"])
+    scope: z9.enum(["personal", "shared", "all_accessible"]),
+    time_scope: z9.enum(["occurred", "future", "all"])
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async (input, ctx) => {
@@ -1358,7 +1444,7 @@ var search_transactions_default = defineTool8({
       cursorSecret
     );
     if (input.cursor && !cursor) return mcpError("INVALID_CURSOR");
-    const common = {
+    const common2 = {
       start_date: input.start_date,
       end_date: input.end_date,
       query: input.query,
@@ -1371,13 +1457,13 @@ var search_transactions_default = defineTool8({
       sort_order: sortOrder
     };
     const expenseFilters = {
-      ...common,
+      ...common2,
       category_id: input.category_id,
       payment_method: input.payment_method,
       card_id: input.card_id
     };
     const incomeFilters = {
-      ...common,
+      ...common2,
       income_category_id: input.category_id
     };
     const supabase = supabaseForUser(ctx);
@@ -1432,6 +1518,7 @@ var search_transactions_default = defineTool8({
       amount: item.amount,
       date: item.date,
       created_at: item.created_at,
+      updated_at: item.updated_at,
       category_id: item.category_id,
       category_name: item.category_name,
       category_icon: item.category_icon,
@@ -1502,7 +1589,7 @@ var search_transactions_default = defineTool8({
 
 // src/lib/mcp/tools/get-spending-breakdown.ts
 import { defineTool as defineTool9 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z9 } from "npm:zod@^3.25.76";
+import { z as z10 } from "npm:zod@^3.25.76";
 
 // src/lib/mcp/shared/analytics.ts
 function groupIdentity(item, groupBy) {
@@ -1609,54 +1696,54 @@ function metricChanges(from, to) {
 }
 
 // src/lib/mcp/tools/get-spending-breakdown.ts
-var largestTransactionSchema = z9.object({
-  id: z9.string().uuid(),
-  description: z9.string(),
-  amount: z9.number(),
-  date: z9.string()
+var largestTransactionSchema = z10.object({
+  id: z10.string().uuid(),
+  description: z10.string(),
+  amount: z10.number(),
+  date: z10.string()
 });
 var get_spending_breakdown_default = defineTool9({
   name: "get_spending_breakdown",
   title: "Detalhamento de gastos",
   description: "Agrupa despesas por categoria, forma de pagamento, cart\xE3o, dia, semana ou m\xEAs. Padr\xE3o: m\xEAs corrente, categoria, scope=personal e time_scope=occurred. Intervalo m\xE1ximo de 366 dias.",
   inputSchema: {
-    start_date: z9.string().regex(ISO_DATE_RE).optional(),
-    end_date: z9.string().regex(ISO_DATE_RE).optional(),
-    group_by: z9.enum(["category", "payment_method", "card", "day", "week", "month"]).optional(),
-    scope: z9.enum(["personal", "shared", "all_accessible"]).optional(),
-    time_scope: z9.enum(["occurred", "future", "all"]).optional(),
-    limit: z9.number().int().min(1).max(100).optional()
+    start_date: z10.string().regex(ISO_DATE_RE).optional(),
+    end_date: z10.string().regex(ISO_DATE_RE).optional(),
+    group_by: z10.enum(["category", "payment_method", "card", "day", "week", "month"]).optional(),
+    scope: z10.enum(["personal", "shared", "all_accessible"]).optional(),
+    time_scope: z10.enum(["occurred", "future", "all"]).optional(),
+    limit: z10.number().int().min(1).max(100).optional()
   },
   outputSchema: {
-    period: z9.object({ start_date: z9.string(), end_date: z9.string() }),
-    requested_period: z9.object({ start_date: z9.string(), end_date: z9.string() }),
-    effective_period: z9.object({
-      start_date: z9.string(),
-      end_date: z9.string(),
-      days: z9.number().int().positive()
+    period: z10.object({ start_date: z10.string(), end_date: z10.string() }),
+    requested_period: z10.object({ start_date: z10.string(), end_date: z10.string() }),
+    effective_period: z10.object({
+      start_date: z10.string(),
+      end_date: z10.string(),
+      days: z10.number().int().positive()
     }).nullable(),
-    coverage_warning: z9.string().nullable(),
-    total: z9.number(),
-    transaction_count: z9.number().int().nonnegative(),
-    groups: z9.array(
-      z9.object({
-        key: z9.string(),
-        label: z9.string(),
-        total: z9.number(),
-        percentage: z9.number(),
-        transaction_count: z9.number().int().nonnegative(),
-        average: z9.number(),
+    coverage_warning: z10.string().nullable(),
+    total: z10.number(),
+    transaction_count: z10.number().int().nonnegative(),
+    groups: z10.array(
+      z10.object({
+        key: z10.string(),
+        label: z10.string(),
+        total: z10.number(),
+        percentage: z10.number(),
+        transaction_count: z10.number().int().nonnegative(),
+        average: z10.number(),
         largest_transaction: largestTransactionSchema
       })
     ),
-    group_by: z9.enum(["category", "payment_method", "card", "day", "week", "month"]),
-    scope: z9.enum(["personal", "shared", "all_accessible"]),
-    time_scope: z9.enum(["occurred", "future", "all"]),
-    complete: z9.boolean(),
-    data_complete: z9.boolean(),
-    total_group_count: z9.number().int().nonnegative(),
-    returned_group_count: z9.number().int().nonnegative(),
-    groups_truncated: z9.boolean()
+    group_by: z10.enum(["category", "payment_method", "card", "day", "week", "month"]),
+    scope: z10.enum(["personal", "shared", "all_accessible"]),
+    time_scope: z10.enum(["occurred", "future", "all"]),
+    complete: z10.boolean(),
+    data_complete: z10.boolean(),
+    total_group_count: z10.number().int().nonnegative(),
+    returned_group_count: z10.number().int().nonnegative(),
+    groups_truncated: z10.boolean()
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async (input, ctx) => {
@@ -1740,90 +1827,90 @@ var get_spending_breakdown_default = defineTool9({
 
 // src/lib/mcp/tools/compare-periods.ts
 import { defineTool as defineTool10 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z10 } from "npm:zod@^3.25.76";
-var metricsSchema = z10.object({
-  income: z10.number(),
-  expenses: z10.number(),
-  balance: z10.number(),
-  savings_rate: z10.number().nullable(),
-  expense_count: z10.number().int().nonnegative(),
-  income_count: z10.number().int().nonnegative()
+import { z as z11 } from "npm:zod@^3.25.76";
+var metricsSchema = z11.object({
+  income: z11.number(),
+  expenses: z11.number(),
+  balance: z11.number(),
+  savings_rate: z11.number().nullable(),
+  expense_count: z11.number().int().nonnegative(),
+  income_count: z11.number().int().nonnegative()
 });
-var requestedPeriodSchema = z10.object({
-  start_date: z10.string(),
-  end_date: z10.string()
+var requestedPeriodSchema = z11.object({
+  start_date: z11.string(),
+  end_date: z11.string()
 });
-var effectivePeriodSchema = z10.object({
-  start_date: z10.string(),
-  end_date: z10.string(),
-  days: z10.number().int().positive()
+var effectivePeriodSchema = z11.object({
+  start_date: z11.string(),
+  end_date: z11.string(),
+  days: z11.number().int().positive()
 }).nullable();
 var compare_periods_default = defineTool10({
   name: "compare_periods",
   title: "Comparar per\xEDodos",
   description: "Compara fatos financeiros de dois intervalos de at\xE9 366 dias. Retorna n\xFAmeros e varia\xE7\xF5es de A para B, sem diagn\xF3stico ou recomenda\xE7\xE3o.",
   inputSchema: {
-    period_a_start: z10.string().regex(ISO_DATE_RE),
-    period_a_end: z10.string().regex(ISO_DATE_RE),
-    period_b_start: z10.string().regex(ISO_DATE_RE),
-    period_b_end: z10.string().regex(ISO_DATE_RE),
-    scope: z10.enum(["personal", "shared", "all_accessible"]).optional(),
-    time_scope: z10.enum(["occurred", "future", "all"]).optional(),
-    breakdown_by: z10.enum(["category", "payment_method", "card", "none"]).optional()
+    period_a_start: z11.string().regex(ISO_DATE_RE),
+    period_a_end: z11.string().regex(ISO_DATE_RE),
+    period_b_start: z11.string().regex(ISO_DATE_RE),
+    period_b_end: z11.string().regex(ISO_DATE_RE),
+    scope: z11.enum(["personal", "shared", "all_accessible"]).optional(),
+    time_scope: z11.enum(["occurred", "future", "all"]).optional(),
+    breakdown_by: z11.enum(["category", "payment_method", "card", "none"]).optional()
   },
   outputSchema: {
-    period_a: z10.object({
-      start_date: z10.string(),
-      end_date: z10.string(),
-      days: z10.number().int().nonnegative(),
-      requested_days: z10.number().int().positive(),
-      effective_days: z10.number().int().nonnegative(),
+    period_a: z11.object({
+      start_date: z11.string(),
+      end_date: z11.string(),
+      days: z11.number().int().nonnegative(),
+      requested_days: z11.number().int().positive(),
+      effective_days: z11.number().int().nonnegative(),
       requested_period: requestedPeriodSchema,
       effective_period: effectivePeriodSchema,
-      coverage_warning: z10.string().nullable(),
+      coverage_warning: z11.string().nullable(),
       metrics: metricsSchema
     }),
-    period_b: z10.object({
-      start_date: z10.string(),
-      end_date: z10.string(),
-      days: z10.number().int().nonnegative(),
-      requested_days: z10.number().int().positive(),
-      effective_days: z10.number().int().nonnegative(),
+    period_b: z11.object({
+      start_date: z11.string(),
+      end_date: z11.string(),
+      days: z11.number().int().nonnegative(),
+      requested_days: z11.number().int().positive(),
+      effective_days: z11.number().int().nonnegative(),
       requested_period: requestedPeriodSchema,
       effective_period: effectivePeriodSchema,
-      coverage_warning: z10.string().nullable(),
+      coverage_warning: z11.string().nullable(),
       metrics: metricsSchema
     }),
-    absolute_changes: z10.object({
-      income: z10.number(),
-      expenses: z10.number(),
-      balance: z10.number(),
-      savings_rate: z10.number().nullable(),
-      expense_count: z10.number().int(),
-      income_count: z10.number().int()
+    absolute_changes: z11.object({
+      income: z11.number(),
+      expenses: z11.number(),
+      balance: z11.number(),
+      savings_rate: z11.number().nullable(),
+      expense_count: z11.number().int(),
+      income_count: z11.number().int()
     }),
-    percentage_changes: z10.object({
-      income: z10.number().nullable(),
-      expenses: z10.number().nullable(),
-      balance: z10.number().nullable(),
-      savings_rate: z10.number().nullable(),
-      expense_count: z10.number().nullable(),
-      income_count: z10.number().nullable()
+    percentage_changes: z11.object({
+      income: z11.number().nullable(),
+      expenses: z11.number().nullable(),
+      balance: z11.number().nullable(),
+      savings_rate: z11.number().nullable(),
+      expense_count: z11.number().nullable(),
+      income_count: z11.number().nullable()
     }),
-    breakdown_changes: z10.array(
-      z10.object({
-        key: z10.string(),
-        label: z10.string(),
-        period_a_total: z10.number(),
-        period_b_total: z10.number(),
-        absolute_change: z10.number(),
-        percentage_change: z10.number().nullable()
+    breakdown_changes: z11.array(
+      z11.object({
+        key: z11.string(),
+        label: z11.string(),
+        period_a_total: z11.number(),
+        period_b_total: z11.number(),
+        absolute_change: z11.number(),
+        percentage_change: z11.number().nullable()
       })
     ).nullable(),
-    scope: z10.enum(["personal", "shared", "all_accessible"]),
-    time_scope: z10.enum(["occurred", "future", "all"]),
-    coverage_warning: z10.array(z10.string()),
-    data_sufficiency_warnings: z10.array(z10.string())
+    scope: z11.enum(["personal", "shared", "all_accessible"]),
+    time_scope: z11.enum(["occurred", "future", "all"]),
+    coverage_warning: z11.array(z11.string()),
+    data_sufficiency_warnings: z11.array(z11.string())
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async (input, ctx) => {
@@ -2028,7 +2115,7 @@ var compare_periods_default = defineTool10({
 
 // src/lib/mcp/tools/list-cards.ts
 import { defineTool as defineTool11 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z11 } from "npm:zod@^3.25.76";
+import { z as z12 } from "npm:zod@^3.25.76";
 
 // src/lib/mcp/shared/resource-cursor.ts
 var UUID_RE2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -2121,43 +2208,43 @@ function resourceCursorFilterExpression(column, cursor) {
 
 // src/lib/mcp/tools/list-cards.ts
 var CURSOR_CONTEXT4 = "list_cards";
-var cardSchema = z11.object({
-  id: z11.string().uuid(),
-  name: z11.string(),
-  card_type: z11.enum(["credit", "debit", "both"]),
-  color: z11.string(),
-  card_limit: z11.number().nullable(),
-  opening_day: z11.number().int().nullable(),
-  closing_day: z11.number().int().nullable(),
-  due_day: z11.number().int().nullable(),
-  days_before_due: z11.number().int().nullable(),
-  is_active: z11.boolean(),
-  created_at: z11.string(),
-  updated_at: z11.string()
+var cardSchema = z12.object({
+  id: z12.string().uuid(),
+  name: z12.string(),
+  card_type: z12.enum(["credit", "debit", "both"]),
+  color: z12.string(),
+  card_limit: z12.number().nullable(),
+  opening_day: z12.number().int().nullable(),
+  closing_day: z12.number().int().nullable(),
+  due_day: z12.number().int().nullable(),
+  days_before_due: z12.number().int().nullable(),
+  is_active: z12.boolean(),
+  created_at: z12.string(),
+  updated_at: z12.string()
 });
 var list_cards_default = defineTool11({
   name: "list_cards",
   title: "Listar cart\xF5es",
   description: "Lista factual dos cart\xF5es da conta autenticada. Por padr\xE3o retorna somente cart\xF5es ativos, ordenados por nome. N\xE3o calcula fatura, limite dispon\xEDvel ou resumo.",
   inputSchema: {
-    include_inactive: z11.boolean().optional(),
-    card_type: z11.enum(["credit", "debit", "both"]).optional(),
-    sort_by: z11.enum(["name", "created_at"]).optional(),
-    sort_order: z11.enum(["asc", "desc"]).optional(),
-    limit: z11.number().int().min(1).max(100).optional(),
-    cursor: z11.string().min(1).max(1e3).optional()
+    include_inactive: z12.boolean().optional(),
+    card_type: z12.enum(["credit", "debit", "both"]).optional(),
+    sort_by: z12.enum(["name", "created_at"]).optional(),
+    sort_order: z12.enum(["asc", "desc"]).optional(),
+    limit: z12.number().int().min(1).max(100).optional(),
+    cursor: z12.string().min(1).max(1e3).optional()
   },
   outputSchema: {
-    cards: z11.array(cardSchema),
-    count: z11.number().int().nonnegative(),
-    has_more: z11.boolean(),
-    next_cursor: z11.string().nullable(),
-    cursor_version: z11.number().int(),
-    applied_filters: z11.object({
-      include_inactive: z11.boolean(),
-      card_type: z11.enum(["credit", "debit", "both"]).nullable(),
-      sort_by: z11.enum(["name", "created_at"]),
-      sort_order: z11.enum(["asc", "desc"])
+    cards: z12.array(cardSchema),
+    count: z12.number().int().nonnegative(),
+    has_more: z12.boolean(),
+    next_cursor: z12.string().nullable(),
+    cursor_version: z12.number().int(),
+    applied_filters: z12.object({
+      include_inactive: z12.boolean(),
+      card_type: z12.enum(["credit", "debit", "both"]).nullable(),
+      sort_by: z12.enum(["name", "created_at"]),
+      sort_order: z12.enum(["asc", "desc"])
     })
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
@@ -2200,7 +2287,7 @@ var list_cards_default = defineTool11({
     if (candidateCards.some((card) => !["credit", "debit", "both"].includes(card.card_type))) {
       return mcpError("INVALID_CARD_TYPE");
     }
-    const parsedCards = z11.array(cardSchema).safeParse(candidateCards);
+    const parsedCards = z12.array(cardSchema).safeParse(candidateCards);
     if (!parsedCards.success) return mcpError("INVALID_DATA");
     const cards = parsedCards.data;
     const last = cards.at(-1);
@@ -2244,7 +2331,7 @@ var list_cards_default = defineTool11({
 
 // src/lib/mcp/tools/get-card-installments.ts
 import { defineTool as defineTool12 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z12 } from "npm:zod@^3.25.76";
+import { z as z13 } from "npm:zod@^3.25.76";
 
 // src/lib/mcp/shared/card-factual.ts
 var INSTALLMENT_DATA_WARNINGS = [
@@ -2282,61 +2369,61 @@ function installmentWarnings(row) {
 
 // src/lib/mcp/tools/get-card-installments.ts
 var CURSOR_CONTEXT5 = "get_card_installments";
-var warningSchema = z12.enum(INSTALLMENT_DATA_WARNINGS);
-var seriesWarningSchema = z12.enum(INSTALLMENT_SERIES_WARNINGS);
-var cardSchema2 = z12.object({
-  id: z12.string().uuid(),
-  name: z12.string(),
-  card_type: z12.enum(["credit", "debit", "both"]),
-  is_active: z12.boolean()
+var warningSchema = z13.enum(INSTALLMENT_DATA_WARNINGS);
+var seriesWarningSchema = z13.enum(INSTALLMENT_SERIES_WARNINGS);
+var cardSchema2 = z13.object({
+  id: z13.string().uuid(),
+  name: z13.string(),
+  card_type: z13.enum(["credit", "debit", "both"]),
+  is_active: z13.boolean()
 });
-var installmentSchema = z12.object({
-  transaction_id: z12.string().uuid(),
-  installment_group_id: z12.string().uuid().nullable(),
-  description: z12.string(),
-  amount: z12.number(),
-  date: z12.string(),
-  installment_number: z12.number().int().nullable(),
-  total_installments: z12.number().int().nullable(),
-  category_id: z12.string().uuid().nullable(),
-  category_name: z12.string().nullable(),
-  category_icon: z12.string().nullable(),
-  payment_method: z12.enum(["pix", "credit", "debit", "cash"]),
-  shared_group_id: z12.string().uuid().nullable(),
-  is_shared: z12.boolean(),
-  card_id: z12.string().uuid(),
-  card_name: z12.string().nullable(),
-  data_warnings: z12.array(warningSchema)
+var installmentSchema = z13.object({
+  transaction_id: z13.string().uuid(),
+  installment_group_id: z13.string().uuid().nullable(),
+  description: z13.string(),
+  amount: z13.number(),
+  date: z13.string(),
+  installment_number: z13.number().int().nullable(),
+  total_installments: z13.number().int().nullable(),
+  category_id: z13.string().uuid().nullable(),
+  category_name: z13.string().nullable(),
+  category_icon: z13.string().nullable(),
+  payment_method: z13.enum(["pix", "credit", "debit", "cash"]),
+  shared_group_id: z13.string().uuid().nullable(),
+  is_shared: z13.boolean(),
+  card_id: z13.string().uuid(),
+  card_name: z13.string().nullable(),
+  data_warnings: z13.array(warningSchema)
 });
 var get_card_installments_default = defineTool12({
   name: "get_card_installments",
   title: "Consultar parcelas do cart\xE3o",
   description: "Lista lan\xE7amentos factuais com evid\xEAncia de parcelamento para um cart\xE3o da conta autenticada. O padr\xE3o retorna parcelas futuras. N\xE3o representa fatura e n\xE3o garante a completude hist\xF3rica da s\xE9rie.",
   inputSchema: {
-    card_id: z12.string().uuid(),
-    time_scope: z12.enum(["occurred", "future", "all"]).optional(),
-    start_date: z12.string().regex(ISO_DATE_RE).optional(),
-    end_date: z12.string().regex(ISO_DATE_RE).optional(),
-    sort_order: z12.enum(["asc", "desc"]).optional(),
-    limit: z12.number().int().min(1).max(100).optional(),
-    cursor: z12.string().min(1).max(1e3).optional()
+    card_id: z13.string().uuid(),
+    time_scope: z13.enum(["occurred", "future", "all"]).optional(),
+    start_date: z13.string().regex(ISO_DATE_RE).optional(),
+    end_date: z13.string().regex(ISO_DATE_RE).optional(),
+    sort_order: z13.enum(["asc", "desc"]).optional(),
+    limit: z13.number().int().min(1).max(100).optional(),
+    cursor: z13.string().min(1).max(1e3).optional()
   },
   outputSchema: {
     card: cardSchema2,
-    installments: z12.array(installmentSchema),
-    count: z12.number().int().nonnegative(),
-    has_more: z12.boolean(),
-    next_cursor: z12.string().nullable(),
-    cursor_version: z12.number().int(),
-    time_scope: z12.enum(["occurred", "future", "all"]),
-    applied_filters: z12.object({
-      card_id: z12.string().uuid(),
-      time_scope: z12.enum(["occurred", "future", "all"]),
-      start_date: z12.string().nullable(),
-      end_date: z12.string().nullable(),
-      sort_order: z12.enum(["asc", "desc"])
+    installments: z13.array(installmentSchema),
+    count: z13.number().int().nonnegative(),
+    has_more: z13.boolean(),
+    next_cursor: z13.string().nullable(),
+    cursor_version: z13.number().int(),
+    time_scope: z13.enum(["occurred", "future", "all"]),
+    applied_filters: z13.object({
+      card_id: z13.string().uuid(),
+      time_scope: z13.enum(["occurred", "future", "all"]),
+      start_date: z13.string().nullable(),
+      end_date: z13.string().nullable(),
+      sort_order: z13.enum(["asc", "desc"])
     }),
-    series_warnings: z12.array(seriesWarningSchema)
+    series_warnings: z13.array(seriesWarningSchema)
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async (input, ctx) => {
@@ -2406,7 +2493,7 @@ var get_card_installments_default = defineTool12({
       card_name: row.card_name,
       data_warnings: installmentWarnings(row)
     }));
-    const parsedInstallments = z12.array(installmentSchema).safeParse(candidateInstallments);
+    const parsedInstallments = z13.array(installmentSchema).safeParse(candidateInstallments);
     if (!parsedInstallments.success) return mcpError("INVALID_DATA");
     const installments = parsedInstallments.data;
     const last = installments.at(-1);
@@ -2460,7 +2547,7 @@ var get_card_installments_default = defineTool12({
 
 // src/lib/mcp/tools/get-card-summary.ts
 import { defineTool as defineTool13 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z13 } from "npm:zod@^3.25.76";
+import { z as z14 } from "npm:zod@^3.25.76";
 
 // src/utils/billing-period.ts
 import { addMonths, format } from "npm:date-fns@^3.6.0";
@@ -2632,67 +2719,67 @@ function resolveCardBillingPeriod(billingMonth, config) {
 // src/lib/mcp/tools/get-card-summary.ts
 var HARD_CAP = 1e4;
 var BILLING_MONTH_RE2 = /^\d{4}-(0[1-9]|1[0-2])$/;
-var warningSchema2 = z13.enum(CARD_SUMMARY_WARNINGS);
-var cardSchema3 = z13.object({
-  id: z13.string().uuid(),
-  name: z13.string(),
-  card_type: z13.enum(["credit", "debit", "both"]),
-  is_active: z13.boolean(),
-  card_limit: z13.number().nullable(),
-  opening_day: z13.number().int().nullable(),
-  closing_day: z13.number().int().nullable(),
-  due_day: z13.number().int().nullable(),
-  days_before_due: z13.number().int().nullable()
+var warningSchema2 = z14.enum(CARD_SUMMARY_WARNINGS);
+var cardSchema3 = z14.object({
+  id: z14.string().uuid(),
+  name: z14.string(),
+  card_type: z14.enum(["credit", "debit", "both"]),
+  is_active: z14.boolean(),
+  card_limit: z14.number().nullable(),
+  opening_day: z14.number().int().nullable(),
+  closing_day: z14.number().int().nullable(),
+  due_day: z14.number().int().nullable(),
+  days_before_due: z14.number().int().nullable()
 }).strict();
-var billingPeriodSchema = z13.object({
-  billing_month: z13.string().regex(BILLING_MONTH_RE2),
-  start_date: z13.string(),
-  end_date: z13.string(),
-  closing_date: z13.string().nullable(),
-  due_date: z13.string().nullable(),
-  calculation_mode: z13.enum(["due_date", "legacy_opening_closing"])
+var billingPeriodSchema = z14.object({
+  billing_month: z14.string().regex(BILLING_MONTH_RE2),
+  start_date: z14.string(),
+  end_date: z14.string(),
+  closing_date: z14.string().nullable(),
+  due_date: z14.string().nullable(),
+  calculation_mode: z14.enum(["due_date", "legacy_opening_closing"])
 }).strict();
-var largestTransactionSchema2 = z13.object({
-  transaction_id: z13.string().uuid(),
-  description: z13.string(),
-  amount: z13.number(),
-  date: z13.string(),
-  category_name: z13.string().nullable(),
-  installment_number: z13.number().int().nullable(),
-  total_installments: z13.number().int().nullable()
+var largestTransactionSchema2 = z14.object({
+  transaction_id: z14.string().uuid(),
+  description: z14.string(),
+  amount: z14.number(),
+  date: z14.string(),
+  category_name: z14.string().nullable(),
+  installment_number: z14.number().int().nullable(),
+  total_installments: z14.number().int().nullable()
 }).strict();
-var categorySummarySchema = z13.object({
-  category_name: z13.string(),
-  total: z13.number(),
-  transaction_count: z13.number().int().nonnegative(),
-  percentage: z13.number()
+var categorySummarySchema = z14.object({
+  category_name: z14.string(),
+  total: z14.number(),
+  transaction_count: z14.number().int().nonnegative(),
+  percentage: z14.number()
 }).strict();
 var get_card_summary_default = defineTool13({
   name: "get_card_summary",
   title: "Resumir lan\xE7amentos do cart\xE3o",
   description: "Calcula um resumo factual dos lan\xE7amentos pr\xF3prios de cr\xE9dito registrados no Gastinho para o per\xEDodo do cart\xE3o. billing_month \xE9 o m\xEAs de refer\xEAncia da fatura calculada; n\xE3o informa pagamento, quita\xE7\xE3o, saldo banc\xE1rio ou fatura oficial do emissor.",
   inputSchema: {
-    card_id: z13.string().uuid(),
-    billing_month: z13.string().regex(BILLING_MONTH_RE2).optional(),
-    time_scope: z13.enum(["occurred", "all"]).optional()
+    card_id: z14.string().uuid(),
+    billing_month: z14.string().regex(BILLING_MONTH_RE2).optional(),
+    time_scope: z14.enum(["occurred", "all"]).optional()
   },
   outputSchema: {
     card: cardSchema3,
     billing_period: billingPeriodSchema,
-    metrics: z13.object({
-      registered_total: z13.number(),
-      occurred_total: z13.number(),
-      future_materialized_total: z13.number(),
-      transaction_count: z13.number().int().nonnegative(),
-      occurred_transaction_count: z13.number().int().nonnegative(),
-      future_transaction_count: z13.number().int().nonnegative(),
-      installment_total: z13.number(),
-      non_installment_total: z13.number()
+    metrics: z14.object({
+      registered_total: z14.number(),
+      occurred_total: z14.number(),
+      future_materialized_total: z14.number(),
+      transaction_count: z14.number().int().nonnegative(),
+      occurred_transaction_count: z14.number().int().nonnegative(),
+      future_transaction_count: z14.number().int().nonnegative(),
+      installment_total: z14.number(),
+      non_installment_total: z14.number()
     }).strict(),
     largest_transaction: largestTransactionSchema2.nullable(),
-    categories_summary: z13.array(categorySummarySchema).max(10),
-    data_complete: z13.boolean(),
-    warnings: z13.array(warningSchema2)
+    categories_summary: z14.array(categorySummarySchema).max(10),
+    data_complete: z14.boolean(),
+    warnings: z14.array(warningSchema2)
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async (input, ctx) => {
@@ -2819,7 +2906,7 @@ var get_card_summary_default = defineTool13({
 
 // src/lib/mcp/tools/list-recurring-transactions.ts
 import { defineTool as defineTool14 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z14 } from "npm:zod@^3.25.76";
+import { z as z15 } from "npm:zod@^3.25.76";
 
 // src/lib/mcp/shared/recurring.ts
 var RECURRING_DATA_WARNINGS = [
@@ -2856,7 +2943,7 @@ function recurringDataWarnings(row) {
   return warnings;
 }
 function recurringItem(row, transactionType, userId) {
-  const common = {
+  const common2 = {
     id: row.id,
     transaction_type: transactionType,
     description: row.description,
@@ -2874,9 +2961,9 @@ function recurringItem(row, transactionType, userId) {
     updated_at: row.updated_at,
     data_warnings: recurringDataWarnings(row)
   };
-  if (transactionType === "income") return common;
+  if (transactionType === "income") return common2;
   return {
-    ...common,
+    ...common2,
     transaction_type: "expense",
     payment_method: row.payment_method,
     card_id: row.card_id ?? null,
@@ -3032,36 +3119,36 @@ function projectRecurringTemplates(templates, startDate, endDate, granularity, o
 // src/lib/mcp/tools/list-recurring-transactions.ts
 var CURSOR_CONTEXT6 = "list_recurring_transactions";
 var CURSOR_SORT = "day_of_month|transaction_type|id";
-var warningSchema3 = z14.enum(RECURRING_DATA_WARNINGS);
+var warningSchema3 = z15.enum(RECURRING_DATA_WARNINGS);
 var commonShape = {
-  id: z14.string().uuid(),
-  transaction_type: z14.enum(["expense", "income"]),
-  description: z14.string(),
-  amount: z14.number(),
-  day_of_month: z14.number().int(),
-  start_date: z14.string().nullable(),
-  end_date: z14.string().nullable(),
-  is_active: z14.boolean(),
-  category_id: z14.string().uuid().nullable(),
-  category_name: z14.string().nullable(),
-  shared_group_id: z14.string().uuid().nullable(),
-  is_shared: z14.boolean(),
-  is_owner: z14.boolean(),
-  created_at: z14.string(),
-  updated_at: z14.string(),
-  data_warnings: z14.array(warningSchema3)
+  id: z15.string().uuid(),
+  transaction_type: z15.enum(["expense", "income"]),
+  description: z15.string(),
+  amount: z15.number(),
+  day_of_month: z15.number().int(),
+  start_date: z15.string().nullable(),
+  end_date: z15.string().nullable(),
+  is_active: z15.boolean(),
+  category_id: z15.string().uuid().nullable(),
+  category_name: z15.string().nullable(),
+  shared_group_id: z15.string().uuid().nullable(),
+  is_shared: z15.boolean(),
+  is_owner: z15.boolean(),
+  created_at: z15.string(),
+  updated_at: z15.string(),
+  data_warnings: z15.array(warningSchema3)
 };
-var recurringItemSchema = z14.discriminatedUnion("transaction_type", [
-  z14.object({
+var recurringItemSchema = z15.discriminatedUnion("transaction_type", [
+  z15.object({
     ...commonShape,
-    transaction_type: z14.literal("expense"),
-    payment_method: z14.enum(["pix", "credit", "debit", "cash"]),
-    card_id: z14.string().uuid().nullable(),
-    card_name: z14.string().nullable()
+    transaction_type: z15.literal("expense"),
+    payment_method: z15.enum(["pix", "credit", "debit", "cash"]),
+    card_id: z15.string().uuid().nullable(),
+    card_name: z15.string().nullable()
   }).strict(),
-  z14.object({
+  z15.object({
     ...commonShape,
-    transaction_type: z14.literal("income")
+    transaction_type: z15.literal("income")
   }).strict()
 ]);
 function applyCursor(query, transactionType, cursor) {
@@ -3079,27 +3166,27 @@ var list_recurring_transactions_default = defineTool14({
   title: "Listar templates recorrentes",
   description: "Lista templates mensais de despesas e receitas recorrentes acess\xEDveis \xE0 conta autenticada. N\xE3o representa lan\xE7amentos financeiros j\xE1 realizados.",
   inputSchema: {
-    transaction_type: z14.enum(["expense", "income", "all"]).optional(),
-    scope: z14.enum(["personal", "shared", "all_accessible"]).optional(),
-    group_id: z14.string().uuid().optional(),
-    status: z14.enum(["active", "inactive", "all"]).optional(),
-    query: z14.string().trim().min(1).max(100).optional(),
-    limit: z14.number().int().min(1).max(100).optional(),
-    cursor: z14.string().min(1).max(1e3).optional()
+    transaction_type: z15.enum(["expense", "income", "all"]).optional(),
+    scope: z15.enum(["personal", "shared", "all_accessible"]).optional(),
+    group_id: z15.string().uuid().optional(),
+    status: z15.enum(["active", "inactive", "all"]).optional(),
+    query: z15.string().trim().min(1).max(100).optional(),
+    limit: z15.number().int().min(1).max(100).optional(),
+    cursor: z15.string().min(1).max(1e3).optional()
   },
   outputSchema: {
-    items: z14.array(recurringItemSchema),
-    count: z14.number().int().nonnegative(),
-    has_more: z14.boolean(),
-    next_cursor: z14.string().nullable(),
-    cursor_version: z14.literal(3),
-    applied_filters: z14.object({
-      transaction_type: z14.enum(["expense", "income", "all"]),
-      scope: z14.enum(["personal", "shared", "all_accessible"]),
-      group_id: z14.string().uuid().nullable(),
-      status: z14.enum(["active", "inactive", "all"]),
-      query: z14.string().nullable(),
-      limit: z14.number().int().min(1).max(100)
+    items: z15.array(recurringItemSchema),
+    count: z15.number().int().nonnegative(),
+    has_more: z15.boolean(),
+    next_cursor: z15.string().nullable(),
+    cursor_version: z15.literal(3),
+    applied_filters: z15.object({
+      transaction_type: z15.enum(["expense", "income", "all"]),
+      scope: z15.enum(["personal", "shared", "all_accessible"]),
+      group_id: z15.string().uuid().nullable(),
+      status: z15.enum(["active", "inactive", "all"]),
+      query: z15.string().nullable(),
+      limit: z15.number().int().min(1).max(100)
     }).strict()
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
@@ -3215,61 +3302,61 @@ var list_recurring_transactions_default = defineTool14({
 
 // src/lib/mcp/tools/get-recurring-forecast.ts
 import { defineTool as defineTool15 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z15 } from "npm:zod@^3.25.76";
+import { z as z16 } from "npm:zod@^3.25.76";
 var TEMPLATE_CAP = 100;
 var OCCURRENCE_CAP = 1e3;
-var warningSchema4 = z15.enum(RECURRING_DATA_WARNINGS);
-var occurrenceSchema = z15.object({
-  date: z15.string().regex(ISO_DATE_RE),
-  transaction_type: z15.enum(["expense", "income"]),
-  amount: z15.number(),
-  recurring_transaction_id: z15.string().uuid(),
-  description: z15.string(),
-  category_name: z15.string().nullable(),
-  source: z15.literal("recurring_template"),
-  shared_group_id: z15.string().uuid().nullable(),
-  is_owner: z15.boolean(),
-  data_warnings: z15.array(warningSchema4)
+var warningSchema4 = z16.enum(RECURRING_DATA_WARNINGS);
+var occurrenceSchema = z16.object({
+  date: z16.string().regex(ISO_DATE_RE),
+  transaction_type: z16.enum(["expense", "income"]),
+  amount: z16.number(),
+  recurring_transaction_id: z16.string().uuid(),
+  description: z16.string(),
+  category_name: z16.string().nullable(),
+  source: z16.literal("recurring_template"),
+  shared_group_id: z16.string().uuid().nullable(),
+  is_owner: z16.boolean(),
+  data_warnings: z16.array(warningSchema4)
 }).strict();
-var seriesPointSchema = z15.object({
-  period: z15.string(),
-  projected_income: z15.number(),
-  projected_expenses: z15.number(),
-  projected_balance: z15.number(),
-  occurrence_count: z15.number().int().nonnegative()
+var seriesPointSchema = z16.object({
+  period: z16.string(),
+  projected_income: z16.number(),
+  projected_expenses: z16.number(),
+  projected_balance: z16.number(),
+  occurrence_count: z16.number().int().nonnegative()
 }).strict();
 var get_recurring_forecast_default = defineTool15({
   name: "get_recurring_forecast",
   title: "Projetar templates recorrentes",
   description: "Projeta ocorr\xEAncias mensais exclusivamente a partir dos templates recorrentes cadastrados. N\xE3o consulta nem representa despesas, receitas ou parcelas j\xE1 materializadas.",
   inputSchema: {
-    start_date: z15.string().regex(ISO_DATE_RE),
-    end_date: z15.string().regex(ISO_DATE_RE),
-    transaction_type: z15.enum(["expense", "income", "all"]).optional(),
-    scope: z15.enum(["personal", "shared", "all_accessible"]).optional(),
-    group_id: z15.string().uuid().optional(),
-    granularity: z15.enum(["day", "week", "month"]).optional(),
-    include_occurrences: z15.boolean().optional()
+    start_date: z16.string().regex(ISO_DATE_RE),
+    end_date: z16.string().regex(ISO_DATE_RE),
+    transaction_type: z16.enum(["expense", "income", "all"]).optional(),
+    scope: z16.enum(["personal", "shared", "all_accessible"]).optional(),
+    group_id: z16.string().uuid().optional(),
+    granularity: z16.enum(["day", "week", "month"]).optional(),
+    include_occurrences: z16.boolean().optional()
   },
   outputSchema: {
-    requested_period: z15.object({
-      start_date: z15.string().regex(ISO_DATE_RE),
-      end_date: z15.string().regex(ISO_DATE_RE)
+    requested_period: z16.object({
+      start_date: z16.string().regex(ISO_DATE_RE),
+      end_date: z16.string().regex(ISO_DATE_RE)
     }).strict(),
-    effective_period: z15.object({
-      start_date: z15.string().regex(ISO_DATE_RE),
-      end_date: z15.string().regex(ISO_DATE_RE),
-      days: z15.number().int().positive()
+    effective_period: z16.object({
+      start_date: z16.string().regex(ISO_DATE_RE),
+      end_date: z16.string().regex(ISO_DATE_RE),
+      days: z16.number().int().positive()
     }).strict(),
-    scope: z15.enum(["personal", "shared", "all_accessible"]),
-    templates_considered: z15.number().int().nonnegative(),
-    occurrences: z15.array(occurrenceSchema),
-    series: z15.array(seriesPointSchema),
-    projected_income: z15.number(),
-    projected_expenses: z15.number(),
-    projected_balance: z15.number(),
-    warnings: z15.array(warningSchema4),
-    data_complete: z15.boolean()
+    scope: z16.enum(["personal", "shared", "all_accessible"]),
+    templates_considered: z16.number().int().nonnegative(),
+    occurrences: z16.array(occurrenceSchema),
+    series: z16.array(seriesPointSchema),
+    projected_income: z16.number(),
+    projected_expenses: z16.number(),
+    projected_balance: z16.number(),
+    warnings: z16.array(warningSchema4),
+    data_complete: z16.boolean()
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async (input, ctx) => {
@@ -3364,7 +3451,7 @@ var get_recurring_forecast_default = defineTool15({
 
 // src/lib/mcp/tools/list-goals.ts
 import { defineTool as defineTool16 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z16 } from "npm:zod@^3.25.76";
+import { z as z17 } from "npm:zod@^3.25.76";
 
 // src/lib/mcp/shared/goals.ts
 var GOAL_TYPES = [
@@ -3514,19 +3601,19 @@ function goalMetrics(actualValue, targetValue) {
 // src/lib/mcp/tools/list-goals.ts
 var CURSOR_CONTEXT7 = "list_goals";
 var CURSOR_SORT2 = "type|category_reference|id";
-var goalTypeSchema = z16.enum(GOAL_TYPES);
-var warningSchema5 = z16.enum(GOAL_WARNINGS);
-var goalSchema = z16.object({
-  id: z16.string().uuid(),
+var goalTypeSchema = z17.enum(GOAL_TYPES);
+var warningSchema5 = z17.enum(GOAL_WARNINGS);
+var goalSchema = z17.object({
+  id: z17.string().uuid(),
   type: goalTypeSchema,
-  category_reference: z16.string().nullable(),
-  limit_amount: z16.number(),
-  shared_group_id: z16.string().uuid().nullable(),
-  is_shared: z16.boolean(),
-  is_owner: z16.boolean(),
-  created_at: z16.string(),
-  updated_at: z16.string(),
-  data_warnings: z16.array(warningSchema5)
+  category_reference: z17.string().nullable(),
+  limit_amount: z17.number(),
+  shared_group_id: z17.string().uuid().nullable(),
+  is_shared: z17.boolean(),
+  is_owner: z17.boolean(),
+  created_at: z17.string(),
+  updated_at: z17.string(),
+  data_warnings: z17.array(warningSchema5)
 }).strict();
 function postgrestString(value) {
   return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
@@ -3536,23 +3623,23 @@ var list_goals_default = defineTool16({
   title: "Listar metas mensais",
   description: "Lista metas ou limites mensais acess\xEDveis \xE0 conta autenticada. N\xE3o representa contas de investimento, contribui\xE7\xF5es acumuladas ou metas de poupan\xE7a com prazo.",
   inputSchema: {
-    scope: z16.enum(["personal", "shared", "all_accessible"]).optional(),
-    group_id: z16.string().uuid().optional(),
+    scope: z17.enum(["personal", "shared", "all_accessible"]).optional(),
+    group_id: z17.string().uuid().optional(),
     type: goalTypeSchema.optional(),
-    limit: z16.number().int().min(1).max(100).optional(),
-    cursor: z16.string().min(1).max(1e3).optional()
+    limit: z17.number().int().min(1).max(100).optional(),
+    cursor: z17.string().min(1).max(1e3).optional()
   },
   outputSchema: {
-    goals: z16.array(goalSchema),
-    count: z16.number().int().nonnegative(),
-    has_more: z16.boolean(),
-    next_cursor: z16.string().nullable(),
-    cursor_version: z16.literal(3),
-    applied_filters: z16.object({
-      scope: z16.enum(["personal", "shared", "all_accessible"]),
-      group_id: z16.string().uuid().nullable(),
+    goals: z17.array(goalSchema),
+    count: z17.number().int().nonnegative(),
+    has_more: z17.boolean(),
+    next_cursor: z17.string().nullable(),
+    cursor_version: z17.literal(3),
+    applied_filters: z17.object({
+      scope: z17.enum(["personal", "shared", "all_accessible"]),
+      group_id: z17.string().uuid().nullable(),
       type: goalTypeSchema.nullable(),
-      limit: z16.number().int().min(1).max(100)
+      limit: z17.number().int().min(1).max(100)
     }).strict()
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
@@ -3648,65 +3735,65 @@ var list_goals_default = defineTool16({
 
 // src/lib/mcp/tools/get-goal-progress.ts
 import { defineTool as defineTool17 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z17 } from "npm:zod@^3.25.76";
+import { z as z18 } from "npm:zod@^3.25.76";
 var TRANSACTION_CAP = 1e4;
 var TEMPLATE_CAP2 = 100;
 var MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
-var goalTypeSchema2 = z17.enum(GOAL_TYPES);
-var goalWarningSchema = z17.enum(GOAL_WARNINGS);
-var projectionWarningSchema = z17.enum(PROJECTION_WARNINGS);
-var goalSchema2 = z17.object({
-  id: z17.string().uuid(),
+var goalTypeSchema2 = z18.enum(GOAL_TYPES);
+var goalWarningSchema = z18.enum(GOAL_WARNINGS);
+var projectionWarningSchema = z18.enum(PROJECTION_WARNINGS);
+var goalSchema2 = z18.object({
+  id: z18.string().uuid(),
   type: goalTypeSchema2,
-  category_reference: z17.string().nullable(),
-  limit_amount: z17.number(),
-  shared_group_id: z17.string().uuid().nullable(),
-  is_shared: z17.boolean(),
-  is_owner: z17.boolean(),
-  created_at: z17.string(),
-  updated_at: z17.string(),
-  data_warnings: z17.array(goalWarningSchema)
+  category_reference: z18.string().nullable(),
+  limit_amount: z18.number(),
+  shared_group_id: z18.string().uuid().nullable(),
+  is_shared: z18.boolean(),
+  is_owner: z18.boolean(),
+  created_at: z18.string(),
+  updated_at: z18.string(),
+  data_warnings: z18.array(goalWarningSchema)
 }).strict();
 var get_goal_progress_default = defineTool17({
   name: "get_goal_progress",
   title: "Consultar progresso mensal da meta",
   description: "Calcula o progresso factual de uma meta ou limite mensal a partir dos lan\xE7amentos acess\xEDveis. A proje\xE7\xE3o recorrente, quando solicitada, permanece separada e pode sobrepor lan\xE7amentos manuais.",
   inputSchema: {
-    goal_id: z17.string().uuid(),
-    reference_month: z17.string().regex(MONTH_RE).optional(),
-    projection_mode: z17.enum(["none", "recurring_templates"]).optional()
+    goal_id: z18.string().uuid(),
+    reference_month: z18.string().regex(MONTH_RE).optional(),
+    projection_mode: z18.enum(["none", "recurring_templates"]).optional()
   },
   outputSchema: {
     goal: goalSchema2,
-    reference_period: z17.object({
-      requested_period: z17.object({
-        start_date: z17.string(),
-        end_date: z17.string()
+    reference_period: z18.object({
+      requested_period: z18.object({
+        start_date: z18.string(),
+        end_date: z18.string()
       }).strict(),
-      effective_period: z17.object({
-        start_date: z17.string(),
-        end_date: z17.string()
+      effective_period: z18.object({
+        start_date: z18.string(),
+        end_date: z18.string()
       }).strict().nullable()
     }).strict(),
-    actual_value: z17.number(),
-    target_value: z17.number(),
-    actual_percentage: z17.number().nullable(),
-    actual_remaining: z17.number(),
-    actual_excess: z17.number(),
-    target_direction: z17.enum(["maximum", "minimum"]),
-    days_in_month: z17.number().int().positive(),
-    elapsed_days: z17.number().int().nonnegative(),
-    remaining_days: z17.number().int().nonnegative(),
-    transaction_count: z17.number().int().nonnegative(),
-    warnings: z17.array(goalWarningSchema),
-    projection_mode: z17.enum(["none", "recurring_templates"]),
-    recurring_projected_value: z17.number().nullable(),
-    projected_value: z17.number().nullable(),
-    projected_percentage: z17.number().nullable(),
-    projected_remaining: z17.number().nullable(),
-    projected_excess: z17.number().nullable(),
-    recurring_templates_considered: z17.number().int().nonnegative().nullable(),
-    projection_warnings: z17.array(projectionWarningSchema)
+    actual_value: z18.number(),
+    target_value: z18.number(),
+    actual_percentage: z18.number().nullable(),
+    actual_remaining: z18.number(),
+    actual_excess: z18.number(),
+    target_direction: z18.enum(["maximum", "minimum"]),
+    days_in_month: z18.number().int().positive(),
+    elapsed_days: z18.number().int().nonnegative(),
+    remaining_days: z18.number().int().nonnegative(),
+    transaction_count: z18.number().int().nonnegative(),
+    warnings: z18.array(goalWarningSchema),
+    projection_mode: z18.enum(["none", "recurring_templates"]),
+    recurring_projected_value: z18.number().nullable(),
+    projected_value: z18.number().nullable(),
+    projected_percentage: z18.number().nullable(),
+    projected_remaining: z18.number().nullable(),
+    projected_excess: z18.number().nullable(),
+    recurring_templates_considered: z18.number().int().nonnegative().nullable(),
+    projection_warnings: z18.array(projectionWarningSchema)
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async (input, ctx) => {
@@ -3915,7 +4002,7 @@ var get_goal_progress_default = defineTool17({
 
 // src/lib/mcp/tools/get-category-usage.ts
 import { defineTool as defineTool18 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z18 } from "npm:zod@^3.25.76";
+import { z as z19 } from "npm:zod@^3.25.76";
 
 // src/lib/mcp/shared/category-usage.ts
 var CATEGORY_USAGE_WARNINGS = [
@@ -4059,59 +4146,59 @@ function calculateCategoryUsage(catalog, transactions, options) {
 
 // src/lib/mcp/tools/get-category-usage.ts
 var TRANSACTION_CAP2 = 1e4;
-var warningSchema6 = z18.enum(CATEGORY_USAGE_WARNINGS);
-var monthlyPointSchema = z18.object({
-  month: z18.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
-  total: z18.number(),
-  transaction_count: z18.number().int().nonnegative()
+var warningSchema6 = z19.enum(CATEGORY_USAGE_WARNINGS);
+var monthlyPointSchema = z19.object({
+  month: z19.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+  total: z19.number(),
+  transaction_count: z19.number().int().nonnegative()
 }).strict();
-var categorySchema = z18.object({
-  category_id: z18.string().uuid(),
-  name: z18.string(),
-  icon: z18.string().nullable(),
-  color: z18.string().nullable(),
-  is_active: z18.boolean(),
-  is_default: z18.boolean(),
-  transaction_count: z18.number().int().nonnegative(),
-  total: z18.number(),
-  percentage: z18.number(),
-  first_used_at: z18.string().nullable(),
-  last_used_at: z18.string().nullable(),
-  monthly_average: z18.number(),
-  monthly_series: z18.array(monthlyPointSchema)
+var categorySchema = z19.object({
+  category_id: z19.string().uuid(),
+  name: z19.string(),
+  icon: z19.string().nullable(),
+  color: z19.string().nullable(),
+  is_active: z19.boolean(),
+  is_default: z19.boolean(),
+  transaction_count: z19.number().int().nonnegative(),
+  total: z19.number(),
+  percentage: z19.number(),
+  first_used_at: z19.string().nullable(),
+  last_used_at: z19.string().nullable(),
+  monthly_average: z19.number(),
+  monthly_series: z19.array(monthlyPointSchema)
 }).strict();
 var get_category_usage_default = defineTool18({
   name: "get_category_usage",
   title: "Consultar uso pessoal de categorias",
   description: "Apresenta fatos hist\xF3ricos sobre o uso das categorias pessoais de despesas ou receitas da conta autenticada. N\xE3o inclui categorias compartilhadas nem transa\xE7\xF5es de outros propriet\xE1rios.",
   inputSchema: {
-    kind: z18.enum(["expense", "income"]),
-    start_date: z18.string(),
-    end_date: z18.string(),
-    include_inactive: z18.boolean().optional(),
-    include_unused: z18.boolean().optional(),
-    trend_granularity: z18.literal("month").optional(),
-    limit: z18.number().int().min(1).max(100).optional()
+    kind: z19.enum(["expense", "income"]),
+    start_date: z19.string(),
+    end_date: z19.string(),
+    include_inactive: z19.boolean().optional(),
+    include_unused: z19.boolean().optional(),
+    trend_granularity: z19.literal("month").optional(),
+    limit: z19.number().int().min(1).max(100).optional()
   },
   outputSchema: {
-    kind: z18.enum(["expense", "income"]),
-    requested_period: z18.object({
-      start_date: z18.string(),
-      end_date: z18.string()
+    kind: z19.enum(["expense", "income"]),
+    requested_period: z19.object({
+      start_date: z19.string(),
+      end_date: z19.string()
     }).strict(),
-    categories: z18.array(categorySchema),
-    uncategorized: z18.object({
-      transaction_count: z18.number().int().nonnegative(),
-      total: z18.number(),
-      percentage: z18.number()
+    categories: z19.array(categorySchema),
+    uncategorized: z19.object({
+      transaction_count: z19.number().int().nonnegative(),
+      total: z19.number(),
+      percentage: z19.number()
     }).strict(),
-    total_amount: z18.number(),
-    total_transaction_count: z18.number().int().nonnegative(),
-    categories_truncated: z18.boolean(),
-    total_category_count: z18.number().int().nonnegative(),
-    returned_category_count: z18.number().int().nonnegative(),
-    data_complete: z18.boolean(),
-    warnings: z18.array(warningSchema6)
+    total_amount: z19.number(),
+    total_transaction_count: z19.number().int().nonnegative(),
+    categories_truncated: z19.boolean(),
+    total_category_count: z19.number().int().nonnegative(),
+    returned_category_count: z19.number().int().nonnegative(),
+    data_complete: z19.boolean(),
+    warnings: z19.array(warningSchema6)
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async (input, ctx) => {
@@ -4226,7 +4313,7 @@ var get_category_usage_default = defineTool18({
 
 // src/lib/mcp/tools/get-cashflow-series.ts
 import { defineTool as defineTool19 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z19 } from "npm:zod@^3.25.76";
+import { z as z20 } from "npm:zod@^3.25.76";
 
 // src/lib/mcp/shared/cashflow.ts
 var CASHFLOW_WARNINGS = [
@@ -4402,57 +4489,57 @@ function calculateCashflowSeries(transactions, options) {
 
 // src/lib/mcp/tools/get-cashflow-series.ts
 var TRANSACTION_CAP3 = 1e4;
-var warningSchema7 = z19.enum(CASHFLOW_WARNINGS);
-var periodSchema = z19.object({
-  start_date: z19.string(),
-  end_date: z19.string()
+var warningSchema7 = z20.enum(CASHFLOW_WARNINGS);
+var periodSchema = z20.object({
+  start_date: z20.string(),
+  end_date: z20.string()
 }).strict();
-var effectivePeriodSchema2 = z19.object({
-  start_date: z19.string(),
-  end_date: z19.string(),
-  days: z19.number().int().positive()
+var effectivePeriodSchema2 = z20.object({
+  start_date: z20.string(),
+  end_date: z20.string(),
+  days: z20.number().int().positive()
 }).strict().nullable();
-var pointSchema = z19.object({
-  period_start: z19.string(),
-  period_end: z19.string(),
-  label: z19.string(),
-  realized_income: z19.number(),
-  realized_expenses: z19.number(),
-  realized_balance: z19.number(),
-  cumulative_balance: z19.number(),
-  income_count: z19.number().int().nonnegative(),
-  expense_count: z19.number().int().nonnegative(),
-  transaction_count: z19.number().int().nonnegative()
+var pointSchema = z20.object({
+  period_start: z20.string(),
+  period_end: z20.string(),
+  label: z20.string(),
+  realized_income: z20.number(),
+  realized_expenses: z20.number(),
+  realized_balance: z20.number(),
+  cumulative_balance: z20.number(),
+  income_count: z20.number().int().nonnegative(),
+  expense_count: z20.number().int().nonnegative(),
+  transaction_count: z20.number().int().nonnegative()
 }).strict();
 var get_cashflow_series_default = defineTool19({
   name: "get_cashflow_series",
   title: "Consultar fluxo de caixa realizado",
   description: "Apresenta uma s\xE9rie factual de receitas e despesas efetivamente registradas at\xE9 hoje. N\xE3o inclui proje\xE7\xF5es, templates recorrentes ou transa\xE7\xF5es futuras e n\xE3o representa saldo banc\xE1rio.",
   inputSchema: {
-    start_date: z19.string(),
-    end_date: z19.string(),
-    scope: z19.enum(["personal", "shared", "all_accessible"]).optional(),
-    group_id: z19.string().uuid().optional(),
-    granularity: z19.enum(["day", "week", "month"]).optional(),
-    include_empty_periods: z19.boolean().optional()
+    start_date: z20.string(),
+    end_date: z20.string(),
+    scope: z20.enum(["personal", "shared", "all_accessible"]).optional(),
+    group_id: z20.string().uuid().optional(),
+    granularity: z20.enum(["day", "week", "month"]).optional(),
+    include_empty_periods: z20.boolean().optional()
   },
   outputSchema: {
     requested_period: periodSchema,
     effective_period: effectivePeriodSchema2,
-    coverage_warning: z19.string().nullable(),
-    granularity: z19.enum(["day", "week", "month"]),
-    scope: z19.enum(["personal", "shared", "all_accessible"]),
-    data_complete: z19.boolean(),
-    series: z19.array(pointSchema),
-    total_income: z19.number(),
-    total_expenses: z19.number(),
-    total_balance: z19.number(),
-    income_count: z19.number().int().nonnegative(),
-    expense_count: z19.number().int().nonnegative(),
-    transaction_count: z19.number().int().nonnegative(),
-    opening_cumulative_balance: z19.literal(0),
-    closing_cumulative_balance: z19.number(),
-    warnings: z19.array(warningSchema7)
+    coverage_warning: z20.string().nullable(),
+    granularity: z20.enum(["day", "week", "month"]),
+    scope: z20.enum(["personal", "shared", "all_accessible"]),
+    data_complete: z20.boolean(),
+    series: z20.array(pointSchema),
+    total_income: z20.number(),
+    total_expenses: z20.number(),
+    total_balance: z20.number(),
+    income_count: z20.number().int().nonnegative(),
+    expense_count: z20.number().int().nonnegative(),
+    transaction_count: z20.number().int().nonnegative(),
+    opening_cumulative_balance: z20.literal(0),
+    closing_cumulative_balance: z20.number(),
+    warnings: z20.array(warningSchema7)
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async (input, ctx) => {
@@ -4602,7 +4689,7 @@ var get_cashflow_series_default = defineTool19({
 
 // src/lib/mcp/tools/get-cashflow-projection.ts
 import { defineTool as defineTool20 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z20 } from "npm:zod@^3.25.76";
+import { z as z21 } from "npm:zod@^3.25.76";
 
 // src/lib/mcp/shared/cashflow-projection.ts
 var CASHFLOW_PROJECTION_WARNINGS = [
@@ -4739,82 +4826,82 @@ function cashflowProjectionInvariantsHold(projection) {
 var TRANSACTION_CAP4 = 1e4;
 var TEMPLATE_CAP3 = 100;
 var OCCURRENCE_CAP2 = 1e3;
-var warningSchema8 = z20.enum(CASHFLOW_PROJECTION_WARNINGS);
-var periodSchema2 = z20.object({
-  start_date: z20.string(),
-  end_date: z20.string()
+var warningSchema8 = z21.enum(CASHFLOW_PROJECTION_WARNINGS);
+var periodSchema2 = z21.object({
+  start_date: z21.string(),
+  end_date: z21.string()
 }).strict();
-var optionalPeriodSchema = z20.object({
-  start_date: z20.string(),
-  end_date: z20.string(),
-  days: z20.number().int().positive()
+var optionalPeriodSchema = z21.object({
+  start_date: z21.string(),
+  end_date: z21.string(),
+  days: z21.number().int().positive()
 }).strict().nullable();
-var componentSchema = z20.object({
-  income: z20.number(),
-  expenses: z20.number(),
-  balance: z20.number(),
-  income_count: z20.number().int().nonnegative(),
-  expense_count: z20.number().int().nonnegative(),
-  transaction_count: z20.number().int().nonnegative()
+var componentSchema = z21.object({
+  income: z21.number(),
+  expenses: z21.number(),
+  balance: z21.number(),
+  income_count: z21.number().int().nonnegative(),
+  expense_count: z21.number().int().nonnegative(),
+  transaction_count: z21.number().int().nonnegative()
 }).strict();
 var recurringComponentSchema = componentSchema.extend({
-  templates_considered: z20.number().int().nonnegative(),
-  occurrence_count: z20.number().int().nonnegative()
+  templates_considered: z21.number().int().nonnegative(),
+  occurrence_count: z21.number().int().nonnegative()
 }).strict();
-var pointSchema2 = z20.object({
-  period_start: z20.string(),
-  period_end: z20.string(),
-  label: z20.string(),
-  realized_income: z20.number(),
-  realized_expenses: z20.number(),
-  realized_balance: z20.number(),
-  future_materialized_income: z20.number(),
-  future_materialized_expenses: z20.number(),
-  future_materialized_balance: z20.number(),
-  recurring_projected_income: z20.number(),
-  recurring_projected_expenses: z20.number(),
-  recurring_projected_balance: z20.number(),
-  combined_income: z20.number(),
-  combined_expenses: z20.number(),
-  combined_balance: z20.number(),
-  cumulative_combined_balance: z20.number(),
-  realized_transaction_count: z20.number().int().nonnegative(),
-  future_materialized_transaction_count: z20.number().int().nonnegative(),
-  recurring_occurrence_count: z20.number().int().nonnegative()
+var pointSchema2 = z21.object({
+  period_start: z21.string(),
+  period_end: z21.string(),
+  label: z21.string(),
+  realized_income: z21.number(),
+  realized_expenses: z21.number(),
+  realized_balance: z21.number(),
+  future_materialized_income: z21.number(),
+  future_materialized_expenses: z21.number(),
+  future_materialized_balance: z21.number(),
+  recurring_projected_income: z21.number(),
+  recurring_projected_expenses: z21.number(),
+  recurring_projected_balance: z21.number(),
+  combined_income: z21.number(),
+  combined_expenses: z21.number(),
+  combined_balance: z21.number(),
+  cumulative_combined_balance: z21.number(),
+  realized_transaction_count: z21.number().int().nonnegative(),
+  future_materialized_transaction_count: z21.number().int().nonnegative(),
+  recurring_occurrence_count: z21.number().int().nonnegative()
 }).strict();
 var get_cashflow_projection_default = defineTool20({
   name: "get_cashflow_projection",
   title: "Projetar fluxo de caixa por componentes",
   description: "Combina matematicamente realizado, lan\xE7amentos futuros materializados e templates recorrentes, mantendo os tr\xEAs componentes separados. N\xE3o representa saldo banc\xE1rio nem previs\xE3o garantida.",
   inputSchema: {
-    start_date: z20.string(),
-    end_date: z20.string(),
-    scope: z20.enum(["personal", "shared", "all_accessible"]).optional(),
-    group_id: z20.string().uuid().optional(),
-    granularity: z20.enum(["day", "week", "month"]).optional(),
-    include_empty_periods: z20.boolean().optional(),
-    include_realized: z20.boolean().optional(),
-    include_future_materialized: z20.boolean().optional(),
-    include_recurring_templates: z20.boolean().optional()
+    start_date: z21.string(),
+    end_date: z21.string(),
+    scope: z21.enum(["personal", "shared", "all_accessible"]).optional(),
+    group_id: z21.string().uuid().optional(),
+    granularity: z21.enum(["day", "week", "month"]).optional(),
+    include_empty_periods: z21.boolean().optional(),
+    include_realized: z21.boolean().optional(),
+    include_future_materialized: z21.boolean().optional(),
+    include_recurring_templates: z21.boolean().optional()
   },
   outputSchema: {
     requested_period: periodSchema2,
     realized_period: optionalPeriodSchema,
     future_projection_period: optionalPeriodSchema,
-    today: z20.string(),
-    granularity: z20.enum(["day", "week", "month"]),
-    scope: z20.enum(["personal", "shared", "all_accessible"]),
-    data_complete: z20.boolean(),
+    today: z21.string(),
+    granularity: z21.enum(["day", "week", "month"]),
+    scope: z21.enum(["personal", "shared", "all_accessible"]),
+    data_complete: z21.boolean(),
     realized: componentSchema,
     future_materialized: componentSchema,
     recurring_projection: recurringComponentSchema,
-    combined_income: z20.number(),
-    combined_expenses: z20.number(),
-    combined_balance: z20.number(),
-    opening_cumulative_balance: z20.literal(0),
-    closing_cumulative_balance: z20.number(),
-    series: z20.array(pointSchema2),
-    warnings: z20.array(warningSchema8)
+    combined_income: z21.number(),
+    combined_expenses: z21.number(),
+    combined_balance: z21.number(),
+    opening_cumulative_balance: z21.literal(0),
+    closing_cumulative_balance: z21.number(),
+    series: z21.array(pointSchema2),
+    warnings: z21.array(warningSchema8)
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async (input, ctx) => {
@@ -5063,13 +5150,482 @@ var get_cashflow_projection_default = defineTool20({
   }
 });
 
+// src/lib/mcp/tools/update-expense.ts
+import { defineTool as defineTool21 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z23 } from "npm:zod@^3.25.76";
+
+// src/lib/mcp/shared/transaction-update.ts
+import { z as z22 } from "npm:zod@^3.25.76";
+var PAYMENT_METHODS = ["pix", "credit", "debit", "cash"];
+var UPDATE_WARNINGS = [
+  "NO_EFFECTIVE_CHANGES",
+  "ONLY_ONE_INSTALLMENT_UPDATED",
+  "SHARED_RECORD_UPDATED",
+  "CATEGORY_SNAPSHOT_UPDATED",
+  "CARD_REFERENCE_UPDATED"
+];
+var civilDateSchema = z22.string().regex(ISO_DATE_RE).refine(isValidIsoDate, "Data civil inv\xE1lida.");
+var expectedUpdatedAtSchema = z22.string().datetime({ offset: true });
+var amountSchema = z22.number().finite().positive();
+var descriptionSchema = z22.string().trim().min(1).max(200);
+var expenseChangesSchema = z22.object({
+  description: descriptionSchema.optional(),
+  amount: amountSchema.optional(),
+  expense_date: civilDateSchema.optional(),
+  category_id: z22.string().uuid().nullable().optional(),
+  payment_method: z22.enum(PAYMENT_METHODS).optional(),
+  card_id: z22.string().uuid().nullable().optional()
+}).strict().refine((changes) => Object.keys(changes).length > 0, {
+  message: "Informe pelo menos uma altera\xE7\xE3o."
+});
+var incomeChangesSchema = z22.object({
+  description: descriptionSchema.optional(),
+  amount: amountSchema.optional(),
+  income_date: civilDateSchema.optional(),
+  income_category_id: z22.string().uuid().nullable().optional()
+}).strict().refine((changes) => Object.keys(changes).length > 0, {
+  message: "Informe pelo menos uma altera\xE7\xE3o."
+});
+var expenseViewSchema = z22.object({
+  id: z22.string().uuid(),
+  description: z22.string(),
+  amount: z22.number(),
+  expense_date: z22.string(),
+  category_id: z22.string().uuid().nullable(),
+  category_name: z22.string().nullable(),
+  category_icon: z22.string().nullable(),
+  payment_method: z22.enum(PAYMENT_METHODS),
+  card_id: z22.string().uuid().nullable(),
+  card_name: z22.string().nullable(),
+  card_color: z22.string().nullable(),
+  is_shared: z22.boolean(),
+  shared_group_id: z22.string().uuid().nullable(),
+  installment_group_id: z22.string().uuid().nullable(),
+  installment_number: z22.number().int().nullable(),
+  total_installments: z22.number().int().nullable(),
+  created_at: z22.string(),
+  updated_at: z22.string()
+}).strict();
+var incomeViewSchema = z22.object({
+  id: z22.string().uuid(),
+  description: z22.string(),
+  amount: z22.number(),
+  income_date: z22.string(),
+  income_category_id: z22.string().uuid().nullable(),
+  category_name: z22.string().nullable(),
+  category_icon: z22.string().nullable(),
+  is_shared: z22.boolean(),
+  shared_group_id: z22.string().uuid().nullable(),
+  installment_group_id: z22.string().uuid().nullable(),
+  installment_number: z22.number().int().nullable(),
+  total_installments: z22.number().int().nullable(),
+  created_at: z22.string(),
+  updated_at: z22.string()
+}).strict();
+var updateWarningSchema = z22.enum(UPDATE_WARNINGS);
+function expenseView(row) {
+  const expenseDate = preserveSqlDate(row.expense_date);
+  if (!expenseDate) return null;
+  return {
+    id: row.id,
+    description: row.description,
+    amount: Number(row.amount),
+    expense_date: expenseDate,
+    category_id: row.category_id,
+    category_name: row.category_name,
+    category_icon: row.category_icon,
+    payment_method: row.payment_method,
+    card_id: row.card_id,
+    card_name: row.card_name,
+    card_color: row.card_color,
+    is_shared: row.shared_group_id !== null || row.is_shared === true,
+    shared_group_id: row.shared_group_id,
+    installment_group_id: row.installment_group_id,
+    installment_number: row.installment_number,
+    total_installments: row.total_installments,
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  };
+}
+function incomeView(row) {
+  return {
+    id: row.id,
+    description: row.description,
+    amount: Number(row.amount),
+    income_date: row.income_date,
+    income_category_id: row.income_category_id,
+    category_name: row.category_name,
+    category_icon: row.category_icon,
+    is_shared: row.shared_group_id !== null,
+    shared_group_id: row.shared_group_id,
+    installment_group_id: row.installment_group_id,
+    installment_number: row.installment_number,
+    total_installments: row.total_installments,
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  };
+}
+function isInstallment(row) {
+  return row.installment_group_id !== null || (row.installment_number ?? 0) > 1 || (row.total_installments ?? 0) > 1;
+}
+function usesCard(paymentMethod) {
+  return paymentMethod === "credit" || paymentMethod === "debit";
+}
+function cardSupports(cardType, paymentMethod) {
+  return cardType === "both" || paymentMethod === "credit" && cardType === "credit" || paymentMethod === "debit" && cardType === "debit";
+}
+function updateContent(result) {
+  const label = result.resource_type === "expense" ? "Despesa" : "Receita";
+  const changes = result.changed_fields.length ? result.changed_fields.map(
+    (field) => `${field}: ${JSON.stringify(result.before[field] ?? null)} -> ${JSON.stringify(result.after[field] ?? null)}`
+  ).join("; ") : "nenhuma mudan\xE7a efetiva";
+  return `${label} ${result.id}; applied=${result.applied}. Altera\xE7\xF5es: ${changes}. updated_at: ${result.updated_at_before} -> ${result.updated_at_after}. warnings=${JSON.stringify(result.warnings)}. Estado anterior seguro=${JSON.stringify(result.before)}. Estado final confirmado pelo banco=${JSON.stringify(result.after)}.`;
+}
+
+// src/lib/mcp/tools/update-expense.ts
+var EXPENSE_COLUMNS2 = "id,user_id,description,amount,expense_date,category_id,category_name,category_icon,payment_method,card_id,card_name,card_color,shared_group_id,is_shared,installment_group_id,installment_number,total_installments,created_at,updated_at";
+var inputProperties = {
+  expense_id: z23.string().uuid(),
+  expected_updated_at: expectedUpdatedAtSchema,
+  changes: expenseChangesSchema,
+  confirm_single_installment_update: z23.boolean().optional()
+};
+var inputValidator = z23.object(inputProperties).strict();
+var update_expense_default = defineTool21({
+  name: "update_expense",
+  title: "Editar despesa com seguran\xE7a",
+  description: "Edita somente uma despesa pertencente \xE0 conta autenticada, com concorr\xEAncia otimista por expected_updated_at. Parcelas exigem confirma\xE7\xE3o expl\xEDcita e apenas a linha selecionada \xE9 alterada.",
+  inputSchema: inputProperties,
+  outputSchema: {
+    resource_type: z23.literal("expense"),
+    id: z23.string().uuid(),
+    applied: z23.boolean(),
+    changed_fields: z23.array(
+      z23.enum([
+        "description",
+        "amount",
+        "expense_date",
+        "category_id",
+        "payment_method",
+        "card_id"
+      ])
+    ),
+    before: expenseViewSchema,
+    after: expenseViewSchema,
+    updated_at_before: z23.string(),
+    updated_at_after: z23.string(),
+    warnings: z23.array(updateWarningSchema),
+    data_complete: z23.boolean()
+  },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    openWorldHint: false
+  },
+  handler: async (rawInput, ctx) => {
+    if (!ctx.isAuthenticated() || !ctx.getUserId()) {
+      return mcpError("UNAUTHENTICATED");
+    }
+    const parsed = inputValidator.safeParse(rawInput);
+    if (!parsed.success) {
+      const changesInvalid = parsed.error.issues.some(
+        (issue) => issue.path[0] === "changes"
+      );
+      return mcpError(changesInvalid ? "INVALID_PATCH" : "INVALID_INPUT");
+    }
+    const input = parsed.data;
+    const userId = ctx.getUserId();
+    const supabase = supabaseForUser(ctx);
+    const currentResult = await supabase.from("expenses").select(EXPENSE_COLUMNS2).eq("id", input.expense_id).eq("user_id", userId).maybeSingle();
+    if (currentResult.error) return mcpError("INTERNAL_ERROR");
+    if (!currentResult.data) return mcpError("RESOURCE_NOT_FOUND");
+    const current = currentResult.data;
+    if (current.updated_at !== input.expected_updated_at) {
+      return mcpError("CONCURRENT_MODIFICATION");
+    }
+    if (isInstallment(current) && input.confirm_single_installment_update !== true) {
+      return mcpError(
+        "CONFIRMATION_REQUIRED",
+        `Esta despesa \xE9 uma parcela individual (parcela=${current.installment_number ?? "desconhecida"}; total=${current.total_installments ?? "desconhecido"}). Somente esta linha seria alterada. Repita com confirm_single_installment_update=true.`
+      );
+    }
+    const before = expenseView(current);
+    if (!before || !expenseViewSchema.safeParse(before).success) {
+      return mcpError("INVALID_DATA");
+    }
+    const patch = {};
+    const changedFields = [];
+    const warnings = [];
+    const changes = input.changes;
+    if (changes.description !== void 0 && changes.description !== current.description) {
+      patch.description = changes.description;
+      changedFields.push("description");
+    }
+    if (changes.amount !== void 0 && changes.amount !== Number(current.amount)) {
+      patch.amount = changes.amount;
+      changedFields.push("amount");
+    }
+    if (changes.expense_date !== void 0 && changes.expense_date !== before.expense_date) {
+      patch.expense_date = changes.expense_date;
+      changedFields.push("expense_date");
+    }
+    if (changes.category_id !== void 0 && changes.category_id !== current.category_id) {
+      if (changes.category_id === null) {
+        patch.category_id = null;
+        patch.category_name = null;
+        patch.category_icon = null;
+      } else {
+        const categoryResult = await supabase.from("user_categories").select("name,icon,is_active").eq("id", changes.category_id).eq("user_id", userId).eq("is_active", true).maybeSingle();
+        if (categoryResult.error) return mcpError("INTERNAL_ERROR");
+        if (!categoryResult.data) return mcpError("CATEGORY_NOT_FOUND");
+        patch.category_id = changes.category_id;
+        patch.category_name = categoryResult.data.name;
+        patch.category_icon = categoryResult.data.icon;
+      }
+      changedFields.push("category_id");
+      warnings.push("CATEGORY_SNAPSHOT_UPDATED");
+    }
+    const finalPaymentMethod = changes.payment_method ?? current.payment_method;
+    if (changes.payment_method !== void 0 && changes.payment_method !== current.payment_method) {
+      patch.payment_method = changes.payment_method;
+      changedFields.push("payment_method");
+    }
+    let finalCardId = changes.card_id !== void 0 ? changes.card_id : current.card_id;
+    if (!usesCard(finalPaymentMethod)) {
+      if (changes.card_id !== void 0 && changes.card_id !== null) {
+        return mcpError("BUSINESS_RULE_VIOLATION");
+      }
+      finalCardId = null;
+    }
+    const cardChanged = finalCardId !== current.card_id;
+    if (finalCardId !== null && (cardChanged || finalPaymentMethod !== current.payment_method)) {
+      const cardResult = await supabase.from("cards").select("name,color,card_type,is_active").eq("id", finalCardId).eq("user_id", userId).maybeSingle();
+      if (cardResult.error) return mcpError("INTERNAL_ERROR");
+      if (!cardResult.data || cardChanged && cardResult.data.is_active !== true) {
+        return mcpError("CARD_NOT_FOUND");
+      }
+      if (!cardSupports(cardResult.data.card_type, finalPaymentMethod)) {
+        return mcpError("BUSINESS_RULE_VIOLATION");
+      }
+      if (cardChanged) {
+        patch.card_id = finalCardId;
+        patch.card_name = cardResult.data.name;
+        patch.card_color = cardResult.data.color;
+      }
+    } else if (cardChanged) {
+      patch.card_id = null;
+      patch.card_name = null;
+      patch.card_color = null;
+    }
+    if (cardChanged) {
+      changedFields.push("card_id");
+      warnings.push("CARD_REFERENCE_UPDATED");
+    }
+    if (changedFields.length === 0) {
+      const result2 = {
+        resource_type: "expense",
+        id: current.id,
+        applied: false,
+        changed_fields: changedFields,
+        before,
+        after: before,
+        updated_at_before: current.updated_at,
+        updated_at_after: current.updated_at,
+        warnings: ["NO_EFFECTIVE_CHANGES"],
+        data_complete: true
+      };
+      return {
+        content: [{ type: "text", text: updateContent(result2) }],
+        structuredContent: result2
+      };
+    }
+    const updateResult = await supabase.from("expenses").update(patch).eq("id", input.expense_id).eq("user_id", userId).eq("updated_at", input.expected_updated_at).select(EXPENSE_COLUMNS2).maybeSingle();
+    if (updateResult.error) return mcpError("WRITE_FAILED");
+    if (!updateResult.data) {
+      const existence = await supabase.from("expenses").select("id,updated_at").eq("id", input.expense_id).eq("user_id", userId).maybeSingle();
+      if (existence.error) return mcpError("INTERNAL_ERROR");
+      return mcpError(
+        existence.data ? "CONCURRENT_MODIFICATION" : "RESOURCE_NOT_FOUND"
+      );
+    }
+    const after = expenseView(updateResult.data);
+    if (!after || !expenseViewSchema.safeParse(after).success) {
+      return mcpError("INVALID_DATA");
+    }
+    if (before.is_shared) warnings.push("SHARED_RECORD_UPDATED");
+    if (isInstallment(current)) warnings.push("ONLY_ONE_INSTALLMENT_UPDATED");
+    const result = {
+      resource_type: "expense",
+      id: current.id,
+      applied: true,
+      changed_fields: changedFields,
+      before,
+      after,
+      updated_at_before: current.updated_at,
+      updated_at_after: after.updated_at,
+      warnings,
+      data_complete: true
+    };
+    return {
+      content: [{ type: "text", text: updateContent(result) }],
+      structuredContent: result
+    };
+  }
+});
+
+// src/lib/mcp/tools/update-income.ts
+import { defineTool as defineTool22 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z24 } from "npm:zod@^3.25.76";
+var INCOME_COLUMNS2 = "id,user_id,description,amount,income_date,income_category_id,category_name,category_icon,shared_group_id,installment_group_id,installment_number,total_installments,created_at,updated_at";
+var inputProperties2 = {
+  income_id: z24.string().uuid(),
+  expected_updated_at: expectedUpdatedAtSchema,
+  changes: incomeChangesSchema
+};
+var inputValidator2 = z24.object(inputProperties2).strict();
+var update_income_default = defineTool22({
+  name: "update_income",
+  title: "Editar receita com seguran\xE7a",
+  description: "Edita somente uma receita pertencente \xE0 conta autenticada, com concorr\xEAncia otimista por expected_updated_at. A altera\xE7\xE3o \xE9 parcial e nunca atualiza uma s\xE9rie inteira.",
+  inputSchema: inputProperties2,
+  outputSchema: {
+    resource_type: z24.literal("income"),
+    id: z24.string().uuid(),
+    applied: z24.boolean(),
+    changed_fields: z24.array(
+      z24.enum(["description", "amount", "income_date", "income_category_id"])
+    ),
+    before: incomeViewSchema,
+    after: incomeViewSchema,
+    updated_at_before: z24.string(),
+    updated_at_after: z24.string(),
+    warnings: z24.array(updateWarningSchema),
+    data_complete: z24.boolean()
+  },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    openWorldHint: false
+  },
+  handler: async (rawInput, ctx) => {
+    if (!ctx.isAuthenticated() || !ctx.getUserId()) {
+      return mcpError("UNAUTHENTICATED");
+    }
+    const parsed = inputValidator2.safeParse(rawInput);
+    if (!parsed.success) {
+      const changesInvalid = parsed.error.issues.some(
+        (issue) => issue.path[0] === "changes"
+      );
+      return mcpError(changesInvalid ? "INVALID_PATCH" : "INVALID_INPUT");
+    }
+    const input = parsed.data;
+    const userId = ctx.getUserId();
+    const supabase = supabaseForUser(ctx);
+    const currentResult = await supabase.from("incomes").select(INCOME_COLUMNS2).eq("id", input.income_id).eq("user_id", userId).maybeSingle();
+    if (currentResult.error) return mcpError("INTERNAL_ERROR");
+    if (!currentResult.data) return mcpError("RESOURCE_NOT_FOUND");
+    const current = currentResult.data;
+    if (current.updated_at !== input.expected_updated_at) {
+      return mcpError("CONCURRENT_MODIFICATION");
+    }
+    const before = incomeView(current);
+    if (!incomeViewSchema.safeParse(before).success) {
+      return mcpError("INVALID_DATA");
+    }
+    const patch = {};
+    const changedFields = [];
+    const warnings = [];
+    const changes = input.changes;
+    if (changes.description !== void 0 && changes.description !== current.description) {
+      patch.description = changes.description;
+      changedFields.push("description");
+    }
+    if (changes.amount !== void 0 && changes.amount !== Number(current.amount)) {
+      patch.amount = changes.amount;
+      changedFields.push("amount");
+    }
+    if (changes.income_date !== void 0) {
+      const currentCivilDate = timestampToSaoPauloCivilDate(current.income_date);
+      if (!currentCivilDate) return mcpError("INVALID_DATA");
+      if (changes.income_date !== currentCivilDate) {
+        patch.income_date = zonedMidnightUtc(changes.income_date);
+        changedFields.push("income_date");
+      }
+    }
+    if (changes.income_category_id !== void 0 && changes.income_category_id !== current.income_category_id) {
+      if (changes.income_category_id === null) {
+        patch.income_category_id = null;
+        patch.category_name = null;
+        patch.category_icon = null;
+      } else {
+        const categoryResult = await supabase.from("user_income_categories").select("name,icon,is_active").eq("id", changes.income_category_id).eq("user_id", userId).eq("is_active", true).maybeSingle();
+        if (categoryResult.error) return mcpError("INTERNAL_ERROR");
+        if (!categoryResult.data) return mcpError("CATEGORY_NOT_FOUND");
+        patch.income_category_id = changes.income_category_id;
+        patch.category_name = categoryResult.data.name;
+        patch.category_icon = categoryResult.data.icon;
+      }
+      changedFields.push("income_category_id");
+      warnings.push("CATEGORY_SNAPSHOT_UPDATED");
+    }
+    if (changedFields.length === 0) {
+      const result2 = {
+        resource_type: "income",
+        id: current.id,
+        applied: false,
+        changed_fields: changedFields,
+        before,
+        after: before,
+        updated_at_before: current.updated_at,
+        updated_at_after: current.updated_at,
+        warnings: ["NO_EFFECTIVE_CHANGES"],
+        data_complete: true
+      };
+      return {
+        content: [{ type: "text", text: updateContent(result2) }],
+        structuredContent: result2
+      };
+    }
+    const updateResult = await supabase.from("incomes").update(patch).eq("id", input.income_id).eq("user_id", userId).eq("updated_at", input.expected_updated_at).select(INCOME_COLUMNS2).maybeSingle();
+    if (updateResult.error) return mcpError("WRITE_FAILED");
+    if (!updateResult.data) {
+      const existence = await supabase.from("incomes").select("id,updated_at").eq("id", input.income_id).eq("user_id", userId).maybeSingle();
+      if (existence.error) return mcpError("INTERNAL_ERROR");
+      return mcpError(
+        existence.data ? "CONCURRENT_MODIFICATION" : "RESOURCE_NOT_FOUND"
+      );
+    }
+    const after = incomeView(updateResult.data);
+    if (!incomeViewSchema.safeParse(after).success) {
+      return mcpError("INVALID_DATA");
+    }
+    if (before.is_shared) warnings.push("SHARED_RECORD_UPDATED");
+    const result = {
+      resource_type: "income",
+      id: current.id,
+      applied: true,
+      changed_fields: changedFields,
+      before,
+      after,
+      updated_at_before: current.updated_at,
+      updated_at_after: after.updated_at,
+      warnings,
+      data_complete: true
+    };
+    return {
+      content: [{ type: "text", text: updateContent(result) }],
+      structuredContent: result
+    };
+  }
+});
+
 // src/lib/mcp/index.ts
 var projectRef = "jaoldaqvbdllowepzwbr";
 var mcp_default = defineMcp({
   name: "gastinho-simples-mcp",
   title: "Gastinho Simples",
   version: "0.1.0",
-  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para lan\xE7amentos reais, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. get_cashflow_series representa somente realizado. get_cashflow_projection separa realizado, futuro materializado e templates recorrentes; futuro materializado s\xE3o linhas reais com data futura, recorr\xEAncias s\xE3o apenas templates, e a soma combinada pode conter sobreposi\xE7\xE3o. Ela n\xE3o representa saldo banc\xE1rio nem previs\xE3o garantida. Para templates isolados use get_recurring_forecast; para parcelas futuras j\xE1 materializadas use get_card_installments. Use list_cards para localizar o cart\xE3o e get_card_summary para o total registrado no per\xEDodo calculado. Recorr\xEAncias s\xE3o templates mensais: use list_recurring_transactions para list\xE1-las e get_recurring_forecast apenas para proje\xE7\xF5es baseadas nesses templates. Metas tamb\xE9m s\xE3o mensais: use list_goals e get_goal_progress; elas n\xE3o s\xE3o metas de poupan\xE7a com contribui\xE7\xF5es. Mantenha realizado e recorrente separados, informe o risco de sobreposi\xE7\xE3o da proje\xE7\xE3o quando houver templates participantes e n\xE3o gere recomenda\xE7\xE3o financeira. Use get_category_usage somente para fatos hist\xF3ricos sobre categorias pessoais: categorias compartilhadas n\xE3o existem no modelo atual e transa\xE7\xF5es compartilhadas de outros propriet\xE1rios n\xE3o entram. O forecast n\xE3o representa transa\xE7\xF5es efetivamente lan\xE7adas e nunca deve ser somado automaticamente a parcelas ou lan\xE7amentos futuros. Nunca chame resultados de saldo banc\xE1rio, limite real dispon\xEDvel ou fatura oficialmente paga/em aberto. Use list_categories para UUIDs. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
+  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Antes de update_expense ou update_income, localize o lan\xE7amento com search_transactions, list_expenses ou list_incomes e reutilize exatamente o updated_at retornado como expected_updated_at. Nunca tente editar recurso de outro propriet\xE1rio nem afirmar que uma s\xE9rie inteira foi alterada; update_expense altera uma \xFAnica parcela e exige confirma\xE7\xE3o quando aplic\xE1vel. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para lan\xE7amentos reais, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. get_cashflow_series representa somente realizado. get_cashflow_projection separa realizado, futuro materializado e templates recorrentes; futuro materializado s\xE3o linhas reais com data futura, recorr\xEAncias s\xE3o apenas templates, e a soma combinada pode conter sobreposi\xE7\xE3o. Ela n\xE3o representa saldo banc\xE1rio nem previs\xE3o garantida. Para templates isolados use get_recurring_forecast; para parcelas futuras j\xE1 materializadas use get_card_installments. Use list_cards para localizar o cart\xE3o e get_card_summary para o total registrado no per\xEDodo calculado. Recorr\xEAncias s\xE3o templates mensais: use list_recurring_transactions para list\xE1-las e get_recurring_forecast apenas para proje\xE7\xF5es baseadas nesses templates. Metas tamb\xE9m s\xE3o mensais: use list_goals e get_goal_progress; elas n\xE3o s\xE3o metas de poupan\xE7a com contribui\xE7\xF5es. Mantenha realizado e recorrente separados, informe o risco de sobreposi\xE7\xE3o da proje\xE7\xE3o quando houver templates participantes e n\xE3o gere recomenda\xE7\xE3o financeira. Use get_category_usage somente para fatos hist\xF3ricos sobre categorias pessoais: categorias compartilhadas n\xE3o existem no modelo atual e transa\xE7\xF5es compartilhadas de outros propriet\xE1rios n\xE3o entram. O forecast n\xE3o representa transa\xE7\xF5es efetivamente lan\xE7adas e nunca deve ser somado automaticamente a parcelas ou lan\xE7amentos futuros. Nunca chame resultados de saldo banc\xE1rio, limite real dispon\xEDvel ou fatura oficialmente paga/em aberto. Use list_categories para UUIDs. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
@@ -5094,7 +5650,9 @@ var mcp_default = defineMcp({
     get_goal_progress_default,
     get_category_usage_default,
     get_cashflow_series_default,
-    get_cashflow_projection_default
+    get_cashflow_projection_default,
+    update_expense_default,
+    update_income_default
   ]
 });
 

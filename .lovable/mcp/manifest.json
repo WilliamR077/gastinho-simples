@@ -164,7 +164,314 @@
           "additionalProperties": false,
           "$schema": "http://json-schema.org/draft-07/schema#"
         },
-        "outputSchema": null
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "amount": {
+                    "type": "number"
+                  },
+                  "date": {
+                    "type": "string"
+                  },
+                  "created_at": {
+                    "type": "string"
+                  },
+                  "updated_at": {
+                    "type": "string"
+                  },
+                  "category_name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "category_icon": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "installment_number": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "total_installments": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "shared_group_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "is_shared": {
+                    "type": "boolean"
+                  },
+                  "is_owner": {
+                    "type": "boolean"
+                  },
+                  "expense_date": {
+                    "type": "string"
+                  },
+                  "category_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "payment_method": {
+                    "type": "string",
+                    "enum": [
+                      "pix",
+                      "credit",
+                      "debit",
+                      "cash"
+                    ]
+                  },
+                  "card_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "card_name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "description",
+                  "amount",
+                  "date",
+                  "created_at",
+                  "updated_at",
+                  "category_name",
+                  "category_icon",
+                  "installment_number",
+                  "total_installments",
+                  "shared_group_id",
+                  "is_shared",
+                  "is_owner",
+                  "expense_date",
+                  "category_id",
+                  "payment_method",
+                  "card_id",
+                  "card_name"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "expenses": {
+              "type": "array",
+              "items": {
+                "$ref": "#/properties/items/items"
+              }
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "limit": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "next_cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "cursor_version": {
+              "type": "number",
+              "const": 3
+            },
+            "applied_filters": {
+              "type": "object",
+              "properties": {
+                "start_date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "end_date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "query": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "category_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "payment_method": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "pix",
+                        "credit",
+                        "debit",
+                        "cash"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "card_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "group_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "min_amount": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "max_amount": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "sort_by": {
+                  "type": "string",
+                  "enum": [
+                    "date",
+                    "created_at",
+                    "amount"
+                  ]
+                },
+                "sort_order": {
+                  "type": "string",
+                  "enum": [
+                    "asc",
+                    "desc"
+                  ]
+                }
+              },
+              "required": [
+                "start_date",
+                "end_date",
+                "query",
+                "category_id",
+                "payment_method",
+                "card_id",
+                "group_id",
+                "min_amount",
+                "max_amount",
+                "sort_by",
+                "sort_order"
+              ],
+              "additionalProperties": false
+            },
+            "scope": {
+              "type": "string",
+              "enum": [
+                "personal",
+                "shared",
+                "all_accessible"
+              ]
+            },
+            "time_scope": {
+              "type": "string",
+              "enum": [
+                "occurred",
+                "future",
+                "all"
+              ]
+            }
+          },
+          "required": [
+            "items",
+            "expenses",
+            "count",
+            "limit",
+            "next_cursor",
+            "cursor_version",
+            "applied_filters",
+            "scope",
+            "time_scope"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
       },
       {
         "name": "list_incomes",
@@ -252,7 +559,256 @@
           "additionalProperties": false,
           "$schema": "http://json-schema.org/draft-07/schema#"
         },
-        "outputSchema": null
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "amount": {
+                    "type": "number"
+                  },
+                  "date": {
+                    "type": "string"
+                  },
+                  "created_at": {
+                    "type": "string"
+                  },
+                  "updated_at": {
+                    "type": "string"
+                  },
+                  "category_name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "category_icon": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "installment_number": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "total_installments": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "shared_group_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "is_shared": {
+                    "type": "boolean"
+                  },
+                  "is_owner": {
+                    "type": "boolean"
+                  },
+                  "income_date": {
+                    "type": "string"
+                  },
+                  "income_category_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "description",
+                  "amount",
+                  "date",
+                  "created_at",
+                  "updated_at",
+                  "category_name",
+                  "category_icon",
+                  "installment_number",
+                  "total_installments",
+                  "shared_group_id",
+                  "is_shared",
+                  "is_owner",
+                  "income_date",
+                  "income_category_id"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "incomes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/properties/items/items"
+              }
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "limit": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "next_cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "cursor_version": {
+              "type": "number",
+              "const": 3
+            },
+            "applied_filters": {
+              "type": "object",
+              "properties": {
+                "start_date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "end_date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "query": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "income_category_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "group_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "min_amount": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "max_amount": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "sort_by": {
+                  "type": "string",
+                  "enum": [
+                    "date",
+                    "created_at",
+                    "amount"
+                  ]
+                },
+                "sort_order": {
+                  "type": "string",
+                  "enum": [
+                    "asc",
+                    "desc"
+                  ]
+                }
+              },
+              "required": [
+                "start_date",
+                "end_date",
+                "query",
+                "income_category_id",
+                "group_id",
+                "min_amount",
+                "max_amount",
+                "sort_by",
+                "sort_order"
+              ],
+              "additionalProperties": false
+            },
+            "scope": {
+              "type": "string",
+              "enum": [
+                "personal",
+                "shared",
+                "all_accessible"
+              ]
+            },
+            "time_scope": {
+              "type": "string",
+              "enum": [
+                "occurred",
+                "future",
+                "all"
+              ]
+            }
+          },
+          "required": [
+            "items",
+            "incomes",
+            "count",
+            "limit",
+            "next_cursor",
+            "cursor_version",
+            "applied_filters",
+            "scope",
+            "time_scope"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
       },
       {
         "name": "create_expense",
@@ -562,6 +1118,9 @@
                   "created_at": {
                     "type": "string"
                   },
+                  "updated_at": {
+                    "type": "string"
+                  },
                   "category_id": {
                     "anyOf": [
                       {
@@ -663,6 +1222,7 @@
                   "amount",
                   "date",
                   "created_at",
+                  "updated_at",
                   "category_id",
                   "category_name",
                   "category_icon",
@@ -4359,6 +4919,539 @@
             "closing_cumulative_balance",
             "series",
             "warnings"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      },
+      {
+        "name": "update_expense",
+        "title": "Editar despesa com segurança",
+        "description": "Edita somente uma despesa pertencente à conta autenticada, com concorrência otimista por expected_updated_at. Parcelas exigem confirmação explícita e apenas a linha selecionada é alterada.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "expense_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "expected_updated_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "changes": {
+              "type": "object",
+              "properties": {
+                "description": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "amount": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "expense_date": {
+                  "type": "string",
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                },
+                "category_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "payment_method": {
+                  "type": "string",
+                  "enum": [
+                    "pix",
+                    "credit",
+                    "debit",
+                    "cash"
+                  ]
+                },
+                "card_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            "confirm_single_installment_update": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "expense_id",
+            "expected_updated_at",
+            "changes"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "expense"
+            },
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "applied": {
+              "type": "boolean"
+            },
+            "changed_fields": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "description",
+                  "amount",
+                  "expense_date",
+                  "category_id",
+                  "payment_method",
+                  "card_id"
+                ]
+              }
+            },
+            "before": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "expense_date": {
+                  "type": "string"
+                },
+                "category_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "category_name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "category_icon": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "payment_method": {
+                  "type": "string",
+                  "enum": [
+                    "pix",
+                    "credit",
+                    "debit",
+                    "cash"
+                  ]
+                },
+                "card_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "card_name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "card_color": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "is_shared": {
+                  "type": "boolean"
+                },
+                "shared_group_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "installment_group_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "installment_number": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "total_installments": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "created_at": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "description",
+                "amount",
+                "expense_date",
+                "category_id",
+                "category_name",
+                "category_icon",
+                "payment_method",
+                "card_id",
+                "card_name",
+                "card_color",
+                "is_shared",
+                "shared_group_id",
+                "installment_group_id",
+                "installment_number",
+                "total_installments",
+                "created_at",
+                "updated_at"
+              ],
+              "additionalProperties": false
+            },
+            "after": {
+              "$ref": "#/properties/before"
+            },
+            "updated_at_before": {
+              "type": "string"
+            },
+            "updated_at_after": {
+              "type": "string"
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "NO_EFFECTIVE_CHANGES",
+                  "ONLY_ONE_INSTALLMENT_UPDATED",
+                  "SHARED_RECORD_UPDATED",
+                  "CATEGORY_SNAPSHOT_UPDATED",
+                  "CARD_REFERENCE_UPDATED"
+                ]
+              }
+            },
+            "data_complete": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "resource_type",
+            "id",
+            "applied",
+            "changed_fields",
+            "before",
+            "after",
+            "updated_at_before",
+            "updated_at_after",
+            "warnings",
+            "data_complete"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      },
+      {
+        "name": "update_income",
+        "title": "Editar receita com segurança",
+        "description": "Edita somente uma receita pertencente à conta autenticada, com concorrência otimista por expected_updated_at. A alteração é parcial e nunca atualiza uma série inteira.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "income_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "expected_updated_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "changes": {
+              "type": "object",
+              "properties": {
+                "description": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "amount": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "income_date": {
+                  "type": "string",
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                },
+                "income_category_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "income_id",
+            "expected_updated_at",
+            "changes"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "income"
+            },
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "applied": {
+              "type": "boolean"
+            },
+            "changed_fields": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "description",
+                  "amount",
+                  "income_date",
+                  "income_category_id"
+                ]
+              }
+            },
+            "before": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "income_date": {
+                  "type": "string"
+                },
+                "income_category_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "category_name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "category_icon": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "is_shared": {
+                  "type": "boolean"
+                },
+                "shared_group_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "installment_group_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "installment_number": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "total_installments": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "created_at": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "description",
+                "amount",
+                "income_date",
+                "income_category_id",
+                "category_name",
+                "category_icon",
+                "is_shared",
+                "shared_group_id",
+                "installment_group_id",
+                "installment_number",
+                "total_installments",
+                "created_at",
+                "updated_at"
+              ],
+              "additionalProperties": false
+            },
+            "after": {
+              "$ref": "#/properties/before"
+            },
+            "updated_at_before": {
+              "type": "string"
+            },
+            "updated_at_after": {
+              "type": "string"
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "NO_EFFECTIVE_CHANGES",
+                  "ONLY_ONE_INSTALLMENT_UPDATED",
+                  "SHARED_RECORD_UPDATED",
+                  "CATEGORY_SNAPSHOT_UPDATED",
+                  "CARD_REFERENCE_UPDATED"
+                ]
+              }
+            },
+            "data_complete": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "resource_type",
+            "id",
+            "applied",
+            "changed_fields",
+            "before",
+            "after",
+            "updated_at_before",
+            "updated_at_after",
+            "warnings",
+            "data_complete"
           ],
           "additionalProperties": false,
           "$schema": "http://json-schema.org/draft-07/schema#"

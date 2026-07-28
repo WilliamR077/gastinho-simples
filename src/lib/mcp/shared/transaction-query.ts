@@ -50,6 +50,7 @@ export interface ExpenseRow {
   amount: number;
   expense_date: string;
   created_at: string;
+  updated_at: string;
   category_id: string | null;
   category_name: string | null;
   category_icon: string | null;
@@ -68,6 +69,7 @@ export interface IncomeRow {
   amount: number;
   income_date: string;
   created_at: string;
+  updated_at: string;
   income_category_id: string | null;
   category_name: string | null;
   category_icon: string | null;
@@ -90,6 +92,7 @@ export interface ExpenseItem extends SortableTransaction {
   is_shared: boolean;
   is_owner: boolean;
   description: string;
+  updated_at: string;
 }
 
 export interface IncomeItem extends SortableTransaction {
@@ -103,6 +106,7 @@ export interface IncomeItem extends SortableTransaction {
   is_shared: boolean;
   is_owner: boolean;
   description: string;
+  updated_at: string;
 }
 
 export interface QueryPage<T> {
@@ -145,9 +149,9 @@ function cursorFilterForTransactionType<
 }
 
 const EXPENSE_COLUMNS =
-  "id, user_id, description, amount, expense_date, created_at, category_id, category_name, category_icon, payment_method, card_id, card_name, installment_number, total_installments, shared_group_id";
+  "id, user_id, description, amount, expense_date, created_at, updated_at, category_id, category_name, category_icon, payment_method, card_id, card_name, installment_number, total_installments, shared_group_id";
 const INCOME_COLUMNS =
-  "id, user_id, description, amount, income_date, created_at, income_category_id, category_name, category_icon, installment_number, total_installments, shared_group_id";
+  "id, user_id, description, amount, income_date, created_at, updated_at, income_category_id, category_name, category_icon, installment_number, total_installments, shared_group_id";
 
 function sortColumn(sortBy: McpSortBy, dateColumn: string): string {
   if (sortBy === "created_at") return "created_at";
@@ -163,6 +167,7 @@ export function expenseItem(row: ExpenseRow, userId: string): ExpenseItem {
     date: row.expense_date,
     expense_date: row.expense_date,
     created_at: row.created_at,
+    updated_at: row.updated_at,
     category_id: row.category_id,
     category_name: row.category_name,
     category_icon: row.category_icon,
@@ -185,6 +190,7 @@ export function incomeItem(row: IncomeRow, userId: string): IncomeItem {
     date: row.income_date,
     income_date: row.income_date,
     created_at: row.created_at,
+    updated_at: row.updated_at,
     income_category_id: row.income_category_id,
     category_name: row.category_name,
     category_icon: row.category_icon,

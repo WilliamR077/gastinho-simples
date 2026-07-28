@@ -107,6 +107,7 @@ const transactionItems = ids.map((id, index) => ({
   amount: index + 1,
   date: "2026-07-20",
   created_at: "2026-07-20T12:00:00.000Z",
+  updated_at: "2026-07-20T12:00:00.000Z",
   category_id: null,
   category_name: null,
   category_icon: null,
@@ -299,7 +300,7 @@ test("comparison content carries periods, metrics, changes and warnings", () => 
 
 test("synthetic structured content validates against every explicit output schema", async () => {
   const manifest = JSON.parse(await readFile(".lovable/mcp/manifest.json", "utf8"));
-  assert.equal(manifest.mcp.tools.length, 20);
+  assert.equal(manifest.mcp.tools.length, 22);
   const tools = Object.fromEntries(manifest.mcp.tools.map((tool) => [tool.name, tool]));
   const cases = [
     ["search_transactions", searchResult],

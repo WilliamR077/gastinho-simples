@@ -11,6 +11,7 @@ export function transactionContent(
     date: string;
     description: string;
     amount: number;
+    updated_at: string;
   }>,
   scope: string,
   timeScope: string,
@@ -25,7 +26,7 @@ export function transactionContent(
     .slice(0, 10)
     .map(
       (item) =>
-        `${item.transaction_type} ${item.date}: ${compactText(item.description, 80)} — ${item.amount}`,
+        `${item.transaction_type} ${item.date}: ${compactText(item.description, 80)} — ${item.amount}; updated_at=${item.updated_at}`,
     )
     .join("; ");
   return (
