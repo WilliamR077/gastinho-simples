@@ -4194,16 +4194,373 @@ var get_category_usage_default = defineTool18({
       ...usage,
       data_complete: true
     };
-    const contentCategories = usage.categories.slice(0, 10).map((category) => ({
+    const detailedCategories = usage.categories.slice(0, 10).map((category) => ({
       ...category,
       monthly_series: category.monthly_series.slice(0, 12),
       monthly_series_omitted: Math.max(0, category.monthly_series.length - 12)
+    }));
+    const compactCategories = usage.categories.slice(10).map((category) => ({
+      category_id: category.category_id,
+      name: category.name,
+      is_active: category.is_active,
+      transaction_count: category.transaction_count,
+      total: category.total,
+      percentage: category.percentage,
+      unused: category.transaction_count === 0
+    }));
+    const contentCategoriesOmitted = Math.max(
+      0,
+      usage.total_category_count - detailedCategories.length - compactCategories.length
+    );
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Uso hist\xF3rico de categorias pessoais de ${input.kind === "expense" ? "despesas" : "receitas"} no per\xEDodo ${input.start_date} a ${input.end_date}. Total=${usage.total_amount}; transa\xE7\xF5es=${usage.total_transaction_count}; categorias retornadas=${usage.returned_category_count}/${usage.total_category_count}; categories_truncated=${usage.categories_truncated}; data_complete=true. detailed_category_count=${detailedCategories.length}; compact_category_count=${compactCategories.length}; total_category_count=${usage.total_category_count}; content_categories_omitted=${contentCategoriesOmitted}. Categorias detalhadas (m\xE1ximo 10; s\xE9rie mensal limitada a 12 pontos no texto)=${JSON.stringify(detailedCategories)}. Categorias compactas restantes=${JSON.stringify(compactCategories)}. Sem classifica\xE7\xE3o=${JSON.stringify(usage.uncategorized)}. warnings=${JSON.stringify(usage.warnings)}. Categorias s\xE3o pessoais; transa\xE7\xF5es de outros propriet\xE1rios n\xE3o entram. Os valores s\xE3o fatos hist\xF3ricos, n\xE3o recomenda\xE7\xF5es ou julgamentos sobre gastos.`
+        }
+      ],
+      structuredContent: result
+    };
+  }
+});
+
+// src/lib/mcp/tools/get-cashflow-series.ts
+import { defineTool as defineTool19 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z19 } from "npm:zod@^3.25.76";
+
+// src/lib/mcp/shared/cashflow.ts
+var CASHFLOW_WARNINGS = [
+  "PERIOD_TRUNCATED_TO_TODAY",
+  "FUTURE_PERIOD_NO_REALIZED_DATA",
+  "RESULT_SET_TOO_LARGE",
+  "NEGATIVE_EXPENSE_VALUE",
+  "NEGATIVE_INCOME_VALUE",
+  "INVALID_TRANSACTION_DATE",
+  "PARTIAL_FIRST_PERIOD",
+  "PARTIAL_LAST_PERIOD"
+];
+function monthEnd(date) {
+  const [year, month] = date.slice(0, 7).split("-").map(Number);
+  const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return `${date.slice(0, 7)}-${String(last).padStart(2, "0")}`;
+}
+function weekEnd(date) {
+  return addIsoDays(isoWeekStart(date), 6);
+}
+function saoPauloCivilDate(value) {
+  if (isValidIsoDate(value)) return value;
+  if (ISO_DATE_RE.test(value)) return null;
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) ? todayIso(parsed) : null;
+}
+function zonedMidnightUtc(date, timeZone = "America/Sao_Paulo") {
+  const target = Date.parse(`${date}T00:00:00Z`);
+  let candidate = target;
+  for (let iteration = 0; iteration < 3; iteration += 1) {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23"
+    }).formatToParts(new Date(candidate));
+    const value = (type) => Number(parts.find((part) => part.type === type)?.value);
+    const represented = Date.UTC(
+      value("year"),
+      value("month") - 1,
+      value("day"),
+      value("hour"),
+      value("minute"),
+      value("second")
+    );
+    candidate += target - represented;
+  }
+  return new Date(candidate).toISOString();
+}
+function cashflowPeriods(startDate, endDate, granularity) {
+  const periods = [];
+  let current = startDate;
+  while (current <= endDate) {
+    let naturalEnd = current;
+    if (granularity === "week") naturalEnd = weekEnd(current);
+    if (granularity === "month") naturalEnd = monthEnd(current);
+    const end = naturalEnd < endDate ? naturalEnd : endDate;
+    periods.push({
+      start: current,
+      end,
+      label: granularity === "day" ? current : granularity === "month" ? current.slice(0, 7) : `${current} a ${end}`
+    });
+    current = addIsoDays(end, 1);
+  }
+  return periods;
+}
+function partialPeriodWarnings(startDate, endDate, granularity) {
+  if (granularity === "day") return [];
+  const warnings = [];
+  const naturalStart = granularity === "week" ? isoWeekStart(startDate) : `${startDate.slice(0, 7)}-01`;
+  const naturalEnd = granularity === "week" ? weekEnd(endDate) : monthEnd(endDate);
+  if (startDate !== naturalStart) warnings.push("PARTIAL_FIRST_PERIOD");
+  if (endDate !== naturalEnd) warnings.push("PARTIAL_LAST_PERIOD");
+  return warnings;
+}
+function calculateCashflowSeries(transactions, options) {
+  const periods = cashflowPeriods(
+    options.start_date,
+    options.end_date,
+    options.granularity
+  );
+  let cumulative = 0;
+  const completeSeries = periods.map((period) => {
+    const current = transactions.filter(
+      (transaction) => transaction.date >= period.start && transaction.date <= period.end
+    );
+    const incomes = current.filter(
+      (transaction) => transaction.transaction_type === "income"
+    );
+    const expenses = current.filter(
+      (transaction) => transaction.transaction_type === "expense"
+    );
+    const realizedIncome = roundFinancial(
+      incomes.reduce((sum, transaction) => sum + transaction.amount, 0)
+    );
+    const realizedExpenses = roundFinancial(
+      expenses.reduce((sum, transaction) => sum + transaction.amount, 0)
+    );
+    const realizedBalance = roundFinancial(realizedIncome - realizedExpenses);
+    cumulative = roundFinancial(cumulative + realizedBalance);
+    return {
+      period_start: period.start,
+      period_end: period.end,
+      label: period.label,
+      realized_income: realizedIncome,
+      realized_expenses: realizedExpenses,
+      realized_balance: realizedBalance,
+      cumulative_balance: cumulative,
+      income_count: incomes.length,
+      expense_count: expenses.length,
+      transaction_count: current.length
+    };
+  });
+  const totalIncome = roundFinancial(
+    transactions.filter((transaction) => transaction.transaction_type === "income").reduce((sum, transaction) => sum + transaction.amount, 0)
+  );
+  const totalExpenses = roundFinancial(
+    transactions.filter((transaction) => transaction.transaction_type === "expense").reduce((sum, transaction) => sum + transaction.amount, 0)
+  );
+  const incomeCount = transactions.filter(
+    (transaction) => transaction.transaction_type === "income"
+  ).length;
+  const expenseCount = transactions.length - incomeCount;
+  const totalBalance = roundFinancial(totalIncome - totalExpenses);
+  return {
+    series: options.include_empty_periods ? completeSeries : completeSeries.filter((point) => point.transaction_count > 0),
+    total_income: totalIncome,
+    total_expenses: totalExpenses,
+    total_balance: totalBalance,
+    income_count: incomeCount,
+    expense_count: expenseCount,
+    transaction_count: transactions.length,
+    opening_cumulative_balance: 0,
+    closing_cumulative_balance: totalBalance
+  };
+}
+
+// src/lib/mcp/tools/get-cashflow-series.ts
+var TRANSACTION_CAP3 = 1e4;
+var warningSchema7 = z19.enum(CASHFLOW_WARNINGS);
+var periodSchema = z19.object({
+  start_date: z19.string(),
+  end_date: z19.string()
+}).strict();
+var effectivePeriodSchema2 = z19.object({
+  start_date: z19.string(),
+  end_date: z19.string(),
+  days: z19.number().int().positive()
+}).strict().nullable();
+var pointSchema = z19.object({
+  period_start: z19.string(),
+  period_end: z19.string(),
+  label: z19.string(),
+  realized_income: z19.number(),
+  realized_expenses: z19.number(),
+  realized_balance: z19.number(),
+  cumulative_balance: z19.number(),
+  income_count: z19.number().int().nonnegative(),
+  expense_count: z19.number().int().nonnegative(),
+  transaction_count: z19.number().int().nonnegative()
+}).strict();
+var get_cashflow_series_default = defineTool19({
+  name: "get_cashflow_series",
+  title: "Consultar fluxo de caixa realizado",
+  description: "Apresenta uma s\xE9rie factual de receitas e despesas efetivamente registradas at\xE9 hoje. N\xE3o inclui proje\xE7\xF5es, templates recorrentes ou transa\xE7\xF5es futuras e n\xE3o representa saldo banc\xE1rio.",
+  inputSchema: {
+    start_date: z19.string(),
+    end_date: z19.string(),
+    scope: z19.enum(["personal", "shared", "all_accessible"]).optional(),
+    group_id: z19.string().uuid().optional(),
+    granularity: z19.enum(["day", "week", "month"]).optional(),
+    include_empty_periods: z19.boolean().optional()
+  },
+  outputSchema: {
+    requested_period: periodSchema,
+    effective_period: effectivePeriodSchema2,
+    coverage_warning: z19.string().nullable(),
+    granularity: z19.enum(["day", "week", "month"]),
+    scope: z19.enum(["personal", "shared", "all_accessible"]),
+    data_complete: z19.boolean(),
+    series: z19.array(pointSchema),
+    total_income: z19.number(),
+    total_expenses: z19.number(),
+    total_balance: z19.number(),
+    income_count: z19.number().int().nonnegative(),
+    expense_count: z19.number().int().nonnegative(),
+    transaction_count: z19.number().int().nonnegative(),
+    opening_cumulative_balance: z19.literal(0),
+    closing_cumulative_balance: z19.number(),
+    warnings: z19.array(warningSchema7)
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async (input, ctx) => {
+    const userId = ctx.getUserId();
+    if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
+    const range = validateBoundedDateRange(input.start_date, input.end_date);
+    if (!range.ok) return mcpError(range.code);
+    const scope = input.scope ?? "personal";
+    const granularity = input.granularity ?? "month";
+    const includeEmptyPeriods = input.include_empty_periods ?? true;
+    const today = todayIso();
+    const entirelyFuture = input.start_date > today;
+    const truncated = input.end_date > today && !entirelyFuture;
+    const effectiveEnd = input.end_date > today ? today : input.end_date;
+    const effectivePeriod = entirelyFuture ? null : {
+      start_date: input.start_date,
+      end_date: effectiveEnd,
+      days: inclusiveDays(input.start_date, effectiveEnd)
+    };
+    const coverageWarning = entirelyFuture ? "O per\xEDodo solicitado est\xE1 totalmente no futuro e n\xE3o cont\xE9m dados realizados." : truncated ? "O per\xEDodo efetivo foi limitado \xE0 data de hoje em America/Sao_Paulo." : null;
+    const warnings = /* @__PURE__ */ new Set();
+    if (entirelyFuture) warnings.add("FUTURE_PERIOD_NO_REALIZED_DATA");
+    if (truncated) warnings.add("PERIOD_TRUNCATED_TO_TODAY");
+    const seriesStart = input.start_date;
+    const seriesEnd = entirelyFuture ? input.end_date : effectiveEnd;
+    for (const warning of partialPeriodWarnings(
+      seriesStart,
+      seriesEnd,
+      granularity
+    )) {
+      warnings.add(warning);
+    }
+    const supabase = supabaseForUser(ctx);
+    const applyScope = (query) => {
+      let scoped = query;
+      if (scope === "personal") scoped = scoped.eq("user_id", userId);
+      if (scope === "shared") {
+        scoped = scoped.not("shared_group_id", "is", null);
+      }
+      if (input.group_id) {
+        scoped = scoped.eq("shared_group_id", input.group_id);
+      }
+      return scoped;
+    };
+    const fetchRows = async (table) => {
+      if (!effectivePeriod) return { ok: true, data: [] };
+      const dateColumn = table === "expenses" ? "expense_date" : "income_date";
+      const columns = `amount,${dateColumn}`;
+      const rows = [];
+      let offset = 0;
+      while (offset <= TRANSACTION_CAP3) {
+        const end = Math.min(offset + 999, TRANSACTION_CAP3);
+        let query = applyScope(
+          supabase.from(table).select(columns)
+        );
+        if (table === "expenses") {
+          query = query.gte(dateColumn, effectivePeriod.start_date).lte(dateColumn, effectivePeriod.end_date);
+        } else {
+          query = query.gte(dateColumn, zonedMidnightUtc(effectivePeriod.start_date)).lt(
+            dateColumn,
+            zonedMidnightUtc(addIsoDays(effectivePeriod.end_date, 1))
+          );
+        }
+        const { data, error } = await query.order(dateColumn, { ascending: true }).range(offset, end);
+        if (error) return { ok: false, tooLarge: false };
+        const page = data ?? [];
+        rows.push(...page);
+        if (rows.length > TRANSACTION_CAP3) {
+          return { ok: false, tooLarge: true };
+        }
+        if (page.length < end - offset + 1) return { ok: true, data: rows };
+        offset = end + 1;
+      }
+      return { ok: false, tooLarge: true };
+    };
+    const [expenseResult, incomeResult] = await Promise.all([
+      fetchRows("expenses"),
+      fetchRows("incomes")
+    ]);
+    if (!expenseResult.ok || !incomeResult.ok) {
+      return mcpError(
+        expenseResult.ok === false && expenseResult.tooLarge || incomeResult.ok === false && incomeResult.tooLarge ? "RESULT_SET_TOO_LARGE" : "INTERNAL_ERROR"
+      );
+    }
+    const transactions = [];
+    for (const raw of expenseResult.data) {
+      const date = saoPauloCivilDate(raw.expense_date);
+      if (!date) {
+        warnings.add("INVALID_TRANSACTION_DATE");
+        continue;
+      }
+      const amount = Number(raw.amount);
+      if (amount < 0) warnings.add("NEGATIVE_EXPENSE_VALUE");
+      transactions.push({ transaction_type: "expense", amount, date });
+    }
+    for (const raw of incomeResult.data) {
+      const date = saoPauloCivilDate(raw.income_date);
+      if (!date) {
+        warnings.add("INVALID_TRANSACTION_DATE");
+        continue;
+      }
+      const amount = Number(raw.amount);
+      if (amount < 0) warnings.add("NEGATIVE_INCOME_VALUE");
+      transactions.push({ transaction_type: "income", amount, date });
+    }
+    const totals = calculateCashflowSeries(transactions, {
+      start_date: seriesStart,
+      end_date: seriesEnd,
+      granularity,
+      include_empty_periods: includeEmptyPeriods
+    });
+    const dataComplete = !warnings.has("INVALID_TRANSACTION_DATE");
+    const result = {
+      requested_period: {
+        start_date: input.start_date,
+        end_date: input.end_date
+      },
+      effective_period: effectivePeriod,
+      coverage_warning: coverageWarning,
+      granularity,
+      scope,
+      data_complete: dataComplete,
+      ...totals,
+      warnings: [...warnings]
+    };
+    const detailedPoints = totals.series.slice(0, 31);
+    const compactPoints = totals.series.slice(31).map((point) => ({
+      period_start: point.period_start,
+      period_end: point.period_end,
+      realized_income: point.realized_income,
+      realized_expenses: point.realized_expenses,
+      realized_balance: point.realized_balance,
+      cumulative_balance: point.cumulative_balance,
+      transaction_count: point.transaction_count
     }));
     return {
       content: [
         {
           type: "text",
-          text: `Uso hist\xF3rico de categorias pessoais de ${input.kind === "expense" ? "despesas" : "receitas"} no per\xEDodo ${input.start_date} a ${input.end_date}. Total=${usage.total_amount}; transa\xE7\xF5es=${usage.total_transaction_count}; categorias retornadas=${usage.returned_category_count}/${usage.total_category_count}; categories_truncated=${usage.categories_truncated}; data_complete=true. Categorias (m\xE1ximo 10; s\xE9rie mensal limitada a 12 pontos no texto)=${JSON.stringify(contentCategories)}. Sem classifica\xE7\xE3o=${JSON.stringify(usage.uncategorized)}. warnings=${JSON.stringify(usage.warnings)}. Categorias s\xE3o pessoais; transa\xE7\xF5es de outros propriet\xE1rios n\xE3o entram. Os valores s\xE3o fatos hist\xF3ricos, n\xE3o recomenda\xE7\xF5es ou julgamentos sobre gastos.`
+          text: `Fluxo de caixa realizado; requested_period=${JSON.stringify(result.requested_period)}; effective_period=${JSON.stringify(effectivePeriod)}; coverage_warning=${coverageWarning ?? "null"}; scope=${scope}; granularity=${granularity}; data_complete=${dataComplete}. Totais: income=${totals.total_income}; expenses=${totals.total_expenses}; balance=${totals.total_balance}; income_count=${totals.income_count}; expense_count=${totals.expense_count}; transaction_count=${totals.transaction_count}; opening_cumulative_balance=0; closing_cumulative_balance=${totals.closing_cumulative_balance}. Pontos detalhados=${JSON.stringify(detailedPoints)}. Pontos compactos restantes=${JSON.stringify(compactPoints)}. warnings=${JSON.stringify([...warnings])}. O cumulative_balance come\xE7a em zero no in\xEDcio do intervalo solicitado e acumula somente os movimentos realizados desse intervalo; n\xE3o representa saldo de conta banc\xE1ria. Templates recorrentes e transa\xE7\xF5es com data futura n\xE3o est\xE3o inclu\xEDdos.`
         }
       ],
       structuredContent: result
@@ -4217,7 +4574,7 @@ var mcp_default = defineMcp({
   name: "gastinho-simples-mcp",
   title: "Gastinho Simples",
   version: "0.1.0",
-  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para lan\xE7amentos reais, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. Use list_cards para localizar o cart\xE3o, get_card_installments para parcelas reais j\xE1 materializadas e get_card_summary para o total registrado no per\xEDodo calculado. Recorr\xEAncias s\xE3o templates mensais: use list_recurring_transactions para list\xE1-las e get_recurring_forecast apenas para proje\xE7\xF5es baseadas nesses templates. Metas tamb\xE9m s\xE3o mensais: use list_goals e get_goal_progress; elas n\xE3o s\xE3o metas de poupan\xE7a com contribui\xE7\xF5es. Mantenha realizado e recorrente separados, informe o risco de sobreposi\xE7\xE3o da proje\xE7\xE3o quando houver templates participantes e n\xE3o gere recomenda\xE7\xE3o financeira. Use get_category_usage somente para fatos hist\xF3ricos sobre categorias pessoais: categorias compartilhadas n\xE3o existem no modelo atual e transa\xE7\xF5es compartilhadas de outros propriet\xE1rios n\xE3o entram. O forecast n\xE3o representa transa\xE7\xF5es efetivamente lan\xE7adas e nunca deve ser somado automaticamente a parcelas ou lan\xE7amentos futuros. Nunca chame resultados de saldo banc\xE1rio, limite real dispon\xEDvel ou fatura oficialmente paga/em aberto. Use list_categories para UUIDs. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
+  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para lan\xE7amentos reais, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. Use get_cashflow_series somente para fluxo realizado: n\xE3o inclui recorr\xEAncias nem transa\xE7\xF5es futuras, e cumulative_balance come\xE7a em zero no per\xEDodo e n\xE3o representa saldo banc\xE1rio. Para templates recorrentes use get_recurring_forecast; para parcelas futuras j\xE1 materializadas use get_card_installments. Use list_cards para localizar o cart\xE3o e get_card_summary para o total registrado no per\xEDodo calculado. Recorr\xEAncias s\xE3o templates mensais: use list_recurring_transactions para list\xE1-las e get_recurring_forecast apenas para proje\xE7\xF5es baseadas nesses templates. Metas tamb\xE9m s\xE3o mensais: use list_goals e get_goal_progress; elas n\xE3o s\xE3o metas de poupan\xE7a com contribui\xE7\xF5es. Mantenha realizado e recorrente separados, informe o risco de sobreposi\xE7\xE3o da proje\xE7\xE3o quando houver templates participantes e n\xE3o gere recomenda\xE7\xE3o financeira. Use get_category_usage somente para fatos hist\xF3ricos sobre categorias pessoais: categorias compartilhadas n\xE3o existem no modelo atual e transa\xE7\xF5es compartilhadas de outros propriet\xE1rios n\xE3o entram. O forecast n\xE3o representa transa\xE7\xF5es efetivamente lan\xE7adas e nunca deve ser somado automaticamente a parcelas ou lan\xE7amentos futuros. Nunca chame resultados de saldo banc\xE1rio, limite real dispon\xEDvel ou fatura oficialmente paga/em aberto. Use list_categories para UUIDs. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
@@ -4240,7 +4597,8 @@ var mcp_default = defineMcp({
     get_recurring_forecast_default,
     list_goals_default,
     get_goal_progress_default,
-    get_category_usage_default
+    get_category_usage_default,
+    get_cashflow_series_default
   ]
 });
 

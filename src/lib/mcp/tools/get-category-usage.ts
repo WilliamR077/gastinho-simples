@@ -185,11 +185,26 @@ export default defineTool({
       ...usage,
       data_complete: true,
     };
-    const contentCategories = usage.categories.slice(0, 10).map((category) => ({
+    const detailedCategories = usage.categories.slice(0, 10).map((category) => ({
       ...category,
       monthly_series: category.monthly_series.slice(0, 12),
       monthly_series_omitted: Math.max(0, category.monthly_series.length - 12),
     }));
+    const compactCategories = usage.categories.slice(10).map((category) => ({
+      category_id: category.category_id,
+      name: category.name,
+      is_active: category.is_active,
+      transaction_count: category.transaction_count,
+      total: category.total,
+      percentage: category.percentage,
+      unused: category.transaction_count === 0,
+    }));
+    const contentCategoriesOmitted = Math.max(
+      0,
+      usage.total_category_count -
+        detailedCategories.length -
+        compactCategories.length,
+    );
     return {
       content: [
         {
@@ -200,8 +215,13 @@ export default defineTool({
             `Total=${usage.total_amount}; transações=${usage.total_transaction_count}; ` +
             `categorias retornadas=${usage.returned_category_count}/${usage.total_category_count}; ` +
             `categories_truncated=${usage.categories_truncated}; data_complete=true. ` +
-            `Categorias (máximo 10; série mensal limitada a 12 pontos no texto)=` +
-            `${JSON.stringify(contentCategories)}. ` +
+            `detailed_category_count=${detailedCategories.length}; ` +
+            `compact_category_count=${compactCategories.length}; ` +
+            `total_category_count=${usage.total_category_count}; ` +
+            `content_categories_omitted=${contentCategoriesOmitted}. ` +
+            `Categorias detalhadas (máximo 10; série mensal limitada a 12 pontos no texto)=` +
+            `${JSON.stringify(detailedCategories)}. ` +
+            `Categorias compactas restantes=${JSON.stringify(compactCategories)}. ` +
             `Sem classificação=${JSON.stringify(usage.uncategorized)}. ` +
             `warnings=${JSON.stringify(usage.warnings)}. ` +
             "Categorias são pessoais; transações de outros proprietários não entram. " +

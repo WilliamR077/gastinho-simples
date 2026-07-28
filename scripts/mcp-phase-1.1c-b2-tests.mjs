@@ -495,11 +495,11 @@ const baseInput = {
 }
 
 const tools = manifest.mcp.tools;
-equal(tools.length, 18, "manifest contém exatamente 18 tools");
+equal(tools.length, 19, "manifest contém exatamente 19 tools");
 equal(
   tools.filter((tool) => tool.annotations?.readOnlyHint === true).length,
-  16,
-  "manifest contém 16 tools read-only",
+  17,
+  "manifest contém 17 tools read-only",
 );
 equal(
   tools.filter((tool) => tool.annotations?.readOnlyHint !== true).length,
