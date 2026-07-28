@@ -4003,6 +4003,366 @@
           "additionalProperties": false,
           "$schema": "http://json-schema.org/draft-07/schema#"
         }
+      },
+      {
+        "name": "get_cashflow_projection",
+        "title": "Projetar fluxo de caixa por componentes",
+        "description": "Combina matematicamente realizado, lançamentos futuros materializados e templates recorrentes, mantendo os três componentes separados. Não representa saldo bancário nem previsão garantida.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "start_date": {
+              "type": "string"
+            },
+            "end_date": {
+              "type": "string"
+            },
+            "scope": {
+              "type": "string",
+              "enum": [
+                "personal",
+                "shared",
+                "all_accessible"
+              ]
+            },
+            "group_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "granularity": {
+              "type": "string",
+              "enum": [
+                "day",
+                "week",
+                "month"
+              ]
+            },
+            "include_empty_periods": {
+              "type": "boolean"
+            },
+            "include_realized": {
+              "type": "boolean"
+            },
+            "include_future_materialized": {
+              "type": "boolean"
+            },
+            "include_recurring_templates": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "start_date",
+            "end_date"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "requested_period": {
+              "type": "object",
+              "properties": {
+                "start_date": {
+                  "type": "string"
+                },
+                "end_date": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "start_date",
+                "end_date"
+              ],
+              "additionalProperties": false
+            },
+            "realized_period": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "start_date": {
+                      "type": "string"
+                    },
+                    "end_date": {
+                      "type": "string"
+                    },
+                    "days": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0
+                    }
+                  },
+                  "required": [
+                    "start_date",
+                    "end_date",
+                    "days"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "future_projection_period": {
+              "$ref": "#/properties/realized_period"
+            },
+            "today": {
+              "type": "string"
+            },
+            "granularity": {
+              "type": "string",
+              "enum": [
+                "day",
+                "week",
+                "month"
+              ]
+            },
+            "scope": {
+              "type": "string",
+              "enum": [
+                "personal",
+                "shared",
+                "all_accessible"
+              ]
+            },
+            "data_complete": {
+              "type": "boolean"
+            },
+            "realized": {
+              "type": "object",
+              "properties": {
+                "income": {
+                  "type": "number"
+                },
+                "expenses": {
+                  "type": "number"
+                },
+                "balance": {
+                  "type": "number"
+                },
+                "income_count": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "expense_count": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "transaction_count": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "income",
+                "expenses",
+                "balance",
+                "income_count",
+                "expense_count",
+                "transaction_count"
+              ],
+              "additionalProperties": false
+            },
+            "future_materialized": {
+              "$ref": "#/properties/realized"
+            },
+            "recurring_projection": {
+              "type": "object",
+              "properties": {
+                "income": {
+                  "$ref": "#/properties/realized/properties/income"
+                },
+                "expenses": {
+                  "$ref": "#/properties/realized/properties/expenses"
+                },
+                "balance": {
+                  "$ref": "#/properties/realized/properties/balance"
+                },
+                "income_count": {
+                  "$ref": "#/properties/realized/properties/income_count"
+                },
+                "expense_count": {
+                  "$ref": "#/properties/realized/properties/expense_count"
+                },
+                "transaction_count": {
+                  "$ref": "#/properties/realized/properties/transaction_count"
+                },
+                "templates_considered": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "occurrence_count": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "income",
+                "expenses",
+                "balance",
+                "income_count",
+                "expense_count",
+                "transaction_count",
+                "templates_considered",
+                "occurrence_count"
+              ],
+              "additionalProperties": false
+            },
+            "combined_income": {
+              "type": "number"
+            },
+            "combined_expenses": {
+              "type": "number"
+            },
+            "combined_balance": {
+              "type": "number"
+            },
+            "opening_cumulative_balance": {
+              "type": "number",
+              "const": 0
+            },
+            "closing_cumulative_balance": {
+              "type": "number"
+            },
+            "series": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "period_start": {
+                    "type": "string"
+                  },
+                  "period_end": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "realized_income": {
+                    "type": "number"
+                  },
+                  "realized_expenses": {
+                    "type": "number"
+                  },
+                  "realized_balance": {
+                    "type": "number"
+                  },
+                  "future_materialized_income": {
+                    "type": "number"
+                  },
+                  "future_materialized_expenses": {
+                    "type": "number"
+                  },
+                  "future_materialized_balance": {
+                    "type": "number"
+                  },
+                  "recurring_projected_income": {
+                    "type": "number"
+                  },
+                  "recurring_projected_expenses": {
+                    "type": "number"
+                  },
+                  "recurring_projected_balance": {
+                    "type": "number"
+                  },
+                  "combined_income": {
+                    "type": "number"
+                  },
+                  "combined_expenses": {
+                    "type": "number"
+                  },
+                  "combined_balance": {
+                    "type": "number"
+                  },
+                  "cumulative_combined_balance": {
+                    "type": "number"
+                  },
+                  "realized_transaction_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "future_materialized_transaction_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "recurring_occurrence_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "period_start",
+                  "period_end",
+                  "label",
+                  "realized_income",
+                  "realized_expenses",
+                  "realized_balance",
+                  "future_materialized_income",
+                  "future_materialized_expenses",
+                  "future_materialized_balance",
+                  "recurring_projected_income",
+                  "recurring_projected_expenses",
+                  "recurring_projected_balance",
+                  "combined_income",
+                  "combined_expenses",
+                  "combined_balance",
+                  "cumulative_combined_balance",
+                  "realized_transaction_count",
+                  "future_materialized_transaction_count",
+                  "recurring_occurrence_count"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "POTENTIAL_RECURRING_OVERLAP",
+                  "PAST_PERIOD_NO_FUTURE_PROJECTION",
+                  "FUTURE_PERIOD_NO_REALIZED_DATA",
+                  "PARTIAL_FIRST_PERIOD",
+                  "PARTIAL_LAST_PERIOD",
+                  "INVALID_RECURRING_TEMPLATE",
+                  "RECURRING_DAY_NOT_AVAILABLE",
+                  "RECURRING_START_DATE_FALLBACK",
+                  "NEGATIVE_EXPENSE_VALUE",
+                  "NEGATIVE_INCOME_VALUE",
+                  "INVALID_TRANSACTION_DATE",
+                  "RESULT_SET_TOO_LARGE"
+                ]
+              }
+            }
+          },
+          "required": [
+            "requested_period",
+            "realized_period",
+            "future_projection_period",
+            "today",
+            "granularity",
+            "scope",
+            "data_complete",
+            "realized",
+            "future_materialized",
+            "recurring_projection",
+            "combined_income",
+            "combined_expenses",
+            "combined_balance",
+            "opening_cumulative_balance",
+            "closing_cumulative_balance",
+            "series",
+            "warnings"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
       }
     ]
   }

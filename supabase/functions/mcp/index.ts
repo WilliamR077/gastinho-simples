@@ -4568,13 +4568,446 @@ var get_cashflow_series_default = defineTool19({
   }
 });
 
+// src/lib/mcp/tools/get-cashflow-projection.ts
+import { defineTool as defineTool20 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z20 } from "npm:zod@^3.25.76";
+
+// src/lib/mcp/shared/cashflow-projection.ts
+var CASHFLOW_PROJECTION_WARNINGS = [
+  "POTENTIAL_RECURRING_OVERLAP",
+  "PAST_PERIOD_NO_FUTURE_PROJECTION",
+  "FUTURE_PERIOD_NO_REALIZED_DATA",
+  "PARTIAL_FIRST_PERIOD",
+  "PARTIAL_LAST_PERIOD",
+  "INVALID_RECURRING_TEMPLATE",
+  "RECURRING_DAY_NOT_AVAILABLE",
+  "RECURRING_START_DATE_FALLBACK",
+  "NEGATIVE_EXPENSE_VALUE",
+  "NEGATIVE_INCOME_VALUE",
+  "INVALID_TRANSACTION_DATE",
+  "RESULT_SET_TOO_LARGE"
+];
+function componentTotals(events, component) {
+  const selected = events.filter((event) => event.component === component);
+  const incomeEvents = selected.filter(
+    (event) => event.transaction_type === "income"
+  );
+  const expenseEvents = selected.filter(
+    (event) => event.transaction_type === "expense"
+  );
+  const income = roundFinancial(
+    incomeEvents.reduce((sum, event) => sum + event.amount, 0)
+  );
+  const expenses = roundFinancial(
+    expenseEvents.reduce((sum, event) => sum + event.amount, 0)
+  );
+  return {
+    income,
+    expenses,
+    balance: roundFinancial(income - expenses),
+    income_count: incomeEvents.length,
+    expense_count: expenseEvents.length,
+    transaction_count: selected.length
+  };
+}
+function calculateCashflowProjection(events, options) {
+  const realized = componentTotals(events, "realized");
+  const futureMaterialized = componentTotals(events, "future_materialized");
+  const recurringProjection = componentTotals(events, "recurring_projection");
+  const combinedIncome = roundFinancial(
+    realized.income + futureMaterialized.income + recurringProjection.income
+  );
+  const combinedExpenses = roundFinancial(
+    realized.expenses + futureMaterialized.expenses + recurringProjection.expenses
+  );
+  const combinedBalance = roundFinancial(combinedIncome - combinedExpenses);
+  let cumulative = 0;
+  const completeSeries = cashflowPeriods(
+    options.start_date,
+    options.end_date,
+    options.granularity
+  ).map((period) => {
+    const current = events.filter(
+      (event) => event.date >= period.start && event.date <= period.end
+    );
+    const totals = (component) => componentTotals(current, component);
+    const pointRealized = totals("realized");
+    const pointFuture = totals("future_materialized");
+    const pointRecurring = totals("recurring_projection");
+    const pointIncome = roundFinancial(
+      pointRealized.income + pointFuture.income + pointRecurring.income
+    );
+    const pointExpenses = roundFinancial(
+      pointRealized.expenses + pointFuture.expenses + pointRecurring.expenses
+    );
+    const pointBalance = roundFinancial(pointIncome - pointExpenses);
+    cumulative = roundFinancial(cumulative + pointBalance);
+    return {
+      period_start: period.start,
+      period_end: period.end,
+      label: period.label,
+      realized_income: pointRealized.income,
+      realized_expenses: pointRealized.expenses,
+      realized_balance: pointRealized.balance,
+      future_materialized_income: pointFuture.income,
+      future_materialized_expenses: pointFuture.expenses,
+      future_materialized_balance: pointFuture.balance,
+      recurring_projected_income: pointRecurring.income,
+      recurring_projected_expenses: pointRecurring.expenses,
+      recurring_projected_balance: pointRecurring.balance,
+      combined_income: pointIncome,
+      combined_expenses: pointExpenses,
+      combined_balance: pointBalance,
+      cumulative_combined_balance: cumulative,
+      realized_transaction_count: pointRealized.transaction_count,
+      future_materialized_transaction_count: pointFuture.transaction_count,
+      recurring_occurrence_count: pointRecurring.transaction_count
+    };
+  });
+  return {
+    realized,
+    future_materialized: futureMaterialized,
+    recurring_projection: recurringProjection,
+    combined_income: combinedIncome,
+    combined_expenses: combinedExpenses,
+    combined_balance: combinedBalance,
+    opening_cumulative_balance: 0,
+    closing_cumulative_balance: combinedBalance,
+    series: options.include_empty_periods ? completeSeries : completeSeries.filter(
+      (point) => point.realized_transaction_count + point.future_materialized_transaction_count + point.recurring_occurrence_count > 0
+    )
+  };
+}
+
+// src/lib/mcp/tools/get-cashflow-projection.ts
+var TRANSACTION_CAP4 = 1e4;
+var TEMPLATE_CAP3 = 100;
+var OCCURRENCE_CAP2 = 1e3;
+var warningSchema8 = z20.enum(CASHFLOW_PROJECTION_WARNINGS);
+var periodSchema2 = z20.object({
+  start_date: z20.string(),
+  end_date: z20.string()
+}).strict();
+var optionalPeriodSchema = z20.object({
+  start_date: z20.string(),
+  end_date: z20.string(),
+  days: z20.number().int().positive()
+}).strict().nullable();
+var componentSchema = z20.object({
+  income: z20.number(),
+  expenses: z20.number(),
+  balance: z20.number(),
+  income_count: z20.number().int().nonnegative(),
+  expense_count: z20.number().int().nonnegative(),
+  transaction_count: z20.number().int().nonnegative()
+}).strict();
+var recurringComponentSchema = componentSchema.extend({
+  templates_considered: z20.number().int().nonnegative(),
+  occurrence_count: z20.number().int().nonnegative()
+}).strict();
+var pointSchema2 = z20.object({
+  period_start: z20.string(),
+  period_end: z20.string(),
+  label: z20.string(),
+  realized_income: z20.number(),
+  realized_expenses: z20.number(),
+  realized_balance: z20.number(),
+  future_materialized_income: z20.number(),
+  future_materialized_expenses: z20.number(),
+  future_materialized_balance: z20.number(),
+  recurring_projected_income: z20.number(),
+  recurring_projected_expenses: z20.number(),
+  recurring_projected_balance: z20.number(),
+  combined_income: z20.number(),
+  combined_expenses: z20.number(),
+  combined_balance: z20.number(),
+  cumulative_combined_balance: z20.number(),
+  realized_transaction_count: z20.number().int().nonnegative(),
+  future_materialized_transaction_count: z20.number().int().nonnegative(),
+  recurring_occurrence_count: z20.number().int().nonnegative()
+}).strict();
+var get_cashflow_projection_default = defineTool20({
+  name: "get_cashflow_projection",
+  title: "Projetar fluxo de caixa por componentes",
+  description: "Combina matematicamente realizado, lan\xE7amentos futuros materializados e templates recorrentes, mantendo os tr\xEAs componentes separados. N\xE3o representa saldo banc\xE1rio nem previs\xE3o garantida.",
+  inputSchema: {
+    start_date: z20.string(),
+    end_date: z20.string(),
+    scope: z20.enum(["personal", "shared", "all_accessible"]).optional(),
+    group_id: z20.string().uuid().optional(),
+    granularity: z20.enum(["day", "week", "month"]).optional(),
+    include_empty_periods: z20.boolean().optional(),
+    include_realized: z20.boolean().optional(),
+    include_future_materialized: z20.boolean().optional(),
+    include_recurring_templates: z20.boolean().optional()
+  },
+  outputSchema: {
+    requested_period: periodSchema2,
+    realized_period: optionalPeriodSchema,
+    future_projection_period: optionalPeriodSchema,
+    today: z20.string(),
+    granularity: z20.enum(["day", "week", "month"]),
+    scope: z20.enum(["personal", "shared", "all_accessible"]),
+    data_complete: z20.boolean(),
+    realized: componentSchema,
+    future_materialized: componentSchema,
+    recurring_projection: recurringComponentSchema,
+    combined_income: z20.number(),
+    combined_expenses: z20.number(),
+    combined_balance: z20.number(),
+    opening_cumulative_balance: z20.literal(0),
+    closing_cumulative_balance: z20.number(),
+    series: z20.array(pointSchema2),
+    warnings: z20.array(warningSchema8)
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async (input, ctx) => {
+    const userId = ctx.getUserId();
+    if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
+    const range = validateBoundedDateRange(input.start_date, input.end_date);
+    if (!range.ok) return mcpError(range.code);
+    const scope = input.scope ?? "personal";
+    const granularity = input.granularity ?? "month";
+    const includeEmpty = input.include_empty_periods ?? true;
+    const includeRealized = input.include_realized ?? true;
+    const includeFuture = input.include_future_materialized ?? true;
+    const includeRecurring = input.include_recurring_templates ?? true;
+    const today = todayIso();
+    const tomorrow = addIsoDays(today, 1);
+    const realizedPeriod = input.start_date <= today ? {
+      start_date: input.start_date,
+      end_date: input.end_date < today ? input.end_date : today,
+      days: inclusiveDays(
+        input.start_date,
+        input.end_date < today ? input.end_date : today
+      )
+    } : null;
+    const futurePeriod = input.end_date > today ? {
+      start_date: input.start_date > tomorrow ? input.start_date : tomorrow,
+      end_date: input.end_date,
+      days: inclusiveDays(
+        input.start_date > tomorrow ? input.start_date : tomorrow,
+        input.end_date
+      )
+    } : null;
+    const warnings = /* @__PURE__ */ new Set();
+    if (!futurePeriod) warnings.add("PAST_PERIOD_NO_FUTURE_PROJECTION");
+    if (!realizedPeriod) warnings.add("FUTURE_PERIOD_NO_REALIZED_DATA");
+    for (const warning of partialPeriodWarnings(
+      input.start_date,
+      input.end_date,
+      granularity
+    )) {
+      warnings.add(warning);
+    }
+    const supabase = supabaseForUser(ctx);
+    const configure = (query) => {
+      let configured = query;
+      if (scope === "personal") configured = configured.eq("user_id", userId);
+      if (scope === "shared") {
+        configured = configured.not("shared_group_id", "is", null);
+      }
+      if (input.group_id) {
+        configured = configured.eq("shared_group_id", input.group_id);
+      }
+      return configured;
+    };
+    const transactionStart = includeRealized && realizedPeriod ? realizedPeriod.start_date : includeFuture && futurePeriod ? futurePeriod.start_date : null;
+    const transactionEnd = includeFuture && futurePeriod ? futurePeriod.end_date : includeRealized && realizedPeriod ? realizedPeriod.end_date : null;
+    const fetchTransactions = async (table) => {
+      if (!transactionStart || !transactionEnd) return { ok: true, rows: [] };
+      const dateColumn = table === "expenses" ? "expense_date" : "income_date";
+      const rows = [];
+      let offset = 0;
+      while (offset <= TRANSACTION_CAP4) {
+        const end = Math.min(offset + 999, TRANSACTION_CAP4);
+        let query = configure(
+          supabase.from(table).select(`amount,${dateColumn}`)
+        );
+        if (table === "expenses") {
+          query = query.gte(dateColumn, transactionStart).lte(dateColumn, transactionEnd);
+        } else {
+          query = query.gte(dateColumn, zonedMidnightUtc(transactionStart)).lt(
+            dateColumn,
+            zonedMidnightUtc(addIsoDays(transactionEnd, 1))
+          );
+        }
+        const { data, error } = await query.order(dateColumn, { ascending: true }).range(offset, end);
+        if (error) return { ok: false, tooLarge: false };
+        const page = data ?? [];
+        rows.push(...page);
+        if (rows.length > TRANSACTION_CAP4) {
+          return { ok: false, tooLarge: true };
+        }
+        if (page.length < end - offset + 1) return { ok: true, rows };
+        offset = end + 1;
+      }
+      return { ok: false, tooLarge: true };
+    };
+    const [expenseResult, incomeResult] = await Promise.all([
+      fetchTransactions("expenses"),
+      fetchTransactions("incomes")
+    ]);
+    if (!expenseResult.ok || !incomeResult.ok) {
+      return mcpError(
+        expenseResult.ok === false && expenseResult.tooLarge || incomeResult.ok === false && incomeResult.tooLarge ? "RESULT_SET_TOO_LARGE" : "INTERNAL_ERROR"
+      );
+    }
+    const events = [];
+    const addTransaction = (type, amountValue, rawDate) => {
+      const date = saoPauloCivilDate(rawDate);
+      if (!date) {
+        warnings.add("INVALID_TRANSACTION_DATE");
+        return;
+      }
+      const amount = Number(amountValue);
+      if (amount < 0) {
+        warnings.add(
+          type === "expense" ? "NEGATIVE_EXPENSE_VALUE" : "NEGATIVE_INCOME_VALUE"
+        );
+      }
+      if (date <= today && includeRealized) {
+        events.push({ component: "realized", transaction_type: type, amount, date });
+      } else if (date > today && includeFuture) {
+        events.push({
+          component: "future_materialized",
+          transaction_type: type,
+          amount,
+          date
+        });
+      }
+    };
+    for (const row of expenseResult.rows) {
+      addTransaction("expense", row.amount, row.expense_date);
+    }
+    for (const row of incomeResult.rows) {
+      addTransaction("income", row.amount, row.income_date);
+    }
+    let templatesConsidered = 0;
+    let recurringOccurrenceCount = 0;
+    if (includeRecurring && futurePeriod) {
+      const expenseTemplatesPromise = configure(
+        supabase.from("recurring_expenses").select(
+          "id,user_id,description,amount,day_of_month,start_date,end_date,is_active,category_id,category_name,shared_group_id,created_at,updated_at,payment_method,card_id,card_name"
+        )
+      ).eq("is_active", true).limit(TEMPLATE_CAP3 + 1);
+      const incomeTemplatesPromise = configure(
+        supabase.from("recurring_incomes").select(
+          "id,user_id,description,amount,day_of_month,start_date,end_date,is_active,income_category_id,category_name,shared_group_id,created_at,updated_at"
+        )
+      ).eq("is_active", true).limit(TEMPLATE_CAP3 + 1);
+      const [expenseTemplates, incomeTemplates] = await Promise.all([
+        expenseTemplatesPromise,
+        incomeTemplatesPromise
+      ]);
+      if (expenseTemplates.error || incomeTemplates.error) {
+        return mcpError("INTERNAL_ERROR");
+      }
+      const templates = [
+        ...(expenseTemplates.data ?? []).map((row) => recurringItem(row, "expense", userId)),
+        ...(incomeTemplates.data ?? []).map((row) => recurringItem(row, "income", userId))
+      ];
+      if (templates.length > TEMPLATE_CAP3) {
+        return mcpError("RESULT_SET_TOO_LARGE");
+      }
+      templatesConsidered = templates.length;
+      const projection2 = projectRecurringTemplates(
+        templates,
+        futurePeriod.start_date,
+        futurePeriod.end_date,
+        granularity,
+        OCCURRENCE_CAP2
+      );
+      if (!projection2.ok) return mcpError(projection2.code);
+      for (const warning of projection2.warnings) {
+        if (warning === "MISSING_START_DATE_USING_CREATED_AT") {
+          warnings.add("RECURRING_START_DATE_FALLBACK");
+        } else if (warning === "DAY_NOT_PRESENT_IN_MONTH") {
+          warnings.add("RECURRING_DAY_NOT_AVAILABLE");
+        } else {
+          warnings.add("INVALID_RECURRING_TEMPLATE");
+        }
+      }
+      const validOccurrences = projection2.occurrences.filter(
+        (occurrence) => !occurrence.data_warnings.includes("NON_POSITIVE_AMOUNT")
+      );
+      recurringOccurrenceCount = validOccurrences.length;
+      for (const occurrence of validOccurrences) {
+        events.push({
+          component: "recurring_projection",
+          transaction_type: occurrence.transaction_type,
+          amount: occurrence.amount,
+          date: occurrence.date
+        });
+      }
+      if (validOccurrences.length > 0) {
+        warnings.add("POTENTIAL_RECURRING_OVERLAP");
+      }
+    }
+    const projection = calculateCashflowProjection(events, {
+      start_date: input.start_date,
+      end_date: input.end_date,
+      granularity,
+      include_empty_periods: includeEmpty
+    });
+    const dataComplete = !warnings.has("INVALID_TRANSACTION_DATE");
+    const result = {
+      requested_period: {
+        start_date: input.start_date,
+        end_date: input.end_date
+      },
+      realized_period: realizedPeriod,
+      future_projection_period: futurePeriod,
+      today,
+      granularity,
+      scope,
+      data_complete: dataComplete,
+      realized: projection.realized,
+      future_materialized: projection.future_materialized,
+      recurring_projection: {
+        ...projection.recurring_projection,
+        templates_considered: templatesConsidered,
+        occurrence_count: recurringOccurrenceCount
+      },
+      combined_income: projection.combined_income,
+      combined_expenses: projection.combined_expenses,
+      combined_balance: projection.combined_balance,
+      opening_cumulative_balance: projection.opening_cumulative_balance,
+      closing_cumulative_balance: projection.closing_cumulative_balance,
+      series: projection.series,
+      warnings: [...warnings]
+    };
+    const detailed = projection.series.slice(0, 24);
+    const compact = projection.series.slice(24).map((point) => ({
+      period_start: point.period_start,
+      period_end: point.period_end,
+      combined_income: point.combined_income,
+      combined_expenses: point.combined_expenses,
+      combined_balance: point.combined_balance,
+      cumulative_combined_balance: point.cumulative_combined_balance,
+      realized_transaction_count: point.realized_transaction_count,
+      future_materialized_transaction_count: point.future_materialized_transaction_count,
+      recurring_occurrence_count: point.recurring_occurrence_count
+    }));
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Proje\xE7\xE3o de caixa por componentes; requested_period=${JSON.stringify(result.requested_period)}; realized_period=${JSON.stringify(realizedPeriod)}; future_projection_period=${JSON.stringify(futurePeriod)}; today=${today}; scope=${scope}; granularity=${granularity}; data_complete=${dataComplete}. Componentes ativados={realized:${includeRealized},future_materialized:${includeFuture},recurring_templates:${includeRecurring}}. Realizado=${JSON.stringify(result.realized)}. Futuro materializado=${JSON.stringify(result.future_materialized)}. Recorr\xEAncia projetada=${JSON.stringify(result.recurring_projection)}. Soma combinada={income:${result.combined_income},expenses:${result.combined_expenses},balance:${result.combined_balance}}; opening_cumulative_balance=0; closing_cumulative_balance=${result.closing_cumulative_balance}. Pontos detalhados=${JSON.stringify(detailed)}. Pontos compactos restantes=${JSON.stringify(compact)}. warnings=${JSON.stringify(result.warnings)}. Templates podem representar compromissos j\xE1 lan\xE7ados manualmente; n\xE3o existe v\xEDnculo para deduplica\xE7\xE3o segura. O total combinado \xE9 somente a soma matem\xE1tica dos componentes, n\xE3o uma previs\xE3o garantida. O cumulative_combined_balance come\xE7a em zero no intervalo e n\xE3o representa saldo anterior ou saldo de conta banc\xE1ria.`
+        }
+      ],
+      structuredContent: result
+    };
+  }
+});
+
 // src/lib/mcp/index.ts
 var projectRef = "jaoldaqvbdllowepzwbr";
 var mcp_default = defineMcp({
   name: "gastinho-simples-mcp",
   title: "Gastinho Simples",
   version: "0.1.0",
-  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para lan\xE7amentos reais, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. Use get_cashflow_series somente para fluxo realizado: n\xE3o inclui recorr\xEAncias nem transa\xE7\xF5es futuras, e cumulative_balance come\xE7a em zero no per\xEDodo e n\xE3o representa saldo banc\xE1rio. Para templates recorrentes use get_recurring_forecast; para parcelas futuras j\xE1 materializadas use get_card_installments. Use list_cards para localizar o cart\xE3o e get_card_summary para o total registrado no per\xEDodo calculado. Recorr\xEAncias s\xE3o templates mensais: use list_recurring_transactions para list\xE1-las e get_recurring_forecast apenas para proje\xE7\xF5es baseadas nesses templates. Metas tamb\xE9m s\xE3o mensais: use list_goals e get_goal_progress; elas n\xE3o s\xE3o metas de poupan\xE7a com contribui\xE7\xF5es. Mantenha realizado e recorrente separados, informe o risco de sobreposi\xE7\xE3o da proje\xE7\xE3o quando houver templates participantes e n\xE3o gere recomenda\xE7\xE3o financeira. Use get_category_usage somente para fatos hist\xF3ricos sobre categorias pessoais: categorias compartilhadas n\xE3o existem no modelo atual e transa\xE7\xF5es compartilhadas de outros propriet\xE1rios n\xE3o entram. O forecast n\xE3o representa transa\xE7\xF5es efetivamente lan\xE7adas e nunca deve ser somado automaticamente a parcelas ou lan\xE7amentos futuros. Nunca chame resultados de saldo banc\xE1rio, limite real dispon\xEDvel ou fatura oficialmente paga/em aberto. Use list_categories para UUIDs. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
+  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para lan\xE7amentos reais, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. get_cashflow_series representa somente realizado. get_cashflow_projection separa realizado, futuro materializado e templates recorrentes; futuro materializado s\xE3o linhas reais com data futura, recorr\xEAncias s\xE3o apenas templates, e a soma combinada pode conter sobreposi\xE7\xE3o. Ela n\xE3o representa saldo banc\xE1rio nem previs\xE3o garantida. Para templates isolados use get_recurring_forecast; para parcelas futuras j\xE1 materializadas use get_card_installments. Use list_cards para localizar o cart\xE3o e get_card_summary para o total registrado no per\xEDodo calculado. Recorr\xEAncias s\xE3o templates mensais: use list_recurring_transactions para list\xE1-las e get_recurring_forecast apenas para proje\xE7\xF5es baseadas nesses templates. Metas tamb\xE9m s\xE3o mensais: use list_goals e get_goal_progress; elas n\xE3o s\xE3o metas de poupan\xE7a com contribui\xE7\xF5es. Mantenha realizado e recorrente separados, informe o risco de sobreposi\xE7\xE3o da proje\xE7\xE3o quando houver templates participantes e n\xE3o gere recomenda\xE7\xE3o financeira. Use get_category_usage somente para fatos hist\xF3ricos sobre categorias pessoais: categorias compartilhadas n\xE3o existem no modelo atual e transa\xE7\xF5es compartilhadas de outros propriet\xE1rios n\xE3o entram. O forecast n\xE3o representa transa\xE7\xF5es efetivamente lan\xE7adas e nunca deve ser somado automaticamente a parcelas ou lan\xE7amentos futuros. Nunca chame resultados de saldo banc\xE1rio, limite real dispon\xEDvel ou fatura oficialmente paga/em aberto. Use list_categories para UUIDs. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
@@ -4598,7 +5031,8 @@ var mcp_default = defineMcp({
     list_goals_default,
     get_goal_progress_default,
     get_category_usage_default,
-    get_cashflow_series_default
+    get_cashflow_series_default,
+    get_cashflow_projection_default
   ]
 });
 
