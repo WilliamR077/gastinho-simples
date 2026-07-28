@@ -124,9 +124,9 @@ class Query {
   select(value) { this.op("select", value); this.columns = value.split(",").map((v) => v.trim()); return this; }
   eq(key, value) { this.op("eq", key, value); this.filters.push((r) => r[key] === value); return this; }
   not(key, op, value) { this.op("not", key, op, value); this.filters.push((r) => r[key] !== value); return this; }
-  gte(key, value) { this.op("gte", key, value); this.filters.push((r) => r[key] >= value); return this; }
-  lte(key, value) { this.op("lte", key, value); this.filters.push((r) => r[key] <= value); return this; }
-  lt(key, value) { this.op("lt", key, value); this.filters.push((r) => r[key] < value); return this; }
+  gte(key, value) { this.op("gte", key, value); if (!this.db.ignoreDateFilters) this.filters.push((r) => r[key] >= value); return this; }
+  lte(key, value) { this.op("lte", key, value); if (!this.db.ignoreDateFilters) this.filters.push((r) => r[key] <= value); return this; }
+  lt(key, value) { this.op("lt", key, value); if (!this.db.ignoreDateFilters) this.filters.push((r) => r[key] < value); return this; }
   order(key, options = {}) { this.op("order", key, options); this.orders.push({ key, asc: options.ascending !== false }); return this; }
   range(from, to) { this.op("range", from, to); this.rowRange = [from, to]; return this; }
   limit(value) { this.op("limit", value); this.rowLimit = value; return this; }
@@ -152,9 +152,10 @@ class Query {
   }
 }
 class DB {
-  constructor(tables, groups = [groupA]) {
+  constructor(tables, groups = [groupA], ignoreDateFilters = false) {
     this.tables = tables; this.userId = userA;
     this.groups = new Set(groups); this.calls = [];
+    this.ignoreDateFilters = ignoreDateFilters;
   }
   from(table) {
     const call = { table, operations: [] };
@@ -162,8 +163,8 @@ class DB {
     return new Query(this, table, call);
   }
 }
-function use(tables, groups = [groupA]) {
-  const db = new DB(tables, groups);
+function use(tables, groups = [groupA], ignoreDateFilters = false) {
+  const db = new DB(tables, groups, ignoreDateFilters);
   globalThis.__MCP_TEST_SUPABASE__ = db;
   return db;
 }
@@ -288,6 +289,54 @@ for (const [flag, expected] of [
 equal(core.saoPauloCivilDate("2026-08-01T01:30:00Z"), "2026-07-31", "America/Sao_Paulo");
 equal(core.preserveSqlDate("2026-07-01"), "2026-07-01", "DATE preserva primeiro dia");
 equal(core.preserveSqlDate("2026-08-01"), "2026-08-01", "DATE não desloca mês");
+for (const serialized of [
+  "2026-07-01",
+  "2026-07-01T00:00:00.000Z",
+  "2026-07-01T00:00:00+00:00",
+  "2026-07-01 00:00:00+00",
+]) {
+  equal(
+    core.preserveSqlDate(serialized),
+    "2026-07-01",
+    `DATE serializado preserva julho: ${serialized}`,
+  );
+}
+for (const invalid of [
+  "2026-02-30",
+  "2026-13-01",
+  "texto arbitrário",
+  "01/08/2026",
+  "2026-08-01 qualquer texto",
+  {},
+]) {
+  equal(core.preserveSqlDate(invalid), null, `DATE inválido rejeitado: ${String(invalid)}`);
+}
+for (const invalid of [
+  "2026-02-30",
+  "2026-13-01",
+  "texto arbitrário",
+  "01/08/2026",
+]) {
+  use(
+    tables({
+      expenses: [expense({ expense_date: invalid })],
+      incomes: [],
+      recurring_expenses: [],
+      recurring_incomes: [],
+    }),
+    [groupA],
+    true,
+  );
+  const result = await core.tool.handler(
+    { start_date: "2026-07-01", end_date: "2026-07-31" },
+    ctx,
+  );
+  check(
+    result.structuredContent.warnings.includes("INVALID_TRANSACTION_DATE"),
+    `DATE inválido gera warning: ${invalid}`,
+  );
+  equal(result.structuredContent.data_complete, false, `DATE inválido torna dados incompletos: ${invalid}`);
+}
 equal(
   core.timestampToSaoPauloCivilDate("2026-08-01T01:30:00Z"),
   "2026-07-31",
@@ -370,6 +419,64 @@ equal(
     closing_cumulative_balance: x.closing_cumulative_balance,
     series: x.series,
   }), "verificação interna de invariantes");
+}
+{
+  const smokeExpenses = [
+    expense({ id: id(520), amount: 100, expense_date: "2026-07-01" }),
+    expense({ id: id(521), amount: 120, expense_date: "2026-07-10T00:00:00.000Z" }),
+    expense({ id: id(522), amount: 130, expense_date: "2026-07-20T00:00:00+00:00" }),
+    expense({ id: id(523), amount: 140.92, expense_date: "2026-07-28 00:00:00+00" }),
+    expense({ id: id(524), amount: 320.52, expense_date: "2026-08-01T00:00:00.000Z" }),
+    expense({ id: id(525), amount: 320.52, expense_date: "2026-09-01T00:00:00+00:00" }),
+    expense({ id: id(526), amount: 320.52, expense_date: "2026-10-01 00:00:00+00" }),
+    expense({ id: id(527), amount: 320.52, expense_date: "2026-11-01" }),
+  ];
+  use(tables({
+    expenses: smokeExpenses,
+    incomes: [],
+    recurring_expenses: [],
+    recurring_incomes: [],
+  }));
+  const result = await core.tool.handler(
+    {
+      start_date: "2026-07-01",
+      end_date: "2026-12-31",
+      granularity: "month",
+      include_recurring_templates: false,
+    },
+    ctx,
+  );
+  const x = result.structuredContent;
+  const byMonth = new Map(x.series.map((point) => [point.label, point]));
+  equal(x.realized.expenses, 490.92, "smoke: despesas realizadas");
+  equal(x.future_materialized.expenses, 1282.08, "smoke: despesas futuras");
+  equal(x.future_materialized.expense_count, 4, "smoke: quatro despesas futuras");
+  equal(byMonth.get("2026-07").future_materialized_expenses, 0, "smoke: nenhuma parcela futura em julho");
+  for (const month of ["2026-08", "2026-09", "2026-10", "2026-11"]) {
+    equal(
+      byMonth.get(month).future_materialized_expenses,
+      320.52,
+      `smoke: parcela no mês ${month}`,
+    );
+  }
+  equal(x.data_complete, true, "smoke: dados completos");
+  const seriesExpenses = Math.round(
+    x.series.reduce(
+      (total, point) =>
+        total + point.realized_expenses + point.future_materialized_expenses,
+      0,
+    ) * 100,
+  ) / 100;
+  equal(
+    seriesExpenses,
+    x.realized.expenses + x.future_materialized.expenses,
+    "smoke: totais iguais à soma da série",
+  );
+  equal(
+    x.combined_balance,
+    x.closing_cumulative_balance,
+    "smoke: saldo combinado igual ao fechamento",
+  );
 }
 {
   use(tables({
