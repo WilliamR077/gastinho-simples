@@ -2,7 +2,7 @@ import {
   calculateBillingPeriod,
   getClosingDateForBillingMonth,
   type CreditCardConfig,
-} from "@/utils/billing-period";
+} from "../../../utils/billing-period";
 
 export const CARD_SUMMARY_WARNINGS = [
   "INACTIVE_CARD",

@@ -1,5 +1,5 @@
 import { addMonths, format } from "date-fns";
-import { parseLocalDate } from "@/lib/utils";
+import { parseLocalDate } from "../lib/utils";
 
 export interface CreditCardConfig {
   opening_day: number;

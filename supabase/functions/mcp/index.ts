@@ -2462,11 +2462,73 @@ var get_card_installments_default = defineTool12({
 import { defineTool as defineTool13 } from "npm:@lovable.dev/mcp-js@0.24.0";
 import { z as z13 } from "npm:zod@^3.25.76";
 
+// src/utils/billing-period.ts
+import { addMonths, format } from "npm:date-fns@^3.6.0";
+
+// src/lib/utils.ts
+import { clsx } from "npm:clsx@^2.1.1";
+import { twMerge } from "npm:tailwind-merge@^2.6.0";
+
+// src/utils/billing-period.ts
+function daysInMonth(year, month) {
+  return new Date(year, month + 1, 0).getDate();
+}
+function getClosingDateForBillingMonth(year, month, dueDay, daysBefore) {
+  const nextMonth = month + 1;
+  const ny = nextMonth > 11 ? year + 1 : year;
+  const nm = nextMonth > 11 ? 0 : nextMonth;
+  const dueDate = new Date(ny, nm, Math.min(dueDay, daysInMonth(ny, nm)));
+  const closingDate = new Date(dueDate);
+  closingDate.setDate(closingDate.getDate() - daysBefore);
+  return { closingDate, dueDate };
+}
+function calculateBillingPeriod(expenseDate, config) {
+  const { due_day, days_before_due, opening_day, closing_day } = config;
+  if (due_day && days_before_due) {
+    const year = expenseDate.getFullYear();
+    const month = expenseDate.getMonth();
+    const current = getClosingDateForBillingMonth(year, month, due_day, days_before_due);
+    const prevMonth = month - 1;
+    const py = prevMonth < 0 ? year - 1 : year;
+    const pm = prevMonth < 0 ? 11 : prevMonth;
+    const prev = getClosingDateForBillingMonth(py, pm, due_day, days_before_due);
+    const expDay = new Date(expenseDate.getFullYear(), expenseDate.getMonth(), expenseDate.getDate());
+    const prevClosingDay = new Date(prev.closingDate.getFullYear(), prev.closingDate.getMonth(), prev.closingDate.getDate());
+    const curClosingDay = new Date(current.closingDate.getFullYear(), current.closingDate.getMonth(), current.closingDate.getDate());
+    if (expDay > prevClosingDay && expDay <= curClosingDay) {
+      return format(new Date(year, month, 1), "yyyy-MM");
+    } else if (expDay > curClosingDay) {
+      const nm = month + 1 > 11 ? 0 : month + 1;
+      const ny = month + 1 > 11 ? year + 1 : year;
+      return format(new Date(ny, nm, 1), "yyyy-MM");
+    } else {
+      return format(new Date(py, pm, 1), "yyyy-MM");
+    }
+  }
+  const currentDay = expenseDate.getDate();
+  const currentMonth = expenseDate.getMonth();
+  const currentYear = expenseDate.getFullYear();
+  if (opening_day > closing_day) {
+    if (currentDay >= opening_day) {
+      const nextMonth = addMonths(new Date(currentYear, currentMonth, 1), 1);
+      return format(nextMonth, "yyyy-MM");
+    } else {
+      return format(new Date(currentYear, currentMonth, 1), "yyyy-MM");
+    }
+  } else {
+    if (currentDay >= opening_day && currentDay <= closing_day) {
+      return format(new Date(currentYear, currentMonth, 1), "yyyy-MM");
+    } else if (currentDay < opening_day) {
+      const previousMonth = addMonths(new Date(currentYear, currentMonth, 1), -1);
+      return format(previousMonth, "yyyy-MM");
+    } else {
+      const nextMonth = addMonths(new Date(currentYear, currentMonth, 1), 1);
+      return format(nextMonth, "yyyy-MM");
+    }
+  }
+}
+
 // src/lib/mcp/shared/card-summary.ts
-import {
-  calculateBillingPeriod,
-  getClosingDateForBillingMonth
-} from "npm:@/utils/billing-period";
 var CARD_SUMMARY_WARNINGS = [
   "INACTIVE_CARD",
   "INVALID_CARD_CONFIGURATION",

@@ -21,6 +21,11 @@ const forbidden = [
     pattern:
       /(?:\bfrom\s+["']|\bimport\s*(?:\(\s*)?["'])(?:\.\.?[\\/]|file:|[A-Za-z]:)/u,
   },
+  {
+    name: "unresolved @/ alias",
+    pattern:
+      /(?:\bfrom\s*["']@\/|\bimport\s*(?:\(\s*)?["']@\/|npm:@\/)/u,
+  },
 ];
 
 for (const check of forbidden) {
