@@ -110,9 +110,19 @@ export function calculateCashflowProjection(
   closing_cumulative_balance: number;
   series: CashflowProjectionPoint[];
 } {
-  const realized = componentTotals(events, "realized");
-  const futureMaterialized = componentTotals(events, "future_materialized");
-  const recurringProjection = componentTotals(events, "recurring_projection");
+  const acceptedEvents = events.filter(
+    (event) =>
+      event.date >= options.start_date && event.date <= options.end_date,
+  );
+  const realized = componentTotals(acceptedEvents, "realized");
+  const futureMaterialized = componentTotals(
+    acceptedEvents,
+    "future_materialized",
+  );
+  const recurringProjection = componentTotals(
+    acceptedEvents,
+    "recurring_projection",
+  );
   const combinedIncome = roundFinancial(
     realized.income + futureMaterialized.income + recurringProjection.income,
   );
@@ -128,7 +138,7 @@ export function calculateCashflowProjection(
     options.end_date,
     options.granularity,
   ).map<CashflowProjectionPoint>((period) => {
-    const current = events.filter(
+    const current = acceptedEvents.filter(
       (event) => event.date >= period.start && event.date <= period.end,
     );
     const totals = (component: ProjectionComponent) =>
@@ -187,4 +197,65 @@ export function calculateCashflowProjection(
             0,
         ),
   };
+}
+
+function summed(
+  series: CashflowProjectionPoint[],
+  field: keyof CashflowProjectionPoint,
+): number {
+  return roundFinancial(
+    series.reduce((sum, point) => sum + Number(point[field]), 0),
+  );
+}
+
+export function cashflowProjectionInvariantsHold(projection: {
+  realized: ProjectionComponentTotals;
+  future_materialized: ProjectionComponentTotals;
+  recurring_projection: ProjectionComponentTotals;
+  combined_income: number;
+  combined_expenses: number;
+  combined_balance: number;
+  opening_cumulative_balance: 0;
+  closing_cumulative_balance: number;
+  series: CashflowProjectionPoint[];
+}): boolean {
+  const realized = projection.realized;
+  const future = projection.future_materialized;
+  const recurring = projection.recurring_projection;
+  return (
+    realized.income === summed(projection.series, "realized_income") &&
+    realized.expenses === summed(projection.series, "realized_expenses") &&
+    realized.balance === roundFinancial(realized.income - realized.expenses) &&
+    realized.transaction_count ===
+      summed(projection.series, "realized_transaction_count") &&
+    future.income ===
+      summed(projection.series, "future_materialized_income") &&
+    future.expenses ===
+      summed(projection.series, "future_materialized_expenses") &&
+    future.balance === roundFinancial(future.income - future.expenses) &&
+    future.transaction_count ===
+      summed(projection.series, "future_materialized_transaction_count") &&
+    recurring.income ===
+      summed(projection.series, "recurring_projected_income") &&
+    recurring.expenses ===
+      summed(projection.series, "recurring_projected_expenses") &&
+    recurring.balance ===
+      roundFinancial(recurring.income - recurring.expenses) &&
+    recurring.transaction_count ===
+      summed(projection.series, "recurring_occurrence_count") &&
+    projection.combined_income ===
+      roundFinancial(realized.income + future.income + recurring.income) &&
+    projection.combined_expenses ===
+      roundFinancial(
+        realized.expenses + future.expenses + recurring.expenses,
+      ) &&
+    projection.combined_balance ===
+      roundFinancial(
+        projection.combined_income - projection.combined_expenses,
+      ) &&
+    projection.opening_cumulative_balance === 0 &&
+    projection.closing_cumulative_balance === projection.combined_balance &&
+    projection.closing_cumulative_balance ===
+      summed(projection.series, "combined_balance")
+  );
 }

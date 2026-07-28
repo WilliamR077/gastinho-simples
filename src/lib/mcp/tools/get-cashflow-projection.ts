@@ -2,12 +2,14 @@ import { defineTool } from "@lovable.dev/mcp-js";
 import { z } from "zod";
 import {
   CASHFLOW_PROJECTION_WARNINGS,
+  cashflowProjectionInvariantsHold,
   calculateCashflowProjection,
   type ProjectionEvent,
 } from "../shared/cashflow-projection";
 import {
   partialPeriodWarnings,
-  saoPauloCivilDate,
+  preserveSqlDate,
+  timestampToSaoPauloCivilDate,
   zonedMidnightUtc,
 } from "../shared/cashflow";
 import { todayIso } from "../shared/dates";
@@ -256,9 +258,8 @@ export default defineTool({
     const addTransaction = (
       type: "expense" | "income",
       amountValue: number,
-      rawDate: string,
+      date: string | null,
     ) => {
-      const date = saoPauloCivilDate(rawDate);
       if (!date) {
         warnings.add("INVALID_TRANSACTION_DATE");
         return;
@@ -283,10 +284,14 @@ export default defineTool({
       }
     };
     for (const row of expenseResult.rows as ExpenseProjectionRow[]) {
-      addTransaction("expense", row.amount, row.expense_date);
+      addTransaction("expense", row.amount, preserveSqlDate(row.expense_date));
     }
     for (const row of incomeResult.rows as IncomeProjectionRow[]) {
-      addTransaction("income", row.amount, row.income_date);
+      addTransaction(
+        "income",
+        row.amount,
+        timestampToSaoPauloCivilDate(row.income_date),
+      );
     }
 
     let templatesConsidered = 0;
@@ -364,6 +369,9 @@ export default defineTool({
       granularity,
       include_empty_periods: includeEmpty,
     });
+    if (!cashflowProjectionInvariantsHold(projection)) {
+      return mcpError("INTERNAL_ERROR");
+    }
     const dataComplete = !warnings.has("INVALID_TRANSACTION_DATE");
     const result = {
       requested_period: {

@@ -57,6 +57,16 @@ export function saoPauloCivilDate(value: string): string | null {
   return Number.isFinite(parsed.getTime()) ? todayIso(parsed) : null;
 }
 
+export function preserveSqlDate(value: string): string | null {
+  return isValidIsoDate(value) ? value : null;
+}
+
+export function timestampToSaoPauloCivilDate(value: string): string | null {
+  if (isValidIsoDate(value)) return value;
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) ? todayIso(parsed) : null;
+}
+
 export function zonedMidnightUtc(
   date: string,
   timeZone = "America/Sao_Paulo",

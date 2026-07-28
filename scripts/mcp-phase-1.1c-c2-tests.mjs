@@ -286,6 +286,91 @@ for (const [flag, expected] of [
 }
 
 equal(core.saoPauloCivilDate("2026-08-01T01:30:00Z"), "2026-07-31", "America/Sao_Paulo");
+equal(core.preserveSqlDate("2026-07-01"), "2026-07-01", "DATE preserva primeiro dia");
+equal(core.preserveSqlDate("2026-08-01"), "2026-08-01", "DATE não desloca mês");
+equal(
+  core.timestampToSaoPauloCivilDate("2026-08-01T01:30:00Z"),
+  "2026-07-31",
+  "TIMESTAMPTZ continua convertido para São Paulo",
+);
+{
+  const boundaryExpenses = [
+    expense({ id: id(500), amount: 100, expense_date: "2026-07-01" }),
+    ...["2026-08-01", "2026-09-01", "2026-10-01", "2026-11-01"].map(
+      (date, index) =>
+        expense({ id: id(501 + index), amount: 320.52, expense_date: date }),
+    ),
+    expense({ id: id(505), amount: 10, expense_date: "2026-12-31" }),
+  ];
+  use(tables({
+    expenses: boundaryExpenses,
+    incomes: [
+      income({
+        id: id(506),
+        amount: 50,
+        income_date: "2026-08-01T01:30:00Z",
+      }),
+    ],
+    recurring_expenses: [],
+    recurring_incomes: [],
+  }));
+  const r = await core.tool.handler(
+    {
+      start_date: "2026-07-01",
+      end_date: "2026-12-31",
+      granularity: "month",
+    },
+    ctx,
+  );
+  const x = r.structuredContent;
+  const byMonth = new Map(x.series.map((point) => [point.label, point]));
+  equal(byMonth.get("2026-07").realized_expenses, 100, "DATE 01/07 permanece em julho");
+  for (const month of ["2026-08", "2026-09", "2026-10", "2026-11"]) {
+    equal(
+      byMonth.get(month).future_materialized_expenses,
+      320.52,
+      `parcela permanece em ${month}`,
+    );
+  }
+  equal(byMonth.get("2026-07").future_materialized_expenses, 0, "agosto não retrocede para julho");
+  equal(byMonth.get("2026-12").future_materialized_expenses, 10, "último dia incluído");
+  equal(byMonth.get("2026-07").future_materialized_income, 50, "timestamp UTC vira 31/07 em São Paulo");
+  const sum = (field) =>
+    Math.round(
+      x.series.reduce((total, point) => total + point[field], 0) * 100,
+    ) / 100;
+  equal(x.realized.income, sum("realized_income"), "invariante realized income");
+  equal(x.realized.expenses, sum("realized_expenses"), "invariante realized expenses");
+  equal(x.future_materialized.income, sum("future_materialized_income"), "invariante future income");
+  equal(x.future_materialized.expenses, sum("future_materialized_expenses"), "invariante future expenses");
+  equal(x.recurring_projection.income, sum("recurring_projected_income"), "invariante recurring income");
+  equal(x.recurring_projection.expenses, sum("recurring_projected_expenses"), "invariante recurring expenses");
+  equal(x.combined_income, x.realized.income + x.future_materialized.income + x.recurring_projection.income, "combined income");
+  equal(x.combined_expenses, x.realized.expenses + x.future_materialized.expenses + x.recurring_projection.expenses, "combined expenses");
+  equal(x.combined_balance, x.combined_income - x.combined_expenses, "combined balance");
+  equal(x.closing_cumulative_balance, x.combined_balance, "fechamento acumulado");
+  equal(x.realized.transaction_count, sum("realized_transaction_count"), "contagem realized");
+  equal(x.future_materialized.transaction_count, sum("future_materialized_transaction_count"), "contagem future");
+  equal(x.recurring_projection.occurrence_count, sum("recurring_occurrence_count"), "contagem recurring");
+  equal(
+    x.realized.transaction_count +
+      x.future_materialized.transaction_count +
+      x.recurring_projection.occurrence_count,
+    boundaryExpenses.length + 1,
+    "nenhuma transação válida perdida ou duplicada entre buckets",
+  );
+  check(core.cashflowProjectionInvariantsHold({
+    realized: x.realized,
+    future_materialized: x.future_materialized,
+    recurring_projection: x.recurring_projection,
+    combined_income: x.combined_income,
+    combined_expenses: x.combined_expenses,
+    combined_balance: x.combined_balance,
+    opening_cumulative_balance: x.opening_cumulative_balance,
+    closing_cumulative_balance: x.closing_cumulative_balance,
+    series: x.series,
+  }), "verificação interna de invariantes");
+}
 {
   use(tables({
     expenses: [expense({ amount: -10 }), expense({ id: id(90), amount: 5, expense_date: "2026-07-xx" })],
