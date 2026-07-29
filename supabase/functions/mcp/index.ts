@@ -48,6 +48,7 @@ var MESSAGES = {
   BUSINESS_RULE_VIOLATION: "A opera\xE7\xE3o viola uma regra do lan\xE7amento.",
   WRITE_FAILED: "N\xE3o foi poss\xEDvel concluir a opera\xE7\xE3o de escrita.",
   INVALID_CARD_TYPE: "Tipo de cart\xE3o inv\xE1lido. Use credit, debit ou both.",
+  INVALID_CARD_CONFIGURATION: "A configura\xE7\xE3o do cart\xE3o \xE9 inv\xE1lida para o tipo informado.",
   INVALID_DATA: "Os dados informados s\xE3o inv\xE1lidos.",
   DATE_RANGE_TOO_LARGE: "Intervalo de datas excede o m\xE1ximo permitido de 366 dias.",
   RESULT_SET_TOO_LARGE: "O conjunto de resultados excede o limite seguro. Reduza o intervalo ou refine os filtros.",
@@ -7269,6 +7270,424 @@ var delete_goal_default = defineTool33({
   }
 });
 
+// src/lib/mcp/tools/create-card.ts
+import { defineTool as defineTool34 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z41 } from "npm:zod@^3.25.76";
+
+// src/lib/mcp/shared/card-write.ts
+import { z as z40 } from "npm:zod@^3.25.76";
+var CARD_TYPES = ["credit", "debit", "both"];
+var CARD_COLORS = [
+  "#FFA500",
+  "#9333EA",
+  "#3B82F6",
+  "#10B981",
+  "#EF4444",
+  "#F97316",
+  "#EC4899",
+  "#6366F1",
+  "#06B6D4",
+  "#84CC16",
+  "#F59E0B",
+  "#14B8A6",
+  "#D946EF",
+  "#64748B",
+  "#0EA5E9",
+  "#059669"
+];
+var CARD_WRITE_WARNINGS = [
+  "CARD_CREATED",
+  "CARD_UPDATED",
+  "CARD_TYPE_CHANGED",
+  "CARD_DEACTIVATED",
+  "CARD_REACTIVATED",
+  "CARD_WITHOUT_LIMIT",
+  "BILLING_DAY_MAY_BE_ADJUSTED",
+  "FUTURE_INSTALLMENTS_PRESERVED",
+  "ACTIVE_RECURRING_TEMPLATES_REFERENCE_CARD",
+  "HISTORICAL_CARD_REFERENCES_PRESERVED",
+  "CARD_CREATED_INACTIVE",
+  "NO_EFFECTIVE_CHANGES"
+];
+var cardTypeSchema = z40.enum(CARD_TYPES);
+var cardColorSchema = z40.enum(CARD_COLORS);
+var cardNameSchema = z40.string().trim().min(1).max(100);
+var cardLimitSchema = z40.number().finite().positive();
+var billingDaySchema = z40.number().int().min(1).max(31);
+var daysBeforeDueSchema = z40.number().int().min(1).max(28);
+var cardWriteWarningSchema = z40.enum(CARD_WRITE_WARNINGS);
+var cardChangesSchema = z40.object({
+  name: cardNameSchema.optional(),
+  card_type: cardTypeSchema.optional(),
+  color: cardColorSchema.optional(),
+  card_limit: cardLimitSchema.nullable().optional(),
+  due_day: billingDaySchema.nullable().optional(),
+  days_before_due: daysBeforeDueSchema.nullable().optional(),
+  is_active: z40.boolean().optional()
+}).strict().refine((changes) => Object.keys(changes).length > 0, {
+  message: "Informe pelo menos uma altera\xE7\xE3o."
+});
+var cardViewSchema = z40.object({
+  id: z40.string().uuid(),
+  name: z40.string(),
+  card_type: cardTypeSchema,
+  color: cardColorSchema,
+  card_limit: z40.number().finite().positive().nullable(),
+  opening_day: billingDaySchema.nullable(),
+  closing_day: billingDaySchema.nullable(),
+  due_day: billingDaySchema.nullable(),
+  days_before_due: daysBeforeDueSchema.nullable(),
+  is_active: z40.boolean(),
+  created_at: z40.string(),
+  updated_at: z40.string()
+}).strict();
+var referenceSummarySchema = z40.object({
+  historical_expense_count: z40.number().int().nonnegative().nullable(),
+  future_materialized_expense_count: z40.number().int().nonnegative().nullable(),
+  active_recurring_template_count: z40.number().int().nonnegative().nullable()
+}).strict();
+function cardWriteView(row, userId) {
+  if (row.user_id !== userId) return null;
+  const view = {
+    id: row.id,
+    name: row.name,
+    card_type: row.card_type,
+    color: row.color,
+    card_limit: row.card_limit === null ? null : Number(row.card_limit),
+    opening_day: row.opening_day,
+    closing_day: row.closing_day,
+    due_day: row.due_day,
+    days_before_due: row.days_before_due,
+    is_active: row.is_active,
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  };
+  return cardViewSchema.safeParse(view).success ? view : null;
+}
+function supportsCredit(type) {
+  return type === "credit" || type === "both";
+}
+function deriveBillingDays(dueDay, daysBeforeDue, referenceDate = todayIso()) {
+  const [year, month] = referenceDate.slice(0, 7).split("-").map(Number);
+  const { closingDate } = getClosingDateForBillingMonth(
+    year,
+    month - 1,
+    dueDay,
+    daysBeforeDue
+  );
+  const closingDay = closingDate.getDate();
+  return {
+    closing_day: closingDay,
+    opening_day: closingDay === 31 ? 1 : closingDay + 1
+  };
+}
+function billingAdjustmentWarning(dueDay) {
+  return dueDay !== null && dueDay >= 29;
+}
+function describeCard(card) {
+  const billing = supportsCredit(card.card_type) ? `vencimento=${card.due_day}; fecha ${card.days_before_due} dia(s) antes; opening_day=${card.opening_day}; closing_day=${card.closing_day}` : "sem configura\xE7\xE3o de cobran\xE7a";
+  return `id=${card.id}; nome=${JSON.stringify(card.name)}; tipo=${card.card_type}; cor=${card.color}; limite configurado=${card.card_limit ?? "n\xE3o informado"}; ${billing}; status=${card.is_active ? "ativo" : "inativo"}`;
+}
+var safetyText = "Nenhuma despesa, parcela ou template recorrente foi criado, removido ou alterado. Nenhuma a\xE7\xE3o foi enviada ao banco emissor. O limite \xE9 apenas uma configura\xE7\xE3o cadastrada no Gastinho; n\xE3o representa saldo banc\xE1rio nem limite dispon\xEDvel consultado no emissor.";
+function createCardContent(result) {
+  return `Cart\xE3o criado no Gastinho: ${describeCard(result.card)}; warnings=${JSON.stringify(result.warnings)}. ${safetyText}`;
+}
+function updateCardContent(result) {
+  const changes = result.changed_fields.map(
+    (field) => `${field}: ${JSON.stringify(result.before[field])} -> ${JSON.stringify(result.after[field])}`
+  );
+  return `Cart\xE3o ${result.after.id} ${result.applied ? "atualizado" : "n\xE3o alterado"} no Gastinho. Antes: ${describeCard(result.before)}. Depois: ${describeCard(result.after)}. Altera\xE7\xF5es=${changes.length ? changes.join("; ") : "nenhuma"}; updated_at=${result.updated_at_before} -> ${result.updated_at_after}; refer\xEAncias preservadas=${JSON.stringify(result.reference_summary)}; warnings=${JSON.stringify(result.warnings)}. ${safetyText} Ativar ou desativar no Gastinho n\xE3o ativa, bloqueia nem cancela o cart\xE3o no banco emissor.`;
+}
+
+// src/lib/mcp/tools/create-card.ts
+var COLUMNS10 = "id,user_id,name,card_type,color,card_limit,opening_day,closing_day,due_day,days_before_due,is_active,created_at,updated_at";
+var inputProperties14 = {
+  name: cardNameSchema,
+  card_type: cardTypeSchema,
+  color: cardColorSchema.optional(),
+  card_limit: cardLimitSchema.nullable().optional(),
+  due_day: billingDaySchema.optional(),
+  days_before_due: daysBeforeDueSchema.optional(),
+  is_active: z41.boolean().optional()
+};
+var inputValidator14 = z41.object(inputProperties14).strict();
+var create_card_default = defineTool34({
+  name: "create_card",
+  title: "Criar cart\xE3o",
+  description: "Cria um cadastro pessoal de cart\xE3o no Gastinho. N\xE3o solicita n\xFAmero, CVV ou credenciais e n\xE3o se comunica com banco emissor.",
+  inputSchema: inputProperties14,
+  outputSchema: {
+    resource_type: z41.literal("card"),
+    id: z41.string().uuid(),
+    created: z41.literal(true),
+    card: cardViewSchema,
+    warnings: z41.array(cardWriteWarningSchema),
+    data_complete: z41.literal(true)
+  },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false
+  },
+  handler: async (rawInput, ctx) => {
+    const userId = ctx.getUserId();
+    if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
+    const parsed = inputValidator14.safeParse(rawInput);
+    if (!parsed.success) return mcpError("INVALID_INPUT");
+    const input = parsed.data;
+    const credit = supportsCredit(input.card_type);
+    if (credit && input.due_day === void 0 || !credit && (input.due_day !== void 0 || input.days_before_due !== void 0)) {
+      return mcpError("INVALID_CARD_CONFIGURATION");
+    }
+    const dueDay = credit ? input.due_day : null;
+    const daysBeforeDue = credit ? input.days_before_due ?? 10 : null;
+    const billing = dueDay !== null && daysBeforeDue !== null ? deriveBillingDays(dueDay, daysBeforeDue) : { opening_day: null, closing_day: null };
+    const supabase = supabaseForUser(ctx);
+    const insertResult = await supabase.from("cards").insert({
+      user_id: userId,
+      name: input.name,
+      card_type: input.card_type,
+      color: input.color ?? "#FFA500",
+      card_limit: input.card_limit ?? null,
+      opening_day: billing.opening_day,
+      closing_day: billing.closing_day,
+      due_day: dueDay,
+      days_before_due: daysBeforeDue,
+      is_active: input.is_active ?? true
+    }).select(COLUMNS10).single();
+    if (insertResult.error || !insertResult.data) return mcpError("WRITE_FAILED");
+    const card = cardWriteView(insertResult.data, userId);
+    if (!card) return mcpError("INVALID_DATA");
+    const warnings = ["CARD_CREATED"];
+    if (card.card_limit === null) warnings.push("CARD_WITHOUT_LIMIT");
+    if (billingAdjustmentWarning(card.due_day)) {
+      warnings.push("BILLING_DAY_MAY_BE_ADJUSTED");
+    }
+    if (!card.is_active) warnings.push("CARD_CREATED_INACTIVE");
+    const result = {
+      resource_type: "card",
+      id: card.id,
+      created: true,
+      card,
+      warnings,
+      data_complete: true
+    };
+    return {
+      content: [{ type: "text", text: createCardContent(result) }],
+      structuredContent: result
+    };
+  }
+});
+
+// src/lib/mcp/tools/update-card.ts
+import { defineTool as defineTool35 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z42 } from "npm:zod@^3.25.76";
+var COLUMNS11 = "id,user_id,name,card_type,color,card_limit,opening_day,closing_day,due_day,days_before_due,is_active,created_at,updated_at";
+var CHANGE_FIELDS4 = [
+  "name",
+  "card_type",
+  "color",
+  "card_limit",
+  "opening_day",
+  "closing_day",
+  "due_day",
+  "days_before_due",
+  "is_active"
+];
+var inputProperties15 = {
+  card_id: z42.string().uuid(),
+  expected_updated_at: expectedUpdatedAtSchema,
+  changes: cardChangesSchema
+};
+var inputValidator15 = z42.object(inputProperties15).strict();
+var emptyReferenceSummary = () => ({
+  historical_expense_count: null,
+  future_materialized_expense_count: null,
+  active_recurring_template_count: null
+});
+var update_card_default = defineTool35({
+  name: "update_card",
+  title: "Editar cart\xE3o",
+  description: "Edita parcialmente um cadastro pessoal de cart\xE3o com concorr\xEAncia otimista. N\xE3o altera despesas, parcelas, templates ou o cart\xE3o no banco emissor.",
+  inputSchema: inputProperties15,
+  outputSchema: {
+    resource_type: z42.literal("card"),
+    id: z42.string().uuid(),
+    applied: z42.boolean(),
+    changed_fields: z42.array(z42.enum(CHANGE_FIELDS4)),
+    before: cardViewSchema,
+    after: cardViewSchema,
+    updated_at_before: z42.string(),
+    updated_at_after: z42.string(),
+    reference_summary: referenceSummarySchema,
+    warnings: z42.array(cardWriteWarningSchema),
+    data_complete: z42.literal(true)
+  },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: false
+  },
+  handler: async (rawInput, ctx) => {
+    const userId = ctx.getUserId();
+    if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
+    const parsed = inputValidator15.safeParse(rawInput);
+    if (!parsed.success) {
+      return mcpError(
+        parsed.error.issues.some((issue) => issue.path[0] === "changes") ? "INVALID_PATCH" : "INVALID_INPUT"
+      );
+    }
+    const input = parsed.data;
+    const supabase = supabaseForUser(ctx);
+    const currentResult = await supabase.from("cards").select(COLUMNS11).eq("id", input.card_id).eq("user_id", userId).maybeSingle();
+    if (currentResult.error) return mcpError("INTERNAL_ERROR");
+    if (!currentResult.data) return mcpError("RESOURCE_NOT_FOUND");
+    const current = currentResult.data;
+    if (current.updated_at !== input.expected_updated_at) {
+      return mcpError(
+        "CONCURRENT_MODIFICATION",
+        "O cart\xE3o foi alterado desde a leitura. Releia o cadastro com list_cards antes de tentar novamente."
+      );
+    }
+    const before = cardWriteView(current, userId);
+    if (!before) return mcpError("INVALID_DATA");
+    const changes = input.changes;
+    const finalType = changes.card_type ?? before.card_type;
+    const finalCredit = supportsCredit(finalType);
+    const crossingToCredit = !supportsCredit(before.card_type) && finalCredit;
+    const billingWasExplicit = changes.due_day !== void 0 || changes.days_before_due !== void 0;
+    let finalDueDay = changes.due_day !== void 0 ? changes.due_day : before.due_day;
+    let finalDaysBefore = changes.days_before_due !== void 0 ? changes.days_before_due : before.days_before_due;
+    let finalOpeningDay = before.opening_day;
+    let finalClosingDay = before.closing_day;
+    if (finalCredit && changes.days_before_due === null) {
+      return mcpError("INVALID_CARD_CONFIGURATION");
+    }
+    if (!finalCredit) {
+      if (changes.due_day !== void 0 && changes.due_day !== null || changes.days_before_due !== void 0 && changes.days_before_due !== null) {
+        return mcpError("INVALID_CARD_CONFIGURATION");
+      }
+      finalDueDay = null;
+      finalDaysBefore = null;
+      finalOpeningDay = null;
+      finalClosingDay = null;
+    } else if (finalDueDay !== null) {
+      finalDaysBefore ??= 10;
+      const billing = deriveBillingDays(finalDueDay, finalDaysBefore);
+      finalOpeningDay = billing.opening_day;
+      finalClosingDay = billing.closing_day;
+    } else {
+      const legacyValid = !crossingToCredit && !billingWasExplicit && Number.isInteger(before.opening_day) && Number.isInteger(before.closing_day) && before.opening_day !== null && before.closing_day !== null && before.opening_day >= 1 && before.opening_day <= 31 && before.closing_day >= 1 && before.closing_day <= 31;
+      if (!legacyValid) return mcpError("INVALID_CARD_CONFIGURATION");
+    }
+    const finalValues = {
+      name: changes.name ?? before.name,
+      card_type: finalType,
+      color: changes.color ?? before.color,
+      card_limit: changes.card_limit !== void 0 ? changes.card_limit : before.card_limit,
+      opening_day: finalOpeningDay,
+      closing_day: finalClosingDay,
+      due_day: finalDueDay,
+      days_before_due: finalDaysBefore,
+      is_active: changes.is_active ?? before.is_active
+    };
+    const patch = {};
+    const changedFields = [];
+    for (const field of CHANGE_FIELDS4) {
+      if (finalValues[field] !== before[field]) {
+        patch[field] = finalValues[field];
+        changedFields.push(field);
+      }
+    }
+    const deactivating = before.is_active && !finalValues.is_active;
+    let referenceSummary = emptyReferenceSummary();
+    let futureInstallmentCount = 0;
+    if (deactivating) {
+      const today = todayIso();
+      const historicalResult = await supabase.from("expenses").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("card_id", input.card_id).lte("expense_date", today);
+      const futureResult = await supabase.from("expenses").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("card_id", input.card_id).gt("expense_date", today);
+      const futureInstallmentResult = await supabase.from("expenses").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("card_id", input.card_id).gt("expense_date", today).not("installment_group_id", "is", null);
+      const recurringResult = await supabase.from("recurring_expenses").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("card_id", input.card_id).eq("is_active", true);
+      if (historicalResult.error || futureResult.error || futureInstallmentResult.error || recurringResult.error) {
+        return mcpError("INTERNAL_ERROR");
+      }
+      referenceSummary = {
+        historical_expense_count: historicalResult.count ?? 0,
+        future_materialized_expense_count: futureResult.count ?? 0,
+        active_recurring_template_count: recurringResult.count ?? 0
+      };
+      futureInstallmentCount = futureInstallmentResult.count ?? 0;
+    }
+    if (changedFields.length === 0) {
+      const result2 = {
+        resource_type: "card",
+        id: before.id,
+        applied: false,
+        changed_fields: changedFields,
+        before,
+        after: before,
+        updated_at_before: before.updated_at,
+        updated_at_after: before.updated_at,
+        reference_summary: referenceSummary,
+        warnings: ["NO_EFFECTIVE_CHANGES"],
+        data_complete: true
+      };
+      return {
+        content: [{ type: "text", text: updateCardContent(result2) }],
+        structuredContent: result2
+      };
+    }
+    const updateResult = await supabase.from("cards").update(patch).eq("id", input.card_id).eq("user_id", userId).eq("updated_at", input.expected_updated_at).select(COLUMNS11).maybeSingle();
+    if (updateResult.error) return mcpError("WRITE_FAILED");
+    if (!updateResult.data) {
+      const existence = await supabase.from("cards").select("id,updated_at").eq("id", input.card_id).eq("user_id", userId).maybeSingle();
+      if (existence.error) return mcpError("INTERNAL_ERROR");
+      return mcpError(
+        existence.data ? "CONCURRENT_MODIFICATION" : "RESOURCE_NOT_FOUND",
+        existence.data ? "O cart\xE3o mudou durante a atualiza\xE7\xE3o. Releia o cadastro com list_cards antes de tentar novamente." : void 0
+      );
+    }
+    const after = cardWriteView(updateResult.data, userId);
+    if (!after) return mcpError("INVALID_DATA");
+    const warnings = ["CARD_UPDATED"];
+    if (before.card_type !== after.card_type) warnings.push("CARD_TYPE_CHANGED");
+    if (before.is_active && !after.is_active) warnings.push("CARD_DEACTIVATED");
+    if (!before.is_active && after.is_active) warnings.push("CARD_REACTIVATED");
+    if (after.card_limit === null) warnings.push("CARD_WITHOUT_LIMIT");
+    if (billingAdjustmentWarning(after.due_day)) {
+      warnings.push("BILLING_DAY_MAY_BE_ADJUSTED");
+    }
+    if ((referenceSummary.historical_expense_count ?? 0) > 0) {
+      warnings.push("HISTORICAL_CARD_REFERENCES_PRESERVED");
+    }
+    if (futureInstallmentCount > 0) {
+      warnings.push("FUTURE_INSTALLMENTS_PRESERVED");
+    }
+    if ((referenceSummary.active_recurring_template_count ?? 0) > 0) {
+      warnings.push("ACTIVE_RECURRING_TEMPLATES_REFERENCE_CARD");
+    }
+    const result = {
+      resource_type: "card",
+      id: after.id,
+      applied: true,
+      changed_fields: changedFields,
+      before,
+      after,
+      updated_at_before: before.updated_at,
+      updated_at_after: after.updated_at,
+      reference_summary: referenceSummary,
+      warnings,
+      data_complete: true
+    };
+    return {
+      content: [{ type: "text", text: updateCardContent(result) }],
+      structuredContent: result
+    };
+  }
+});
+
 // src/lib/mcp/index.ts
 var projectRef = "jaoldaqvbdllowepzwbr";
 var mcp_default = defineMcp({
@@ -7313,7 +7732,9 @@ var mcp_default = defineMcp({
     delete_recurring_income_default,
     create_goal_default,
     update_goal_default,
-    delete_goal_default
+    delete_goal_default,
+    create_card_default,
+    update_card_default
   ]
 });
 

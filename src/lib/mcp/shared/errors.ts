@@ -27,6 +27,7 @@ export const MCP_ERROR_CODES = {
   BUSINESS_RULE_VIOLATION: "BUSINESS_RULE_VIOLATION",
   WRITE_FAILED: "WRITE_FAILED",
   INVALID_CARD_TYPE: "INVALID_CARD_TYPE",
+  INVALID_CARD_CONFIGURATION: "INVALID_CARD_CONFIGURATION",
   INVALID_DATA: "INVALID_DATA",
   DATE_RANGE_TOO_LARGE: "DATE_RANGE_TOO_LARGE",
   RESULT_SET_TOO_LARGE: "RESULT_SET_TOO_LARGE",
@@ -68,6 +69,8 @@ const MESSAGES: Record<McpErrorCode, string> = {
   BUSINESS_RULE_VIOLATION: "A operação viola uma regra do lançamento.",
   WRITE_FAILED: "Não foi possível concluir a operação de escrita.",
   INVALID_CARD_TYPE: "Tipo de cartão inválido. Use credit, debit ou both.",
+  INVALID_CARD_CONFIGURATION:
+    "A configuração do cartão é inválida para o tipo informado.",
   INVALID_DATA: "Os dados informados são inválidos.",
   DATE_RANGE_TOO_LARGE: "Intervalo de datas excede o máximo permitido de 366 dias.",
   RESULT_SET_TOO_LARGE: "O conjunto de resultados excede o limite seguro. Reduza o intervalo ou refine os filtros.",

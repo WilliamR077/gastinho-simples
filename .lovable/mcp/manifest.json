@@ -7953,6 +7953,611 @@
           "additionalProperties": false,
           "$schema": "http://json-schema.org/draft-07/schema#"
         }
+      },
+      {
+        "name": "create_card",
+        "title": "Criar cartão",
+        "description": "Cria um cadastro pessoal de cartão no Gastinho. Não solicita número, CVV ou credenciais e não se comunica com banco emissor.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "card_type": {
+              "type": "string",
+              "enum": [
+                "credit",
+                "debit",
+                "both"
+              ]
+            },
+            "color": {
+              "type": "string",
+              "enum": [
+                "#FFA500",
+                "#9333EA",
+                "#3B82F6",
+                "#10B981",
+                "#EF4444",
+                "#F97316",
+                "#EC4899",
+                "#6366F1",
+                "#06B6D4",
+                "#84CC16",
+                "#F59E0B",
+                "#14B8A6",
+                "#D946EF",
+                "#64748B",
+                "#0EA5E9",
+                "#059669"
+              ]
+            },
+            "card_limit": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "due_day": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 31
+            },
+            "days_before_due": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 28
+            },
+            "is_active": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "name",
+            "card_type"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "card"
+            },
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "created": {
+              "type": "boolean",
+              "const": true
+            },
+            "card": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "card_type": {
+                  "type": "string",
+                  "enum": [
+                    "credit",
+                    "debit",
+                    "both"
+                  ]
+                },
+                "color": {
+                  "type": "string",
+                  "enum": [
+                    "#FFA500",
+                    "#9333EA",
+                    "#3B82F6",
+                    "#10B981",
+                    "#EF4444",
+                    "#F97316",
+                    "#EC4899",
+                    "#6366F1",
+                    "#06B6D4",
+                    "#84CC16",
+                    "#F59E0B",
+                    "#14B8A6",
+                    "#D946EF",
+                    "#64748B",
+                    "#0EA5E9",
+                    "#059669"
+                  ]
+                },
+                "card_limit": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "opening_day": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 31
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "closing_day": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/properties/card/properties/opening_day/anyOf/0"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "due_day": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/properties/card/properties/opening_day/anyOf/0"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "days_before_due": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 28
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "is_active": {
+                  "type": "boolean"
+                },
+                "created_at": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "card_type",
+                "color",
+                "card_limit",
+                "opening_day",
+                "closing_day",
+                "due_day",
+                "days_before_due",
+                "is_active",
+                "created_at",
+                "updated_at"
+              ],
+              "additionalProperties": false
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "CARD_CREATED",
+                  "CARD_UPDATED",
+                  "CARD_TYPE_CHANGED",
+                  "CARD_DEACTIVATED",
+                  "CARD_REACTIVATED",
+                  "CARD_WITHOUT_LIMIT",
+                  "BILLING_DAY_MAY_BE_ADJUSTED",
+                  "FUTURE_INSTALLMENTS_PRESERVED",
+                  "ACTIVE_RECURRING_TEMPLATES_REFERENCE_CARD",
+                  "HISTORICAL_CARD_REFERENCES_PRESERVED",
+                  "CARD_CREATED_INACTIVE",
+                  "NO_EFFECTIVE_CHANGES"
+                ]
+              }
+            },
+            "data_complete": {
+              "type": "boolean",
+              "const": true
+            }
+          },
+          "required": [
+            "resource_type",
+            "id",
+            "created",
+            "card",
+            "warnings",
+            "data_complete"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      },
+      {
+        "name": "update_card",
+        "title": "Editar cartão",
+        "description": "Edita parcialmente um cadastro pessoal de cartão com concorrência otimista. Não altera despesas, parcelas, templates ou o cartão no banco emissor.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "card_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "expected_updated_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "changes": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                "card_type": {
+                  "type": "string",
+                  "enum": [
+                    "credit",
+                    "debit",
+                    "both"
+                  ]
+                },
+                "color": {
+                  "type": "string",
+                  "enum": [
+                    "#FFA500",
+                    "#9333EA",
+                    "#3B82F6",
+                    "#10B981",
+                    "#EF4444",
+                    "#F97316",
+                    "#EC4899",
+                    "#6366F1",
+                    "#06B6D4",
+                    "#84CC16",
+                    "#F59E0B",
+                    "#14B8A6",
+                    "#D946EF",
+                    "#64748B",
+                    "#0EA5E9",
+                    "#059669"
+                  ]
+                },
+                "card_limit": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "due_day": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 31
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "days_before_due": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 28
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "is_active": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "card_id",
+            "expected_updated_at",
+            "changes"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "card"
+            },
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "applied": {
+              "type": "boolean"
+            },
+            "changed_fields": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "name",
+                  "card_type",
+                  "color",
+                  "card_limit",
+                  "opening_day",
+                  "closing_day",
+                  "due_day",
+                  "days_before_due",
+                  "is_active"
+                ]
+              }
+            },
+            "before": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "card_type": {
+                  "type": "string",
+                  "enum": [
+                    "credit",
+                    "debit",
+                    "both"
+                  ]
+                },
+                "color": {
+                  "type": "string",
+                  "enum": [
+                    "#FFA500",
+                    "#9333EA",
+                    "#3B82F6",
+                    "#10B981",
+                    "#EF4444",
+                    "#F97316",
+                    "#EC4899",
+                    "#6366F1",
+                    "#06B6D4",
+                    "#84CC16",
+                    "#F59E0B",
+                    "#14B8A6",
+                    "#D946EF",
+                    "#64748B",
+                    "#0EA5E9",
+                    "#059669"
+                  ]
+                },
+                "card_limit": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "opening_day": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 31
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "closing_day": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/properties/before/properties/opening_day/anyOf/0"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "due_day": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/properties/before/properties/opening_day/anyOf/0"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "days_before_due": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 28
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "is_active": {
+                  "type": "boolean"
+                },
+                "created_at": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "card_type",
+                "color",
+                "card_limit",
+                "opening_day",
+                "closing_day",
+                "due_day",
+                "days_before_due",
+                "is_active",
+                "created_at",
+                "updated_at"
+              ],
+              "additionalProperties": false
+            },
+            "after": {
+              "$ref": "#/properties/before"
+            },
+            "updated_at_before": {
+              "type": "string"
+            },
+            "updated_at_after": {
+              "type": "string"
+            },
+            "reference_summary": {
+              "type": "object",
+              "properties": {
+                "historical_expense_count": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "future_materialized_expense_count": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "active_recurring_template_count": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "historical_expense_count",
+                "future_materialized_expense_count",
+                "active_recurring_template_count"
+              ],
+              "additionalProperties": false
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "CARD_CREATED",
+                  "CARD_UPDATED",
+                  "CARD_TYPE_CHANGED",
+                  "CARD_DEACTIVATED",
+                  "CARD_REACTIVATED",
+                  "CARD_WITHOUT_LIMIT",
+                  "BILLING_DAY_MAY_BE_ADJUSTED",
+                  "FUTURE_INSTALLMENTS_PRESERVED",
+                  "ACTIVE_RECURRING_TEMPLATES_REFERENCE_CARD",
+                  "HISTORICAL_CARD_REFERENCES_PRESERVED",
+                  "CARD_CREATED_INACTIVE",
+                  "NO_EFFECTIVE_CHANGES"
+                ]
+              }
+            },
+            "data_complete": {
+              "type": "boolean",
+              "const": true
+            }
+          },
+          "required": [
+            "resource_type",
+            "id",
+            "applied",
+            "changed_fields",
+            "before",
+            "after",
+            "updated_at_before",
+            "updated_at_after",
+            "reference_summary",
+            "warnings",
+            "data_complete"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
       }
     ]
   }

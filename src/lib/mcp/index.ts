@@ -32,6 +32,8 @@ import deleteRecurringIncome from "./tools/delete-recurring-income";
 import createGoal from "./tools/create-goal";
 import updateGoal from "./tools/update-goal";
 import deleteGoal from "./tools/delete-goal";
+import createCard from "./tools/create-card";
+import updateCard from "./tools/update-card";
 
 // O emissor OAuth precisa ser o host direto do Supabase — nunca o proxy do
 // Lovable Cloud. Construímos a partir do project ref, que o Vite substitui
@@ -82,5 +84,7 @@ export default defineMcp({
     createGoal,
     updateGoal,
     deleteGoal,
+    createCard,
+    updateCard,
   ],
 });
