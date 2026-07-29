@@ -382,7 +382,7 @@ for (const invalid of [
     "crédito incompleto",
   );
 }
-for (const field of ["due_day", "days_before_due"]) {
+for (const field of ["card_limit", "due_day", "days_before_due"]) {
   use();
   const result = await core.createCard.handler(
     { name: "Débito", card_type: "debit", [field]: 10 },
@@ -472,17 +472,51 @@ for (const [changes, field, expected] of [
   check(result.content[0].text.includes('"Principal" -> "Novo"'), "content autossuficiente");
 }
 {
-  use();
+  const db = use(baseTables({
+    cards: [card({ card_limit: 234.56 })],
+  }));
   const result = await core.updateCard.handler(
     updateInput({ card_type: "debit" }),
     ctx,
   );
   equal(result.structuredContent.after.card_type, "debit", "crédito para débito");
-  for (const field of ["opening_day", "closing_day", "due_day", "days_before_due"]) {
+  for (const field of ["card_limit", "opening_day", "closing_day", "due_day", "days_before_due"]) {
     equal(result.structuredContent.after[field], null, `${field} limpo`);
     check(result.structuredContent.changed_fields.includes(field), `${field} registrado`);
   }
+  equal(result.structuredContent.before.card_limit, 234.56, "before mantém limite real");
+  equal(db.tables.expenses.length, 3, "transição preserva despesas");
+  equal(db.tables.recurring_expenses.length, 2, "transição preserva recorrências");
   check(result.structuredContent.warnings.includes("CARD_TYPE_CHANGED"), "warning tipo");
+}
+{
+  use(baseTables({
+    cards: [card({ card_type: "both", card_limit: 900 })],
+  }));
+  const result = await core.updateCard.handler(
+    updateInput({ card_type: "debit" }),
+    ctx,
+  );
+  equal(result.structuredContent.after.card_type, "debit", "both para débito");
+  for (const field of ["card_limit", "opening_day", "closing_day", "due_day", "days_before_due"]) {
+    equal(result.structuredContent.after[field], null, `both limpa ${field}`);
+  }
+}
+{
+  const db = use();
+  const result = await core.updateCard.handler(
+    updateInput({
+      card_type: "debit",
+      card_limit: 500,
+      due_day: 10,
+      days_before_due: 10,
+    }),
+    ctx,
+  );
+  errorCode(result, "INVALID_CARD_CONFIGURATION", "patch debit incompatível rejeitado");
+  equal(db.writes.length, 0, "rejeição debit integral");
+  equal(db.tables.cards[0].card_type, "credit", "tipo preservado após rejeição");
+  equal(db.tables.cards[0].card_limit, 5000, "limite preservado após rejeição");
 }
 {
   use(baseTables({ cards: [card({

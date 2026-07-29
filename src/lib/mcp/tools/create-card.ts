@@ -63,7 +63,9 @@ export default defineTool({
     if (
       (credit && input.due_day === undefined) ||
       (!credit &&
-        (input.due_day !== undefined || input.days_before_due !== undefined))
+        (input.card_limit !== undefined && input.card_limit !== null ||
+          input.due_day !== undefined ||
+          input.days_before_due !== undefined))
     ) {
       return mcpError("INVALID_CARD_CONFIGURATION");
     }
@@ -81,7 +83,7 @@ export default defineTool({
         name: input.name,
         card_type: input.card_type,
         color: input.color ?? "#FFA500",
-        card_limit: input.card_limit ?? null,
+        card_limit: credit ? (input.card_limit ?? null) : null,
         opening_day: billing.opening_day,
         closing_day: billing.closing_day,
         due_day: dueDay,

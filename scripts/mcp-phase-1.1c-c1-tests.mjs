@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { mock } from "node:test";
 import { build } from "esbuild";
 import { z } from "zod";
+
+const FIXED_NOW_JULY_28 = new Date("2026-07-29T01:30:00Z");
+const FIXED_NOW_JULY_29 = new Date("2026-07-30T01:30:00Z");
+mock.timers.enable({ apis: ["Date"], now: FIXED_NOW_JULY_28 });
 
 const supabaseMockPlugin = {
   name: "phase-1.1c-c1-supabase-mock",
@@ -393,6 +398,18 @@ const baseInput = {
     truncated.structuredContent.warnings.includes("PERIOD_TRUNCATED_TO_TODAY"),
     "warning de truncamento",
   );
+  mock.timers.setTime(FIXED_NOW_JULY_29.getTime());
+  useDatabase(baseTables({ expenses: [], incomes: [] }));
+  const nextDay = await core.cashflowTool.handler({
+    start_date: "2026-07-01",
+    end_date: "2026-08-05",
+  }, contextFor());
+  equal(
+    nextDay.structuredContent.effective_period.end_date,
+    "2026-07-29",
+    "dia 29 civil em São Paulo sem deslocamento UTC",
+  );
+  mock.timers.setTime(FIXED_NOW_JULY_28.getTime());
   useDatabase(baseTables({ expenses: [], incomes: [] }));
   const future = await core.cashflowTool.handler({
     start_date: "2026-08-01",
@@ -546,6 +563,7 @@ check(
   "bundle contém a tool sem aliases",
 );
 
+mock.timers.reset();
 console.log(
   `Fase MCP 1.1C-C1: ${checks} verificações diretas e de contrato concluídas.`,
 );

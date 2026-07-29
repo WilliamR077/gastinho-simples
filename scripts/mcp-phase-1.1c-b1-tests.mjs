@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { mock } from "node:test";
 import { build } from "esbuild";
 import { z } from "zod";
+
+const FIXED_NOW_JULY_28 = new Date("2026-07-29T01:30:00Z");
+const FIXED_NOW_JULY_29 = new Date("2026-07-30T01:30:00Z");
+mock.timers.enable({ apis: ["Date"], now: FIXED_NOW_JULY_28 });
 
 const supabaseMockPlugin = {
   name: "phase-1.1c-b1-supabase-mock",
@@ -466,6 +471,23 @@ for (const [goalId, expected] of expectedByGoal) {
 }
 
 {
+  mock.timers.setTime(FIXED_NOW_JULY_29.getTime());
+  useDatabase(baseTables());
+  const response = await core.progressTool.handler(
+    { goal_id: id(1), reference_month: "2026-07" },
+    contextFor(userA),
+  );
+  equal(response.structuredContent.elapsed_days, 29, "dia 29: mês atual parcial");
+  equal(response.structuredContent.remaining_days, 2, "dia 29: dias restantes");
+  equal(
+    response.structuredContent.reference_period.effective_period.end_date,
+    "2026-07-29",
+    "dia 29 preservado em America/Sao_Paulo",
+  );
+  mock.timers.setTime(FIXED_NOW_JULY_28.getTime());
+}
+
+{
   useDatabase(baseTables());
   const past = await core.progressTool.handler(
     { goal_id: id(1), reference_month: "2026-06" },
@@ -697,6 +719,7 @@ check(
   "bundle contém as tools",
 );
 
+mock.timers.reset();
 console.log(
   `Fase MCP 1.1C-B1: ${checks} verificações diretas e de contrato concluídas.`,
 );

@@ -7437,7 +7437,7 @@ var create_card_default = defineTool34({
     if (!parsed.success) return mcpError("INVALID_INPUT");
     const input = parsed.data;
     const credit = supportsCredit(input.card_type);
-    if (credit && input.due_day === void 0 || !credit && (input.due_day !== void 0 || input.days_before_due !== void 0)) {
+    if (credit && input.due_day === void 0 || !credit && (input.card_limit !== void 0 && input.card_limit !== null || input.due_day !== void 0 || input.days_before_due !== void 0)) {
       return mcpError("INVALID_CARD_CONFIGURATION");
     }
     const dueDay = credit ? input.due_day : null;
@@ -7449,7 +7449,7 @@ var create_card_default = defineTool34({
       name: input.name,
       card_type: input.card_type,
       color: input.color ?? "#FFA500",
-      card_limit: input.card_limit ?? null,
+      card_limit: credit ? input.card_limit ?? null : null,
       opening_day: billing.opening_day,
       closing_day: billing.closing_day,
       due_day: dueDay,
@@ -7566,7 +7566,7 @@ var update_card_default = defineTool35({
       return mcpError("INVALID_CARD_CONFIGURATION");
     }
     if (!finalCredit) {
-      if (changes.due_day !== void 0 && changes.due_day !== null || changes.days_before_due !== void 0 && changes.days_before_due !== null) {
+      if (changes.card_limit !== void 0 && changes.card_limit !== null || changes.due_day !== void 0 && changes.due_day !== null || changes.days_before_due !== void 0 && changes.days_before_due !== null) {
         return mcpError("INVALID_CARD_CONFIGURATION");
       }
       finalDueDay = null;
@@ -7586,7 +7586,7 @@ var update_card_default = defineTool35({
       name: changes.name ?? before.name,
       card_type: finalType,
       color: changes.color ?? before.color,
-      card_limit: changes.card_limit !== void 0 ? changes.card_limit : before.card_limit,
+      card_limit: finalCredit ? changes.card_limit !== void 0 ? changes.card_limit : before.card_limit : null,
       opening_day: finalOpeningDay,
       closing_day: finalClosingDay,
       due_day: finalDueDay,

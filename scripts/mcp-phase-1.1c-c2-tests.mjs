@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { mock } from "node:test";
 import { build } from "esbuild";
 import { z } from "zod";
+
+const FIXED_NOW_JULY_28 = new Date("2026-07-29T01:30:00Z");
+const FIXED_NOW_JULY_29 = new Date("2026-07-30T01:30:00Z");
+mock.timers.enable({ apis: ["Date"], now: FIXED_NOW_JULY_28 });
 
 const mockPlugin = {
   name: "c2-supabase-mock",
@@ -230,6 +235,19 @@ const crossing = { start_date: "2026-07-01", end_date: "2026-08-31" };
   check(r.content[0].text.includes("não existe vínculo para deduplicação segura") &&
     r.content[0].text.includes("não uma previsão garantida") &&
     r.content[0].text.includes("não representa saldo anterior"), "content autossuficiente");
+}
+
+{
+  mock.timers.setTime(FIXED_NOW_JULY_29.getTime());
+  use(tables());
+  const r = await core.tool.handler(crossing, ctx);
+  equal(r.structuredContent.realized_period.end_date, "2026-07-29", "dia 29: corte realizado");
+  equal(
+    r.structuredContent.future_projection_period.start_date,
+    "2026-07-30",
+    "dia 29: futuro começa no dia civil seguinte",
+  );
+  mock.timers.setTime(FIXED_NOW_JULY_28.getTime());
 }
 
 {
@@ -558,4 +576,5 @@ check(!/service_role|SERVICE_ROLE/u.test(source), "sem service_role");
 check(bundle.includes('name: "get_cashflow_projection"') &&
   !bundle.includes("@/") && !bundle.includes("npm:@/"), "bundle válido");
 
+mock.timers.reset();
 console.log(`Fase MCP 1.1C-C2: ${checks} verificações diretas e de contrato concluídas.`);

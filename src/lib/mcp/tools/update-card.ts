@@ -123,6 +123,8 @@ export default defineTool({
     }
     if (!finalCredit) {
       if (
+        (changes.card_limit !== undefined &&
+          changes.card_limit !== null) ||
         (changes.due_day !== undefined && changes.due_day !== null) ||
         (changes.days_before_due !== undefined &&
           changes.days_before_due !== null)
@@ -157,10 +159,11 @@ export default defineTool({
       name: changes.name ?? before.name,
       card_type: finalType,
       color: changes.color ?? before.color,
-      card_limit:
-        changes.card_limit !== undefined
+      card_limit: finalCredit
+        ? changes.card_limit !== undefined
           ? changes.card_limit
-          : before.card_limit,
+          : before.card_limit
+        : null,
       opening_day: finalOpeningDay,
       closing_day: finalClosingDay,
       due_day: finalDueDay,
