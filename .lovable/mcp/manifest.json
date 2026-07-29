@@ -10419,6 +10419,420 @@
           "additionalProperties": false,
           "$schema": "http://json-schema.org/draft-07/schema#"
         }
+      },
+      {
+        "name": "list_shared_groups",
+        "title": "Listar grupos compartilhados",
+        "description": "Lista grupos compartilhados acessíveis à conta autenticada, incluindo IDs, papel atual, associação, capacidade e updated_at. Não deriva grupos de transações e não altera dados.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "include_inactive": {
+              "type": "boolean"
+            },
+            "include_invite_code": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "shared_group_collection"
+            },
+            "groups": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "color": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "is_active": {
+                    "type": "boolean"
+                  },
+                  "current_user_role": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "owner",
+                          "admin",
+                          "member"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "current_membership_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "is_owner": {
+                    "type": "boolean"
+                  },
+                  "can_manage": {
+                    "type": "boolean"
+                  },
+                  "member_count": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "max_members": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "capacity_remaining": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "created_at": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "updated_at": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "invite_code": {
+                    "type": "string"
+                  },
+                  "warnings": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "GROUP_INACTIVE",
+                        "OWNER_MEMBERSHIP_MISSING",
+                        "GROUP_ROLE_INCONSISTENCY",
+                        "DUPLICATE_MEMBERSHIP_DETECTED",
+                        "GROUP_CAPACITY_INCONSISTENT",
+                        "INVITE_CODE_NOT_AVAILABLE",
+                        "DATA_INCOMPLETE"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "description",
+                  "color",
+                  "is_active",
+                  "current_user_role",
+                  "current_membership_id",
+                  "is_owner",
+                  "can_manage",
+                  "member_count",
+                  "max_members",
+                  "capacity_remaining",
+                  "created_at",
+                  "updated_at",
+                  "warnings"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "returned_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "total_accessible_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "active_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "inactive_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "NO_SHARED_GROUPS",
+                  "DATA_INCOMPLETE"
+                ]
+              }
+            },
+            "data_complete": {
+              "type": "boolean"
+            },
+            "generated_at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "resource_type",
+            "groups",
+            "returned_count",
+            "total_accessible_count",
+            "active_count",
+            "inactive_count",
+            "warnings",
+            "data_complete",
+            "generated_at"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      },
+      {
+        "name": "list_shared_group_members",
+        "title": "Listar membros do grupo compartilhado",
+        "description": "Lista identidades públicas reduzidas dos membros de um grupo acessível. Nunca retorna UUID de usuário, e-mail, proprietário interno ou código de convite e não altera dados.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "group_id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "group_id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "shared_group_member_collection"
+            },
+            "group": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "current_user_role": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "owner",
+                        "admin",
+                        "member"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "is_owner": {
+                  "type": "boolean"
+                },
+                "can_manage": {
+                  "type": "boolean"
+                },
+                "is_active": {
+                  "type": "boolean"
+                },
+                "member_count": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "max_members": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "capacity_remaining": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "updated_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "current_user_role",
+                "is_owner",
+                "can_manage",
+                "is_active",
+                "member_count",
+                "max_members",
+                "capacity_remaining",
+                "updated_at"
+              ],
+              "additionalProperties": false
+            },
+            "members": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "membership_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "display_name": {
+                    "type": "string"
+                  },
+                  "role": {
+                    "$ref": "#/properties/group/properties/current_user_role/anyOf/0"
+                  },
+                  "is_current_user": {
+                    "type": "boolean"
+                  },
+                  "joined_at": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "membership_id",
+                  "display_name",
+                  "role",
+                  "is_current_user",
+                  "joined_at"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "returned_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "GROUP_INACTIVE",
+                  "OWNER_MEMBERSHIP_MISSING",
+                  "GROUP_ROLE_INCONSISTENCY",
+                  "DUPLICATE_MEMBERSHIP_DETECTED",
+                  "MEMBER_PROFILE_INCOMPLETE",
+                  "GROUP_CAPACITY_INCONSISTENT",
+                  "DATA_INCOMPLETE"
+                ]
+              }
+            },
+            "data_complete": {
+              "type": "boolean"
+            },
+            "generated_at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "resource_type",
+            "group",
+            "members",
+            "returned_count",
+            "warnings",
+            "data_complete",
+            "generated_at"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
       }
     ]
   }

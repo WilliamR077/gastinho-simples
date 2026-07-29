@@ -562,8 +562,8 @@ check(
 
 const manifest = JSON.parse(await readFile(".lovable/mcp/manifest.json", "utf8"));
 const tools = manifest.mcp.tools;
-equal(tools.length, 42, "manifest 42 tools");
-equal(tools.filter((tool) => tool.annotations?.readOnlyHint === true).length, 18, "18 read-only");
+equal(tools.length, 44, "manifest 44 tools");
+equal(tools.filter((tool) => tool.annotations?.readOnlyHint === true).length, 20, "20 read-only");
 equal(tools.filter((tool) => tool.annotations?.readOnlyHint === false).length, 24, "24 write");
 for (const [name, destructive] of [
   ["create_goal", false],

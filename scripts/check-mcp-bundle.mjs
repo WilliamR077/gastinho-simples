@@ -59,6 +59,8 @@ assert.match(source, /name:\s*"update_recurring_expense"/u);
 assert.match(source, /name:\s*"update_recurring_income"/u);
 assert.match(source, /name:\s*"delete_recurring_expense"/u);
 assert.match(source, /name:\s*"delete_recurring_income"/u);
+assert.match(source, /name:\s*"list_shared_groups"/u);
+assert.match(source, /name:\s*"list_shared_group_members"/u);
 assert.match(source, /Deno\.serve/u);
 
 console.log("Bundle MCP autocontido e sem caminhos absolutos.");

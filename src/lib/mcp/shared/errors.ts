@@ -25,6 +25,7 @@ export const MCP_ERROR_CODES = {
   CATEGORY_NOT_FOUND: "CATEGORY_NOT_FOUND",
   CARD_NOT_FOUND: "CARD_NOT_FOUND",
   BUSINESS_RULE_VIOLATION: "BUSINESS_RULE_VIOLATION",
+  READ_FAILED: "READ_FAILED",
   WRITE_FAILED: "WRITE_FAILED",
   INVALID_CARD_TYPE: "INVALID_CARD_TYPE",
   INVALID_CARD_CONFIGURATION: "INVALID_CARD_CONFIGURATION",
@@ -75,6 +76,7 @@ const MESSAGES: Record<McpErrorCode, string> = {
   CATEGORY_NOT_FOUND: "Categoria não encontrada para a conta autenticada.",
   CARD_NOT_FOUND: "Cartão não encontrado para a conta autenticada.",
   BUSINESS_RULE_VIOLATION: "A operação viola uma regra do lançamento.",
+  READ_FAILED: "Não foi possível concluir a consulta solicitada.",
   WRITE_FAILED: "Não foi possível concluir a operação de escrita.",
   INVALID_CARD_TYPE: "Tipo de cartão inválido. Use credit, debit ou both.",
   INVALID_CARD_CONFIGURATION:

@@ -564,8 +564,8 @@ for (const table of ["expenses", "incomes"]) {
 }
 
 const tools = manifest.mcp.tools;
-equal(tools.length, 42, "manifest com 42 tools");
-equal(tools.filter((t) => t.annotations?.readOnlyHint === true).length, 18, "18 read-only");
+equal(tools.length, 44, "manifest com 44 tools");
+equal(tools.filter((t) => t.annotations?.readOnlyHint === true).length, 20, "20 read-only");
 equal(tools.filter((t) => t.annotations?.readOnlyHint !== true).length, 24, "24 write");
 const declared = tools.find((t) => t.name === "get_cashflow_projection");
 check(declared?.annotations?.readOnlyHint === true, "tool read-only");

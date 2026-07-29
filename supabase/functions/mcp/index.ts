@@ -46,6 +46,7 @@ var MESSAGES = {
   CATEGORY_NOT_FOUND: "Categoria n\xE3o encontrada para a conta autenticada.",
   CARD_NOT_FOUND: "Cart\xE3o n\xE3o encontrado para a conta autenticada.",
   BUSINESS_RULE_VIOLATION: "A opera\xE7\xE3o viola uma regra do lan\xE7amento.",
+  READ_FAILED: "N\xE3o foi poss\xEDvel concluir a consulta solicitada.",
   WRITE_FAILED: "N\xE3o foi poss\xEDvel concluir a opera\xE7\xE3o de escrita.",
   INVALID_CARD_TYPE: "Tipo de cart\xE3o inv\xE1lido. Use credit, debit ou both.",
   INVALID_CARD_CONFIGURATION: "A configura\xE7\xE3o do cart\xE3o \xE9 inv\xE1lida para o tipo informado.",
@@ -4972,7 +4973,7 @@ var get_goal_progress_default = defineTool18({
     if ((goalRow.type === "category" || goalRow.type === "income_category") && transactionCount === 0) {
       warnings.push("CATEGORY_NOT_FOUND");
     }
-    const uniqueWarnings = [...new Set(warnings)];
+    const uniqueWarnings2 = [...new Set(warnings)];
     const actualMetrics = goalMetrics(actualValue, Number(goalRow.limit_amount));
     let recurringProjectedValue = null;
     let projectedValue = null;
@@ -5077,7 +5078,7 @@ var get_goal_progress_default = defineTool18({
       elapsed_days: reference.elapsed_days,
       remaining_days: reference.remaining_days,
       transaction_count: transactionCount,
-      warnings: uniqueWarnings,
+      warnings: uniqueWarnings2,
       projection_mode: projectionMode,
       recurring_projected_value: recurringProjectedValue,
       projected_value: projectedValue,
@@ -5092,7 +5093,7 @@ var get_goal_progress_default = defineTool18({
       content: [
         {
           type: "text",
-          text: `Meta mensal: type=${goalRow.type}; category_reference=${goalRow.category ?? "null"}; reference_month=${input.reference_month ?? reference.requested_period.start_date.slice(0, 7)}; requested_period=${JSON.stringify(reference.requested_period)}; effective_period=${JSON.stringify(reference.effective_period)}. Valor realizado=${actualMetrics.actual_value}; alvo=${actualMetrics.target_value}; percentual=${actualMetrics.actual_percentage ?? "null"}; restante=${actualMetrics.actual_remaining}; excesso=${actualMetrics.actual_excess}; dire\xE7\xE3o=${goalDirection(goalRow.type)}; transaction_count=${transactionCount}; dias decorridos=${reference.elapsed_days}; dias restantes=${reference.remaining_days}. ${projectionText}warnings=${JSON.stringify(uniqueWarnings)}. Estas s\xE3o metas ou limites mensais, n\xE3o contas de investimento, contribui\xE7\xF5es acumuladas ou metas de poupan\xE7a com prazo.`
+          text: `Meta mensal: type=${goalRow.type}; category_reference=${goalRow.category ?? "null"}; reference_month=${input.reference_month ?? reference.requested_period.start_date.slice(0, 7)}; requested_period=${JSON.stringify(reference.requested_period)}; effective_period=${JSON.stringify(reference.effective_period)}. Valor realizado=${actualMetrics.actual_value}; alvo=${actualMetrics.target_value}; percentual=${actualMetrics.actual_percentage ?? "null"}; restante=${actualMetrics.actual_remaining}; excesso=${actualMetrics.actual_excess}; dire\xE7\xE3o=${goalDirection(goalRow.type)}; transaction_count=${transactionCount}; dias decorridos=${reference.elapsed_days}; dias restantes=${reference.remaining_days}. ${projectionText}warnings=${JSON.stringify(uniqueWarnings2)}. Estas s\xE3o metas ou limites mensais, n\xE3o contas de investimento, contribui\xE7\xF5es acumuladas ou metas de poupan\xE7a com prazo.`
         }
       ],
       structuredContent: result
@@ -8840,13 +8841,463 @@ var delete_expense_category_default = deleteCategoryTool("expense");
 // src/lib/mcp/tools/delete-income-category.ts
 var delete_income_category_default = deleteCategoryTool("income");
 
+// src/lib/mcp/tools/list-shared-groups.ts
+import { defineTool as defineTool39 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z48 } from "npm:zod@^3.25.76";
+
+// src/lib/mcp/shared/shared-group-read.ts
+import { z as z47 } from "npm:zod@^3.25.76";
+var GROUP_ROLES = ["owner", "admin", "member"];
+var SHARED_GROUP_WARNINGS = [
+  "GROUP_INACTIVE",
+  "OWNER_MEMBERSHIP_MISSING",
+  "GROUP_ROLE_INCONSISTENCY",
+  "DUPLICATE_MEMBERSHIP_DETECTED",
+  "GROUP_CAPACITY_INCONSISTENT",
+  "INVITE_CODE_NOT_AVAILABLE",
+  "DATA_INCOMPLETE"
+];
+var SHARED_GROUP_COLLECTION_WARNINGS = [
+  "NO_SHARED_GROUPS",
+  "DATA_INCOMPLETE"
+];
+var SHARED_GROUP_MEMBER_WARNINGS = [
+  "GROUP_INACTIVE",
+  "OWNER_MEMBERSHIP_MISSING",
+  "GROUP_ROLE_INCONSISTENCY",
+  "DUPLICATE_MEMBERSHIP_DETECTED",
+  "MEMBER_PROFILE_INCOMPLETE",
+  "GROUP_CAPACITY_INCONSISTENT",
+  "DATA_INCOMPLETE"
+];
+var MAX_GROUPS = 100;
+var MAX_MEMBERS_PER_GROUP = 100;
+var MAX_MEMBERS_ACROSS_GROUPS = 1e4;
+var groupRoleSchema = z47.enum(GROUP_ROLES);
+var sharedGroupWarningSchema = z47.enum(SHARED_GROUP_WARNINGS);
+var sharedGroupCollectionWarningSchema = z47.enum(
+  SHARED_GROUP_COLLECTION_WARNINGS
+);
+var sharedGroupMemberWarningSchema = z47.enum(
+  SHARED_GROUP_MEMBER_WARNINGS
+);
+var sharedGroupSchema = z47.object({
+  id: z47.string().uuid(),
+  name: z47.string(),
+  description: z47.string().nullable(),
+  color: z47.string().nullable(),
+  is_active: z47.boolean(),
+  current_user_role: groupRoleSchema.nullable(),
+  current_membership_id: z47.string().uuid().nullable(),
+  is_owner: z47.boolean(),
+  can_manage: z47.boolean(),
+  member_count: z47.number().int().nonnegative().nullable(),
+  max_members: z47.number().int().nullable(),
+  capacity_remaining: z47.number().int().nonnegative().nullable(),
+  created_at: z47.string().nullable(),
+  updated_at: z47.string().nullable(),
+  invite_code: z47.string().optional(),
+  warnings: z47.array(sharedGroupWarningSchema)
+}).strict();
+var publicGroupMemberSchema = z47.object({
+  membership_id: z47.string().uuid(),
+  display_name: z47.string(),
+  role: groupRoleSchema,
+  is_current_user: z47.boolean(),
+  joined_at: z47.string().nullable()
+}).strict();
+var sharedGroupSummarySchema = z47.object({
+  id: z47.string().uuid(),
+  name: z47.string(),
+  current_user_role: groupRoleSchema.nullable(),
+  is_owner: z47.boolean(),
+  can_manage: z47.boolean(),
+  is_active: z47.boolean(),
+  member_count: z47.number().int().nonnegative().nullable(),
+  max_members: z47.number().int().nullable(),
+  capacity_remaining: z47.number().int().nonnegative().nullable(),
+  updated_at: z47.string().nullable()
+}).strict();
+var listGroupsInputSchema = z47.object({
+  include_inactive: z47.boolean().optional(),
+  include_invite_code: z47.boolean().optional()
+}).strict();
+var listMembersInputSchema = z47.object({
+  group_id: z47.string().uuid()
+}).strict();
+function uniqueWarnings(warnings) {
+  return [...new Set(warnings)];
+}
+function validRole(value) {
+  return GROUP_ROLES.includes(value);
+}
+function compareMemberships(a, b) {
+  const joinedA = a.joined_at ?? "";
+  const joinedB = b.joined_at ?? "";
+  return joinedA.localeCompare(joinedB) || a.id.localeCompare(b.id);
+}
+function chooseCurrentMembership(rows) {
+  if (rows.length === 0) return null;
+  const privilege = {
+    member: 0,
+    admin: 1,
+    owner: 2
+  };
+  return [...rows].sort(
+    (a, b) => privilege[a.role] - privilege[b.role] || compareMemberships(a, b)
+  )[0];
+}
+function normalizeMaxMembers(raw, memberCount, warnings) {
+  if (raw === null) {
+    return { maxMembers: null, capacityRemaining: null };
+  }
+  if (!Number.isInteger(raw)) {
+    warnings.push("GROUP_CAPACITY_INCONSISTENT", "DATA_INCOMPLETE");
+    return { maxMembers: null, capacityRemaining: null };
+  }
+  if (raw < 0) warnings.push("GROUP_CAPACITY_INCONSISTENT");
+  return {
+    maxMembers: raw,
+    capacityRemaining: memberCount === null ? null : Math.max(raw - memberCount, 0)
+  };
+}
+function inspectGroup(group, memberships, userId, includeInviteCode) {
+  const warnings = [];
+  const rowsByUser = /* @__PURE__ */ new Map();
+  for (const membership of memberships) {
+    const existing = rowsByUser.get(membership.user_id) ?? [];
+    existing.push(membership);
+    rowsByUser.set(membership.user_id, existing);
+  }
+  const duplicateMembership = [...rowsByUser.values()].some(
+    (rows) => rows.length > 1
+  );
+  if (duplicateMembership) warnings.push("DUPLICATE_MEMBERSHIP_DETECTED");
+  const currentRows = rowsByUser.get(userId) ?? [];
+  const currentMembership = chooseCurrentMembership(currentRows);
+  const currentRole = currentMembership && validRole(currentMembership.role) ? currentMembership.role : null;
+  const creatorRows = rowsByUser.get(group.created_by) ?? [];
+  const creatorOwnerRows = creatorRows.filter((row) => row.role === "owner");
+  const ownerUserIds = new Set(
+    memberships.filter((row) => row.role === "owner").map((row) => row.user_id)
+  );
+  const creatorMembershipMissing = group.created_by === userId && currentRows.length === 0;
+  if (creatorMembershipMissing) {
+    warnings.push("OWNER_MEMBERSHIP_MISSING", "DATA_INCOMPLETE");
+  }
+  const ownershipConsistent = creatorOwnerRows.length === 1 && ownerUserIds.size === 1 && !duplicateMembership;
+  if (!ownershipConsistent || group.created_by === userId && currentRole !== "owner" || currentRole === "owner" && group.created_by !== userId) {
+    warnings.push("GROUP_ROLE_INCONSISTENCY", "DATA_INCOMPLETE");
+  }
+  if (group.is_active !== true) warnings.push("GROUP_INACTIVE");
+  if (group.created_at === null || group.updated_at === null || group.is_active === null) {
+    warnings.push("DATA_INCOMPLETE");
+  }
+  const membershipVisible = currentRows.length > 0;
+  const memberCount = membershipVisible ? rowsByUser.size : null;
+  if (!membershipVisible && memberships.length > 0) {
+    warnings.push("DATA_INCOMPLETE");
+  }
+  const capacity = normalizeMaxMembers(
+    group.max_members,
+    memberCount,
+    warnings
+  );
+  const duplicateCurrentMembership = currentRows.length > 1;
+  const canManage = !duplicateCurrentMembership && (currentRole === "owner" || currentRole === "admin");
+  const isOwner = !duplicateCurrentMembership && ownershipConsistent && currentRole === "owner" && group.created_by === userId;
+  const publicGroup = {
+    id: group.id,
+    name: group.name,
+    description: group.description,
+    color: group.color,
+    is_active: group.is_active === true,
+    current_user_role: currentRole,
+    current_membership_id: currentMembership?.id ?? null,
+    is_owner: isOwner,
+    can_manage: canManage,
+    member_count: memberCount,
+    max_members: capacity.maxMembers,
+    capacity_remaining: capacity.capacityRemaining,
+    created_at: group.created_at,
+    updated_at: group.updated_at,
+    warnings: uniqueWarnings(warnings)
+  };
+  if (includeInviteCode) {
+    if (canManage && group.invite_code) {
+      publicGroup.invite_code = group.invite_code;
+    } else {
+      publicGroup.warnings = uniqueWarnings([
+        ...publicGroup.warnings,
+        "INVITE_CODE_NOT_AVAILABLE"
+      ]);
+    }
+  }
+  return publicGroup;
+}
+function groupCapacityText(group) {
+  if (group.member_count === null) return "membros=indispon\xEDvel";
+  if (group.max_members === null) {
+    return `membros=${group.member_count}; capacidade=sem limite configurado`;
+  }
+  return `membros=${group.member_count}/${group.max_members}; vagas_calculadas=${group.capacity_remaining}`;
+}
+function groupsContent(result, includeInactive, includeInviteCode) {
+  const lines = result.groups.map((group, index) => {
+    const invite = includeInviteCode && group.invite_code ? `; invite_code=${group.invite_code}` : "";
+    return `${index + 1}. id=${group.id}; nome=${compactText(group.name, 100)}; ativo=${group.is_active}; papel=${group.current_user_role ?? "indispon\xEDvel"}; membership_id=${group.current_membership_id ?? "indispon\xEDvel"}; is_owner=${group.is_owner}; can_manage=${group.can_manage}; ${groupCapacityText(group)}; updated_at=${group.updated_at ?? "indispon\xEDvel"}${invite}; warnings=${group.warnings.join(",") || "nenhum"}`;
+  });
+  return `Consulta somente leitura; nenhum dado foi alterado. Grupos retornados=${result.returned_count}; grupos acess\xEDveis=${result.total_accessible_count}; ativos=${result.active_count}; inativos=${result.inactive_count}; include_inactive=${includeInactive}; include_invite_code=${includeInviteCode}; data_complete=${result.data_complete}; warnings=${result.warnings.join(",") || "nenhum"}; generated_at=${result.generated_at}.
+` + (lines.join("\n") || "Nenhum grupo compartilhado retornado.");
+}
+function membersContent(result) {
+  const memberLines = result.members.map(
+    (member, index) => `${index + 1}. membership_id=${member.membership_id}; nome=${compactText(member.display_name, 100)}; papel=${member.role}; is_current_user=${member.is_current_user}; joined_at=${member.joined_at ?? "indispon\xEDvel"}`
+  );
+  return `Consulta somente leitura; nenhum dado foi alterado. Grupo=${compactText(result.group.name, 100)}; group_id=${result.group.id}; papel_atual=${result.group.current_user_role ?? "indispon\xEDvel"}; is_owner=${result.group.is_owner}; can_manage=${result.group.can_manage}; ativo=${result.group.is_active}; membros=${result.group.member_count ?? "indispon\xEDvel"}; max_members=${result.group.max_members ?? "sem limite configurado"}; updated_at=${result.group.updated_at ?? "indispon\xEDvel"}; retornados=${result.returned_count}; data_complete=${result.data_complete}; warnings=${result.warnings.join(",") || "nenhum"}; generated_at=${result.generated_at}.
+` + (memberLines.join("\n") || "Nenhum membro p\xF4de ser listado.");
+}
+async function listSharedGroups(rawInput, ctx) {
+  const parsed = listGroupsInputSchema.safeParse(rawInput);
+  if (!parsed.success) return mcpError("INVALID_INPUT");
+  const userId = ctx.getUserId();
+  if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
+  const includeInactive = parsed.data.include_inactive ?? false;
+  const includeInviteCode = parsed.data.include_invite_code ?? false;
+  try {
+    const supabase = supabaseForUser(ctx);
+    const groupColumns = "id,name,description,color,created_by,is_active,max_members,created_at,updated_at" + (includeInviteCode ? ",invite_code" : "");
+    const { data: groupData, error: groupError } = await supabase.from("shared_groups").select(groupColumns).limit(MAX_GROUPS + 1);
+    if (groupError) return mcpError("READ_FAILED");
+    const groups = groupData ?? [];
+    if (groups.length > MAX_GROUPS) return mcpError("RESULT_SET_TOO_LARGE");
+    const groupIds = groups.map((group) => group.id);
+    let memberships = [];
+    if (groupIds.length > 0) {
+      const { data, error } = await supabase.from("shared_group_members").select("id,group_id,user_id,role,joined_at").in("group_id", groupIds).limit(MAX_MEMBERS_ACROSS_GROUPS + 1);
+      if (error) return mcpError("READ_FAILED");
+      memberships = data ?? [];
+      if (memberships.length > MAX_MEMBERS_ACROSS_GROUPS) {
+        return mcpError("RESULT_SET_TOO_LARGE");
+      }
+    }
+    const membershipsByGroup = /* @__PURE__ */ new Map();
+    for (const membership of memberships) {
+      const current = membershipsByGroup.get(membership.group_id) ?? [];
+      current.push(membership);
+      membershipsByGroup.set(membership.group_id, current);
+    }
+    const resolved = groups.map(
+      (group) => inspectGroup(
+        group,
+        membershipsByGroup.get(group.id) ?? [],
+        userId,
+        includeInviteCode
+      )
+    ).sort(
+      (a, b) => Number(b.is_active) - Number(a.is_active) || a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" }) || a.id.localeCompare(b.id)
+    );
+    const returnedGroups = includeInactive ? resolved : resolved.filter((group) => group.is_active);
+    const activeCount = resolved.filter((group) => group.is_active).length;
+    const inactiveCount = resolved.length - activeCount;
+    const collectionWarnings = [];
+    if (resolved.length === 0) collectionWarnings.push("NO_SHARED_GROUPS");
+    const dataComplete = resolved.every(
+      (group) => !group.warnings.includes("DATA_INCOMPLETE")
+    );
+    if (!dataComplete) collectionWarnings.push("DATA_INCOMPLETE");
+    const result = {
+      resource_type: "shared_group_collection",
+      groups: returnedGroups,
+      returned_count: returnedGroups.length,
+      total_accessible_count: resolved.length,
+      active_count: activeCount,
+      inactive_count: inactiveCount,
+      warnings: uniqueWarnings(collectionWarnings),
+      data_complete: dataComplete,
+      generated_at: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    return {
+      content: [
+        {
+          type: "text",
+          text: groupsContent(
+            result,
+            includeInactive,
+            includeInviteCode
+          )
+        }
+      ],
+      structuredContent: result
+    };
+  } catch {
+    return mcpError("READ_FAILED");
+  }
+}
+async function listSharedGroupMembers(rawInput, ctx) {
+  const parsed = listMembersInputSchema.safeParse(rawInput);
+  if (!parsed.success) return mcpError("INVALID_INPUT");
+  const userId = ctx.getUserId();
+  if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
+  try {
+    const supabase = supabaseForUser(ctx);
+    const { data: groupData, error: groupError } = await supabase.from("shared_groups").select(
+      "id,name,description,color,created_by,is_active,max_members,created_at,updated_at"
+    ).eq("id", parsed.data.group_id).maybeSingle();
+    if (groupError) return mcpError("READ_FAILED");
+    if (!groupData) return mcpError("RESOURCE_NOT_FOUND");
+    const group = groupData;
+    const { data: membershipData, error: membershipError } = await supabase.from("shared_group_members").select("id,group_id,user_id,role,joined_at").eq("group_id", group.id).limit(MAX_MEMBERS_PER_GROUP + 1);
+    if (membershipError) return mcpError("READ_FAILED");
+    const memberships = membershipData ?? [];
+    if (memberships.length > MAX_MEMBERS_PER_GROUP) {
+      return mcpError("RESULT_SET_TOO_LARGE");
+    }
+    const inspected = inspectGroup(
+      group,
+      memberships,
+      userId,
+      false
+    );
+    const rowsByUser = /* @__PURE__ */ new Map();
+    for (const membership of memberships) {
+      const current = rowsByUser.get(membership.user_id) ?? [];
+      current.push(membership);
+      rowsByUser.set(membership.user_id, current);
+    }
+    const deduplicated = [...rowsByUser.values()].map((rows) => [...rows].sort(compareMemberships)[0]).sort(compareMemberships);
+    const userIds = deduplicated.map((membership) => membership.user_id);
+    let profiles = [];
+    if (userIds.length > 0) {
+      const { data, error } = await supabase.from("profiles").select("user_id,display_name").in("user_id", userIds).limit(MAX_MEMBERS_PER_GROUP);
+      if (error) return mcpError("READ_FAILED");
+      profiles = data ?? [];
+    }
+    const profileByUser = new Map(
+      profiles.map((profile) => [profile.user_id, profile.display_name])
+    );
+    const warnings = inspected.warnings.filter(
+      (warning) => SHARED_GROUP_MEMBER_WARNINGS.includes(
+        warning
+      )
+    );
+    const members = deduplicated.map((membership) => {
+      const displayName = profileByUser.get(membership.user_id)?.trim();
+      if (!displayName) warnings.push("MEMBER_PROFILE_INCOMPLETE");
+      return {
+        membership_id: membership.id,
+        display_name: displayName || "Membro",
+        role: membership.role,
+        is_current_user: membership.user_id === userId,
+        joined_at: membership.joined_at
+      };
+    });
+    if (memberships.length !== deduplicated.length) {
+      warnings.push("DUPLICATE_MEMBERSHIP_DETECTED", "DATA_INCOMPLETE");
+    }
+    if (members.some((member) => member.joined_at === null) || inspected.updated_at === null) {
+      warnings.push("DATA_INCOMPLETE");
+    }
+    const finalWarnings = uniqueWarnings(warnings);
+    const dataComplete = !finalWarnings.includes("DATA_INCOMPLETE");
+    const result = {
+      resource_type: "shared_group_member_collection",
+      group: {
+        id: inspected.id,
+        name: inspected.name,
+        current_user_role: inspected.current_user_role,
+        is_owner: inspected.is_owner,
+        can_manage: inspected.can_manage,
+        is_active: inspected.is_active,
+        member_count: inspected.member_count,
+        max_members: inspected.max_members,
+        capacity_remaining: inspected.capacity_remaining,
+        updated_at: inspected.updated_at
+      },
+      members,
+      returned_count: members.length,
+      warnings: finalWarnings,
+      data_complete: dataComplete,
+      generated_at: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    return {
+      content: [
+        {
+          type: "text",
+          text: membersContent(result)
+        }
+      ],
+      structuredContent: result
+    };
+  } catch {
+    return mcpError("READ_FAILED");
+  }
+}
+
+// src/lib/mcp/tools/list-shared-groups.ts
+var list_shared_groups_default = defineTool39({
+  name: "list_shared_groups",
+  title: "Listar grupos compartilhados",
+  description: "Lista grupos compartilhados acess\xEDveis \xE0 conta autenticada, incluindo IDs, papel atual, associa\xE7\xE3o, capacidade e updated_at. N\xE3o deriva grupos de transa\xE7\xF5es e n\xE3o altera dados.",
+  inputSchema: {
+    include_inactive: z48.boolean().optional(),
+    include_invite_code: z48.boolean().optional()
+  },
+  outputSchema: {
+    resource_type: z48.literal("shared_group_collection"),
+    groups: z48.array(sharedGroupSchema),
+    returned_count: z48.number().int().nonnegative(),
+    total_accessible_count: z48.number().int().nonnegative(),
+    active_count: z48.number().int().nonnegative(),
+    inactive_count: z48.number().int().nonnegative(),
+    warnings: z48.array(sharedGroupCollectionWarningSchema),
+    data_complete: z48.boolean(),
+    generated_at: z48.string().datetime()
+  },
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false
+  },
+  handler: listSharedGroups
+});
+
+// src/lib/mcp/tools/list-shared-group-members.ts
+import { defineTool as defineTool40 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z49 } from "npm:zod@^3.25.76";
+var list_shared_group_members_default = defineTool40({
+  name: "list_shared_group_members",
+  title: "Listar membros do grupo compartilhado",
+  description: "Lista identidades p\xFAblicas reduzidas dos membros de um grupo acess\xEDvel. Nunca retorna UUID de usu\xE1rio, e-mail, propriet\xE1rio interno ou c\xF3digo de convite e n\xE3o altera dados.",
+  inputSchema: {
+    group_id: z49.string().uuid()
+  },
+  outputSchema: {
+    resource_type: z49.literal("shared_group_member_collection"),
+    group: sharedGroupSummarySchema,
+    members: z49.array(publicGroupMemberSchema),
+    returned_count: z49.number().int().nonnegative(),
+    warnings: z49.array(sharedGroupMemberWarningSchema),
+    data_complete: z49.boolean(),
+    generated_at: z49.string().datetime()
+  },
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false
+  },
+  handler: listSharedGroupMembers
+});
+
 // src/lib/mcp/index.ts
 var projectRef = "jaoldaqvbdllowepzwbr";
 var mcp_default = defineMcp({
   name: "gastinho-simples-mcp",
   title: "Gastinho Simples",
   version: "0.1.0",
-  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Antes de update_expense, update_income, delete_expense ou delete_income, localize o lan\xE7amento com search_transactions, list_expenses ou list_incomes e reutilize exatamente o updated_at retornado como expected_updated_at. Exclus\xF5es s\xE3o definitivas, sempre exigem confirm_delete=true e, para parcelas, confirma\xE7\xE3o espec\xEDfica; elas removem somente a linha selecionada, nunca a s\xE9rie inteira. Nunca tente editar ou excluir recurso de outro propriet\xE1rio nem afirmar que uma s\xE9rie inteira foi alterada. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para lan\xE7amentos reais, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. get_cashflow_series representa somente realizado. get_cashflow_projection separa realizado, futuro materializado e templates recorrentes; futuro materializado s\xE3o linhas reais com data futura, recorr\xEAncias s\xE3o apenas templates, e a soma combinada pode conter sobreposi\xE7\xE3o. Ela n\xE3o representa saldo banc\xE1rio nem previs\xE3o garantida. Para templates isolados use get_recurring_forecast; para parcelas futuras j\xE1 materializadas use get_card_installments. Use list_cards para localizar o cart\xE3o e obter updated_at antes de update_card ou delete_card; delete_card exige confirma\xE7\xE3o, cart\xE3o inativo e aus\xEAncia total de despesas, parcelas ou templates vinculados. Use get_card_summary para o total registrado no per\xEDodo calculado. Recorr\xEAncias s\xE3o templates mensais: use list_recurring_transactions para list\xE1-las e get_recurring_forecast apenas para proje\xE7\xF5es baseadas nesses templates. Metas tamb\xE9m s\xE3o mensais: use list_goals para localizar uma meta e obter updated_at antes de update_goal ou delete_goal; delete_goal exige confirm_delete=true. create_goal, update_goal e delete_goal n\xE3o criam nem alteram transa\xE7\xF5es e n\xE3o representam investimento ou poupan\xE7a acumulada. Use get_goal_progress para o progresso calculado. Mantenha realizado e recorrente separados, informe o risco de sobreposi\xE7\xE3o da proje\xE7\xE3o quando houver templates participantes e n\xE3o gere recomenda\xE7\xE3o financeira. Use get_category_usage somente para fatos hist\xF3ricos sobre categorias pessoais: categorias compartilhadas n\xE3o existem no modelo atual e transa\xE7\xF5es compartilhadas de outros propriet\xE1rios n\xE3o entram. O forecast n\xE3o representa transa\xE7\xF5es efetivamente lan\xE7adas e nunca deve ser somado automaticamente a parcelas ou lan\xE7amentos futuros. Nunca chame resultados de saldo banc\xE1rio, limite real dispon\xEDvel ou fatura oficialmente paga/em aberto. Use list_categories para obter UUID e updated_at; informe include_inactive=true ao localizar uma categoria inativa antes de update_expense_category ou update_income_category. Desativar ou renomear categoria n\xE3o altera transa\xE7\xF5es, recorr\xEAncias, parcelas ou metas vinculadas. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
+  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Use list_shared_groups para descobrir grupos, group_id, papel atual, membership_id e updated_at; use list_shared_group_members para identidades p\xFAblicas reduzidas dos membros. Nunca invente group_id, exponha e-mail/UUID de usu\xE1rio nem trate grupos como contas banc\xE1rias. Antes de update_expense, update_income, delete_expense ou delete_income, localize o lan\xE7amento com search_transactions, list_expenses ou list_incomes e reutilize exatamente o updated_at retornado como expected_updated_at. Exclus\xF5es s\xE3o definitivas, sempre exigem confirm_delete=true e, para parcelas, confirma\xE7\xE3o espec\xEDfica; elas removem somente a linha selecionada, nunca a s\xE9rie inteira. Nunca tente editar ou excluir recurso de outro propriet\xE1rio nem afirmar que uma s\xE9rie inteira foi alterada. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para lan\xE7amentos reais, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. get_cashflow_series representa somente realizado. get_cashflow_projection separa realizado, futuro materializado e templates recorrentes; futuro materializado s\xE3o linhas reais com data futura, recorr\xEAncias s\xE3o apenas templates, e a soma combinada pode conter sobreposi\xE7\xE3o. Ela n\xE3o representa saldo banc\xE1rio nem previs\xE3o garantida. Para templates isolados use get_recurring_forecast; para parcelas futuras j\xE1 materializadas use get_card_installments. Use list_cards para localizar o cart\xE3o e obter updated_at antes de update_card ou delete_card; delete_card exige confirma\xE7\xE3o, cart\xE3o inativo e aus\xEAncia total de despesas, parcelas ou templates vinculados. Use get_card_summary para o total registrado no per\xEDodo calculado. Recorr\xEAncias s\xE3o templates mensais: use list_recurring_transactions para list\xE1-las e get_recurring_forecast apenas para proje\xE7\xF5es baseadas nesses templates. Metas tamb\xE9m s\xE3o mensais: use list_goals para localizar uma meta e obter updated_at antes de update_goal ou delete_goal; delete_goal exige confirm_delete=true. create_goal, update_goal e delete_goal n\xE3o criam nem alteram transa\xE7\xF5es e n\xE3o representam investimento ou poupan\xE7a acumulada. Use get_goal_progress para o progresso calculado. Mantenha realizado e recorrente separados, informe o risco de sobreposi\xE7\xE3o da proje\xE7\xE3o quando houver templates participantes e n\xE3o gere recomenda\xE7\xE3o financeira. Use get_category_usage somente para fatos hist\xF3ricos sobre categorias pessoais: categorias compartilhadas n\xE3o existem no modelo atual e transa\xE7\xF5es compartilhadas de outros propriet\xE1rios n\xE3o entram. O forecast n\xE3o representa transa\xE7\xF5es efetivamente lan\xE7adas e nunca deve ser somado automaticamente a parcelas ou lan\xE7amentos futuros. Nunca chame resultados de saldo banc\xE1rio, limite real dispon\xEDvel ou fatura oficialmente paga/em aberto. Use list_categories para obter UUID e updated_at; informe include_inactive=true ao localizar uma categoria inativa antes de update_expense_category ou update_income_category. Desativar ou renomear categoria n\xE3o altera transa\xE7\xF5es, recorr\xEAncias, parcelas ou metas vinculadas. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
@@ -8893,7 +9344,9 @@ var mcp_default = defineMcp({
     create_income_category_default,
     update_income_category_default,
     delete_expense_category_default,
-    delete_income_category_default
+    delete_income_category_default,
+    list_shared_groups_default,
+    list_shared_group_members_default
   ]
 });
 
