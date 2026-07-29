@@ -6,6 +6,7 @@ import {
   type GoalRow,
   type GoalType,
 } from "./goals";
+import { supabaseForUser } from "./supabase-client";
 import { expectedUpdatedAtSchema } from "./transaction-update";
 
 export const EXPENSE_GOAL_CATEGORIES = [
@@ -34,6 +35,107 @@ export const EXPENSE_GOAL_CATEGORY_NAMES: Record<
   servicos: "Serviços",
   outros: "Outros",
 };
+
+type ExpenseGoalCategory = {
+  id: string;
+  name: string;
+};
+
+export type ExpenseGoalCategoryResolution =
+  | {
+      status: "found";
+      category: ExpenseGoalCategory;
+      reference: string;
+      reference_kind: "uuid" | "legacy";
+    }
+  | { status: "not_found" }
+  | { status: "error" };
+
+export function expenseCategoryGoalReference(categoryId: string): string {
+  return categoryId;
+}
+
+export function expenseGoalLegacyReferences(categoryName: string): string[] {
+  return Object.entries(EXPENSE_GOAL_CATEGORY_NAMES)
+    .filter(([, name]) => name === categoryName)
+    .map(([reference]) => reference);
+}
+
+export function expenseGoalReferenceMatchesCategory(
+  reference: unknown,
+  category: ExpenseGoalCategory,
+): boolean {
+  if (typeof reference !== "string") return false;
+  const uuid = z.string().uuid().safeParse(reference);
+  if (uuid.success) {
+    return uuid.data.toLowerCase() === category.id.toLowerCase();
+  }
+  return expenseGoalLegacyReferences(category.name).includes(reference);
+}
+
+export function expenseGoalReferenceDependsOnName(
+  reference: unknown,
+  category: ExpenseGoalCategory,
+): boolean {
+  return (
+    typeof reference === "string" &&
+    !z.string().uuid().safeParse(reference).success &&
+    expenseGoalLegacyReferences(category.name).includes(reference)
+  );
+}
+
+export async function resolveExpenseGoalCategoryReference(
+  supabase: ReturnType<typeof supabaseForUser>,
+  userId: string,
+  reference: string,
+): Promise<ExpenseGoalCategoryResolution> {
+  const uuid = z.string().uuid().safeParse(reference);
+  if (uuid.success) {
+    const result = await supabase
+      .from("user_categories")
+      .select("id,name")
+      .eq("id", uuid.data)
+      .eq("user_id", userId)
+      .eq("is_active", true)
+      .maybeSingle();
+    if (result.error) return { status: "error" };
+    if (!result.data) return { status: "not_found" };
+    return {
+      status: "found",
+      category: { id: result.data.id, name: result.data.name },
+      reference: expenseCategoryGoalReference(result.data.id),
+      reference_kind: "uuid",
+    };
+  }
+
+  if (
+    !EXPENSE_GOAL_CATEGORIES.includes(
+      reference as (typeof EXPENSE_GOAL_CATEGORIES)[number],
+    )
+  ) {
+    return { status: "not_found" };
+  }
+  const result = await supabase
+    .from("user_categories")
+    .select("id,name")
+    .eq("user_id", userId)
+    .eq(
+      "name",
+      EXPENSE_GOAL_CATEGORY_NAMES[
+        reference as (typeof EXPENSE_GOAL_CATEGORIES)[number]
+      ],
+    )
+    .eq("is_active", true)
+    .maybeSingle();
+  if (result.error) return { status: "error" };
+  if (!result.data) return { status: "not_found" };
+  return {
+    status: "found",
+    category: { id: result.data.id, name: result.data.name },
+    reference,
+    reference_kind: "legacy",
+  };
+}
 
 export const GOAL_WRITE_WARNINGS = [
   "MONTHLY_GOAL_ONLY",
@@ -140,9 +242,12 @@ function describeGoal(goal: GoalWriteView): string {
 export function createGoalContent(result: {
   goal: GoalWriteView;
   warnings: GoalWriteWarning[];
-}): string {
+}, categoryName?: string): string {
   return (
     `Foi criada a meta ou limite mensal: ${describeGoal(result.goal)}; ` +
+    (categoryName
+      ? `referência armazenada=${JSON.stringify(result.goal.category_reference)}; nome atual da categoria=${JSON.stringify(categoryName)}; `
+      : "") +
     `created_at=${result.goal.created_at}; updated_at=${result.goal.updated_at}; ` +
     `warnings=${JSON.stringify(result.warnings)}. ` +
     "Nenhuma despesa, receita ou template recorrente foi criado ou alterado. " +

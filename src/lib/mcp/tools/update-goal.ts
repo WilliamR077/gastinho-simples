@@ -2,14 +2,13 @@ import { defineTool } from "@lovable.dev/mcp-js";
 import { z } from "zod";
 import { mcpError } from "../shared/errors";
 import {
-  EXPENSE_GOAL_CATEGORIES,
-  EXPENSE_GOAL_CATEGORY_NAMES,
   expectedUpdatedAtSchema,
   goalCategoryKind,
   goalChangesSchema,
   goalViewSchema,
   goalWriteView,
   goalWriteWarningSchema,
+  resolveExpenseGoalCategoryReference,
   updateGoalContent,
   validGoalConfiguration,
   type GoalWriteWarning,
@@ -105,30 +104,20 @@ export default defineTool({
       return mcpError("INVALID_GOAL_CONFIGURATION");
     }
 
-    const categoryChanged = finalCategory !== current.category;
-    if (categoryChanged || (typeChanged && finalKind !== null)) {
+    const categoryNeedsValidation =
+      finalCategory !== current.category || (typeChanged && finalKind !== null);
+    if (categoryNeedsValidation) {
       if (finalKind === "expense") {
-        if (
-          !EXPENSE_GOAL_CATEGORIES.includes(
-            finalCategory as (typeof EXPENSE_GOAL_CATEGORIES)[number],
-          )
-        ) {
+        const resolution = await resolveExpenseGoalCategoryReference(
+          supabase,
+          userId,
+          finalCategory!,
+        );
+        if (resolution.status === "error") return mcpError("INTERNAL_ERROR");
+        if (resolution.status === "not_found") {
           return mcpError("CATEGORY_NOT_FOUND");
         }
-        const categoryResult = await supabase
-          .from("user_categories")
-          .select("id")
-          .eq("user_id", userId)
-          .eq(
-            "name",
-            EXPENSE_GOAL_CATEGORY_NAMES[
-              finalCategory as (typeof EXPENSE_GOAL_CATEGORIES)[number]
-            ],
-          )
-          .eq("is_active", true)
-          .maybeSingle();
-        if (categoryResult.error) return mcpError("INTERNAL_ERROR");
-        if (!categoryResult.data) return mcpError("CATEGORY_NOT_FOUND");
+        finalCategory = resolution.reference;
       }
       if (finalKind === "income") {
         const parsedCategory = z.string().uuid().safeParse(finalCategory);
@@ -142,9 +131,11 @@ export default defineTool({
           .maybeSingle();
         if (categoryResult.error) return mcpError("INTERNAL_ERROR");
         if (!categoryResult.data) return mcpError("CATEGORY_NOT_FOUND");
+        finalCategory = categoryResult.data.id;
       }
     }
 
+    const categoryChanged = finalCategory !== current.category;
     const patch: Record<string, unknown> = {};
     const changedFields: ChangeField[] = [];
     if (typeChanged) {

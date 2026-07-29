@@ -50,6 +50,7 @@ export default defineTool({
     if (error) return mcpError("INTERNAL_ERROR");
     const categories = (data ?? []).map((row) => ({
       id: row.id,
+      ...(kind === "expense" ? { goal_reference: row.id } : {}),
       name: row.name,
       icon: row.icon,
       color: row.color,

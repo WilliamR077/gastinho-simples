@@ -997,52 +997,105 @@
             "categories": {
               "type": "array",
               "items": {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "format": "uuid"
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "icon": {
+                        "type": "string"
+                      },
+                      "color": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "is_default": {
+                        "type": "boolean"
+                      },
+                      "is_active": {
+                        "type": "boolean"
+                      },
+                      "display_order": {
+                        "type": "integer"
+                      },
+                      "created_at": {
+                        "type": "string"
+                      },
+                      "updated_at": {
+                        "type": "string"
+                      },
+                      "goal_reference": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "icon",
+                      "color",
+                      "is_default",
+                      "is_active",
+                      "display_order",
+                      "created_at",
+                      "updated_at",
+                      "goal_reference"
+                    ],
+                    "additionalProperties": false
                   },
-                  "name": {
-                    "type": "string"
-                  },
-                  "icon": {
-                    "type": "string"
-                  },
-                  "color": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
-                  "is_default": {
-                    "type": "boolean"
-                  },
-                  "is_active": {
-                    "type": "boolean"
-                  },
-                  "display_order": {
-                    "type": "integer"
-                  },
-                  "created_at": {
-                    "type": "string"
-                  },
-                  "updated_at": {
-                    "type": "string"
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "$ref": "#/properties/categories/items/anyOf/0/properties/id"
+                      },
+                      "name": {
+                        "$ref": "#/properties/categories/items/anyOf/0/properties/name"
+                      },
+                      "icon": {
+                        "$ref": "#/properties/categories/items/anyOf/0/properties/icon"
+                      },
+                      "color": {
+                        "$ref": "#/properties/categories/items/anyOf/0/properties/color"
+                      },
+                      "is_default": {
+                        "$ref": "#/properties/categories/items/anyOf/0/properties/is_default"
+                      },
+                      "is_active": {
+                        "$ref": "#/properties/categories/items/anyOf/0/properties/is_active"
+                      },
+                      "display_order": {
+                        "$ref": "#/properties/categories/items/anyOf/0/properties/display_order"
+                      },
+                      "created_at": {
+                        "$ref": "#/properties/categories/items/anyOf/0/properties/created_at"
+                      },
+                      "updated_at": {
+                        "$ref": "#/properties/categories/items/anyOf/0/properties/updated_at"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "icon",
+                      "color",
+                      "is_default",
+                      "is_active",
+                      "display_order",
+                      "created_at",
+                      "updated_at"
+                    ],
+                    "additionalProperties": false
                   }
-                },
-                "required": [
-                  "id",
-                  "name",
-                  "icon",
-                  "color",
-                  "is_default",
-                  "is_active",
-                  "display_order",
-                  "created_at",
-                  "updated_at"
-                ],
-                "additionalProperties": false
+                ]
               }
             },
             "data_complete": {
@@ -9046,6 +9099,10 @@
                 },
                 "updated_at": {
                   "type": "string"
+                },
+                "goal_reference": {
+                  "type": "string",
+                  "format": "uuid"
                 }
               },
               "required": [
@@ -9057,7 +9114,8 @@
                 "is_active",
                 "display_order",
                 "created_at",
-                "updated_at"
+                "updated_at",
+                "goal_reference"
               ],
               "additionalProperties": false
             },
@@ -9277,6 +9335,10 @@
                 },
                 "updated_at": {
                   "type": "string"
+                },
+                "goal_reference": {
+                  "type": "string",
+                  "format": "uuid"
                 }
               },
               "required": [
@@ -9288,7 +9350,8 @@
                 "is_active",
                 "display_order",
                 "created_at",
-                "updated_at"
+                "updated_at",
+                "goal_reference"
               ],
               "additionalProperties": false
             },

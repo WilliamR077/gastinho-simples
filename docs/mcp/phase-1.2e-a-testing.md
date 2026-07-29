@@ -12,6 +12,11 @@ A fase adiciona quatro operações pessoais:
 `list_categories` passa a expor `updated_at` e aceita
 `include_inactive`, mantendo `false` como padrão.
 
+Categorias de despesa também expõem `goal_reference`. A referência canônica é
+o UUID pessoal da categoria e pode ser copiada diretamente para
+`create_goal.category`. Os nove slugs históricos usados pelo frontend
+(`alimentacao`, `saude` etc.) continuam aceitos e não são reescritos.
+
 ## Contratos reais
 
 Criação aceita `name` e `icon` opcional. Os demais valores são definidos pelo
@@ -31,8 +36,9 @@ mesmo `RESOURCE_NOT_FOUND`.
 
 Desativação preserva transações, parcelas, recorrências e metas. A categoria
 `Outros`, usada como fallback do aplicativo, não pode ser editada. Renomear uma
-categoria de despesa referenciada por uma meta textual é bloqueado para não
-invalidar silenciosamente a meta.
+categoria de despesa só é bloqueado quando existe meta legada vinculada ao slug
+dependente do nome. Metas novas vinculadas pelo UUID preservam a referência e
+não impedem a alteração do nome.
 
 ## Execução
 

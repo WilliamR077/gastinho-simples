@@ -2,8 +2,6 @@ import { defineTool } from "@lovable.dev/mcp-js";
 import { z } from "zod";
 import { mcpError } from "../shared/errors";
 import {
-  EXPENSE_GOAL_CATEGORIES,
-  EXPENSE_GOAL_CATEGORY_NAMES,
   createGoalContent,
   goalAmountSchema,
   goalCategoryKind,
@@ -11,6 +9,7 @@ import {
   goalTypeSchema,
   goalViewSchema,
   goalWriteView,
+  resolveExpenseGoalCategoryReference,
   validGoalConfiguration,
   goalWriteWarningSchema,
   type GoalWriteWarning,
@@ -54,8 +53,8 @@ export default defineTool({
     const parsed = inputValidator.safeParse(rawInput);
     if (!parsed.success) return mcpError("INVALID_INPUT");
     const input = parsed.data;
-    const category = input.category ?? null;
-    if (!validGoalConfiguration(input.type, category)) {
+    let categoryReference = input.category ?? null;
+    if (!validGoalConfiguration(input.type, categoryReference)) {
       return mcpError("INVALID_GOAL_CONFIGURATION");
     }
     const supabase = supabaseForUser(ctx);
@@ -71,40 +70,34 @@ export default defineTool({
     }
 
     const categoryKind = goalCategoryKind(input.type);
+    let categoryName: string | undefined;
     if (categoryKind === "expense") {
-      if (
-        !EXPENSE_GOAL_CATEGORIES.includes(
-          category as (typeof EXPENSE_GOAL_CATEGORIES)[number],
-        )
-      ) {
+      const resolution = await resolveExpenseGoalCategoryReference(
+        supabase,
+        userId,
+        categoryReference!,
+      );
+      if (resolution.status === "error") return mcpError("INTERNAL_ERROR");
+      if (resolution.status === "not_found") {
         return mcpError("CATEGORY_NOT_FOUND");
       }
-      const expenseCategory =
-        EXPENSE_GOAL_CATEGORY_NAMES[
-          category as (typeof EXPENSE_GOAL_CATEGORIES)[number]
-        ];
-      const categoryResult = await supabase
-        .from("user_categories")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("name", expenseCategory)
-        .eq("is_active", true)
-        .maybeSingle();
-      if (categoryResult.error) return mcpError("INTERNAL_ERROR");
-      if (!categoryResult.data) return mcpError("CATEGORY_NOT_FOUND");
+      categoryReference = resolution.reference;
+      categoryName = resolution.category.name;
     }
     if (categoryKind === "income") {
-      const incomeCategoryId = z.string().uuid().safeParse(category);
+      const incomeCategoryId = z.string().uuid().safeParse(categoryReference);
       if (!incomeCategoryId.success) return mcpError("CATEGORY_NOT_FOUND");
       const categoryResult = await supabase
         .from("user_income_categories")
-        .select("id")
+        .select("id,name")
         .eq("id", incomeCategoryId.data)
         .eq("user_id", userId)
         .eq("is_active", true)
         .maybeSingle();
       if (categoryResult.error) return mcpError("INTERNAL_ERROR");
       if (!categoryResult.data) return mcpError("CATEGORY_NOT_FOUND");
+      categoryReference = categoryResult.data.id;
+      categoryName = categoryResult.data.name;
     }
 
     const insertResult = await supabase
@@ -112,7 +105,7 @@ export default defineTool({
       .insert({
         user_id: userId,
         type: input.type,
-        category,
+        category: categoryReference,
         limit_amount: input.limit_amount,
         shared_group_id: input.shared_group_id ?? null,
       })
@@ -122,7 +115,9 @@ export default defineTool({
     const goal = goalWriteView(insertResult.data as GoalRow, userId);
     if (!goal) return mcpError("INVALID_DATA");
     const warnings: GoalWriteWarning[] = ["MONTHLY_GOAL_ONLY"];
-    if (category !== null) warnings.push("CATEGORY_REFERENCE_STORED_AS_TEXT");
+    if (categoryReference !== null) {
+      warnings.push("CATEGORY_REFERENCE_STORED_AS_TEXT");
+    }
     if (goal.is_shared) warnings.push("SHARED_GOAL_CREATED");
     const result = {
       resource_type: "goal" as const,
@@ -133,7 +128,10 @@ export default defineTool({
       data_complete: true as const,
     };
     return {
-      content: [{ type: "text" as const, text: createGoalContent(result) }],
+      content: [{
+        type: "text" as const,
+        text: createGoalContent(result, categoryName),
+      }],
       structuredContent: result,
     };
   },

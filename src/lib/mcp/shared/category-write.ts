@@ -3,7 +3,11 @@ import { z } from "zod";
 import { preserveSqlDate, timestampToSaoPauloCivilDate } from "./cashflow";
 import { todayIso } from "./dates";
 import { mcpError } from "./errors";
-import { EXPENSE_GOAL_CATEGORY_NAMES } from "./goal-write";
+import {
+  expenseCategoryGoalReference,
+  expenseGoalReferenceDependsOnName,
+  expenseGoalReferenceMatchesCategory,
+} from "./goal-write";
 import { supabaseForUser } from "./supabase-client";
 import { expectedUpdatedAtSchema } from "./transaction-update";
 
@@ -44,7 +48,7 @@ const iconSchema = (kind: CategoryKind) =>
     ? z.enum(EXPENSE_CATEGORY_ICONS)
     : z.enum(INCOME_CATEGORY_ICONS);
 
-export const categoryViewSchema = z
+const categoryBaseViewSchema = z
   .object({
     id: z.string().uuid(),
     name: z.string(),
@@ -57,10 +61,29 @@ export const categoryViewSchema = z
     updated_at: z.string(),
   })
   .strict();
+export const expenseCategoryViewSchema = categoryBaseViewSchema
+  .extend({
+    goal_reference: z.string().uuid(),
+  })
+  .strict();
+export const incomeCategoryViewSchema = categoryBaseViewSchema;
+export const categoryViewSchema = z.union([
+  expenseCategoryViewSchema,
+  incomeCategoryViewSchema,
+]);
 export type CategoryView = z.infer<typeof categoryViewSchema>;
 
-interface CategoryRow extends CategoryView {
+interface CategoryRow {
+  id: string;
   user_id: string;
+  name: string;
+  icon: string;
+  color: string | null;
+  is_default: boolean;
+  is_active: boolean;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
 }
 
 const expenseReferenceSchema = z
@@ -132,9 +155,13 @@ function config(kind: CategoryKind) {
       };
 }
 
-function categoryView(row: CategoryRow, userId: string): CategoryView | null {
+function categoryView(
+  row: CategoryRow,
+  userId: string,
+  kind: CategoryKind,
+): CategoryView | null {
   if (row.user_id !== userId || row.updated_at === null) return null;
-  const view = {
+  const base = {
     id: row.id,
     name: row.name,
     icon: row.icon,
@@ -145,7 +172,16 @@ function categoryView(row: CategoryRow, userId: string): CategoryView | null {
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
-  return categoryViewSchema.safeParse(view).success ? view : null;
+  const view =
+    kind === "expense"
+      ? {
+          ...base,
+          goal_reference: expenseCategoryGoalReference(row.id),
+        }
+      : base;
+  const schema =
+    kind === "expense" ? expenseCategoryViewSchema : incomeCategoryViewSchema;
+  return schema.safeParse(view).success ? view : null;
 }
 
 function isProtected(category: CategoryView): boolean {
@@ -157,7 +193,10 @@ async function references(
   kind: CategoryKind,
   category: CategoryView,
   userId: string,
-): Promise<CategoryReferenceSummary | null> {
+): Promise<{
+  summary: CategoryReferenceSummary;
+  has_name_dependent_expense_goal: boolean;
+} | null> {
   const cfg = config(kind);
   const transactions = await supabase
     .from(cfg.transactionTable)
@@ -181,18 +220,16 @@ async function references(
   if (transactions.error || recurring.error || goalResult.error) return null;
   const transactionRows = transactions.data ?? [];
   const recurringRows = recurring.data ?? [];
-  const expenseGoalKeys =
-    kind === "expense"
-      ? Object.entries(EXPENSE_GOAL_CATEGORY_NAMES)
-          .filter(([, name]) => name === category.name)
-          .map(([key]) => key)
-      : [];
   const goalRows = (goalResult.data ?? []).filter((goal) =>
     kind === "expense"
-      ? goal.category === category.name ||
-        expenseGoalKeys.includes(String(goal.category))
+      ? expenseGoalReferenceMatchesCategory(goal.category, category)
       : goal.category === category.id,
   );
+  const hasNameDependentExpenseGoal =
+    kind === "expense" &&
+    goalRows.some((goal) =>
+      expenseGoalReferenceDependsOnName(goal.category, category),
+    );
   const today = todayIso();
   const dates = transactionRows.map((row) =>
     kind === "expense"
@@ -211,31 +248,41 @@ async function references(
         (row.total_installments ?? 0) > 1,
     ).length;
     return {
-      historical_expense_count: historical,
-      future_expense_count: future,
-      installment_expense_count: installments,
-      active_recurring_expense_count: activeRecurring,
-      inactive_recurring_expense_count:
-        recurringRows.length - activeRecurring,
-      active_goal_count: goalRows.length,
-      total_reference_count:
-        transactionRows.length + recurringRows.length + goalRows.length,
+      summary: {
+        historical_expense_count: historical,
+        future_expense_count: future,
+        installment_expense_count: installments,
+        active_recurring_expense_count: activeRecurring,
+        inactive_recurring_expense_count:
+          recurringRows.length - activeRecurring,
+        active_goal_count: goalRows.length,
+        total_reference_count:
+          transactionRows.length + recurringRows.length + goalRows.length,
+      },
+      has_name_dependent_expense_goal: hasNameDependentExpenseGoal,
     };
   }
   return {
-    historical_income_count: historical,
-    future_income_count: future,
-    active_recurring_income_count: activeRecurring,
-    inactive_recurring_income_count: recurringRows.length - activeRecurring,
-    active_goal_count: goalRows.length,
-    total_reference_count:
-      transactionRows.length + recurringRows.length + goalRows.length,
+    summary: {
+      historical_income_count: historical,
+      future_income_count: future,
+      active_recurring_income_count: activeRecurring,
+      inactive_recurring_income_count: recurringRows.length - activeRecurring,
+      active_goal_count: goalRows.length,
+      total_reference_count:
+        transactionRows.length + recurringRows.length + goalRows.length,
+    },
+    has_name_dependent_expense_goal: false,
   };
 }
 
 function categoryFacts(kind: CategoryKind, category: CategoryView): string {
   return (
-    `tipo=${kind}; id=${category.id}; nome=${JSON.stringify(category.name)}; ` +
+    `tipo=${kind}; id=${category.id}; ` +
+    (`goal_reference` in category
+      ? `goal_reference=${category.goal_reference}; `
+      : "") +
+    `nome=${JSON.stringify(category.name)}; ` +
     `ícone=${category.icon}; cor=${category.color ?? "null"}; ` +
     `status=${category.is_active ? "ativa" : "inativa"}; ` +
     `ordem=${category.display_order}; padrão=${category.is_default}`
@@ -284,6 +331,8 @@ function updateContent(
 
 export function createCategoryTool(kind: CategoryKind) {
   const cfg = config(kind);
+  const outputCategorySchema =
+    kind === "expense" ? expenseCategoryViewSchema : incomeCategoryViewSchema;
   const inputProperties = {
     name: nameSchema,
     icon: iconSchema(kind).optional(),
@@ -300,7 +349,7 @@ export function createCategoryTool(kind: CategoryKind) {
       category_kind: z.literal(kind),
       id: z.string().uuid(),
       created: z.literal(true),
-      category: categoryViewSchema,
+      category: outputCategorySchema,
       warnings: z.array(categoryWriteWarningSchema),
       data_complete: z.literal(true),
     },
@@ -357,7 +406,11 @@ export function createCategoryTool(kind: CategoryKind) {
         );
       }
       if (!insertResult.data) return mcpError("WRITE_FAILED");
-      const category = categoryView(insertResult.data as CategoryRow, userId);
+      const category = categoryView(
+        insertResult.data as CategoryRow,
+        userId,
+        kind,
+      );
       if (!category) return mcpError("INVALID_DATA");
       const warnings: CategoryWriteWarning[] = ["CATEGORY_CREATED"];
       if (
@@ -387,6 +440,8 @@ export function createCategoryTool(kind: CategoryKind) {
 
 export function updateCategoryTool(kind: CategoryKind) {
   const cfg = config(kind);
+  const outputCategorySchema =
+    kind === "expense" ? expenseCategoryViewSchema : incomeCategoryViewSchema;
   const changesSchema = z
     .object({
       name: nameSchema.optional(),
@@ -413,8 +468,8 @@ export function updateCategoryTool(kind: CategoryKind) {
       id: z.string().uuid(),
       applied: z.boolean(),
       changed_fields: z.array(z.enum(CHANGE_FIELDS)),
-      before: categoryViewSchema,
-      after: categoryViewSchema,
+      before: outputCategorySchema,
+      after: outputCategorySchema,
       updated_at_before: z.string(),
       updated_at_after: z.string(),
       reference_summary: categoryReferenceSchema,
@@ -455,11 +510,17 @@ export function updateCategoryTool(kind: CategoryKind) {
           "A categoria mudou desde a leitura. Releia-a com list_categories antes de tentar novamente.",
         );
       }
-      const before = categoryView(current, userId);
+      const before = categoryView(current, userId, kind);
       if (!before) return mcpError("INVALID_DATA");
       if (isProtected(before)) return mcpError("CATEGORY_NOT_EDITABLE");
-      const summary = await references(supabase, kind, before, userId);
-      if (!summary) return mcpError("INTERNAL_ERROR");
+      const referenceInspection = await references(
+        supabase,
+        kind,
+        before,
+        userId,
+      );
+      if (!referenceInspection) return mcpError("INTERNAL_ERROR");
+      const summary = referenceInspection.summary;
       const finalValues = {
         name: input.changes.name ?? before.name,
         icon: input.changes.icon ?? before.icon,
@@ -475,10 +536,10 @@ export function updateCategoryTool(kind: CategoryKind) {
         if ((duplicate.data ?? []).some((row) => row.id !== before.id)) {
           return mcpError("CATEGORY_NAME_CONFLICT");
         }
-        if ("active_goal_count" in summary && summary.active_goal_count > 0) {
+        if (referenceInspection.has_name_dependent_expense_goal) {
           return mcpError(
             "BUSINESS_RULE_VIOLATION",
-            "A categoria de despesa possui meta vinculada pelo nome atual e não pode ser renomeada sem deixar essa referência inválida.",
+            "A categoria possui meta legada vinculada a uma chave derivada do nome atual. Exclua ou atualize essa meta antes de renomear a categoria.",
           );
         }
       }
@@ -537,7 +598,11 @@ export function updateCategoryTool(kind: CategoryKind) {
           existence.data ? "CONCURRENT_MODIFICATION" : "RESOURCE_NOT_FOUND",
         );
       }
-      const after = categoryView(updateResult.data as CategoryRow, userId);
+      const after = categoryView(
+        updateResult.data as CategoryRow,
+        userId,
+        kind,
+      );
       if (!after) return mcpError("INVALID_DATA");
       const warnings: CategoryWriteWarning[] = ["CATEGORY_UPDATED"];
       if (before.name !== after.name) warnings.push("CATEGORY_NAME_CHANGED");

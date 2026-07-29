@@ -4,6 +4,9 @@ import { readFile, readdir } from "node:fs/promises";
 import { mock } from "node:test";
 import { build } from "esbuild";
 
+process.env.MCP_CURSOR_SECRET =
+  "phase-1.2e-a-deterministic-cursor-secret-with-safe-length";
+
 mock.timers.enable({
   apis: ["Date"],
   now: new Date("2026-07-29T12:00:00-03:00"),
@@ -31,6 +34,9 @@ const bundled = await build({
       export { default as createIncomeCategory } from "./src/lib/mcp/tools/create-income-category.ts";
       export { default as updateIncomeCategory } from "./src/lib/mcp/tools/update-income-category.ts";
       export { default as listCategories } from "./src/lib/mcp/tools/list-categories.ts";
+      export { default as createGoal } from "./src/lib/mcp/tools/create-goal.ts";
+      export { default as updateGoal } from "./src/lib/mcp/tools/update-goal.ts";
+      export { default as listGoals } from "./src/lib/mcp/tools/list-goals.ts";
       export * from "./src/lib/mcp/shared/category-write.ts";
     `,
     resolveDir: process.cwd(),
@@ -128,6 +134,7 @@ class Query {
     this.mode = "select";
     this.payload = null;
     this.ordering = null;
+    this.rowLimit = null;
   }
   select(columns) {
     this.columns = columns.split(",").map((item) => item.trim());
@@ -155,6 +162,10 @@ class Query {
     this.ordering = { column, ascending: options.ascending !== false };
     return this;
   }
+  limit(value) {
+    this.rowLimit = value;
+    return this;
+  }
   visible(row) {
     if (
       this.table === "user_categories" ||
@@ -175,6 +186,7 @@ class Query {
         ascending ? a[column] - b[column] : b[column] - a[column],
       );
     }
+    if (this.rowLimit !== null) result = result.slice(0, this.rowLimit);
     return result;
   }
   project(row) {
@@ -290,6 +302,11 @@ const updateInput = (id, changes, overrides = {}) => ({
   );
   equal(result.structuredContent.created, true, "cria categoria de despesa");
   equal(result.structuredContent.category_kind, "expense", "tipo despesa");
+  equal(
+    result.structuredContent.category.goal_reference,
+    result.structuredContent.category.id,
+    "goal_reference canônica é o UUID",
+  );
   equal(result.structuredContent.category.name, "Mercado", "nome normalizado");
   equal(result.structuredContent.category.icon, "📦", "ícone default do app");
   equal(result.structuredContent.category.color, "#6366f1", "cor default");
@@ -302,6 +319,151 @@ const updateInput = (id, changes, overrides = {}) => ({
   check(!JSON.stringify(result).includes(userA), "não expõe user_id");
   equal(db.writes.length, 1, "uma escrita");
   equal(db.tables.expense_categories.length, 1, "catálogo legado intocado");
+}
+{
+  const db = use(tables({ user_categories: [], budget_goals: [] }));
+  const created = await core.createExpenseCategory.handler(
+    { name: "  TESTE MCP 1.2E Á DESPESA  ", icon: "🎨" },
+    ctx,
+  );
+  const category = created.structuredContent.category;
+  equal(category.name, "TESTE MCP 1.2E Á DESPESA", "nome complexo preservado");
+  equal(category.goal_reference, category.id, "referência copiável");
+
+  const listed = await core.listCategories.handler(
+    { kind: "expense", include_inactive: true },
+    ctx,
+  );
+  equal(
+    listed.structuredContent.categories[0].goal_reference,
+    category.goal_reference,
+    "list_categories repete referência",
+  );
+
+  const goalResult = await core.createGoal.handler(
+    {
+      type: "category",
+      limit_amount: 1.23,
+      category: category.goal_reference,
+    },
+    ctx,
+  );
+  equal(goalResult.structuredContent.created, true, "create_goal aceita UUID");
+  equal(
+    goalResult.structuredContent.goal.category_reference,
+    category.goal_reference,
+    "goal retorna referência canônica",
+  );
+  equal(
+    db.tables.budget_goals[0].category,
+    category.goal_reference,
+    "meta persiste exatamente goal_reference",
+  );
+  check(
+    goalResult.content[0].text.includes(category.name) &&
+      goalResult.content[0].text.includes(category.goal_reference),
+    "content da meta informa nome e referência",
+  );
+
+  const goals = await core.listGoals.handler(
+    { scope: "personal", type: "category", limit: 20 },
+    ctx,
+  );
+  equal(goals.structuredContent.count, 1, "list_goals encontra meta");
+  equal(
+    goals.structuredContent.goals[0].category_reference,
+    category.goal_reference,
+    "list_goals preserva vínculo UUID",
+  );
+  check(!JSON.stringify(goalResult).includes(userA), "goal sem user_id");
+}
+{
+  const legacy = tables({
+    user_categories: [
+      expenseCategory({ name: "Alimentação", is_default: true }),
+    ],
+    budget_goals: [],
+  });
+  const db = use(legacy);
+  const result = await core.createGoal.handler(
+    { type: "category", limit_amount: 10, category: "alimentacao" },
+    ctx,
+  );
+  equal(result.structuredContent.created, true, "slug legado aceito");
+  equal(db.tables.budget_goals[0].category, "alimentacao", "slug legado preservado");
+  check(result.content[0].text.includes("Alimentação"), "nome legado no content");
+}
+{
+  const db = use(tables({
+    budget_goals: [
+      {
+        id: "65000000-0000-4000-8000-000000000001",
+        user_id: userA,
+        type: "monthly_total",
+        category: null,
+        limit_amount: 100,
+        shared_group_id: null,
+        created_at: createdAt,
+        updated_at: t0,
+      },
+    ],
+  }));
+  const result = await core.updateGoal.handler(
+    {
+      goal_id: "65000000-0000-4000-8000-000000000001",
+      expected_updated_at: t0,
+      changes: {
+        type: "category",
+        category: expenseCategoryId,
+      },
+    },
+    ctx,
+  );
+  equal(result.structuredContent.applied, true, "update_goal aceita UUID expense");
+  equal(
+    result.structuredContent.after.category_reference,
+    expenseCategoryId,
+    "update_goal persiste referência canônica",
+  );
+  equal(db.tables.budget_goals[0].category, expenseCategoryId, "linha da meta atualizada");
+}
+for (const [initial, reference, message] of [
+  [
+    tables({
+      user_categories: [
+        expenseCategory({ user_id: userB }),
+      ],
+      budget_goals: [],
+    }),
+    expenseCategoryId,
+    "categoria alheia",
+  ],
+  [
+    tables({
+      user_categories: [
+        expenseCategory({ is_active: false }),
+      ],
+      budget_goals: [],
+    }),
+    expenseCategoryId,
+    "categoria inativa",
+  ],
+  [tables({ user_categories: [], budget_goals: [] }), expenseCategoryId, "UUID inexistente"],
+  [
+    tables({ user_categories: [expenseCategory()], budget_goals: [] }),
+    "Viagem",
+    "nome de exibição não é referência",
+  ],
+]) {
+  use(initial);
+  errorCode(
+    await core.createGoal.handler(
+      { type: "category", limit_amount: 1, category: reference },
+      ctx,
+    ),
+    "CATEGORY_NOT_FOUND",
+    message,
+  );
 }
 {
   use(tables({ user_categories: [expenseCategory({ name: "Mercado" })] }));
@@ -364,8 +526,30 @@ for (const [input, message] of [
   );
   equal(result.structuredContent.created, true, "income aceita duplicata conforme banco");
   equal(result.structuredContent.category.color, "#10b981", "cor de receita");
+  check(
+    !("goal_reference" in result.structuredContent.category),
+    "contrato de criação income preservado",
+  );
   equal(result.structuredContent.category.display_order, 3, "ordem de receita");
   equal(db.writes.length, 1, "inserção de receita");
+}
+{
+  const db = use(tables({ budget_goals: [] }));
+  const result = await core.createGoal.handler(
+    {
+      type: "income_category",
+      limit_amount: 50,
+      category: incomeCategoryId,
+    },
+    ctx,
+  );
+  equal(result.structuredContent.created, true, "meta de receita preservada");
+  equal(
+    result.structuredContent.goal.category_reference,
+    incomeCategoryId,
+    "receita continua por UUID",
+  );
+  equal(db.tables.budget_goals[0].category, incomeCategoryId, "UUID income persistido");
 }
 for (const [input, message] of [
   [{ name: " " }, "income nome vazio"],
@@ -462,6 +646,60 @@ for (const [input, message] of [
     "BUSINESS_RULE_VIOLATION",
     "rename com meta textual bloqueado",
   );
+}
+{
+  const initial = tables({
+    budget_goals: [
+      {
+        id: "73000000-0000-4000-8000-000000000001",
+        user_id: userA,
+        type: "category",
+        category: expenseCategoryId,
+      },
+    ],
+  });
+  const goalsBefore = structuredClone(initial.budget_goals);
+  use(initial);
+  const result = await core.updateExpenseCategory.handler(
+    updateInput(expenseCategoryId, { name: "Viagem Renomeada" }),
+    ctx,
+  );
+  equal(result.structuredContent.applied, true, "rename com meta UUID permitido");
+  equal(
+    result.structuredContent.after.goal_reference,
+    expenseCategoryId,
+    "goal_reference UUID preservada no rename",
+  );
+  check(
+    result.structuredContent.warnings.includes("ACTIVE_GOALS_REFERENCE_CATEGORY"),
+    "warning de meta UUID vinculada",
+  );
+  equal(
+    globalThis.__MCP_TEST_SUPABASE__.tables.budget_goals,
+    goalsBefore,
+    "rename não reescreve meta UUID",
+  );
+}
+{
+  const initial = tables({
+    budget_goals: [
+      {
+        id: "73000000-0000-4000-8000-000000000001",
+        user_id: userA,
+        type: "category",
+        category: "alimentacao",
+      },
+    ],
+  });
+  initial.user_categories[0].name = "Alimentação";
+  const db = use(initial);
+  db.tables.budget_goals.splice(0, 1);
+  const result = await core.updateExpenseCategory.handler(
+    updateInput(expenseCategoryId, { name: "Comida" }),
+    ctx,
+  );
+  equal(result.structuredContent.applied, true, "rename liberado sem meta legada");
+  equal(db.tables.budget_goals.length, 0, "meta removida não é recriada");
 }
 {
   const db = use();
@@ -778,6 +1016,33 @@ for (const name of [
   equal(tool.inputSchema.additionalProperties, false, `${name} input fechado`);
   equal(tool.outputSchema.additionalProperties, false, `${name} output fechado`);
 }
+const createExpenseCategoryManifest = tools.find(
+  (tool) => tool.name === "create_expense_category",
+);
+check(
+  "goal_reference" in
+    createExpenseCategoryManifest.outputSchema.properties.category.properties,
+  "create expense expõe goal_reference",
+);
+const updateExpenseCategoryManifest = tools.find(
+  (tool) => tool.name === "update_expense_category",
+);
+check(
+  "goal_reference" in
+    updateExpenseCategoryManifest.outputSchema.properties.before.properties,
+  "update expense expõe goal_reference",
+);
+const listCategoriesManifest = tools.find(
+  (tool) => tool.name === "list_categories",
+);
+const listCategoryVariants =
+  listCategoriesManifest.outputSchema.properties.categories.items.anyOf;
+check(
+  listCategoryVariants.some(
+    (variant) => "goal_reference" in variant.properties,
+  ),
+  "list_categories expõe goal_reference",
+);
 for (const name of ["update_expense_category", "update_income_category"]) {
   const tool = tools.find((candidate) => candidate.name === name);
   check(tool.inputSchema.required.includes("expected_updated_at"), `${name} expected obrigatório`);

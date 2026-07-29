@@ -1683,6 +1683,54 @@ var EXPENSE_GOAL_CATEGORY_NAMES = {
   servicos: "Servi\xE7os",
   outros: "Outros"
 };
+function expenseCategoryGoalReference(categoryId) {
+  return categoryId;
+}
+function expenseGoalLegacyReferences(categoryName) {
+  return Object.entries(EXPENSE_GOAL_CATEGORY_NAMES).filter(([, name]) => name === categoryName).map(([reference]) => reference);
+}
+function expenseGoalReferenceMatchesCategory(reference, category) {
+  if (typeof reference !== "string") return false;
+  const uuid = z8.string().uuid().safeParse(reference);
+  if (uuid.success) {
+    return uuid.data.toLowerCase() === category.id.toLowerCase();
+  }
+  return expenseGoalLegacyReferences(category.name).includes(reference);
+}
+function expenseGoalReferenceDependsOnName(reference, category) {
+  return typeof reference === "string" && !z8.string().uuid().safeParse(reference).success && expenseGoalLegacyReferences(category.name).includes(reference);
+}
+async function resolveExpenseGoalCategoryReference(supabase, userId, reference) {
+  const uuid = z8.string().uuid().safeParse(reference);
+  if (uuid.success) {
+    const result2 = await supabase.from("user_categories").select("id,name").eq("id", uuid.data).eq("user_id", userId).eq("is_active", true).maybeSingle();
+    if (result2.error) return { status: "error" };
+    if (!result2.data) return { status: "not_found" };
+    return {
+      status: "found",
+      category: { id: result2.data.id, name: result2.data.name },
+      reference: expenseCategoryGoalReference(result2.data.id),
+      reference_kind: "uuid"
+    };
+  }
+  if (!EXPENSE_GOAL_CATEGORIES.includes(
+    reference
+  )) {
+    return { status: "not_found" };
+  }
+  const result = await supabase.from("user_categories").select("id,name").eq("user_id", userId).eq(
+    "name",
+    EXPENSE_GOAL_CATEGORY_NAMES[reference]
+  ).eq("is_active", true).maybeSingle();
+  if (result.error) return { status: "error" };
+  if (!result.data) return { status: "not_found" };
+  return {
+    status: "found",
+    category: { id: result.data.id, name: result.data.name },
+    reference,
+    reference_kind: "legacy"
+  };
+}
 var GOAL_WRITE_WARNINGS = [
   "MONTHLY_GOAL_ONLY",
   "NO_EFFECTIVE_CHANGES",
@@ -1758,8 +1806,8 @@ function validGoalConfiguration(type, category) {
 function describeGoal(goal) {
   return `id=${goal.id}; tipo=${goal.type}; categoria=${JSON.stringify(goal.category_reference)}; valor=${goal.limit_amount}; dire\xE7\xE3o=${goal.target_direction}; escopo=${goal.is_shared ? "compartilhado" : "pessoal"}`;
 }
-function createGoalContent(result) {
-  return `Foi criada a meta ou limite mensal: ${describeGoal(result.goal)}; created_at=${result.goal.created_at}; updated_at=${result.goal.updated_at}; warnings=${JSON.stringify(result.warnings)}. Nenhuma despesa, receita ou template recorrente foi criado ou alterado. Este registro \xE9 apenas uma meta mensal calculada sobre transa\xE7\xF5es; n\xE3o \xE9 conta de investimento nem poupan\xE7a acumulada.`;
+function createGoalContent(result, categoryName) {
+  return `Foi criada a meta ou limite mensal: ${describeGoal(result.goal)}; ` + (categoryName ? `refer\xEAncia armazenada=${JSON.stringify(result.goal.category_reference)}; nome atual da categoria=${JSON.stringify(categoryName)}; ` : "") + `created_at=${result.goal.created_at}; updated_at=${result.goal.updated_at}; warnings=${JSON.stringify(result.warnings)}. Nenhuma despesa, receita ou template recorrente foi criado ou alterado. Este registro \xE9 apenas uma meta mensal calculada sobre transa\xE7\xF5es; n\xE3o \xE9 conta de investimento nem poupan\xE7a acumulada.`;
 }
 function updateGoalContent(result) {
   const changes = result.changed_fields.map(
@@ -1932,7 +1980,7 @@ var nameSchema = z9.string().trim().min(1).refine(
   })
 );
 var iconSchema = (kind) => kind === "expense" ? z9.enum(EXPENSE_CATEGORY_ICONS) : z9.enum(INCOME_CATEGORY_ICONS);
-var categoryViewSchema = z9.object({
+var categoryBaseViewSchema = z9.object({
   id: z9.string().uuid(),
   name: z9.string(),
   icon: z9.string(),
@@ -1943,6 +1991,14 @@ var categoryViewSchema = z9.object({
   created_at: z9.string(),
   updated_at: z9.string()
 }).strict();
+var expenseCategoryViewSchema = categoryBaseViewSchema.extend({
+  goal_reference: z9.string().uuid()
+}).strict();
+var incomeCategoryViewSchema = categoryBaseViewSchema;
+var categoryViewSchema = z9.union([
+  expenseCategoryViewSchema,
+  incomeCategoryViewSchema
+]);
 var expenseReferenceSchema = z9.object({
   historical_expense_count: z9.number().int().nonnegative(),
   future_expense_count: z9.number().int().nonnegative(),
@@ -1996,9 +2052,9 @@ function config(kind) {
     dateColumn: "income_date"
   };
 }
-function categoryView(row, userId) {
+function categoryView(row, userId, kind) {
   if (row.user_id !== userId || row.updated_at === null) return null;
-  const view = {
+  const base = {
     id: row.id,
     name: row.name,
     icon: row.icon,
@@ -2009,7 +2065,12 @@ function categoryView(row, userId) {
     created_at: row.created_at,
     updated_at: row.updated_at
   };
-  return categoryViewSchema.safeParse(view).success ? view : null;
+  const view = kind === "expense" ? {
+    ...base,
+    goal_reference: expenseCategoryGoalReference(row.id)
+  } : base;
+  const schema = kind === "expense" ? expenseCategoryViewSchema : incomeCategoryViewSchema;
+  return schema.safeParse(view).success ? view : null;
 }
 function isProtected(category) {
   return category.name.trim().toLocaleLowerCase("pt-BR") === "outros";
@@ -2024,9 +2085,11 @@ async function references(supabase, kind, category, userId) {
   if (transactions.error || recurring.error || goalResult.error) return null;
   const transactionRows = transactions.data ?? [];
   const recurringRows = recurring.data ?? [];
-  const expenseGoalKeys = kind === "expense" ? Object.entries(EXPENSE_GOAL_CATEGORY_NAMES).filter(([, name]) => name === category.name).map(([key]) => key) : [];
   const goalRows = (goalResult.data ?? []).filter(
-    (goal) => kind === "expense" ? goal.category === category.name || expenseGoalKeys.includes(String(goal.category)) : goal.category === category.id
+    (goal) => kind === "expense" ? expenseGoalReferenceMatchesCategory(goal.category, category) : goal.category === category.id
+  );
+  const hasNameDependentExpenseGoal = kind === "expense" && goalRows.some(
+    (goal) => expenseGoalReferenceDependsOnName(goal.category, category)
   );
   const today = todayIso();
   const dates = transactionRows.map(
@@ -2041,26 +2104,32 @@ async function references(supabase, kind, category, userId) {
       (row) => row.installment_group_id !== null || (row.installment_number ?? 0) > 1 || (row.total_installments ?? 0) > 1
     ).length;
     return {
-      historical_expense_count: historical,
-      future_expense_count: future,
-      installment_expense_count: installments,
-      active_recurring_expense_count: activeRecurring,
-      inactive_recurring_expense_count: recurringRows.length - activeRecurring,
-      active_goal_count: goalRows.length,
-      total_reference_count: transactionRows.length + recurringRows.length + goalRows.length
+      summary: {
+        historical_expense_count: historical,
+        future_expense_count: future,
+        installment_expense_count: installments,
+        active_recurring_expense_count: activeRecurring,
+        inactive_recurring_expense_count: recurringRows.length - activeRecurring,
+        active_goal_count: goalRows.length,
+        total_reference_count: transactionRows.length + recurringRows.length + goalRows.length
+      },
+      has_name_dependent_expense_goal: hasNameDependentExpenseGoal
     };
   }
   return {
-    historical_income_count: historical,
-    future_income_count: future,
-    active_recurring_income_count: activeRecurring,
-    inactive_recurring_income_count: recurringRows.length - activeRecurring,
-    active_goal_count: goalRows.length,
-    total_reference_count: transactionRows.length + recurringRows.length + goalRows.length
+    summary: {
+      historical_income_count: historical,
+      future_income_count: future,
+      active_recurring_income_count: activeRecurring,
+      inactive_recurring_income_count: recurringRows.length - activeRecurring,
+      active_goal_count: goalRows.length,
+      total_reference_count: transactionRows.length + recurringRows.length + goalRows.length
+    },
+    has_name_dependent_expense_goal: false
   };
 }
 function categoryFacts(kind, category) {
-  return `tipo=${kind}; id=${category.id}; nome=${JSON.stringify(category.name)}; \xEDcone=${category.icon}; cor=${category.color ?? "null"}; status=${category.is_active ? "ativa" : "inativa"}; ordem=${category.display_order}; padr\xE3o=${category.is_default}`;
+  return `tipo=${kind}; id=${category.id}; ` + (`goal_reference` in category ? `goal_reference=${category.goal_reference}; ` : "") + `nome=${JSON.stringify(category.name)}; \xEDcone=${category.icon}; cor=${category.color ?? "null"}; status=${category.is_active ? "ativa" : "inativa"}; ordem=${category.display_order}; padr\xE3o=${category.is_default}`;
 }
 function createContent(kind, category, warnings) {
   return `Categoria de ${kind === "expense" ? "despesa" : "receita"} criada somente no Gastinho: ${categoryFacts(kind, category)}; warnings=${JSON.stringify(warnings)}. Nenhuma despesa, receita, recorr\xEAncia, parcela ou meta foi criada ou alterada; a categoria n\xE3o representa or\xE7amento, saldo ou conta banc\xE1ria.`;
@@ -2073,6 +2142,7 @@ function updateContent2(kind, result) {
 }
 function createCategoryTool(kind) {
   const cfg = config(kind);
+  const outputCategorySchema = kind === "expense" ? expenseCategoryViewSchema : incomeCategoryViewSchema;
   const inputProperties17 = {
     name: nameSchema,
     icon: iconSchema(kind).optional()
@@ -2088,7 +2158,7 @@ function createCategoryTool(kind) {
       category_kind: z9.literal(kind),
       id: z9.string().uuid(),
       created: z9.literal(true),
-      category: categoryViewSchema,
+      category: outputCategorySchema,
       warnings: z9.array(categoryWriteWarningSchema),
       data_complete: z9.literal(true)
     },
@@ -2131,7 +2201,11 @@ function createCategoryTool(kind) {
         );
       }
       if (!insertResult.data) return mcpError("WRITE_FAILED");
-      const category = categoryView(insertResult.data, userId);
+      const category = categoryView(
+        insertResult.data,
+        userId,
+        kind
+      );
       if (!category) return mcpError("INVALID_DATA");
       const warnings = ["CATEGORY_CREATED"];
       if (typeof rawInput === "object" && rawInput !== null && "name" in rawInput && rawInput.name !== input.name) {
@@ -2155,6 +2229,7 @@ function createCategoryTool(kind) {
 }
 function updateCategoryTool(kind) {
   const cfg = config(kind);
+  const outputCategorySchema = kind === "expense" ? expenseCategoryViewSchema : incomeCategoryViewSchema;
   const changesSchema = z9.object({
     name: nameSchema.optional(),
     icon: iconSchema(kind).optional(),
@@ -2177,8 +2252,8 @@ function updateCategoryTool(kind) {
       id: z9.string().uuid(),
       applied: z9.boolean(),
       changed_fields: z9.array(z9.enum(CHANGE_FIELDS)),
-      before: categoryViewSchema,
-      after: categoryViewSchema,
+      before: outputCategorySchema,
+      after: outputCategorySchema,
       updated_at_before: z9.string(),
       updated_at_after: z9.string(),
       reference_summary: categoryReferenceSchema,
@@ -2212,11 +2287,17 @@ function updateCategoryTool(kind) {
           "A categoria mudou desde a leitura. Releia-a com list_categories antes de tentar novamente."
         );
       }
-      const before = categoryView(current, userId);
+      const before = categoryView(current, userId, kind);
       if (!before) return mcpError("INVALID_DATA");
       if (isProtected(before)) return mcpError("CATEGORY_NOT_EDITABLE");
-      const summary = await references(supabase, kind, before, userId);
-      if (!summary) return mcpError("INTERNAL_ERROR");
+      const referenceInspection = await references(
+        supabase,
+        kind,
+        before,
+        userId
+      );
+      if (!referenceInspection) return mcpError("INTERNAL_ERROR");
+      const summary = referenceInspection.summary;
       const finalValues = {
         name: input.changes.name ?? before.name,
         icon: input.changes.icon ?? before.icon,
@@ -2228,10 +2309,10 @@ function updateCategoryTool(kind) {
         if ((duplicate.data ?? []).some((row) => row.id !== before.id)) {
           return mcpError("CATEGORY_NAME_CONFLICT");
         }
-        if ("active_goal_count" in summary && summary.active_goal_count > 0) {
+        if (referenceInspection.has_name_dependent_expense_goal) {
           return mcpError(
             "BUSINESS_RULE_VIOLATION",
-            "A categoria de despesa possui meta vinculada pelo nome atual e n\xE3o pode ser renomeada sem deixar essa refer\xEAncia inv\xE1lida."
+            "A categoria possui meta legada vinculada a uma chave derivada do nome atual. Exclua ou atualize essa meta antes de renomear a categoria."
           );
         }
       }
@@ -2276,7 +2357,11 @@ function updateCategoryTool(kind) {
           existence.data ? "CONCURRENT_MODIFICATION" : "RESOURCE_NOT_FOUND"
         );
       }
-      const after = categoryView(updateResult.data, userId);
+      const after = categoryView(
+        updateResult.data,
+        userId,
+        kind
+      );
       if (!after) return mcpError("INVALID_DATA");
       const warnings = ["CATEGORY_UPDATED"];
       if (before.name !== after.name) warnings.push("CATEGORY_NAME_CHANGED");
@@ -2352,6 +2437,7 @@ var list_categories_default = defineTool7({
     if (error) return mcpError("INTERNAL_ERROR");
     const categories = (data ?? []).map((row) => ({
       id: row.id,
+      ...kind === "expense" ? { goal_reference: row.id } : {},
       name: row.name,
       icon: row.icon,
       color: row.color,
@@ -7523,8 +7609,8 @@ var create_goal_default = defineTool32({
     const parsed = inputValidator11.safeParse(rawInput);
     if (!parsed.success) return mcpError("INVALID_INPUT");
     const input = parsed.data;
-    const category = input.category ?? null;
-    if (!validGoalConfiguration(input.type, category)) {
+    let categoryReference = input.category ?? null;
+    if (!validGoalConfiguration(input.type, categoryReference)) {
       return mcpError("INVALID_GOAL_CONFIGURATION");
     }
     const supabase = supabaseForUser(ctx);
@@ -7534,28 +7620,33 @@ var create_goal_default = defineTool32({
       if (!group.data) return mcpError("RESOURCE_NOT_FOUND");
     }
     const categoryKind = goalCategoryKind(input.type);
+    let categoryName;
     if (categoryKind === "expense") {
-      if (!EXPENSE_GOAL_CATEGORIES.includes(
-        category
-      )) {
+      const resolution = await resolveExpenseGoalCategoryReference(
+        supabase,
+        userId,
+        categoryReference
+      );
+      if (resolution.status === "error") return mcpError("INTERNAL_ERROR");
+      if (resolution.status === "not_found") {
         return mcpError("CATEGORY_NOT_FOUND");
       }
-      const expenseCategory = EXPENSE_GOAL_CATEGORY_NAMES[category];
-      const categoryResult = await supabase.from("user_categories").select("id").eq("user_id", userId).eq("name", expenseCategory).eq("is_active", true).maybeSingle();
-      if (categoryResult.error) return mcpError("INTERNAL_ERROR");
-      if (!categoryResult.data) return mcpError("CATEGORY_NOT_FOUND");
+      categoryReference = resolution.reference;
+      categoryName = resolution.category.name;
     }
     if (categoryKind === "income") {
-      const incomeCategoryId = z38.string().uuid().safeParse(category);
+      const incomeCategoryId = z38.string().uuid().safeParse(categoryReference);
       if (!incomeCategoryId.success) return mcpError("CATEGORY_NOT_FOUND");
-      const categoryResult = await supabase.from("user_income_categories").select("id").eq("id", incomeCategoryId.data).eq("user_id", userId).eq("is_active", true).maybeSingle();
+      const categoryResult = await supabase.from("user_income_categories").select("id,name").eq("id", incomeCategoryId.data).eq("user_id", userId).eq("is_active", true).maybeSingle();
       if (categoryResult.error) return mcpError("INTERNAL_ERROR");
       if (!categoryResult.data) return mcpError("CATEGORY_NOT_FOUND");
+      categoryReference = categoryResult.data.id;
+      categoryName = categoryResult.data.name;
     }
     const insertResult = await supabase.from("budget_goals").insert({
       user_id: userId,
       type: input.type,
-      category,
+      category: categoryReference,
       limit_amount: input.limit_amount,
       shared_group_id: input.shared_group_id ?? null
     }).select(COLUMNS8).single();
@@ -7563,7 +7654,9 @@ var create_goal_default = defineTool32({
     const goal = goalWriteView(insertResult.data, userId);
     if (!goal) return mcpError("INVALID_DATA");
     const warnings = ["MONTHLY_GOAL_ONLY"];
-    if (category !== null) warnings.push("CATEGORY_REFERENCE_STORED_AS_TEXT");
+    if (categoryReference !== null) {
+      warnings.push("CATEGORY_REFERENCE_STORED_AS_TEXT");
+    }
     if (goal.is_shared) warnings.push("SHARED_GOAL_CREATED");
     const result = {
       resource_type: "goal",
@@ -7574,7 +7667,10 @@ var create_goal_default = defineTool32({
       data_complete: true
     };
     return {
-      content: [{ type: "text", text: createGoalContent(result) }],
+      content: [{
+        type: "text",
+        text: createGoalContent(result, categoryName)
+      }],
       structuredContent: result
     };
   }
@@ -7658,20 +7754,19 @@ var update_goal_default = defineTool33({
     if (!validGoalConfiguration(finalType, finalCategory)) {
       return mcpError("INVALID_GOAL_CONFIGURATION");
     }
-    const categoryChanged = finalCategory !== current.category;
-    if (categoryChanged || typeChanged && finalKind !== null) {
+    const categoryNeedsValidation = finalCategory !== current.category || typeChanged && finalKind !== null;
+    if (categoryNeedsValidation) {
       if (finalKind === "expense") {
-        if (!EXPENSE_GOAL_CATEGORIES.includes(
+        const resolution = await resolveExpenseGoalCategoryReference(
+          supabase,
+          userId,
           finalCategory
-        )) {
+        );
+        if (resolution.status === "error") return mcpError("INTERNAL_ERROR");
+        if (resolution.status === "not_found") {
           return mcpError("CATEGORY_NOT_FOUND");
         }
-        const categoryResult = await supabase.from("user_categories").select("id").eq("user_id", userId).eq(
-          "name",
-          EXPENSE_GOAL_CATEGORY_NAMES[finalCategory]
-        ).eq("is_active", true).maybeSingle();
-        if (categoryResult.error) return mcpError("INTERNAL_ERROR");
-        if (!categoryResult.data) return mcpError("CATEGORY_NOT_FOUND");
+        finalCategory = resolution.reference;
       }
       if (finalKind === "income") {
         const parsedCategory = z39.string().uuid().safeParse(finalCategory);
@@ -7679,8 +7774,10 @@ var update_goal_default = defineTool33({
         const categoryResult = await supabase.from("user_income_categories").select("id").eq("id", parsedCategory.data).eq("user_id", userId).eq("is_active", true).maybeSingle();
         if (categoryResult.error) return mcpError("INTERNAL_ERROR");
         if (!categoryResult.data) return mcpError("CATEGORY_NOT_FOUND");
+        finalCategory = categoryResult.data.id;
       }
     }
+    const categoryChanged = finalCategory !== current.category;
     const patch = {};
     const changedFields = [];
     if (typeChanged) {
