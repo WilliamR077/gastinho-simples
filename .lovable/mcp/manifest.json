@@ -5886,6 +5886,1075 @@
           "additionalProperties": false,
           "$schema": "http://json-schema.org/draft-07/schema#"
         }
+      },
+      {
+        "name": "create_recurring_expense",
+        "title": "Criar template mensal de despesa",
+        "description": "Cria somente um template mensal de despesa para a conta autenticada. Não cria nem materializa uma despesa real.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "description": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "amount": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "day_of_month": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 31
+            },
+            "start_date": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "end_date": {
+              "anyOf": [
+                {
+                  "$ref": "#/properties/start_date"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "category_id": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "payment_method": {
+              "type": "string",
+              "enum": [
+                "pix",
+                "credit",
+                "debit",
+                "cash"
+              ]
+            },
+            "card_id": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "is_active": {
+              "type": "boolean"
+            },
+            "shared_group_id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "description",
+            "amount",
+            "day_of_month",
+            "payment_method"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "recurring_expense"
+            },
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "created": {
+              "type": "boolean",
+              "const": true
+            },
+            "template": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "day_of_month": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 31
+                },
+                "start_date": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "end_date": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/properties/template/properties/start_date/anyOf/0"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "is_active": {
+                  "type": "boolean"
+                },
+                "category_name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "category_icon": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "is_shared": {
+                  "type": "boolean"
+                },
+                "shared_group_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "created_at": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "type": "string"
+                },
+                "category_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "payment_method": {
+                  "type": "string",
+                  "enum": [
+                    "pix",
+                    "credit",
+                    "debit",
+                    "cash"
+                  ]
+                },
+                "card_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "card_name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "card_color": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "description",
+                "amount",
+                "day_of_month",
+                "start_date",
+                "end_date",
+                "is_active",
+                "category_name",
+                "category_icon",
+                "is_shared",
+                "shared_group_id",
+                "created_at",
+                "updated_at",
+                "category_id",
+                "payment_method",
+                "card_id",
+                "card_name",
+                "card_color"
+              ],
+              "additionalProperties": false
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "NO_EFFECTIVE_CHANGES",
+                  "RECURRING_TEMPLATE_ONLY",
+                  "RECURRING_DAY_MAY_BE_SKIPPED",
+                  "RECURRING_START_DATE_FALLBACK",
+                  "CATEGORY_SNAPSHOT_UPDATED",
+                  "CARD_REFERENCE_UPDATED",
+                  "SHARED_TEMPLATE_CREATED",
+                  "SHARED_TEMPLATE_UPDATED"
+                ]
+              }
+            },
+            "data_complete": {
+              "type": "boolean",
+              "const": true
+            }
+          },
+          "required": [
+            "resource_type",
+            "id",
+            "created",
+            "template",
+            "warnings",
+            "data_complete"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      },
+      {
+        "name": "create_recurring_income",
+        "title": "Criar template mensal de receita",
+        "description": "Cria somente um template mensal de receita para a conta autenticada. Não cria nem materializa uma receita real.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "description": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "amount": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "day_of_month": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 31
+            },
+            "start_date": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "end_date": {
+              "anyOf": [
+                {
+                  "$ref": "#/properties/start_date"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "income_category_id": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "is_active": {
+              "type": "boolean"
+            },
+            "shared_group_id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "description",
+            "amount",
+            "day_of_month"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "recurring_income"
+            },
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "created": {
+              "type": "boolean",
+              "const": true
+            },
+            "template": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "day_of_month": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 31
+                },
+                "start_date": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "end_date": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/properties/template/properties/start_date/anyOf/0"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "is_active": {
+                  "type": "boolean"
+                },
+                "category_name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "category_icon": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "is_shared": {
+                  "type": "boolean"
+                },
+                "shared_group_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "created_at": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "type": "string"
+                },
+                "income_category_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "description",
+                "amount",
+                "day_of_month",
+                "start_date",
+                "end_date",
+                "is_active",
+                "category_name",
+                "category_icon",
+                "is_shared",
+                "shared_group_id",
+                "created_at",
+                "updated_at",
+                "income_category_id"
+              ],
+              "additionalProperties": false
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "NO_EFFECTIVE_CHANGES",
+                  "RECURRING_TEMPLATE_ONLY",
+                  "RECURRING_DAY_MAY_BE_SKIPPED",
+                  "RECURRING_START_DATE_FALLBACK",
+                  "CATEGORY_SNAPSHOT_UPDATED",
+                  "CARD_REFERENCE_UPDATED",
+                  "SHARED_TEMPLATE_CREATED",
+                  "SHARED_TEMPLATE_UPDATED"
+                ]
+              }
+            },
+            "data_complete": {
+              "type": "boolean",
+              "const": true
+            }
+          },
+          "required": [
+            "resource_type",
+            "id",
+            "created",
+            "template",
+            "warnings",
+            "data_complete"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      },
+      {
+        "name": "update_recurring_expense",
+        "title": "Editar template mensal de despesa",
+        "description": "Edita parcialmente somente um template mensal de despesa pertencente à conta autenticada, com concorrência otimista. Não altera despesas reais.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "recurring_expense_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "expected_updated_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "changes": {
+              "type": "object",
+              "properties": {
+                "description": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "amount": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "day_of_month": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 31
+                },
+                "start_date": {
+                  "type": "string",
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                },
+                "end_date": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/properties/changes/properties/start_date"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "category_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "payment_method": {
+                  "type": "string",
+                  "enum": [
+                    "pix",
+                    "credit",
+                    "debit",
+                    "cash"
+                  ]
+                },
+                "card_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "is_active": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "recurring_expense_id",
+            "expected_updated_at",
+            "changes"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "recurring_expense"
+            },
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "applied": {
+              "type": "boolean"
+            },
+            "changed_fields": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "description",
+                  "amount",
+                  "day_of_month",
+                  "start_date",
+                  "end_date",
+                  "category_id",
+                  "payment_method",
+                  "card_id",
+                  "is_active"
+                ]
+              }
+            },
+            "before": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "day_of_month": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 31
+                },
+                "start_date": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "end_date": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/properties/before/properties/start_date/anyOf/0"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "is_active": {
+                  "type": "boolean"
+                },
+                "category_name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "category_icon": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "is_shared": {
+                  "type": "boolean"
+                },
+                "shared_group_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "created_at": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "type": "string"
+                },
+                "category_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "payment_method": {
+                  "type": "string",
+                  "enum": [
+                    "pix",
+                    "credit",
+                    "debit",
+                    "cash"
+                  ]
+                },
+                "card_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "card_name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "card_color": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "description",
+                "amount",
+                "day_of_month",
+                "start_date",
+                "end_date",
+                "is_active",
+                "category_name",
+                "category_icon",
+                "is_shared",
+                "shared_group_id",
+                "created_at",
+                "updated_at",
+                "category_id",
+                "payment_method",
+                "card_id",
+                "card_name",
+                "card_color"
+              ],
+              "additionalProperties": false
+            },
+            "after": {
+              "$ref": "#/properties/before"
+            },
+            "updated_at_before": {
+              "type": "string"
+            },
+            "updated_at_after": {
+              "type": "string"
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "NO_EFFECTIVE_CHANGES",
+                  "RECURRING_TEMPLATE_ONLY",
+                  "RECURRING_DAY_MAY_BE_SKIPPED",
+                  "RECURRING_START_DATE_FALLBACK",
+                  "CATEGORY_SNAPSHOT_UPDATED",
+                  "CARD_REFERENCE_UPDATED",
+                  "SHARED_TEMPLATE_CREATED",
+                  "SHARED_TEMPLATE_UPDATED"
+                ]
+              }
+            },
+            "data_complete": {
+              "type": "boolean",
+              "const": true
+            }
+          },
+          "required": [
+            "resource_type",
+            "id",
+            "applied",
+            "changed_fields",
+            "before",
+            "after",
+            "updated_at_before",
+            "updated_at_after",
+            "warnings",
+            "data_complete"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      },
+      {
+        "name": "update_recurring_income",
+        "title": "Editar template mensal de receita",
+        "description": "Edita parcialmente somente um template mensal de receita pertencente à conta autenticada, com concorrência otimista. Não altera receitas reais.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "recurring_income_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "expected_updated_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "changes": {
+              "type": "object",
+              "properties": {
+                "description": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "amount": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "day_of_month": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 31
+                },
+                "start_date": {
+                  "type": "string",
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                },
+                "end_date": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/properties/changes/properties/start_date"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "income_category_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "is_active": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "recurring_income_id",
+            "expected_updated_at",
+            "changes"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "recurring_income"
+            },
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "applied": {
+              "type": "boolean"
+            },
+            "changed_fields": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "description",
+                  "amount",
+                  "day_of_month",
+                  "start_date",
+                  "end_date",
+                  "income_category_id",
+                  "is_active"
+                ]
+              }
+            },
+            "before": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "day_of_month": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 31
+                },
+                "start_date": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "end_date": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/properties/before/properties/start_date/anyOf/0"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "is_active": {
+                  "type": "boolean"
+                },
+                "category_name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "category_icon": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "is_shared": {
+                  "type": "boolean"
+                },
+                "shared_group_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "created_at": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "type": "string"
+                },
+                "income_category_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "description",
+                "amount",
+                "day_of_month",
+                "start_date",
+                "end_date",
+                "is_active",
+                "category_name",
+                "category_icon",
+                "is_shared",
+                "shared_group_id",
+                "created_at",
+                "updated_at",
+                "income_category_id"
+              ],
+              "additionalProperties": false
+            },
+            "after": {
+              "$ref": "#/properties/before"
+            },
+            "updated_at_before": {
+              "type": "string"
+            },
+            "updated_at_after": {
+              "type": "string"
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "NO_EFFECTIVE_CHANGES",
+                  "RECURRING_TEMPLATE_ONLY",
+                  "RECURRING_DAY_MAY_BE_SKIPPED",
+                  "RECURRING_START_DATE_FALLBACK",
+                  "CATEGORY_SNAPSHOT_UPDATED",
+                  "CARD_REFERENCE_UPDATED",
+                  "SHARED_TEMPLATE_CREATED",
+                  "SHARED_TEMPLATE_UPDATED"
+                ]
+              }
+            },
+            "data_complete": {
+              "type": "boolean",
+              "const": true
+            }
+          },
+          "required": [
+            "resource_type",
+            "id",
+            "applied",
+            "changed_fields",
+            "before",
+            "after",
+            "updated_at_before",
+            "updated_at_after",
+            "warnings",
+            "data_complete"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
       }
     ]
   }

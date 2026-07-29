@@ -514,7 +514,7 @@ equal(
 }
 
 const tools = manifest.mcp.tools;
-equal(tools.length, 24, "manifest contém exatamente 24 tools");
+equal(tools.length, 28, "manifest contém exatamente 28 tools");
 equal(
   tools.filter((tool) => tool.annotations?.readOnlyHint === true).length,
   18,
@@ -522,8 +522,8 @@ equal(
 );
 equal(
   tools.filter((tool) => tool.annotations?.readOnlyHint !== true).length,
-  6,
-  "manifest mantém 6 tools write",
+  10,
+  "manifest mantém 10 tools write",
 );
 const manifestTool = tools.find((tool) => tool.name === "get_cashflow_series");
 check(manifestTool, "get_cashflow_series registrada");

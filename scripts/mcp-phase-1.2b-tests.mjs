@@ -520,9 +520,9 @@ for (const [tool, type] of [
 
 const manifest = JSON.parse(await readFile(".lovable/mcp/manifest.json", "utf8"));
 const tools = manifest.mcp.tools;
-equal(tools.length, 24, "manifest 24 tools");
+equal(tools.length, 28, "manifest 28 tools");
 equal(tools.filter((tool) => tool.annotations?.readOnlyHint === true).length, 18, "18 read-only");
-equal(tools.filter((tool) => tool.annotations?.readOnlyHint !== true).length, 6, "6 write");
+equal(tools.filter((tool) => tool.annotations?.readOnlyHint !== true).length, 10, "10 write");
 for (const name of ["delete_expense", "delete_income"]) {
   const tool = tools.find((candidate) => candidate.name === name);
   check(tool, `${name} no manifest`);

@@ -5848,6 +5848,716 @@ var delete_income_default = defineTool24({
   }
 });
 
+// src/lib/mcp/tools/create-recurring-expense.ts
+import { defineTool as defineTool25 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z29 } from "npm:zod@^3.25.76";
+
+// src/lib/mcp/shared/recurring-write.ts
+import { z as z28 } from "npm:zod@^3.25.76";
+var RECURRING_WRITE_WARNINGS = [
+  "NO_EFFECTIVE_CHANGES",
+  "RECURRING_TEMPLATE_ONLY",
+  "RECURRING_DAY_MAY_BE_SKIPPED",
+  "RECURRING_START_DATE_FALLBACK",
+  "CATEGORY_SNAPSHOT_UPDATED",
+  "CARD_REFERENCE_UPDATED",
+  "SHARED_TEMPLATE_CREATED",
+  "SHARED_TEMPLATE_UPDATED"
+];
+var recurringWarningSchema = z28.enum(RECURRING_WRITE_WARNINGS);
+var recurringDaySchema = z28.number().int().min(1).max(31);
+var recurringExpenseChangesSchema = z28.object({
+  description: descriptionSchema.optional(),
+  amount: amountSchema.optional(),
+  day_of_month: recurringDaySchema.optional(),
+  start_date: civilDateSchema.optional(),
+  end_date: civilDateSchema.nullable().optional(),
+  category_id: z28.string().uuid().nullable().optional(),
+  payment_method: z28.enum(PAYMENT_METHODS).optional(),
+  card_id: z28.string().uuid().nullable().optional(),
+  is_active: z28.boolean().optional()
+}).strict().refine((changes) => Object.keys(changes).length > 0, {
+  message: "Informe pelo menos uma altera\xE7\xE3o."
+});
+var recurringIncomeChangesSchema = z28.object({
+  description: descriptionSchema.optional(),
+  amount: amountSchema.optional(),
+  day_of_month: recurringDaySchema.optional(),
+  start_date: civilDateSchema.optional(),
+  end_date: civilDateSchema.nullable().optional(),
+  income_category_id: z28.string().uuid().nullable().optional(),
+  is_active: z28.boolean().optional()
+}).strict().refine((changes) => Object.keys(changes).length > 0, {
+  message: "Informe pelo menos uma altera\xE7\xE3o."
+});
+var recurringBaseViewShape = {
+  id: z28.string().uuid(),
+  description: z28.string(),
+  amount: z28.number(),
+  day_of_month: recurringDaySchema,
+  start_date: civilDateSchema.nullable(),
+  end_date: civilDateSchema.nullable(),
+  is_active: z28.boolean(),
+  category_name: z28.string().nullable(),
+  category_icon: z28.string().nullable(),
+  is_shared: z28.boolean(),
+  shared_group_id: z28.string().uuid().nullable(),
+  created_at: z28.string(),
+  updated_at: z28.string()
+};
+var recurringExpenseViewSchema = z28.object({
+  ...recurringBaseViewShape,
+  category_id: z28.string().uuid().nullable(),
+  payment_method: z28.enum(PAYMENT_METHODS),
+  card_id: z28.string().uuid().nullable(),
+  card_name: z28.string().nullable(),
+  card_color: z28.string().nullable()
+}).strict();
+var recurringIncomeViewSchema = z28.object({
+  ...recurringBaseViewShape,
+  income_category_id: z28.string().uuid().nullable()
+}).strict();
+function datesForView(row) {
+  const startDate = row.start_date === null ? null : preserveSqlDate(row.start_date);
+  const endDate = row.end_date === null ? null : preserveSqlDate(row.end_date);
+  if (row.start_date !== null && startDate === null || row.end_date !== null && endDate === null) {
+    return null;
+  }
+  return { start_date: startDate, end_date: endDate };
+}
+function recurringExpenseView(row) {
+  const dates = datesForView(row);
+  if (!dates) return null;
+  return {
+    id: row.id,
+    description: row.description,
+    amount: Number(row.amount),
+    day_of_month: row.day_of_month,
+    ...dates,
+    is_active: row.is_active,
+    category_id: row.category_id,
+    category_name: row.category_name,
+    category_icon: row.category_icon,
+    payment_method: row.payment_method,
+    card_id: row.card_id,
+    card_name: row.card_name,
+    card_color: row.card_color,
+    is_shared: row.shared_group_id !== null,
+    shared_group_id: row.shared_group_id,
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  };
+}
+function recurringIncomeView(row) {
+  const dates = datesForView(row);
+  if (!dates) return null;
+  return {
+    id: row.id,
+    description: row.description,
+    amount: Number(row.amount),
+    day_of_month: row.day_of_month,
+    ...dates,
+    is_active: row.is_active,
+    income_category_id: row.income_category_id,
+    category_name: row.category_name,
+    category_icon: row.category_icon,
+    is_shared: row.shared_group_id !== null,
+    shared_group_id: row.shared_group_id,
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  };
+}
+function validateRecurringRange(startDate, endDate) {
+  return !(startDate && endDate && endDate < startDate);
+}
+function recurringWarnings(dayOfMonth, startDate) {
+  const warnings = ["RECURRING_TEMPLATE_ONLY"];
+  if (dayOfMonth >= 29) warnings.push("RECURRING_DAY_MAY_BE_SKIPPED");
+  if (startDate === null) warnings.push("RECURRING_START_DATE_FALLBACK");
+  return warnings;
+}
+function recurringContent(result) {
+  const template = result.template ?? result.after ?? result.before ?? {};
+  const label = result.resource_type === "recurring_expense" ? "template mensal de despesa" : "template mensal de receita";
+  const state = result.applied === void 0 ? "criado" : result.applied ? "atualizado" : "n\xE3o alterado";
+  const changed = result.changed_fields?.map(
+    (field) => `${field}: ${JSON.stringify(result.before?.[field] ?? null)} -> ${JSON.stringify(result.after?.[field] ?? null)}`
+  ) ?? [];
+  const datePeriod = `${String(template.start_date ?? "fallback de created_at")} at\xE9 ${String(template.end_date ?? "sem data final")}`;
+  return `Foi ${state} o ${label} ${result.id}: descri\xE7\xE3o=${JSON.stringify(template.description)}; valor=${String(template.amount)}; dia do m\xEAs=${String(template.day_of_month)}; validade=${datePeriod}; situa\xE7\xE3o=${template.is_active ? "ativa" : "inativa"}; categoria=${JSON.stringify(template.category_name ?? null)}; ` + (result.resource_type === "recurring_expense" ? `forma de pagamento=${String(template.payment_method)}; cart\xE3o=${JSON.stringify(template.card_name ?? null)}; ` : "") + `escopo=${template.is_shared ? "compartilhado" : "pessoal"}; ` + (changed.length ? `altera\xE7\xF5es=${changed.join("; ")}; ` : "") + (result.updated_at_before ? `updated_at=${result.updated_at_before} -> ${result.updated_at_after}; ` : "") + `warnings=${JSON.stringify(result.warnings)}. Este registro \xE9 somente um template mensal. Nenhuma despesa ou receita real foi criada ou alterada. ` + (result.warnings.includes("RECURRING_DAY_MAY_BE_SKIPPED") ? "Meses sem esse dia n\xE3o produzir\xE3o ocorr\xEAncia no forecast; o dia n\xE3o ser\xE1 ajustado automaticamente. " : "") + (result.changed_fields?.includes("is_active") ? "A mudan\xE7a de situa\xE7\xE3o afeta apenas a participa\xE7\xE3o futura do template nas proje\xE7\xF5es; n\xE3o altera hist\xF3rico. " : "");
+}
+
+// src/lib/mcp/tools/create-recurring-expense.ts
+var COLUMNS = "id,user_id,description,amount,day_of_month,start_date,end_date,is_active,category_id,category_name,category_icon,payment_method,card_id,card_name,card_color,shared_group_id,created_at,updated_at";
+var inputProperties5 = {
+  description: descriptionSchema,
+  amount: amountSchema,
+  day_of_month: recurringDaySchema,
+  start_date: civilDateSchema.optional(),
+  end_date: civilDateSchema.nullable().optional(),
+  category_id: z29.string().uuid().nullable().optional(),
+  payment_method: z29.enum(PAYMENT_METHODS),
+  card_id: z29.string().uuid().nullable().optional(),
+  is_active: z29.boolean().optional(),
+  shared_group_id: z29.string().uuid().optional()
+};
+var inputValidator5 = z29.object(inputProperties5).strict();
+var create_recurring_expense_default = defineTool25({
+  name: "create_recurring_expense",
+  title: "Criar template mensal de despesa",
+  description: "Cria somente um template mensal de despesa para a conta autenticada. N\xE3o cria nem materializa uma despesa real.",
+  inputSchema: inputProperties5,
+  outputSchema: {
+    resource_type: z29.literal("recurring_expense"),
+    id: z29.string().uuid(),
+    created: z29.literal(true),
+    template: recurringExpenseViewSchema,
+    warnings: z29.array(recurringWarningSchema),
+    data_complete: z29.literal(true)
+  },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false
+  },
+  handler: async (rawInput, ctx) => {
+    const userId = ctx.getUserId();
+    if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
+    const parsed = inputValidator5.safeParse(rawInput);
+    if (!parsed.success) return mcpError("INVALID_INPUT");
+    const input = parsed.data;
+    const startDate = input.start_date ?? todayIso();
+    if (!validateRecurringRange(startDate, input.end_date)) {
+      return mcpError("INVALID_DATE_RANGE");
+    }
+    const supabase = supabaseForUser(ctx);
+    if (input.shared_group_id) {
+      const group = await supabase.from("shared_groups").select("id").eq("id", input.shared_group_id).maybeSingle();
+      if (group.error) return mcpError("INTERNAL_ERROR");
+      if (!group.data) return mcpError("RESOURCE_NOT_FOUND");
+    }
+    let categorySnapshot = null;
+    if (input.category_id) {
+      const category = await supabase.from("user_categories").select("name,icon,is_active").eq("id", input.category_id).eq("user_id", userId).eq("is_active", true).maybeSingle();
+      if (category.error) return mcpError("INTERNAL_ERROR");
+      if (!category.data) return mcpError("CATEGORY_NOT_FOUND");
+      categorySnapshot = category.data;
+    }
+    const cardId = input.card_id ?? null;
+    let cardSnapshot = null;
+    if (!usesCard(input.payment_method) && cardId !== null) {
+      return mcpError("BUSINESS_RULE_VIOLATION");
+    }
+    if (cardId !== null) {
+      const card = await supabase.from("cards").select("name,color,card_type,is_active").eq("id", cardId).eq("user_id", userId).eq("is_active", true).maybeSingle();
+      if (card.error) return mcpError("INTERNAL_ERROR");
+      if (!card.data) return mcpError("CARD_NOT_FOUND");
+      if (!cardSupports(card.data.card_type, input.payment_method)) {
+        return mcpError("BUSINESS_RULE_VIOLATION");
+      }
+      cardSnapshot = card.data;
+    }
+    const insertResult = await supabase.from("recurring_expenses").insert({
+      user_id: userId,
+      description: input.description,
+      amount: input.amount,
+      day_of_month: input.day_of_month,
+      start_date: startDate,
+      end_date: input.end_date ?? null,
+      is_active: input.is_active ?? true,
+      category: "outros",
+      category_id: input.category_id ?? null,
+      category_name: categorySnapshot?.name ?? null,
+      category_icon: categorySnapshot?.icon ?? null,
+      payment_method: input.payment_method,
+      card_id: cardId,
+      card_name: cardSnapshot?.name ?? null,
+      card_color: cardSnapshot?.color ?? null,
+      shared_group_id: input.shared_group_id ?? null
+    }).select(COLUMNS).single();
+    if (insertResult.error || !insertResult.data) return mcpError("WRITE_FAILED");
+    const template = recurringExpenseView(
+      insertResult.data
+    );
+    if (!template || !recurringExpenseViewSchema.safeParse(template).success) {
+      return mcpError("INVALID_DATA");
+    }
+    const warnings = recurringWarnings(
+      template.day_of_month,
+      template.start_date
+    );
+    if (input.category_id) warnings.push("CATEGORY_SNAPSHOT_UPDATED");
+    if (cardId) warnings.push("CARD_REFERENCE_UPDATED");
+    if (template.is_shared) warnings.push("SHARED_TEMPLATE_CREATED");
+    const result = {
+      resource_type: "recurring_expense",
+      id: template.id,
+      created: true,
+      template,
+      warnings,
+      data_complete: true
+    };
+    return {
+      content: [{ type: "text", text: recurringContent(result) }],
+      structuredContent: result
+    };
+  }
+});
+
+// src/lib/mcp/tools/create-recurring-income.ts
+import { defineTool as defineTool26 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z30 } from "npm:zod@^3.25.76";
+var COLUMNS2 = "id,user_id,description,amount,day_of_month,start_date,end_date,is_active,income_category_id,category_name,category_icon,shared_group_id,created_at,updated_at";
+var inputProperties6 = {
+  description: descriptionSchema,
+  amount: amountSchema,
+  day_of_month: recurringDaySchema,
+  start_date: civilDateSchema.optional(),
+  end_date: civilDateSchema.nullable().optional(),
+  income_category_id: z30.string().uuid().nullable().optional(),
+  is_active: z30.boolean().optional(),
+  shared_group_id: z30.string().uuid().optional()
+};
+var inputValidator6 = z30.object(inputProperties6).strict();
+var create_recurring_income_default = defineTool26({
+  name: "create_recurring_income",
+  title: "Criar template mensal de receita",
+  description: "Cria somente um template mensal de receita para a conta autenticada. N\xE3o cria nem materializa uma receita real.",
+  inputSchema: inputProperties6,
+  outputSchema: {
+    resource_type: z30.literal("recurring_income"),
+    id: z30.string().uuid(),
+    created: z30.literal(true),
+    template: recurringIncomeViewSchema,
+    warnings: z30.array(recurringWarningSchema),
+    data_complete: z30.literal(true)
+  },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false
+  },
+  handler: async (rawInput, ctx) => {
+    const userId = ctx.getUserId();
+    if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
+    const parsed = inputValidator6.safeParse(rawInput);
+    if (!parsed.success) return mcpError("INVALID_INPUT");
+    const input = parsed.data;
+    const startDate = input.start_date ?? todayIso();
+    if (!validateRecurringRange(startDate, input.end_date)) {
+      return mcpError("INVALID_DATE_RANGE");
+    }
+    const supabase = supabaseForUser(ctx);
+    if (input.shared_group_id) {
+      const group = await supabase.from("shared_groups").select("id").eq("id", input.shared_group_id).maybeSingle();
+      if (group.error) return mcpError("INTERNAL_ERROR");
+      if (!group.data) return mcpError("RESOURCE_NOT_FOUND");
+    }
+    let categorySnapshot = null;
+    if (input.income_category_id) {
+      const category = await supabase.from("user_income_categories").select("name,icon,is_active").eq("id", input.income_category_id).eq("user_id", userId).eq("is_active", true).maybeSingle();
+      if (category.error) return mcpError("INTERNAL_ERROR");
+      if (!category.data) return mcpError("CATEGORY_NOT_FOUND");
+      categorySnapshot = category.data;
+    }
+    const insertResult = await supabase.from("recurring_incomes").insert({
+      user_id: userId,
+      description: input.description,
+      amount: input.amount,
+      day_of_month: input.day_of_month,
+      start_date: startDate,
+      end_date: input.end_date ?? null,
+      is_active: input.is_active ?? true,
+      category: input.income_category_id ? "outros" : "salario",
+      income_category_id: input.income_category_id ?? null,
+      category_name: categorySnapshot?.name ?? null,
+      category_icon: categorySnapshot?.icon ?? null,
+      shared_group_id: input.shared_group_id ?? null
+    }).select(COLUMNS2).single();
+    if (insertResult.error || !insertResult.data) return mcpError("WRITE_FAILED");
+    const template = recurringIncomeView(
+      insertResult.data
+    );
+    if (!template || !recurringIncomeViewSchema.safeParse(template).success) {
+      return mcpError("INVALID_DATA");
+    }
+    const warnings = recurringWarnings(
+      template.day_of_month,
+      template.start_date
+    );
+    if (input.income_category_id) warnings.push("CATEGORY_SNAPSHOT_UPDATED");
+    if (template.is_shared) warnings.push("SHARED_TEMPLATE_CREATED");
+    const result = {
+      resource_type: "recurring_income",
+      id: template.id,
+      created: true,
+      template,
+      warnings,
+      data_complete: true
+    };
+    return {
+      content: [{ type: "text", text: recurringContent(result) }],
+      structuredContent: result
+    };
+  }
+});
+
+// src/lib/mcp/tools/update-recurring-expense.ts
+import { defineTool as defineTool27 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z31 } from "npm:zod@^3.25.76";
+var COLUMNS3 = "id,user_id,description,amount,day_of_month,start_date,end_date,is_active,category_id,category_name,category_icon,payment_method,card_id,card_name,card_color,shared_group_id,created_at,updated_at";
+var CHANGE_FIELDS = [
+  "description",
+  "amount",
+  "day_of_month",
+  "start_date",
+  "end_date",
+  "category_id",
+  "payment_method",
+  "card_id",
+  "is_active"
+];
+var inputProperties7 = {
+  recurring_expense_id: z31.string().uuid(),
+  expected_updated_at: expectedUpdatedAtSchema,
+  changes: recurringExpenseChangesSchema
+};
+var inputValidator7 = z31.object(inputProperties7).strict();
+var update_recurring_expense_default = defineTool27({
+  name: "update_recurring_expense",
+  title: "Editar template mensal de despesa",
+  description: "Edita parcialmente somente um template mensal de despesa pertencente \xE0 conta autenticada, com concorr\xEAncia otimista. N\xE3o altera despesas reais.",
+  inputSchema: inputProperties7,
+  outputSchema: {
+    resource_type: z31.literal("recurring_expense"),
+    id: z31.string().uuid(),
+    applied: z31.boolean(),
+    changed_fields: z31.array(z31.enum(CHANGE_FIELDS)),
+    before: recurringExpenseViewSchema,
+    after: recurringExpenseViewSchema,
+    updated_at_before: z31.string(),
+    updated_at_after: z31.string(),
+    warnings: z31.array(recurringWarningSchema),
+    data_complete: z31.literal(true)
+  },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: false
+  },
+  handler: async (rawInput, ctx) => {
+    const userId = ctx.getUserId();
+    if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
+    const parsed = inputValidator7.safeParse(rawInput);
+    if (!parsed.success) {
+      return mcpError(
+        parsed.error.issues.some((issue) => issue.path[0] === "changes") ? "INVALID_PATCH" : "INVALID_INPUT"
+      );
+    }
+    const input = parsed.data;
+    const supabase = supabaseForUser(ctx);
+    const currentResult = await supabase.from("recurring_expenses").select(COLUMNS3).eq("id", input.recurring_expense_id).eq("user_id", userId).maybeSingle();
+    if (currentResult.error) return mcpError("INTERNAL_ERROR");
+    if (!currentResult.data) return mcpError("RESOURCE_NOT_FOUND");
+    const current = currentResult.data;
+    if (current.updated_at !== input.expected_updated_at) {
+      return mcpError("CONCURRENT_MODIFICATION");
+    }
+    const before = recurringExpenseView(current);
+    if (!before || !recurringExpenseViewSchema.safeParse(before).success) {
+      return mcpError("INVALID_DATA");
+    }
+    const changes = input.changes;
+    const finalStartDate = changes.start_date ?? before.start_date;
+    const finalEndDate = changes.end_date !== void 0 ? changes.end_date : before.end_date;
+    if (!validateRecurringRange(finalStartDate, finalEndDate)) {
+      return mcpError("INVALID_DATE_RANGE");
+    }
+    const patch = {};
+    const changedFields = [];
+    const warnings = [];
+    const assign = (field, value, currentValue) => {
+      if (value !== void 0 && value !== currentValue) {
+        patch[field] = value;
+        changedFields.push(field);
+      }
+    };
+    assign("description", changes.description, current.description);
+    assign("amount", changes.amount, Number(current.amount));
+    assign("day_of_month", changes.day_of_month, current.day_of_month);
+    assign("start_date", changes.start_date, before.start_date);
+    assign("end_date", changes.end_date, before.end_date);
+    assign("is_active", changes.is_active, current.is_active);
+    if (changes.category_id !== void 0 && changes.category_id !== current.category_id) {
+      if (changes.category_id === null) {
+        patch.category_id = null;
+        patch.category_name = null;
+        patch.category_icon = null;
+      } else {
+        const category = await supabase.from("user_categories").select("name,icon,is_active").eq("id", changes.category_id).eq("user_id", userId).eq("is_active", true).maybeSingle();
+        if (category.error) return mcpError("INTERNAL_ERROR");
+        if (!category.data) return mcpError("CATEGORY_NOT_FOUND");
+        patch.category_id = changes.category_id;
+        patch.category_name = category.data.name;
+        patch.category_icon = category.data.icon;
+      }
+      changedFields.push("category_id");
+      warnings.push("CATEGORY_SNAPSHOT_UPDATED");
+    }
+    const finalPaymentMethod = changes.payment_method ?? current.payment_method;
+    if (changes.payment_method !== void 0 && changes.payment_method !== current.payment_method) {
+      patch.payment_method = changes.payment_method;
+      changedFields.push("payment_method");
+    }
+    let finalCardId = changes.card_id !== void 0 ? changes.card_id : current.card_id;
+    if (!usesCard(finalPaymentMethod)) {
+      if (changes.card_id !== void 0 && changes.card_id !== null) {
+        return mcpError("BUSINESS_RULE_VIOLATION");
+      }
+      finalCardId = null;
+    }
+    const cardChanged = finalCardId !== current.card_id;
+    if (finalCardId !== null && (cardChanged || finalPaymentMethod !== current.payment_method)) {
+      const card = await supabase.from("cards").select("name,color,card_type,is_active").eq("id", finalCardId).eq("user_id", userId).maybeSingle();
+      if (card.error) return mcpError("INTERNAL_ERROR");
+      if (!card.data || cardChanged && card.data.is_active !== true) {
+        return mcpError("CARD_NOT_FOUND");
+      }
+      if (!cardSupports(card.data.card_type, finalPaymentMethod)) {
+        return mcpError("BUSINESS_RULE_VIOLATION");
+      }
+      if (cardChanged) {
+        patch.card_id = finalCardId;
+        patch.card_name = card.data.name;
+        patch.card_color = card.data.color;
+      }
+    } else if (cardChanged) {
+      patch.card_id = null;
+      patch.card_name = null;
+      patch.card_color = null;
+    }
+    if (cardChanged) {
+      changedFields.push("card_id");
+      warnings.push("CARD_REFERENCE_UPDATED");
+    }
+    if (changedFields.length === 0) {
+      const result2 = {
+        resource_type: "recurring_expense",
+        id: current.id,
+        applied: false,
+        changed_fields: changedFields,
+        before,
+        after: before,
+        updated_at_before: current.updated_at,
+        updated_at_after: current.updated_at,
+        warnings: [
+          "RECURRING_TEMPLATE_ONLY",
+          "NO_EFFECTIVE_CHANGES"
+        ],
+        data_complete: true
+      };
+      return {
+        content: [{ type: "text", text: recurringContent(result2) }],
+        structuredContent: result2
+      };
+    }
+    const updateResult = await supabase.from("recurring_expenses").update(patch).eq("id", input.recurring_expense_id).eq("user_id", userId).eq("updated_at", input.expected_updated_at).select(COLUMNS3).maybeSingle();
+    if (updateResult.error) return mcpError("WRITE_FAILED");
+    if (!updateResult.data) {
+      const existence = await supabase.from("recurring_expenses").select("id,updated_at").eq("id", input.recurring_expense_id).eq("user_id", userId).maybeSingle();
+      if (existence.error) return mcpError("INTERNAL_ERROR");
+      return mcpError(
+        existence.data ? "CONCURRENT_MODIFICATION" : "RESOURCE_NOT_FOUND"
+      );
+    }
+    const after = recurringExpenseView(
+      updateResult.data
+    );
+    if (!after || !recurringExpenseViewSchema.safeParse(after).success) {
+      return mcpError("INVALID_DATA");
+    }
+    warnings.unshift(...recurringWarnings(after.day_of_month, after.start_date));
+    if (before.is_shared) warnings.push("SHARED_TEMPLATE_UPDATED");
+    const result = {
+      resource_type: "recurring_expense",
+      id: current.id,
+      applied: true,
+      changed_fields: changedFields,
+      before,
+      after,
+      updated_at_before: current.updated_at,
+      updated_at_after: after.updated_at,
+      warnings: [...new Set(warnings)],
+      data_complete: true
+    };
+    return {
+      content: [{ type: "text", text: recurringContent(result) }],
+      structuredContent: result
+    };
+  }
+});
+
+// src/lib/mcp/tools/update-recurring-income.ts
+import { defineTool as defineTool28 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z32 } from "npm:zod@^3.25.76";
+var COLUMNS4 = "id,user_id,description,amount,day_of_month,start_date,end_date,is_active,income_category_id,category_name,category_icon,shared_group_id,created_at,updated_at";
+var CHANGE_FIELDS2 = [
+  "description",
+  "amount",
+  "day_of_month",
+  "start_date",
+  "end_date",
+  "income_category_id",
+  "is_active"
+];
+var inputProperties8 = {
+  recurring_income_id: z32.string().uuid(),
+  expected_updated_at: expectedUpdatedAtSchema,
+  changes: recurringIncomeChangesSchema
+};
+var inputValidator8 = z32.object(inputProperties8).strict();
+var update_recurring_income_default = defineTool28({
+  name: "update_recurring_income",
+  title: "Editar template mensal de receita",
+  description: "Edita parcialmente somente um template mensal de receita pertencente \xE0 conta autenticada, com concorr\xEAncia otimista. N\xE3o altera receitas reais.",
+  inputSchema: inputProperties8,
+  outputSchema: {
+    resource_type: z32.literal("recurring_income"),
+    id: z32.string().uuid(),
+    applied: z32.boolean(),
+    changed_fields: z32.array(z32.enum(CHANGE_FIELDS2)),
+    before: recurringIncomeViewSchema,
+    after: recurringIncomeViewSchema,
+    updated_at_before: z32.string(),
+    updated_at_after: z32.string(),
+    warnings: z32.array(recurringWarningSchema),
+    data_complete: z32.literal(true)
+  },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: false
+  },
+  handler: async (rawInput, ctx) => {
+    const userId = ctx.getUserId();
+    if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
+    const parsed = inputValidator8.safeParse(rawInput);
+    if (!parsed.success) {
+      return mcpError(
+        parsed.error.issues.some((issue) => issue.path[0] === "changes") ? "INVALID_PATCH" : "INVALID_INPUT"
+      );
+    }
+    const input = parsed.data;
+    const supabase = supabaseForUser(ctx);
+    const currentResult = await supabase.from("recurring_incomes").select(COLUMNS4).eq("id", input.recurring_income_id).eq("user_id", userId).maybeSingle();
+    if (currentResult.error) return mcpError("INTERNAL_ERROR");
+    if (!currentResult.data) return mcpError("RESOURCE_NOT_FOUND");
+    const current = currentResult.data;
+    if (current.updated_at !== input.expected_updated_at) {
+      return mcpError("CONCURRENT_MODIFICATION");
+    }
+    const before = recurringIncomeView(current);
+    if (!before || !recurringIncomeViewSchema.safeParse(before).success) {
+      return mcpError("INVALID_DATA");
+    }
+    const changes = input.changes;
+    const finalStartDate = changes.start_date ?? before.start_date;
+    const finalEndDate = changes.end_date !== void 0 ? changes.end_date : before.end_date;
+    if (!validateRecurringRange(finalStartDate, finalEndDate)) {
+      return mcpError("INVALID_DATE_RANGE");
+    }
+    const patch = {};
+    const changedFields = [];
+    const warnings = [];
+    const assign = (field, value, currentValue) => {
+      if (value !== void 0 && value !== currentValue) {
+        patch[field] = value;
+        changedFields.push(field);
+      }
+    };
+    assign("description", changes.description, current.description);
+    assign("amount", changes.amount, Number(current.amount));
+    assign("day_of_month", changes.day_of_month, current.day_of_month);
+    assign("start_date", changes.start_date, before.start_date);
+    assign("end_date", changes.end_date, before.end_date);
+    assign("is_active", changes.is_active, current.is_active);
+    if (changes.income_category_id !== void 0 && changes.income_category_id !== current.income_category_id) {
+      if (changes.income_category_id === null) {
+        patch.income_category_id = null;
+        patch.category_name = null;
+        patch.category_icon = null;
+      } else {
+        const category = await supabase.from("user_income_categories").select("name,icon,is_active").eq("id", changes.income_category_id).eq("user_id", userId).eq("is_active", true).maybeSingle();
+        if (category.error) return mcpError("INTERNAL_ERROR");
+        if (!category.data) return mcpError("CATEGORY_NOT_FOUND");
+        patch.income_category_id = changes.income_category_id;
+        patch.category_name = category.data.name;
+        patch.category_icon = category.data.icon;
+      }
+      changedFields.push("income_category_id");
+      warnings.push("CATEGORY_SNAPSHOT_UPDATED");
+    }
+    if (changedFields.length === 0) {
+      const result2 = {
+        resource_type: "recurring_income",
+        id: current.id,
+        applied: false,
+        changed_fields: changedFields,
+        before,
+        after: before,
+        updated_at_before: current.updated_at,
+        updated_at_after: current.updated_at,
+        warnings: [
+          "RECURRING_TEMPLATE_ONLY",
+          "NO_EFFECTIVE_CHANGES"
+        ],
+        data_complete: true
+      };
+      return {
+        content: [{ type: "text", text: recurringContent(result2) }],
+        structuredContent: result2
+      };
+    }
+    const updateResult = await supabase.from("recurring_incomes").update(patch).eq("id", input.recurring_income_id).eq("user_id", userId).eq("updated_at", input.expected_updated_at).select(COLUMNS4).maybeSingle();
+    if (updateResult.error) return mcpError("WRITE_FAILED");
+    if (!updateResult.data) {
+      const existence = await supabase.from("recurring_incomes").select("id,updated_at").eq("id", input.recurring_income_id).eq("user_id", userId).maybeSingle();
+      if (existence.error) return mcpError("INTERNAL_ERROR");
+      return mcpError(
+        existence.data ? "CONCURRENT_MODIFICATION" : "RESOURCE_NOT_FOUND"
+      );
+    }
+    const after = recurringIncomeView(
+      updateResult.data
+    );
+    if (!after || !recurringIncomeViewSchema.safeParse(after).success) {
+      return mcpError("INVALID_DATA");
+    }
+    warnings.unshift(...recurringWarnings(after.day_of_month, after.start_date));
+    if (before.is_shared) warnings.push("SHARED_TEMPLATE_UPDATED");
+    const result = {
+      resource_type: "recurring_income",
+      id: current.id,
+      applied: true,
+      changed_fields: changedFields,
+      before,
+      after,
+      updated_at_before: current.updated_at,
+      updated_at_after: after.updated_at,
+      warnings: [...new Set(warnings)],
+      data_complete: true
+    };
+    return {
+      content: [{ type: "text", text: recurringContent(result) }],
+      structuredContent: result
+    };
+  }
+});
+
 // src/lib/mcp/index.ts
 var projectRef = "jaoldaqvbdllowepzwbr";
 var mcp_default = defineMcp({
@@ -5883,7 +6593,11 @@ var mcp_default = defineMcp({
     update_expense_default,
     update_income_default,
     delete_expense_default,
-    delete_income_default
+    delete_income_default,
+    create_recurring_expense_default,
+    create_recurring_income_default,
+    update_recurring_expense_default,
+    update_recurring_income_default
   ]
 });
 
