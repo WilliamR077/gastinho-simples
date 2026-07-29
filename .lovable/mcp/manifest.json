@@ -8558,6 +8558,260 @@
           "additionalProperties": false,
           "$schema": "http://json-schema.org/draft-07/schema#"
         }
+      },
+      {
+        "name": "delete_card",
+        "title": "Excluir cartão",
+        "description": "Exclui permanentemente somente um cartão pessoal inativo, sem despesas, parcelas ou templates recorrentes vinculados, com confirmação e concorrência otimista.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "card_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "expected_updated_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "confirm_delete": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "card_id",
+            "expected_updated_at",
+            "confirm_delete"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "card"
+            },
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "deleted": {
+              "type": "boolean",
+              "const": true
+            },
+            "deletion_mode": {
+              "type": "string",
+              "const": "permanent"
+            },
+            "deleted_card": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "card_type": {
+                  "type": "string",
+                  "enum": [
+                    "credit",
+                    "debit",
+                    "both"
+                  ]
+                },
+                "color": {
+                  "type": "string",
+                  "enum": [
+                    "#FFA500",
+                    "#9333EA",
+                    "#3B82F6",
+                    "#10B981",
+                    "#EF4444",
+                    "#F97316",
+                    "#EC4899",
+                    "#6366F1",
+                    "#06B6D4",
+                    "#84CC16",
+                    "#F59E0B",
+                    "#14B8A6",
+                    "#D946EF",
+                    "#64748B",
+                    "#0EA5E9",
+                    "#059669"
+                  ]
+                },
+                "card_limit": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "opening_day": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 31
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "closing_day": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/properties/deleted_card/properties/opening_day/anyOf/0"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "due_day": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/properties/deleted_card/properties/opening_day/anyOf/0"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "days_before_due": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 28
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "is_active": {
+                  "type": "boolean"
+                },
+                "created_at": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "card_type",
+                "color",
+                "card_limit",
+                "opening_day",
+                "closing_day",
+                "due_day",
+                "days_before_due",
+                "is_active",
+                "created_at",
+                "updated_at"
+              ],
+              "additionalProperties": false
+            },
+            "reference_summary": {
+              "type": "object",
+              "properties": {
+                "historical_expense_count": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "future_materialized_expense_count": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "installment_expense_count": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "active_recurring_template_count": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "inactive_recurring_template_count": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "total_expense_reference_count": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "total_recurring_reference_count": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "total_reference_count": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "historical_expense_count",
+                "future_materialized_expense_count",
+                "installment_expense_count",
+                "active_recurring_template_count",
+                "inactive_recurring_template_count",
+                "total_expense_reference_count",
+                "total_recurring_reference_count",
+                "total_reference_count"
+              ],
+              "additionalProperties": false
+            },
+            "operation_completed_at": {
+              "type": "string"
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "PERMANENT_DELETION",
+                  "CARD_DELETED",
+                  "BANK_ISSUER_UNAFFECTED"
+                ]
+              }
+            },
+            "data_complete": {
+              "type": "boolean",
+              "const": true
+            }
+          },
+          "required": [
+            "resource_type",
+            "id",
+            "deleted",
+            "deletion_mode",
+            "deleted_card",
+            "reference_summary",
+            "operation_completed_at",
+            "warnings",
+            "data_complete"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
       }
     ]
   }

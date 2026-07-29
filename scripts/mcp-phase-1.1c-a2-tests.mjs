@@ -447,7 +447,7 @@ const rows = [
 }
 
 const tools = manifest.mcp.tools;
-equal(tools.length, 35, "manifest contém exatamente 35 tools");
+equal(tools.length, 36, "manifest contém exatamente 36 tools");
 equal(
   tools.filter((tool) => tool.annotations?.readOnlyHint === true).length,
   18,
@@ -455,8 +455,8 @@ equal(
 );
 equal(
   tools.filter((tool) => tool.annotations?.readOnlyHint !== true).length,
-  17,
-  "manifest contém 17 tools write",
+  18,
+  "manifest contém 18 tools write",
 );
 const manifestTool = tools.find((tool) => tool.name === "get_card_summary");
 check(manifestTool, "get_card_summary está no manifest");

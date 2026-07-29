@@ -568,9 +568,9 @@ for (const date of ["2023-02-29", "2026-02-30", "2026-13-01", "2026-01-01T00:00:
 
 const manifest = JSON.parse(await readFile(".lovable/mcp/manifest.json", "utf8"));
 const tools = manifest.mcp.tools;
-equal(tools.length, 35, "manifest 35 tools");
+equal(tools.length, 36, "manifest 36 tools");
 equal(tools.filter((tool) => tool.annotations?.readOnlyHint === true).length, 18, "18 read-only");
-equal(tools.filter((tool) => tool.annotations?.readOnlyHint === false).length, 17, "17 write");
+equal(tools.filter((tool) => tool.annotations?.readOnlyHint === false).length, 18, "18 write");
 for (const name of [
   "create_recurring_expense",
   "create_recurring_income",

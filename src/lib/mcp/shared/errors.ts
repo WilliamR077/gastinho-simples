@@ -28,6 +28,8 @@ export const MCP_ERROR_CODES = {
   WRITE_FAILED: "WRITE_FAILED",
   INVALID_CARD_TYPE: "INVALID_CARD_TYPE",
   INVALID_CARD_CONFIGURATION: "INVALID_CARD_CONFIGURATION",
+  CARD_MUST_BE_INACTIVE: "CARD_MUST_BE_INACTIVE",
+  CARD_HAS_REFERENCES: "CARD_HAS_REFERENCES",
   INVALID_DATA: "INVALID_DATA",
   DATE_RANGE_TOO_LARGE: "DATE_RANGE_TOO_LARGE",
   RESULT_SET_TOO_LARGE: "RESULT_SET_TOO_LARGE",
@@ -71,6 +73,10 @@ const MESSAGES: Record<McpErrorCode, string> = {
   INVALID_CARD_TYPE: "Tipo de cartão inválido. Use credit, debit ou both.",
   INVALID_CARD_CONFIGURATION:
     "A configuração do cartão é inválida para o tipo informado.",
+  CARD_MUST_BE_INACTIVE:
+    "O cartão precisa estar inativo antes da exclusão permanente.",
+  CARD_HAS_REFERENCES:
+    "O cartão possui referências e não pode ser excluído.",
   INVALID_DATA: "Os dados informados são inválidos.",
   DATE_RANGE_TOO_LARGE: "Intervalo de datas excede o máximo permitido de 366 dias.",
   RESULT_SET_TOO_LARGE: "O conjunto de resultados excede o limite seguro. Reduza o intervalo ou refine os filtros.",

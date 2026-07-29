@@ -564,9 +564,9 @@ for (const table of ["expenses", "incomes"]) {
 }
 
 const tools = manifest.mcp.tools;
-equal(tools.length, 35, "manifest com 35 tools");
+equal(tools.length, 36, "manifest com 36 tools");
 equal(tools.filter((t) => t.annotations?.readOnlyHint === true).length, 18, "18 read-only");
-equal(tools.filter((t) => t.annotations?.readOnlyHint !== true).length, 17, "17 write");
+equal(tools.filter((t) => t.annotations?.readOnlyHint !== true).length, 18, "18 write");
 const declared = tools.find((t) => t.name === "get_cashflow_projection");
 check(declared?.annotations?.readOnlyHint === true, "tool read-only");
 check(declared?.outputSchema?.additionalProperties === false, "schema fechado");

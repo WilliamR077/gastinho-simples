@@ -880,7 +880,7 @@ check(
 
 const tools = manifest.mcp.tools;
 const names = tools.map((tool) => tool.name);
-equal(tools.length, 35, "manifest contém exatamente 35 tools");
+equal(tools.length, 36, "manifest contém exatamente 36 tools");
 equal(
   names.slice(10, 30),
   [

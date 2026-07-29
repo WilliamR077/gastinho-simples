@@ -49,6 +49,8 @@ var MESSAGES = {
   WRITE_FAILED: "N\xE3o foi poss\xEDvel concluir a opera\xE7\xE3o de escrita.",
   INVALID_CARD_TYPE: "Tipo de cart\xE3o inv\xE1lido. Use credit, debit ou both.",
   INVALID_CARD_CONFIGURATION: "A configura\xE7\xE3o do cart\xE3o \xE9 inv\xE1lida para o tipo informado.",
+  CARD_MUST_BE_INACTIVE: "O cart\xE3o precisa estar inativo antes da exclus\xE3o permanente.",
+  CARD_HAS_REFERENCES: "O cart\xE3o possui refer\xEAncias e n\xE3o pode ser exclu\xEDdo.",
   INVALID_DATA: "Os dados informados s\xE3o inv\xE1lidos.",
   DATE_RANGE_TOO_LARGE: "Intervalo de datas excede o m\xE1ximo permitido de 366 dias.",
   RESULT_SET_TOO_LARGE: "O conjunto de resultados excede o limite seguro. Reduza o intervalo ou refine os filtros.",
@@ -7602,7 +7604,7 @@ var update_card_default = defineTool35({
       }
     }
     const deactivating = before.is_active && !finalValues.is_active;
-    let referenceSummary = emptyReferenceSummary();
+    let referenceSummary2 = emptyReferenceSummary();
     let futureInstallmentCount = 0;
     if (deactivating) {
       const today = todayIso();
@@ -7613,7 +7615,7 @@ var update_card_default = defineTool35({
       if (historicalResult.error || futureResult.error || futureInstallmentResult.error || recurringResult.error) {
         return mcpError("INTERNAL_ERROR");
       }
-      referenceSummary = {
+      referenceSummary2 = {
         historical_expense_count: historicalResult.count ?? 0,
         future_materialized_expense_count: futureResult.count ?? 0,
         active_recurring_template_count: recurringResult.count ?? 0
@@ -7630,7 +7632,7 @@ var update_card_default = defineTool35({
         after: before,
         updated_at_before: before.updated_at,
         updated_at_after: before.updated_at,
-        reference_summary: referenceSummary,
+        reference_summary: referenceSummary2,
         warnings: ["NO_EFFECTIVE_CHANGES"],
         data_complete: true
       };
@@ -7659,13 +7661,13 @@ var update_card_default = defineTool35({
     if (billingAdjustmentWarning(after.due_day)) {
       warnings.push("BILLING_DAY_MAY_BE_ADJUSTED");
     }
-    if ((referenceSummary.historical_expense_count ?? 0) > 0) {
+    if ((referenceSummary2.historical_expense_count ?? 0) > 0) {
       warnings.push("HISTORICAL_CARD_REFERENCES_PRESERVED");
     }
     if (futureInstallmentCount > 0) {
       warnings.push("FUTURE_INSTALLMENTS_PRESERVED");
     }
-    if ((referenceSummary.active_recurring_template_count ?? 0) > 0) {
+    if ((referenceSummary2.active_recurring_template_count ?? 0) > 0) {
       warnings.push("ACTIVE_RECURRING_TEMPLATES_REFERENCE_CARD");
     }
     const result = {
@@ -7677,12 +7679,212 @@ var update_card_default = defineTool35({
       after,
       updated_at_before: before.updated_at,
       updated_at_after: after.updated_at,
-      reference_summary: referenceSummary,
+      reference_summary: referenceSummary2,
       warnings,
       data_complete: true
     };
     return {
       content: [{ type: "text", text: updateCardContent(result) }],
+      structuredContent: result
+    };
+  }
+});
+
+// src/lib/mcp/tools/delete-card.ts
+import { defineTool as defineTool36 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z44 } from "npm:zod@^3.25.76";
+
+// src/lib/mcp/shared/card-delete.ts
+import { z as z43 } from "npm:zod@^3.25.76";
+var CARD_DELETE_WARNINGS = [
+  "PERMANENT_DELETION",
+  "CARD_DELETED",
+  "BANK_ISSUER_UNAFFECTED"
+];
+var cardDeleteWarningSchema = z43.enum(CARD_DELETE_WARNINGS);
+var cardDeleteReferenceSummarySchema = z43.object({
+  historical_expense_count: z43.number().int().nonnegative(),
+  future_materialized_expense_count: z43.number().int().nonnegative(),
+  installment_expense_count: z43.number().int().nonnegative(),
+  active_recurring_template_count: z43.number().int().nonnegative(),
+  inactive_recurring_template_count: z43.number().int().nonnegative(),
+  total_expense_reference_count: z43.number().int().nonnegative(),
+  total_recurring_reference_count: z43.number().int().nonnegative(),
+  total_reference_count: z43.number().int().nonnegative()
+}).strict();
+var emptyCardDeleteReferenceSummary = () => ({
+  historical_expense_count: 0,
+  future_materialized_expense_count: 0,
+  installment_expense_count: 0,
+  active_recurring_template_count: 0,
+  inactive_recurring_template_count: 0,
+  total_expense_reference_count: 0,
+  total_recurring_reference_count: 0,
+  total_reference_count: 0
+});
+function cardFacts(card) {
+  const billing = supportsCredit(card.card_type) ? `limite=${card.card_limit ?? "null"}; opening_day=${card.opening_day ?? "null"}; closing_day=${card.closing_day ?? "null"}; due_day=${card.due_day ?? "null"}; days_before_due=${card.days_before_due ?? "null"}` : "limite=null; sem ciclo de cobran\xE7a";
+  return `id=${card.id}; nome=${JSON.stringify(card.name)}; tipo=${card.card_type}; status=${card.is_active ? "ativo" : "inativo"}; cor=${card.color}; ${billing}`;
+}
+function deleteCardConfirmationContent(card) {
+  return `Nada foi removido. Falta confirm_delete=true. A exclus\xE3o permanente deste cart\xE3o exige confirma\xE7\xE3o expl\xEDcita: ${cardFacts(card)}. N\xE3o existe restaura\xE7\xE3o pelo MCP. Nenhuma despesa, parcela, recorr\xEAncia ou refer\xEAncia seria removida ou alterada. Releia o cart\xE3o com list_cards e repita a chamada com confirm_delete=true e o expected_updated_at atual.`;
+}
+function activeCardDeletionBlockedContent(card) {
+  return `Nada foi removido. O cart\xE3o est\xE1 ativo: ${cardFacts(card)}. Desative-o primeiro com update_card, releia-o com list_cards e s\xF3 ent\xE3o solicite a exclus\xE3o permanente. O Gastinho n\xE3o alterou o cart\xE3o no banco emissor e nenhum dado banc\xE1rio foi acessado.`;
+}
+function referencedCardDeletionBlockedContent(card, summary) {
+  return `Nada foi removido. A exclus\xE3o do cart\xE3o ${JSON.stringify(card.name)} foi bloqueada para preservar o hist\xF3rico. Refer\xEAncias: despesas hist\xF3ricas=${summary.historical_expense_count}; lan\xE7amentos futuros=${summary.future_materialized_expense_count}; parcelas=${summary.installment_expense_count}; templates ativos=${summary.active_recurring_template_count}; templates inativos=${summary.inactive_recurring_template_count}; despesas distintas=${summary.total_expense_reference_count}; templates distintos=${summary.total_recurring_reference_count}; total distinto=${summary.total_reference_count}. Nenhuma despesa, parcela, recorr\xEAncia ou card_id foi removido ou alterado. Mantenha o cart\xE3o desativado; n\xE3o h\xE1 exclus\xE3o em cascata.`;
+}
+function deleteCardContent(result) {
+  return `Cart\xE3o exclu\xEDdo permanentemente somente do Gastinho: ${cardFacts(result.deleted_card)}. operation_completed_at=${result.operation_completed_at}; refer\xEAncias confirmadas=${JSON.stringify(result.reference_summary)}; warnings=${JSON.stringify(result.warnings)}. Nenhuma despesa, parcela ou recorr\xEAncia foi removida ou alterada. O cart\xE3o n\xE3o foi cancelado no banco emissor, nenhuma comunica\xE7\xE3o foi enviada ao emissor e nenhum dado banc\xE1rio foi acessado. N\xE3o existe restaura\xE7\xE3o pelo MCP.`;
+}
+
+// src/lib/mcp/tools/delete-card.ts
+var COLUMNS12 = "id,user_id,name,card_type,color,card_limit,opening_day,closing_day,due_day,days_before_due,is_active,created_at,updated_at";
+var inputProperties16 = {
+  card_id: z44.string().uuid(),
+  expected_updated_at: expectedUpdatedAtSchema,
+  confirm_delete: z44.boolean()
+};
+var inputValidator16 = z44.object({ ...inputProperties16, confirm_delete: z44.boolean().optional() }).strict();
+function referenceSummary(expenses, recurring, today) {
+  const dates = expenses.map((row) => preserveSqlDate(row.expense_date));
+  if (dates.some((date) => date === null)) return null;
+  const historical = dates.filter((date) => date <= today).length;
+  const future = dates.length - historical;
+  const installments = expenses.filter(
+    (row) => row.installment_group_id !== null || (row.installment_number ?? 0) > 1 || (row.total_installments ?? 0) > 1
+  ).length;
+  const active = recurring.filter((row) => row.is_active).length;
+  const inactive = recurring.length - active;
+  return {
+    historical_expense_count: historical,
+    future_materialized_expense_count: future,
+    installment_expense_count: installments,
+    active_recurring_template_count: active,
+    inactive_recurring_template_count: inactive,
+    total_expense_reference_count: expenses.length,
+    total_recurring_reference_count: recurring.length,
+    total_reference_count: expenses.length + recurring.length
+  };
+}
+var delete_card_default = defineTool36({
+  name: "delete_card",
+  title: "Excluir cart\xE3o",
+  description: "Exclui permanentemente somente um cart\xE3o pessoal inativo, sem despesas, parcelas ou templates recorrentes vinculados, com confirma\xE7\xE3o e concorr\xEAncia otimista.",
+  inputSchema: inputProperties16,
+  outputSchema: {
+    resource_type: z44.literal("card"),
+    id: z44.string().uuid(),
+    deleted: z44.literal(true),
+    deletion_mode: z44.literal("permanent"),
+    deleted_card: cardViewSchema,
+    reference_summary: cardDeleteReferenceSummarySchema,
+    operation_completed_at: z44.string(),
+    warnings: z44.array(cardDeleteWarningSchema),
+    data_complete: z44.literal(true)
+  },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: false
+  },
+  handler: async (rawInput, ctx) => {
+    const userId = ctx.getUserId();
+    if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
+    const parsed = inputValidator16.safeParse(rawInput);
+    if (!parsed.success) return mcpError("INVALID_INPUT");
+    const input = parsed.data;
+    const supabase = supabaseForUser(ctx);
+    const currentResult = await supabase.from("cards").select(COLUMNS12).eq("id", input.card_id).eq("user_id", userId).maybeSingle();
+    if (currentResult.error) return mcpError("INTERNAL_ERROR");
+    if (!currentResult.data) return mcpError("RESOURCE_NOT_FOUND");
+    const current = currentResult.data;
+    if (current.updated_at !== input.expected_updated_at) {
+      return mcpError(
+        "CONCURRENT_MODIFICATION",
+        "O cart\xE3o foi alterado desde a leitura. Releia-o com list_cards antes de tentar novamente."
+      );
+    }
+    const recognizable = cardWriteView(current, userId);
+    if (!recognizable) return mcpError("INVALID_DATA");
+    if (input.confirm_delete !== true) {
+      return mcpError(
+        "CONFIRMATION_REQUIRED",
+        deleteCardConfirmationContent(recognizable)
+      );
+    }
+    if (recognizable.is_active) {
+      return mcpError(
+        "CARD_MUST_BE_INACTIVE",
+        activeCardDeletionBlockedContent(recognizable)
+      );
+    }
+    const expensesResult = await supabase.from("expenses").select(
+      "id,expense_date,installment_group_id,installment_number,total_installments"
+    ).eq("user_id", userId).eq("card_id", input.card_id);
+    const recurringResult = await supabase.from("recurring_expenses").select("id,is_active").eq("user_id", userId).eq("card_id", input.card_id);
+    if (expensesResult.error || recurringResult.error) {
+      return mcpError("INTERNAL_ERROR");
+    }
+    const summary = referenceSummary(
+      expensesResult.data ?? [],
+      recurringResult.data ?? [],
+      todayIso()
+    );
+    if (!summary) return mcpError("INVALID_DATA");
+    if (summary.total_reference_count > 0) {
+      return mcpError(
+        "CARD_HAS_REFERENCES",
+        referencedCardDeletionBlockedContent(recognizable, summary)
+      );
+    }
+    const deleteResult = await supabase.from("cards").delete().eq("id", input.card_id).eq("user_id", userId).eq("updated_at", input.expected_updated_at).eq("is_active", false).select(COLUMNS12).maybeSingle();
+    if (deleteResult.error) {
+      return mcpError(
+        "WRITE_FAILED",
+        "N\xE3o foi poss\xEDvel excluir o cart\xE3o. Ele pode ter recebido uma refer\xEAncia; releia-o com list_cards e mantenha-o desativado."
+      );
+    }
+    if (!deleteResult.data) {
+      const existence = await supabase.from("cards").select("id,updated_at,is_active").eq("id", input.card_id).eq("user_id", userId).maybeSingle();
+      if (existence.error) return mcpError("INTERNAL_ERROR");
+      if (!existence.data) return mcpError("RESOURCE_NOT_FOUND");
+      if (existence.data.is_active) {
+        return mcpError(
+          "CARD_MUST_BE_INACTIVE",
+          "Nada foi removido. O cart\xE3o foi reativado durante a exclus\xE3o. Releia-o com list_cards."
+        );
+      }
+      return mcpError(
+        "CONCURRENT_MODIFICATION",
+        "Nada foi removido. O cart\xE3o mudou durante a exclus\xE3o. Releia-o com list_cards."
+      );
+    }
+    const deletedCard = cardWriteView(
+      deleteResult.data,
+      userId
+    );
+    if (!deletedCard) return mcpError("INVALID_DATA");
+    const warnings = [
+      "PERMANENT_DELETION",
+      "CARD_DELETED",
+      "BANK_ISSUER_UNAFFECTED"
+    ];
+    const result = {
+      resource_type: "card",
+      id: deletedCard.id,
+      deleted: true,
+      deletion_mode: "permanent",
+      deleted_card: deletedCard,
+      reference_summary: emptyCardDeleteReferenceSummary(),
+      operation_completed_at: (/* @__PURE__ */ new Date()).toISOString(),
+      warnings,
+      data_complete: true
+    };
+    return {
+      content: [{ type: "text", text: deleteCardContent(result) }],
       structuredContent: result
     };
   }
@@ -7694,7 +7896,7 @@ var mcp_default = defineMcp({
   name: "gastinho-simples-mcp",
   title: "Gastinho Simples",
   version: "0.1.0",
-  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Antes de update_expense, update_income, delete_expense ou delete_income, localize o lan\xE7amento com search_transactions, list_expenses ou list_incomes e reutilize exatamente o updated_at retornado como expected_updated_at. Exclus\xF5es s\xE3o definitivas, sempre exigem confirm_delete=true e, para parcelas, confirma\xE7\xE3o espec\xEDfica; elas removem somente a linha selecionada, nunca a s\xE9rie inteira. Nunca tente editar ou excluir recurso de outro propriet\xE1rio nem afirmar que uma s\xE9rie inteira foi alterada. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para lan\xE7amentos reais, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. get_cashflow_series representa somente realizado. get_cashflow_projection separa realizado, futuro materializado e templates recorrentes; futuro materializado s\xE3o linhas reais com data futura, recorr\xEAncias s\xE3o apenas templates, e a soma combinada pode conter sobreposi\xE7\xE3o. Ela n\xE3o representa saldo banc\xE1rio nem previs\xE3o garantida. Para templates isolados use get_recurring_forecast; para parcelas futuras j\xE1 materializadas use get_card_installments. Use list_cards para localizar o cart\xE3o e get_card_summary para o total registrado no per\xEDodo calculado. Recorr\xEAncias s\xE3o templates mensais: use list_recurring_transactions para list\xE1-las e get_recurring_forecast apenas para proje\xE7\xF5es baseadas nesses templates. Metas tamb\xE9m s\xE3o mensais: use list_goals para localizar uma meta e obter updated_at antes de update_goal ou delete_goal; delete_goal exige confirm_delete=true. create_goal, update_goal e delete_goal n\xE3o criam nem alteram transa\xE7\xF5es e n\xE3o representam investimento ou poupan\xE7a acumulada. Use get_goal_progress para o progresso calculado. Mantenha realizado e recorrente separados, informe o risco de sobreposi\xE7\xE3o da proje\xE7\xE3o quando houver templates participantes e n\xE3o gere recomenda\xE7\xE3o financeira. Use get_category_usage somente para fatos hist\xF3ricos sobre categorias pessoais: categorias compartilhadas n\xE3o existem no modelo atual e transa\xE7\xF5es compartilhadas de outros propriet\xE1rios n\xE3o entram. O forecast n\xE3o representa transa\xE7\xF5es efetivamente lan\xE7adas e nunca deve ser somado automaticamente a parcelas ou lan\xE7amentos futuros. Nunca chame resultados de saldo banc\xE1rio, limite real dispon\xEDvel ou fatura oficialmente paga/em aberto. Use list_categories para UUIDs. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
+  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Antes de update_expense, update_income, delete_expense ou delete_income, localize o lan\xE7amento com search_transactions, list_expenses ou list_incomes e reutilize exatamente o updated_at retornado como expected_updated_at. Exclus\xF5es s\xE3o definitivas, sempre exigem confirm_delete=true e, para parcelas, confirma\xE7\xE3o espec\xEDfica; elas removem somente a linha selecionada, nunca a s\xE9rie inteira. Nunca tente editar ou excluir recurso de outro propriet\xE1rio nem afirmar que uma s\xE9rie inteira foi alterada. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para lan\xE7amentos reais, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. get_cashflow_series representa somente realizado. get_cashflow_projection separa realizado, futuro materializado e templates recorrentes; futuro materializado s\xE3o linhas reais com data futura, recorr\xEAncias s\xE3o apenas templates, e a soma combinada pode conter sobreposi\xE7\xE3o. Ela n\xE3o representa saldo banc\xE1rio nem previs\xE3o garantida. Para templates isolados use get_recurring_forecast; para parcelas futuras j\xE1 materializadas use get_card_installments. Use list_cards para localizar o cart\xE3o e obter updated_at antes de update_card ou delete_card; delete_card exige confirma\xE7\xE3o, cart\xE3o inativo e aus\xEAncia total de despesas, parcelas ou templates vinculados. Use get_card_summary para o total registrado no per\xEDodo calculado. Recorr\xEAncias s\xE3o templates mensais: use list_recurring_transactions para list\xE1-las e get_recurring_forecast apenas para proje\xE7\xF5es baseadas nesses templates. Metas tamb\xE9m s\xE3o mensais: use list_goals para localizar uma meta e obter updated_at antes de update_goal ou delete_goal; delete_goal exige confirm_delete=true. create_goal, update_goal e delete_goal n\xE3o criam nem alteram transa\xE7\xF5es e n\xE3o representam investimento ou poupan\xE7a acumulada. Use get_goal_progress para o progresso calculado. Mantenha realizado e recorrente separados, informe o risco de sobreposi\xE7\xE3o da proje\xE7\xE3o quando houver templates participantes e n\xE3o gere recomenda\xE7\xE3o financeira. Use get_category_usage somente para fatos hist\xF3ricos sobre categorias pessoais: categorias compartilhadas n\xE3o existem no modelo atual e transa\xE7\xF5es compartilhadas de outros propriet\xE1rios n\xE3o entram. O forecast n\xE3o representa transa\xE7\xF5es efetivamente lan\xE7adas e nunca deve ser somado automaticamente a parcelas ou lan\xE7amentos futuros. Nunca chame resultados de saldo banc\xE1rio, limite real dispon\xEDvel ou fatura oficialmente paga/em aberto. Use list_categories para UUIDs. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
@@ -7734,7 +7936,8 @@ var mcp_default = defineMcp({
     update_goal_default,
     delete_goal_default,
     create_card_default,
-    update_card_default
+    update_card_default,
+    delete_card_default
   ]
 });
 
