@@ -495,7 +495,7 @@ const baseInput = {
 }
 
 const tools = manifest.mcp.tools;
-equal(tools.length, 40, "manifest contém exatamente 40 tools");
+equal(tools.length, 42, "manifest contém exatamente 42 tools");
 equal(
   tools.filter((tool) => tool.annotations?.readOnlyHint === true).length,
   18,
@@ -503,8 +503,8 @@ equal(
 );
 equal(
   tools.filter((tool) => tool.annotations?.readOnlyHint !== true).length,
-  22,
-  "manifest mantém 22 tools write",
+  24,
+  "manifest mantém 24 tools write",
 );
 const manifestTool = tools.find((tool) => tool.name === "get_category_usage");
 check(manifestTool, "get_category_usage registrada");

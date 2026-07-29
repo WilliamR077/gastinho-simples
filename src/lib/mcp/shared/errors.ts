@@ -33,6 +33,9 @@ export const MCP_ERROR_CODES = {
   INVALID_CATEGORY_CONFIGURATION: "INVALID_CATEGORY_CONFIGURATION",
   CATEGORY_NAME_CONFLICT: "CATEGORY_NAME_CONFLICT",
   CATEGORY_NOT_EDITABLE: "CATEGORY_NOT_EDITABLE",
+  CATEGORY_MUST_BE_INACTIVE: "CATEGORY_MUST_BE_INACTIVE",
+  CATEGORY_HAS_REFERENCES: "CATEGORY_HAS_REFERENCES",
+  CATEGORY_NOT_DELETABLE: "CATEGORY_NOT_DELETABLE",
   INVALID_DATA: "INVALID_DATA",
   DATE_RANGE_TOO_LARGE: "DATE_RANGE_TOO_LARGE",
   RESULT_SET_TOO_LARGE: "RESULT_SET_TOO_LARGE",
@@ -86,6 +89,12 @@ const MESSAGES: Record<McpErrorCode, string> = {
     "Já existe uma categoria pessoal com esse nome.",
   CATEGORY_NOT_EDITABLE:
     "A categoria não pode ser editada por esta operação.",
+  CATEGORY_MUST_BE_INACTIVE:
+    "A categoria precisa estar inativa antes da exclusão permanente.",
+  CATEGORY_HAS_REFERENCES:
+    "A categoria possui referências e deve permanecer inativa para preservar o histórico.",
+  CATEGORY_NOT_DELETABLE:
+    "A categoria protegida não pode ser excluída.",
   INVALID_DATA: "Os dados informados são inválidos.",
   DATE_RANGE_TOO_LARGE: "Intervalo de datas excede o máximo permitido de 366 dias.",
   RESULT_SET_TOO_LARGE: "O conjunto de resultados excede o limite seguro. Reduza o intervalo ou refine os filtros.",

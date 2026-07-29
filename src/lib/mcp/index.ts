@@ -39,6 +39,8 @@ import createExpenseCategory from "./tools/create-expense-category";
 import updateExpenseCategory from "./tools/update-expense-category";
 import createIncomeCategory from "./tools/create-income-category";
 import updateIncomeCategory from "./tools/update-income-category";
+import deleteExpenseCategory from "./tools/delete-expense-category";
+import deleteIncomeCategory from "./tools/delete-income-category";
 
 // O emissor OAuth precisa ser o host direto do Supabase — nunca o proxy do
 // Lovable Cloud. Construímos a partir do project ref, que o Vite substitui
@@ -96,5 +98,7 @@ export default defineMcp({
     updateExpenseCategory,
     createIncomeCategory,
     updateIncomeCategory,
+    deleteExpenseCategory,
+    deleteIncomeCategory,
   ],
 });
