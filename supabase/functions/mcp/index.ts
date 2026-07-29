@@ -6558,6 +6558,228 @@ var update_recurring_income_default = defineTool28({
   }
 });
 
+// src/lib/mcp/tools/delete-recurring-expense.ts
+import { defineTool as defineTool29 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z34 } from "npm:zod@^3.25.76";
+
+// src/lib/mcp/shared/recurring-delete.ts
+import { z as z33 } from "npm:zod@^3.25.76";
+var RECURRING_DELETE_WARNINGS = [
+  "PERMANENT_DELETION",
+  "RECURRING_TEMPLATE_DELETED",
+  "SHARED_TEMPLATE_DELETED",
+  "FORECAST_WILL_CHANGE"
+];
+var recurringDeleteWarningSchema = z33.enum(
+  RECURRING_DELETE_WARNINGS
+);
+function templateFacts(resourceType, template) {
+  return `description=${JSON.stringify(template.description)}; amount=${template.amount}; day_of_month=${template.day_of_month}; start_date=${template.start_date ?? "null"}; end_date=${template.end_date ?? "null"}; is_active=${template.is_active}; category=${JSON.stringify(template.category_name)}; ` + (resourceType === "recurring_expense" ? `payment_method=${template.payment_method}; card=${JSON.stringify(template.card_name ?? null)}; ` : "") + `scope=${template.is_shared ? "shared" : "personal"}`;
+}
+function recurringDeleteConfirmationContent(resourceType, template) {
+  const label = resourceType === "recurring_expense" ? "template mensal de despesa" : "template mensal de receita";
+  return `Nada foi removido. Falta confirm_delete=true. A exclus\xE3o deste ${label} \xE9 permanente: ${templateFacts(resourceType, template)}. Somente o template ser\xE1 removido; nenhuma despesa, receita, parcela ou ocorr\xEAncia real ser\xE1 exclu\xEDda ou alterada. Releia o template e repita a chamada com a confirma\xE7\xE3o expl\xEDcita e o expected_updated_at atual.`;
+}
+function recurringDeleteContent(result) {
+  const label = result.resource_type === "recurring_expense" ? "template mensal de despesa" : "template mensal de receita";
+  const shared = result.deleted_template.is_shared ? " O template compartilhado deixar\xE1 de aparecer nas proje\xE7\xF5es do grupo; o grupo e os templates de outros membros foram preservados." : "";
+  return `Foi exclu\xEDdo permanentemente o ${label} ${result.id}: ${templateFacts(result.resource_type, result.deleted_template)}.` + shared + ` O template mensal foi removido. Nenhuma despesa ou receita real foi exclu\xEDda ou alterada. Ele n\xE3o participar\xE1 dos forecasts futuros calculados a partir dos templates atualmente cadastrados. Nenhum compromisso, cobran\xE7a, recebimento ou notifica\xE7\xE3o externa ao aplicativo foi cancelado. warnings=${JSON.stringify(result.warnings)}; operation_completed_at=${result.operation_completed_at}.`;
+}
+
+// src/lib/mcp/tools/delete-recurring-expense.ts
+var COLUMNS5 = "id,user_id,description,amount,day_of_month,start_date,end_date,is_active,category_id,category_name,category_icon,payment_method,card_id,card_name,card_color,shared_group_id,created_at,updated_at";
+var inputProperties9 = {
+  recurring_expense_id: z34.string().uuid(),
+  expected_updated_at: expectedUpdatedAtSchema,
+  confirm_delete: z34.boolean()
+};
+var inputValidator9 = z34.object({ ...inputProperties9, confirm_delete: z34.boolean().optional() }).strict();
+var delete_recurring_expense_default = defineTool29({
+  name: "delete_recurring_expense",
+  title: "Excluir template mensal de despesa",
+  description: "Exclui permanentemente somente um template mensal de despesa pertencente \xE0 conta autenticada. N\xE3o exclui despesas nem ocorr\xEAncias reais.",
+  inputSchema: inputProperties9,
+  outputSchema: {
+    resource_type: z34.literal("recurring_expense"),
+    id: z34.string().uuid(),
+    deleted: z34.literal(true),
+    deletion_mode: z34.literal("permanent"),
+    deleted_template: recurringExpenseViewSchema,
+    operation_completed_at: z34.string(),
+    warnings: z34.array(recurringDeleteWarningSchema),
+    data_complete: z34.literal(true)
+  },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: false
+  },
+  handler: async (rawInput, ctx) => {
+    const userId = ctx.getUserId();
+    if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
+    const parsed = inputValidator9.safeParse(rawInput);
+    if (!parsed.success) return mcpError("INVALID_INPUT");
+    const input = parsed.data;
+    const supabase = supabaseForUser(ctx);
+    const currentResult = await supabase.from("recurring_expenses").select(COLUMNS5).eq("id", input.recurring_expense_id).eq("user_id", userId).maybeSingle();
+    if (currentResult.error) return mcpError("INTERNAL_ERROR");
+    if (!currentResult.data) return mcpError("RESOURCE_NOT_FOUND");
+    const current = currentResult.data;
+    if (current.updated_at !== input.expected_updated_at) {
+      return mcpError("CONCURRENT_MODIFICATION");
+    }
+    const recognizable = recurringExpenseView(current);
+    if (!recognizable || !recurringExpenseViewSchema.safeParse(recognizable).success) {
+      return mcpError("INVALID_DATA");
+    }
+    if (input.confirm_delete !== true) {
+      return mcpError(
+        "CONFIRMATION_REQUIRED",
+        recurringDeleteConfirmationContent(
+          "recurring_expense",
+          recognizable
+        )
+      );
+    }
+    const deleteResult = await supabase.from("recurring_expenses").delete().eq("id", input.recurring_expense_id).eq("user_id", userId).eq("updated_at", input.expected_updated_at).select(COLUMNS5).maybeSingle();
+    if (deleteResult.error) return mcpError("WRITE_FAILED");
+    if (!deleteResult.data) {
+      const existence = await supabase.from("recurring_expenses").select("id,updated_at").eq("id", input.recurring_expense_id).eq("user_id", userId).maybeSingle();
+      if (existence.error) return mcpError("INTERNAL_ERROR");
+      return mcpError(
+        existence.data ? "CONCURRENT_MODIFICATION" : "RESOURCE_NOT_FOUND"
+      );
+    }
+    const deletedTemplate = recurringExpenseView(
+      deleteResult.data
+    );
+    if (!deletedTemplate || !recurringExpenseViewSchema.safeParse(deletedTemplate).success) {
+      return mcpError("INVALID_DATA");
+    }
+    const warnings = [
+      "PERMANENT_DELETION",
+      "RECURRING_TEMPLATE_DELETED",
+      "FORECAST_WILL_CHANGE"
+    ];
+    if (deletedTemplate.is_shared) warnings.push("SHARED_TEMPLATE_DELETED");
+    const result = {
+      resource_type: "recurring_expense",
+      id: deletedTemplate.id,
+      deleted: true,
+      deletion_mode: "permanent",
+      deleted_template: deletedTemplate,
+      operation_completed_at: (/* @__PURE__ */ new Date()).toISOString(),
+      warnings,
+      data_complete: true
+    };
+    return {
+      content: [
+        { type: "text", text: recurringDeleteContent(result) }
+      ],
+      structuredContent: result
+    };
+  }
+});
+
+// src/lib/mcp/tools/delete-recurring-income.ts
+import { defineTool as defineTool30 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z35 } from "npm:zod@^3.25.76";
+var COLUMNS6 = "id,user_id,description,amount,day_of_month,start_date,end_date,is_active,income_category_id,category_name,category_icon,shared_group_id,created_at,updated_at";
+var inputProperties10 = {
+  recurring_income_id: z35.string().uuid(),
+  expected_updated_at: expectedUpdatedAtSchema,
+  confirm_delete: z35.boolean()
+};
+var inputValidator10 = z35.object({ ...inputProperties10, confirm_delete: z35.boolean().optional() }).strict();
+var delete_recurring_income_default = defineTool30({
+  name: "delete_recurring_income",
+  title: "Excluir template mensal de receita",
+  description: "Exclui permanentemente somente um template mensal de receita pertencente \xE0 conta autenticada. N\xE3o exclui receitas nem ocorr\xEAncias reais.",
+  inputSchema: inputProperties10,
+  outputSchema: {
+    resource_type: z35.literal("recurring_income"),
+    id: z35.string().uuid(),
+    deleted: z35.literal(true),
+    deletion_mode: z35.literal("permanent"),
+    deleted_template: recurringIncomeViewSchema,
+    operation_completed_at: z35.string(),
+    warnings: z35.array(recurringDeleteWarningSchema),
+    data_complete: z35.literal(true)
+  },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: false
+  },
+  handler: async (rawInput, ctx) => {
+    const userId = ctx.getUserId();
+    if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
+    const parsed = inputValidator10.safeParse(rawInput);
+    if (!parsed.success) return mcpError("INVALID_INPUT");
+    const input = parsed.data;
+    const supabase = supabaseForUser(ctx);
+    const currentResult = await supabase.from("recurring_incomes").select(COLUMNS6).eq("id", input.recurring_income_id).eq("user_id", userId).maybeSingle();
+    if (currentResult.error) return mcpError("INTERNAL_ERROR");
+    if (!currentResult.data) return mcpError("RESOURCE_NOT_FOUND");
+    const current = currentResult.data;
+    if (current.updated_at !== input.expected_updated_at) {
+      return mcpError("CONCURRENT_MODIFICATION");
+    }
+    const recognizable = recurringIncomeView(current);
+    if (!recognizable || !recurringIncomeViewSchema.safeParse(recognizable).success) {
+      return mcpError("INVALID_DATA");
+    }
+    if (input.confirm_delete !== true) {
+      return mcpError(
+        "CONFIRMATION_REQUIRED",
+        recurringDeleteConfirmationContent(
+          "recurring_income",
+          recognizable
+        )
+      );
+    }
+    const deleteResult = await supabase.from("recurring_incomes").delete().eq("id", input.recurring_income_id).eq("user_id", userId).eq("updated_at", input.expected_updated_at).select(COLUMNS6).maybeSingle();
+    if (deleteResult.error) return mcpError("WRITE_FAILED");
+    if (!deleteResult.data) {
+      const existence = await supabase.from("recurring_incomes").select("id,updated_at").eq("id", input.recurring_income_id).eq("user_id", userId).maybeSingle();
+      if (existence.error) return mcpError("INTERNAL_ERROR");
+      return mcpError(
+        existence.data ? "CONCURRENT_MODIFICATION" : "RESOURCE_NOT_FOUND"
+      );
+    }
+    const deletedTemplate = recurringIncomeView(
+      deleteResult.data
+    );
+    if (!deletedTemplate || !recurringIncomeViewSchema.safeParse(deletedTemplate).success) {
+      return mcpError("INVALID_DATA");
+    }
+    const warnings = [
+      "PERMANENT_DELETION",
+      "RECURRING_TEMPLATE_DELETED",
+      "FORECAST_WILL_CHANGE"
+    ];
+    if (deletedTemplate.is_shared) warnings.push("SHARED_TEMPLATE_DELETED");
+    const result = {
+      resource_type: "recurring_income",
+      id: deletedTemplate.id,
+      deleted: true,
+      deletion_mode: "permanent",
+      deleted_template: deletedTemplate,
+      operation_completed_at: (/* @__PURE__ */ new Date()).toISOString(),
+      warnings,
+      data_complete: true
+    };
+    return {
+      content: [
+        { type: "text", text: recurringDeleteContent(result) }
+      ],
+      structuredContent: result
+    };
+  }
+});
+
 // src/lib/mcp/index.ts
 var projectRef = "jaoldaqvbdllowepzwbr";
 var mcp_default = defineMcp({
@@ -6597,7 +6819,9 @@ var mcp_default = defineMcp({
     create_recurring_expense_default,
     create_recurring_income_default,
     update_recurring_expense_default,
-    update_recurring_income_default
+    update_recurring_income_default,
+    delete_recurring_expense_default,
+    delete_recurring_income_default
   ]
 });
 

@@ -6955,6 +6955,422 @@
           "additionalProperties": false,
           "$schema": "http://json-schema.org/draft-07/schema#"
         }
+      },
+      {
+        "name": "delete_recurring_expense",
+        "title": "Excluir template mensal de despesa",
+        "description": "Exclui permanentemente somente um template mensal de despesa pertencente à conta autenticada. Não exclui despesas nem ocorrências reais.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "recurring_expense_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "expected_updated_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "confirm_delete": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "recurring_expense_id",
+            "expected_updated_at",
+            "confirm_delete"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "recurring_expense"
+            },
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "deleted": {
+              "type": "boolean",
+              "const": true
+            },
+            "deletion_mode": {
+              "type": "string",
+              "const": "permanent"
+            },
+            "deleted_template": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "day_of_month": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 31
+                },
+                "start_date": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "end_date": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/properties/deleted_template/properties/start_date/anyOf/0"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "is_active": {
+                  "type": "boolean"
+                },
+                "category_name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "category_icon": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "is_shared": {
+                  "type": "boolean"
+                },
+                "shared_group_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "created_at": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "type": "string"
+                },
+                "category_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "payment_method": {
+                  "type": "string",
+                  "enum": [
+                    "pix",
+                    "credit",
+                    "debit",
+                    "cash"
+                  ]
+                },
+                "card_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "card_name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "card_color": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "description",
+                "amount",
+                "day_of_month",
+                "start_date",
+                "end_date",
+                "is_active",
+                "category_name",
+                "category_icon",
+                "is_shared",
+                "shared_group_id",
+                "created_at",
+                "updated_at",
+                "category_id",
+                "payment_method",
+                "card_id",
+                "card_name",
+                "card_color"
+              ],
+              "additionalProperties": false
+            },
+            "operation_completed_at": {
+              "type": "string"
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "PERMANENT_DELETION",
+                  "RECURRING_TEMPLATE_DELETED",
+                  "SHARED_TEMPLATE_DELETED",
+                  "FORECAST_WILL_CHANGE"
+                ]
+              }
+            },
+            "data_complete": {
+              "type": "boolean",
+              "const": true
+            }
+          },
+          "required": [
+            "resource_type",
+            "id",
+            "deleted",
+            "deletion_mode",
+            "deleted_template",
+            "operation_completed_at",
+            "warnings",
+            "data_complete"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      },
+      {
+        "name": "delete_recurring_income",
+        "title": "Excluir template mensal de receita",
+        "description": "Exclui permanentemente somente um template mensal de receita pertencente à conta autenticada. Não exclui receitas nem ocorrências reais.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "recurring_income_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "expected_updated_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "confirm_delete": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "recurring_income_id",
+            "expected_updated_at",
+            "confirm_delete"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "recurring_income"
+            },
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "deleted": {
+              "type": "boolean",
+              "const": true
+            },
+            "deletion_mode": {
+              "type": "string",
+              "const": "permanent"
+            },
+            "deleted_template": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "day_of_month": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 31
+                },
+                "start_date": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "end_date": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/properties/deleted_template/properties/start_date/anyOf/0"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "is_active": {
+                  "type": "boolean"
+                },
+                "category_name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "category_icon": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "is_shared": {
+                  "type": "boolean"
+                },
+                "shared_group_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "created_at": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "type": "string"
+                },
+                "income_category_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "description",
+                "amount",
+                "day_of_month",
+                "start_date",
+                "end_date",
+                "is_active",
+                "category_name",
+                "category_icon",
+                "is_shared",
+                "shared_group_id",
+                "created_at",
+                "updated_at",
+                "income_category_id"
+              ],
+              "additionalProperties": false
+            },
+            "operation_completed_at": {
+              "type": "string"
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "PERMANENT_DELETION",
+                  "RECURRING_TEMPLATE_DELETED",
+                  "SHARED_TEMPLATE_DELETED",
+                  "FORECAST_WILL_CHANGE"
+                ]
+              }
+            },
+            "data_complete": {
+              "type": "boolean",
+              "const": true
+            }
+          },
+          "required": [
+            "resource_type",
+            "id",
+            "deleted",
+            "deletion_mode",
+            "deleted_template",
+            "operation_completed_at",
+            "warnings",
+            "data_complete"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
       }
     ]
   }
