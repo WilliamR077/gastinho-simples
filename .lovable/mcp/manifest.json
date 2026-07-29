@@ -952,7 +952,7 @@
       {
         "name": "list_categories",
         "title": "Listar categorias",
-        "description": "Lista as categorias de despesa ou receita do usuário autenticado (útil para descobrir o UUID a passar em create_expense / create_income).",
+        "description": "Lista as categorias pessoais de despesa ou receita da conta autenticada, incluindo updated_at necessário para edições seguras.",
         "annotations": {
           "readOnlyHint": true,
           "idempotentHint": true,
@@ -968,6 +968,11 @@
                 "income"
               ],
               "description": "Tipo de categoria: expense ou income."
+            },
+            "include_inactive": {
+              "type": "boolean",
+              "default": false,
+              "description": "Inclui categorias inativas quando true."
             }
           },
           "required": [
@@ -976,7 +981,84 @@
           "additionalProperties": false,
           "$schema": "http://json-schema.org/draft-07/schema#"
         },
-        "outputSchema": null
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "category_kind": {
+              "type": "string",
+              "enum": [
+                "expense",
+                "income"
+              ]
+            },
+            "include_inactive": {
+              "type": "boolean"
+            },
+            "categories": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "icon": {
+                    "type": "string"
+                  },
+                  "color": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "is_default": {
+                    "type": "boolean"
+                  },
+                  "is_active": {
+                    "type": "boolean"
+                  },
+                  "display_order": {
+                    "type": "integer"
+                  },
+                  "created_at": {
+                    "type": "string"
+                  },
+                  "updated_at": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "icon",
+                  "color",
+                  "is_default",
+                  "is_active",
+                  "display_order",
+                  "created_at",
+                  "updated_at"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "data_complete": {
+              "type": "boolean",
+              "const": true
+            }
+          },
+          "required": [
+            "category_kind",
+            "include_inactive",
+            "categories",
+            "data_complete"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
       },
       {
         "name": "search_transactions",
@@ -8806,6 +8888,1070 @@
             "deleted_card",
             "reference_summary",
             "operation_completed_at",
+            "warnings",
+            "data_complete"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      },
+      {
+        "name": "create_expense_category",
+        "title": "Criar categoria de despesa",
+        "description": "Cria uma categoria pessoal de despesa usando os mesmos campos e defaults do gerenciador do aplicativo.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "icon": {
+              "type": "string",
+              "enum": [
+                "🍔",
+                "🚗",
+                "🎮",
+                "⚕️",
+                "📚",
+                "🏠",
+                "👕",
+                "🔧",
+                "📦",
+                "🐕",
+                "🐱",
+                "✈️",
+                "🎬",
+                "🎵",
+                "💪",
+                "💊",
+                "🛒",
+                "☕",
+                "🍕",
+                "🎁",
+                "💰",
+                "📱",
+                "💻",
+                "🎨",
+                "⚽",
+                "🏋️",
+                "🚌",
+                "🏥",
+                "🎓",
+                "🏪",
+                "🍺",
+                "🎭",
+                "📺",
+                "🎪",
+                "🏖️",
+                "💇",
+                "🍽️",
+                "🥗",
+                "🍳",
+                "🧃",
+                "⛽",
+                "🚕",
+                "🚍",
+                "🏍️",
+                "🧾",
+                "💡",
+                "💧",
+                "📡",
+                "🏫",
+                "👶",
+                "🐾",
+                "💍",
+                "🛍️",
+                "🏗️",
+                "🔑",
+                "🧹",
+                "🧴",
+                "💄",
+                "🎂",
+                "🎄",
+                "🏸",
+                "🎾",
+                "🎒",
+                "💉",
+                "🦷",
+                "👓",
+                "🧥",
+                "👟",
+                "🍱",
+                "🚲"
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "category"
+            },
+            "category_kind": {
+              "type": "string",
+              "const": "expense"
+            },
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "created": {
+              "type": "boolean",
+              "const": true
+            },
+            "category": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "icon": {
+                  "type": "string"
+                },
+                "color": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "is_default": {
+                  "type": "boolean"
+                },
+                "is_active": {
+                  "type": "boolean"
+                },
+                "display_order": {
+                  "type": "integer"
+                },
+                "created_at": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "icon",
+                "color",
+                "is_default",
+                "is_active",
+                "display_order",
+                "created_at",
+                "updated_at"
+              ],
+              "additionalProperties": false
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "CATEGORY_CREATED",
+                  "CATEGORY_UPDATED",
+                  "CATEGORY_DEACTIVATED",
+                  "CATEGORY_REACTIVATED",
+                  "CATEGORY_NAME_CHANGED",
+                  "CATEGORY_NAME_NORMALIZED",
+                  "HISTORICAL_CATEGORY_REFERENCES_PRESERVED",
+                  "ACTIVE_RECURRING_TEMPLATES_REFERENCE_CATEGORY",
+                  "ACTIVE_GOALS_REFERENCE_CATEGORY",
+                  "NO_EFFECTIVE_CHANGES"
+                ]
+              }
+            },
+            "data_complete": {
+              "type": "boolean",
+              "const": true
+            }
+          },
+          "required": [
+            "resource_type",
+            "category_kind",
+            "id",
+            "created",
+            "category",
+            "warnings",
+            "data_complete"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      },
+      {
+        "name": "update_expense_category",
+        "title": "Editar categoria de despesa",
+        "description": "Edita nome, ícone ou visibilidade de uma categoria pessoal de despesa com concorrência otimista.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "category_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "expected_updated_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "changes": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "icon": {
+                  "type": "string",
+                  "enum": [
+                    "🍔",
+                    "🚗",
+                    "🎮",
+                    "⚕️",
+                    "📚",
+                    "🏠",
+                    "👕",
+                    "🔧",
+                    "📦",
+                    "🐕",
+                    "🐱",
+                    "✈️",
+                    "🎬",
+                    "🎵",
+                    "💪",
+                    "💊",
+                    "🛒",
+                    "☕",
+                    "🍕",
+                    "🎁",
+                    "💰",
+                    "📱",
+                    "💻",
+                    "🎨",
+                    "⚽",
+                    "🏋️",
+                    "🚌",
+                    "🏥",
+                    "🎓",
+                    "🏪",
+                    "🍺",
+                    "🎭",
+                    "📺",
+                    "🎪",
+                    "🏖️",
+                    "💇",
+                    "🍽️",
+                    "🥗",
+                    "🍳",
+                    "🧃",
+                    "⛽",
+                    "🚕",
+                    "🚍",
+                    "🏍️",
+                    "🧾",
+                    "💡",
+                    "💧",
+                    "📡",
+                    "🏫",
+                    "👶",
+                    "🐾",
+                    "💍",
+                    "🛍️",
+                    "🏗️",
+                    "🔑",
+                    "🧹",
+                    "🧴",
+                    "💄",
+                    "🎂",
+                    "🎄",
+                    "🏸",
+                    "🎾",
+                    "🎒",
+                    "💉",
+                    "🦷",
+                    "👓",
+                    "🧥",
+                    "👟",
+                    "🍱",
+                    "🚲"
+                  ]
+                },
+                "is_active": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "category_id",
+            "expected_updated_at",
+            "changes"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "category"
+            },
+            "category_kind": {
+              "type": "string",
+              "const": "expense"
+            },
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "applied": {
+              "type": "boolean"
+            },
+            "changed_fields": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "name",
+                  "icon",
+                  "is_active"
+                ]
+              }
+            },
+            "before": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "icon": {
+                  "type": "string"
+                },
+                "color": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "is_default": {
+                  "type": "boolean"
+                },
+                "is_active": {
+                  "type": "boolean"
+                },
+                "display_order": {
+                  "type": "integer"
+                },
+                "created_at": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "icon",
+                "color",
+                "is_default",
+                "is_active",
+                "display_order",
+                "created_at",
+                "updated_at"
+              ],
+              "additionalProperties": false
+            },
+            "after": {
+              "$ref": "#/properties/before"
+            },
+            "updated_at_before": {
+              "type": "string"
+            },
+            "updated_at_after": {
+              "type": "string"
+            },
+            "reference_summary": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "historical_expense_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "future_expense_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "installment_expense_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "active_recurring_expense_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "inactive_recurring_expense_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "active_goal_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "total_reference_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "historical_expense_count",
+                    "future_expense_count",
+                    "installment_expense_count",
+                    "active_recurring_expense_count",
+                    "inactive_recurring_expense_count",
+                    "active_goal_count",
+                    "total_reference_count"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "historical_income_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "future_income_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "active_recurring_income_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "inactive_recurring_income_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "active_goal_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "total_reference_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "historical_income_count",
+                    "future_income_count",
+                    "active_recurring_income_count",
+                    "inactive_recurring_income_count",
+                    "active_goal_count",
+                    "total_reference_count"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "CATEGORY_CREATED",
+                  "CATEGORY_UPDATED",
+                  "CATEGORY_DEACTIVATED",
+                  "CATEGORY_REACTIVATED",
+                  "CATEGORY_NAME_CHANGED",
+                  "CATEGORY_NAME_NORMALIZED",
+                  "HISTORICAL_CATEGORY_REFERENCES_PRESERVED",
+                  "ACTIVE_RECURRING_TEMPLATES_REFERENCE_CATEGORY",
+                  "ACTIVE_GOALS_REFERENCE_CATEGORY",
+                  "NO_EFFECTIVE_CHANGES"
+                ]
+              }
+            },
+            "data_complete": {
+              "type": "boolean",
+              "const": true
+            }
+          },
+          "required": [
+            "resource_type",
+            "category_kind",
+            "id",
+            "applied",
+            "changed_fields",
+            "before",
+            "after",
+            "updated_at_before",
+            "updated_at_after",
+            "reference_summary",
+            "warnings",
+            "data_complete"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      },
+      {
+        "name": "create_income_category",
+        "title": "Criar categoria de receita",
+        "description": "Cria uma categoria pessoal de receita usando os mesmos campos e defaults do gerenciador do aplicativo.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "icon": {
+              "type": "string",
+              "enum": [
+                "💰",
+                "💻",
+                "📈",
+                "🛒",
+                "🎁",
+                "🎀",
+                "🔄",
+                "🏠",
+                "📦",
+                "💵",
+                "💳",
+                "🏦",
+                "📊",
+                "🎯",
+                "💼",
+                "🤝",
+                "📱",
+                "🎓",
+                "🏢",
+                "🚗",
+                "✈️",
+                "🏥",
+                "⚽",
+                "🎨",
+                "🎵",
+                "📚",
+                "🔧",
+                "🍔",
+                "☕",
+                "🎮",
+                "🐕",
+                "👕",
+                "💊",
+                "🏋️",
+                "🏖️",
+                "💇",
+                "🍽️",
+                "🥗",
+                "🍳",
+                "🧃",
+                "⛽",
+                "🚕",
+                "🚍",
+                "🏍️",
+                "🧾",
+                "💡",
+                "💧",
+                "📡",
+                "🏫",
+                "👶",
+                "🐾",
+                "💍",
+                "🛍️",
+                "🏗️",
+                "🔑",
+                "🧹",
+                "🧴",
+                "💄",
+                "🎂",
+                "🎄",
+                "🏸",
+                "🎾",
+                "🎒",
+                "💉",
+                "🦷",
+                "👓",
+                "🧥",
+                "👟",
+                "🍱",
+                "🚲"
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "category"
+            },
+            "category_kind": {
+              "type": "string",
+              "const": "income"
+            },
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "created": {
+              "type": "boolean",
+              "const": true
+            },
+            "category": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "icon": {
+                  "type": "string"
+                },
+                "color": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "is_default": {
+                  "type": "boolean"
+                },
+                "is_active": {
+                  "type": "boolean"
+                },
+                "display_order": {
+                  "type": "integer"
+                },
+                "created_at": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "icon",
+                "color",
+                "is_default",
+                "is_active",
+                "display_order",
+                "created_at",
+                "updated_at"
+              ],
+              "additionalProperties": false
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "CATEGORY_CREATED",
+                  "CATEGORY_UPDATED",
+                  "CATEGORY_DEACTIVATED",
+                  "CATEGORY_REACTIVATED",
+                  "CATEGORY_NAME_CHANGED",
+                  "CATEGORY_NAME_NORMALIZED",
+                  "HISTORICAL_CATEGORY_REFERENCES_PRESERVED",
+                  "ACTIVE_RECURRING_TEMPLATES_REFERENCE_CATEGORY",
+                  "ACTIVE_GOALS_REFERENCE_CATEGORY",
+                  "NO_EFFECTIVE_CHANGES"
+                ]
+              }
+            },
+            "data_complete": {
+              "type": "boolean",
+              "const": true
+            }
+          },
+          "required": [
+            "resource_type",
+            "category_kind",
+            "id",
+            "created",
+            "category",
+            "warnings",
+            "data_complete"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      },
+      {
+        "name": "update_income_category",
+        "title": "Editar categoria de receita",
+        "description": "Edita nome, ícone ou visibilidade de uma categoria pessoal de receita com concorrência otimista.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "category_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "expected_updated_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "changes": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "icon": {
+                  "type": "string",
+                  "enum": [
+                    "💰",
+                    "💻",
+                    "📈",
+                    "🛒",
+                    "🎁",
+                    "🎀",
+                    "🔄",
+                    "🏠",
+                    "📦",
+                    "💵",
+                    "💳",
+                    "🏦",
+                    "📊",
+                    "🎯",
+                    "💼",
+                    "🤝",
+                    "📱",
+                    "🎓",
+                    "🏢",
+                    "🚗",
+                    "✈️",
+                    "🏥",
+                    "⚽",
+                    "🎨",
+                    "🎵",
+                    "📚",
+                    "🔧",
+                    "🍔",
+                    "☕",
+                    "🎮",
+                    "🐕",
+                    "👕",
+                    "💊",
+                    "🏋️",
+                    "🏖️",
+                    "💇",
+                    "🍽️",
+                    "🥗",
+                    "🍳",
+                    "🧃",
+                    "⛽",
+                    "🚕",
+                    "🚍",
+                    "🏍️",
+                    "🧾",
+                    "💡",
+                    "💧",
+                    "📡",
+                    "🏫",
+                    "👶",
+                    "🐾",
+                    "💍",
+                    "🛍️",
+                    "🏗️",
+                    "🔑",
+                    "🧹",
+                    "🧴",
+                    "💄",
+                    "🎂",
+                    "🎄",
+                    "🏸",
+                    "🎾",
+                    "🎒",
+                    "💉",
+                    "🦷",
+                    "👓",
+                    "🧥",
+                    "👟",
+                    "🍱",
+                    "🚲"
+                  ]
+                },
+                "is_active": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "category_id",
+            "expected_updated_at",
+            "changes"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "category"
+            },
+            "category_kind": {
+              "type": "string",
+              "const": "income"
+            },
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "applied": {
+              "type": "boolean"
+            },
+            "changed_fields": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "name",
+                  "icon",
+                  "is_active"
+                ]
+              }
+            },
+            "before": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "icon": {
+                  "type": "string"
+                },
+                "color": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "is_default": {
+                  "type": "boolean"
+                },
+                "is_active": {
+                  "type": "boolean"
+                },
+                "display_order": {
+                  "type": "integer"
+                },
+                "created_at": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "icon",
+                "color",
+                "is_default",
+                "is_active",
+                "display_order",
+                "created_at",
+                "updated_at"
+              ],
+              "additionalProperties": false
+            },
+            "after": {
+              "$ref": "#/properties/before"
+            },
+            "updated_at_before": {
+              "type": "string"
+            },
+            "updated_at_after": {
+              "type": "string"
+            },
+            "reference_summary": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "historical_expense_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "future_expense_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "installment_expense_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "active_recurring_expense_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "inactive_recurring_expense_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "active_goal_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "total_reference_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "historical_expense_count",
+                    "future_expense_count",
+                    "installment_expense_count",
+                    "active_recurring_expense_count",
+                    "inactive_recurring_expense_count",
+                    "active_goal_count",
+                    "total_reference_count"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "historical_income_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "future_income_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "active_recurring_income_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "inactive_recurring_income_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "active_goal_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "total_reference_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "historical_income_count",
+                    "future_income_count",
+                    "active_recurring_income_count",
+                    "inactive_recurring_income_count",
+                    "active_goal_count",
+                    "total_reference_count"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "CATEGORY_CREATED",
+                  "CATEGORY_UPDATED",
+                  "CATEGORY_DEACTIVATED",
+                  "CATEGORY_REACTIVATED",
+                  "CATEGORY_NAME_CHANGED",
+                  "CATEGORY_NAME_NORMALIZED",
+                  "HISTORICAL_CATEGORY_REFERENCES_PRESERVED",
+                  "ACTIVE_RECURRING_TEMPLATES_REFERENCE_CATEGORY",
+                  "ACTIVE_GOALS_REFERENCE_CATEGORY",
+                  "NO_EFFECTIVE_CHANGES"
+                ]
+              }
+            },
+            "data_complete": {
+              "type": "boolean",
+              "const": true
+            }
+          },
+          "required": [
+            "resource_type",
+            "category_kind",
+            "id",
+            "applied",
+            "changed_fields",
+            "before",
+            "after",
+            "updated_at_before",
+            "updated_at_after",
+            "reference_summary",
             "warnings",
             "data_complete"
           ],

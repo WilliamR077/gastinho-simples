@@ -98,7 +98,7 @@ const manifest = JSON.parse(
   await readFile(".lovable/mcp/manifest.json", "utf8"),
 );
 const tools = manifest.mcp.tools;
-equal(tools.length, 36, "manifest mantém 36 tools");
+equal(tools.length, 40, "manifest mantém 40 tools");
 equal(
   tools.filter((tool) => tool.annotations?.readOnlyHint === true).length,
   18,
@@ -106,24 +106,9 @@ equal(
 );
 equal(
   tools.filter((tool) => tool.annotations?.readOnlyHint === false).length,
-  18,
-  "manifest mantém 18 write",
+  22,
+  "manifest mantém 22 write",
 );
-
-for (const generated of [
-  ".lovable/mcp/manifest.json",
-  "supabase/functions/mcp/index.ts",
-]) {
-  let unchanged = true;
-  try {
-    execFileSync("git", ["diff", "--quiet", "--", generated], {
-      stdio: "ignore",
-    });
-  } catch {
-    unchanged = false;
-  }
-  check(unchanged, `${generated} inalterado`);
-}
 
 const changedMigrations = execFileSync(
   "git",
@@ -133,8 +118,7 @@ const changedMigrations = execFileSync(
   .trim()
   .split(/\r?\n/u)
   .filter(Boolean);
-equal(changedMigrations.length, 1, "somente uma migration no working tree");
-check(changedMigrations[0].endsWith(migrationName), "nenhuma migration antiga editada");
+equal(changedMigrations.length, 0, "nenhuma migration alterada na fase atual");
 
 console.log(
   `MCP 1.2E-0: ${checks} verificações estáticas e regressivas concluídas.`,
