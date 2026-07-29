@@ -10833,6 +10833,793 @@
           "additionalProperties": false,
           "$schema": "http://json-schema.org/draft-07/schema#"
         }
+      },
+      {
+        "name": "get_expense_split_details",
+        "title": "Detalhar rateio de despesa",
+        "description": "Consulta o rateio persistido de uma despesa compartilhada acessível, resolve identidades públicas reduzidas e valida os totais em centavos. Não altera a despesa nem o rateio.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "expense_id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "expense_id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "expense_split_details"
+            },
+            "expense": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "expense_date": {
+                  "type": "string"
+                },
+                "split_type": {
+                  "type": "string",
+                  "enum": [
+                    "equal",
+                    "percentage",
+                    "manual",
+                    "unknown"
+                  ]
+                },
+                "group_id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "group_name": {
+                  "type": "string"
+                },
+                "paid_by_membership_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "paid_by_display_name": {
+                  "type": "string"
+                },
+                "installment_number": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "total_installments": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "updated_at": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "description",
+                "amount",
+                "expense_date",
+                "split_type",
+                "group_id",
+                "group_name",
+                "paid_by_membership_id",
+                "paid_by_display_name",
+                "installment_number",
+                "total_installments",
+                "updated_at"
+              ],
+              "additionalProperties": false
+            },
+            "participants": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "membership_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "display_name": {
+                    "type": "string"
+                  },
+                  "is_current_user": {
+                    "type": "boolean"
+                  },
+                  "allocated_amount": {
+                    "type": "number"
+                  },
+                  "percentage": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "allocation_source": {
+                    "type": "string",
+                    "const": "persisted_split"
+                  }
+                },
+                "required": [
+                  "membership_id",
+                  "display_name",
+                  "is_current_user",
+                  "allocated_amount",
+                  "percentage",
+                  "allocation_source"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "participant_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "allocated_amount_total": {
+              "type": "number"
+            },
+            "unallocated_amount": {
+              "type": "number",
+              "minimum": 0
+            },
+            "allocation_difference": {
+              "type": "number"
+            },
+            "allocation_status": {
+              "type": "string",
+              "enum": [
+                "balanced",
+                "under_allocated",
+                "over_allocated",
+                "no_split_rows",
+                "inconsistent"
+              ]
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "NO_SHARED_EXPENSES",
+                  "SPLIT_DETAILS_MISSING",
+                  "SPLIT_UNDER_ALLOCATED",
+                  "SPLIT_OVER_ALLOCATED",
+                  "SPLIT_PERCENTAGE_INVALID",
+                  "SPLIT_AMOUNT_INVALID",
+                  "PAYER_UNRESOLVED",
+                  "MEMBER_PROFILE_INCOMPLETE",
+                  "HISTORICAL_MEMBER_UNRESOLVED",
+                  "GROUP_INACTIVE",
+                  "OWNER_MEMBERSHIP_MISSING",
+                  "GROUP_ROLE_INCONSISTENCY",
+                  "DATA_INCOMPLETE",
+                  "SETTLEMENT_NOT_BALANCED",
+                  "RESIDUAL_AMOUNT_REMAINS"
+                ]
+              }
+            },
+            "data_complete": {
+              "type": "boolean"
+            },
+            "generated_at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "resource_type",
+            "expense",
+            "participants",
+            "participant_count",
+            "allocated_amount_total",
+            "unallocated_amount",
+            "allocation_difference",
+            "allocation_status",
+            "warnings",
+            "data_complete",
+            "generated_at"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      },
+      {
+        "name": "get_group_member_summary",
+        "title": "Resumir rateios por membro",
+        "description": "Calcula valores pagos, atribuídos e saldos líquidos dos membros de um grupo acessível em um período civil. Usa os rateios persistidos e não altera dados.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "group_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "date_from": {
+              "type": "string"
+            },
+            "date_to": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "group_id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "group_member_summary"
+            },
+            "group": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "is_active": {
+                  "type": "boolean"
+                },
+                "current_user_role": {
+                  "type": "string",
+                  "enum": [
+                    "owner",
+                    "admin",
+                    "member"
+                  ]
+                },
+                "updated_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "is_active",
+                "current_user_role",
+                "updated_at"
+              ],
+              "additionalProperties": false
+            },
+            "period": {
+              "type": "object",
+              "properties": {
+                "date_from": {
+                  "type": "string"
+                },
+                "date_to": {
+                  "type": "string"
+                },
+                "days": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                "time_zone": {
+                  "type": "string",
+                  "const": "America/Sao_Paulo"
+                }
+              },
+              "required": [
+                "date_from",
+                "date_to",
+                "days",
+                "time_zone"
+              ],
+              "additionalProperties": false
+            },
+            "total_group_expenses": {
+              "type": "number"
+            },
+            "total_allocated": {
+              "type": "number"
+            },
+            "total_unallocated": {
+              "type": "number",
+              "minimum": 0
+            },
+            "member_paid_total": {
+              "type": "number"
+            },
+            "member_allocated_total": {
+              "type": "number"
+            },
+            "net_balance_sum": {
+              "type": "number"
+            },
+            "expense_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "split_expense_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "incomplete_expense_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "members": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "membership_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "display_name": {
+                    "type": "string"
+                  },
+                  "role": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "owner",
+                          "admin",
+                          "member"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "is_current_user": {
+                    "type": "boolean"
+                  },
+                  "paid_amount": {
+                    "type": "number"
+                  },
+                  "allocated_amount": {
+                    "type": "number"
+                  },
+                  "net_balance": {
+                    "type": "number"
+                  },
+                  "expense_count_paid": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "split_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "warnings": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "NO_SHARED_EXPENSES",
+                        "SPLIT_DETAILS_MISSING",
+                        "SPLIT_UNDER_ALLOCATED",
+                        "SPLIT_OVER_ALLOCATED",
+                        "SPLIT_PERCENTAGE_INVALID",
+                        "SPLIT_AMOUNT_INVALID",
+                        "PAYER_UNRESOLVED",
+                        "MEMBER_PROFILE_INCOMPLETE",
+                        "HISTORICAL_MEMBER_UNRESOLVED",
+                        "GROUP_INACTIVE",
+                        "OWNER_MEMBERSHIP_MISSING",
+                        "GROUP_ROLE_INCONSISTENCY",
+                        "DATA_INCOMPLETE",
+                        "SETTLEMENT_NOT_BALANCED",
+                        "RESIDUAL_AMOUNT_REMAINS"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "membership_id",
+                  "display_name",
+                  "role",
+                  "is_current_user",
+                  "paid_amount",
+                  "allocated_amount",
+                  "net_balance",
+                  "expense_count_paid",
+                  "split_count",
+                  "warnings"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "$ref": "#/properties/members/items/properties/warnings/items"
+              }
+            },
+            "data_complete": {
+              "type": "boolean"
+            },
+            "generated_at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "resource_type",
+            "group",
+            "period",
+            "total_group_expenses",
+            "total_allocated",
+            "total_unallocated",
+            "member_paid_total",
+            "member_allocated_total",
+            "net_balance_sum",
+            "expense_count",
+            "split_expense_count",
+            "incomplete_expense_count",
+            "members",
+            "warnings",
+            "data_complete",
+            "generated_at"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      },
+      {
+        "name": "get_group_settlement",
+        "title": "Sugerir acerto do grupo",
+        "description": "Calcula saldos e sugestões simplificadas de acerto em centavos para um grupo acessível. Não executa transferência, não confirma pagamento e não cria transação.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "group_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "date_from": {
+              "type": "string"
+            },
+            "date_to": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "group_id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "group_settlement"
+            },
+            "group": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "is_active": {
+                  "type": "boolean"
+                },
+                "current_user_role": {
+                  "type": "string",
+                  "enum": [
+                    "owner",
+                    "admin",
+                    "member"
+                  ]
+                },
+                "updated_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "is_active",
+                "current_user_role",
+                "updated_at"
+              ],
+              "additionalProperties": false
+            },
+            "period": {
+              "type": "object",
+              "properties": {
+                "date_from": {
+                  "type": "string"
+                },
+                "date_to": {
+                  "type": "string"
+                },
+                "days": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                "time_zone": {
+                  "type": "string",
+                  "const": "America/Sao_Paulo"
+                }
+              },
+              "required": [
+                "date_from",
+                "date_to",
+                "days",
+                "time_zone"
+              ],
+              "additionalProperties": false
+            },
+            "member_balances": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "membership_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "display_name": {
+                    "type": "string"
+                  },
+                  "role": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "owner",
+                          "admin",
+                          "member"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "is_current_user": {
+                    "type": "boolean"
+                  },
+                  "paid_amount": {
+                    "type": "number"
+                  },
+                  "allocated_amount": {
+                    "type": "number"
+                  },
+                  "net_balance": {
+                    "type": "number"
+                  },
+                  "expense_count_paid": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "split_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "warnings": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "NO_SHARED_EXPENSES",
+                        "SPLIT_DETAILS_MISSING",
+                        "SPLIT_UNDER_ALLOCATED",
+                        "SPLIT_OVER_ALLOCATED",
+                        "SPLIT_PERCENTAGE_INVALID",
+                        "SPLIT_AMOUNT_INVALID",
+                        "PAYER_UNRESOLVED",
+                        "MEMBER_PROFILE_INCOMPLETE",
+                        "HISTORICAL_MEMBER_UNRESOLVED",
+                        "GROUP_INACTIVE",
+                        "OWNER_MEMBERSHIP_MISSING",
+                        "GROUP_ROLE_INCONSISTENCY",
+                        "DATA_INCOMPLETE",
+                        "SETTLEMENT_NOT_BALANCED",
+                        "RESIDUAL_AMOUNT_REMAINS"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "membership_id",
+                  "display_name",
+                  "role",
+                  "is_current_user",
+                  "paid_amount",
+                  "allocated_amount",
+                  "net_balance",
+                  "expense_count_paid",
+                  "split_count",
+                  "warnings"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "transfers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "from_membership_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "from_display_name": {
+                    "type": "string"
+                  },
+                  "to_membership_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "to_display_name": {
+                    "type": "string"
+                  },
+                  "amount": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  }
+                },
+                "required": [
+                  "from_membership_id",
+                  "from_display_name",
+                  "to_membership_id",
+                  "to_display_name",
+                  "amount"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "transfer_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "total_to_transfer": {
+              "type": "number",
+              "minimum": 0
+            },
+            "total_credit": {
+              "type": "number",
+              "minimum": 0
+            },
+            "total_debit": {
+              "type": "number",
+              "minimum": 0
+            },
+            "residual_amount": {
+              "type": "number",
+              "minimum": 0
+            },
+            "settlement_status": {
+              "type": "string",
+              "enum": [
+                "settled",
+                "transfers_suggested",
+                "incomplete_data",
+                "unbalanced_source_data",
+                "no_shared_expenses"
+              ]
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "$ref": "#/properties/member_balances/items/properties/warnings/items"
+              }
+            },
+            "data_complete": {
+              "type": "boolean"
+            },
+            "generated_at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "resource_type",
+            "group",
+            "period",
+            "member_balances",
+            "transfers",
+            "transfer_count",
+            "total_to_transfer",
+            "total_credit",
+            "total_debit",
+            "residual_amount",
+            "settlement_status",
+            "warnings",
+            "data_complete",
+            "generated_at"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
       }
     ]
   }

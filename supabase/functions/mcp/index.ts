@@ -46,6 +46,8 @@ var MESSAGES = {
   CATEGORY_NOT_FOUND: "Categoria n\xE3o encontrada para a conta autenticada.",
   CARD_NOT_FOUND: "Cart\xE3o n\xE3o encontrado para a conta autenticada.",
   BUSINESS_RULE_VIOLATION: "A opera\xE7\xE3o viola uma regra do lan\xE7amento.",
+  EXPENSE_NOT_SHARED: "A despesa acess\xEDvel n\xE3o possui um rateio compartilhado.",
+  GROUP_DATA_INCOMPLETE: "Os dados do grupo n\xE3o permitem concluir a an\xE1lise com seguran\xE7a.",
   READ_FAILED: "N\xE3o foi poss\xEDvel concluir a consulta solicitada.",
   WRITE_FAILED: "N\xE3o foi poss\xEDvel concluir a opera\xE7\xE3o de escrita.",
   INVALID_CARD_TYPE: "Tipo de cart\xE3o inv\xE1lido. Use credit, debit ou both.",
@@ -4973,7 +4975,7 @@ var get_goal_progress_default = defineTool18({
     if ((goalRow.type === "category" || goalRow.type === "income_category") && transactionCount === 0) {
       warnings.push("CATEGORY_NOT_FOUND");
     }
-    const uniqueWarnings2 = [...new Set(warnings)];
+    const uniqueWarnings3 = [...new Set(warnings)];
     const actualMetrics = goalMetrics(actualValue, Number(goalRow.limit_amount));
     let recurringProjectedValue = null;
     let projectedValue = null;
@@ -5078,7 +5080,7 @@ var get_goal_progress_default = defineTool18({
       elapsed_days: reference.elapsed_days,
       remaining_days: reference.remaining_days,
       transaction_count: transactionCount,
-      warnings: uniqueWarnings2,
+      warnings: uniqueWarnings3,
       projection_mode: projectionMode,
       recurring_projected_value: recurringProjectedValue,
       projected_value: projectedValue,
@@ -5093,7 +5095,7 @@ var get_goal_progress_default = defineTool18({
       content: [
         {
           type: "text",
-          text: `Meta mensal: type=${goalRow.type}; category_reference=${goalRow.category ?? "null"}; reference_month=${input.reference_month ?? reference.requested_period.start_date.slice(0, 7)}; requested_period=${JSON.stringify(reference.requested_period)}; effective_period=${JSON.stringify(reference.effective_period)}. Valor realizado=${actualMetrics.actual_value}; alvo=${actualMetrics.target_value}; percentual=${actualMetrics.actual_percentage ?? "null"}; restante=${actualMetrics.actual_remaining}; excesso=${actualMetrics.actual_excess}; dire\xE7\xE3o=${goalDirection(goalRow.type)}; transaction_count=${transactionCount}; dias decorridos=${reference.elapsed_days}; dias restantes=${reference.remaining_days}. ${projectionText}warnings=${JSON.stringify(uniqueWarnings2)}. Estas s\xE3o metas ou limites mensais, n\xE3o contas de investimento, contribui\xE7\xF5es acumuladas ou metas de poupan\xE7a com prazo.`
+          text: `Meta mensal: type=${goalRow.type}; category_reference=${goalRow.category ?? "null"}; reference_month=${input.reference_month ?? reference.requested_period.start_date.slice(0, 7)}; requested_period=${JSON.stringify(reference.requested_period)}; effective_period=${JSON.stringify(reference.effective_period)}. Valor realizado=${actualMetrics.actual_value}; alvo=${actualMetrics.target_value}; percentual=${actualMetrics.actual_percentage ?? "null"}; restante=${actualMetrics.actual_remaining}; excesso=${actualMetrics.actual_excess}; dire\xE7\xE3o=${goalDirection(goalRow.type)}; transaction_count=${transactionCount}; dias decorridos=${reference.elapsed_days}; dias restantes=${reference.remaining_days}. ${projectionText}warnings=${JSON.stringify(uniqueWarnings3)}. Estas s\xE3o metas ou limites mensais, n\xE3o contas de investimento, contribui\xE7\xF5es acumuladas ou metas de poupan\xE7a com prazo.`
         }
       ],
       structuredContent: result
@@ -9006,7 +9008,7 @@ function inspectGroup(group, memberships, userId, includeInviteCode) {
   const duplicateCurrentMembership = currentRows.length > 1;
   const canManage = !duplicateCurrentMembership && (currentRole === "owner" || currentRole === "admin");
   const isOwner = !duplicateCurrentMembership && ownershipConsistent && currentRole === "owner" && group.created_by === userId;
-  const publicGroup = {
+  const publicGroup2 = {
     id: group.id,
     name: group.name,
     description: group.description,
@@ -9025,15 +9027,15 @@ function inspectGroup(group, memberships, userId, includeInviteCode) {
   };
   if (includeInviteCode) {
     if (canManage && group.invite_code) {
-      publicGroup.invite_code = group.invite_code;
+      publicGroup2.invite_code = group.invite_code;
     } else {
-      publicGroup.warnings = uniqueWarnings([
-        ...publicGroup.warnings,
+      publicGroup2.warnings = uniqueWarnings([
+        ...publicGroup2.warnings,
         "INVITE_CODE_NOT_AVAILABLE"
       ]);
     }
   }
-  return publicGroup;
+  return publicGroup2;
 }
 function groupCapacityText(group) {
   if (group.member_count === null) return "membros=indispon\xEDvel";
@@ -9291,13 +9293,850 @@ var list_shared_group_members_default = defineTool40({
   handler: listSharedGroupMembers
 });
 
+// src/lib/mcp/tools/get-expense-split-details.ts
+import { defineTool as defineTool41 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z51 } from "npm:zod@^3.25.76";
+
+// src/lib/mcp/shared/group-split-analysis.ts
+import { z as z50 } from "npm:zod@^3.25.76";
+var GROUP_ANALYSIS_MAX_DAYS = 366;
+var GROUP_ANALYSIS_MAX_EXPENSES = 1e3;
+var GROUP_ANALYSIS_MAX_SPLITS = 5e3;
+var GROUP_ANALYSIS_MAX_MEMBERS = 100;
+var GROUP_ANALYSIS_MAX_TRANSFERS = 100;
+var GROUP_ROLES2 = ["owner", "admin", "member"];
+var SPLIT_TYPES = ["equal", "percentage", "manual"];
+var SPLIT_TYPE_OUTPUTS = [...SPLIT_TYPES, "unknown"];
+var ALLOCATION_STATUSES = [
+  "balanced",
+  "under_allocated",
+  "over_allocated",
+  "no_split_rows",
+  "inconsistent"
+];
+var SETTLEMENT_STATUSES = [
+  "settled",
+  "transfers_suggested",
+  "incomplete_data",
+  "unbalanced_source_data",
+  "no_shared_expenses"
+];
+var GROUP_SPLIT_WARNINGS = [
+  "NO_SHARED_EXPENSES",
+  "SPLIT_DETAILS_MISSING",
+  "SPLIT_UNDER_ALLOCATED",
+  "SPLIT_OVER_ALLOCATED",
+  "SPLIT_PERCENTAGE_INVALID",
+  "SPLIT_AMOUNT_INVALID",
+  "PAYER_UNRESOLVED",
+  "MEMBER_PROFILE_INCOMPLETE",
+  "HISTORICAL_MEMBER_UNRESOLVED",
+  "GROUP_INACTIVE",
+  "OWNER_MEMBERSHIP_MISSING",
+  "GROUP_ROLE_INCONSISTENCY",
+  "DATA_INCOMPLETE",
+  "SETTLEMENT_NOT_BALANCED",
+  "RESIDUAL_AMOUNT_REMAINS"
+];
+var groupSplitWarningSchema = z50.enum(GROUP_SPLIT_WARNINGS);
+var groupAnalysisPeriodSchema = z50.object({
+  date_from: z50.string(),
+  date_to: z50.string(),
+  days: z50.number().int().positive(),
+  time_zone: z50.literal("America/Sao_Paulo")
+}).strict();
+var groupAnalysisGroupSchema = z50.object({
+  id: z50.string().uuid(),
+  name: z50.string(),
+  is_active: z50.boolean(),
+  current_user_role: z50.enum(GROUP_ROLES2),
+  updated_at: z50.string().nullable()
+}).strict();
+var expenseSplitParticipantSchema = z50.object({
+  membership_id: z50.string().uuid().nullable(),
+  display_name: z50.string(),
+  is_current_user: z50.boolean(),
+  allocated_amount: z50.number(),
+  percentage: z50.number().nullable(),
+  allocation_source: z50.literal("persisted_split")
+}).strict();
+var expenseSplitDetailsExpenseSchema = z50.object({
+  id: z50.string().uuid(),
+  description: z50.string(),
+  amount: z50.number(),
+  expense_date: z50.string(),
+  split_type: z50.enum(SPLIT_TYPE_OUTPUTS),
+  group_id: z50.string().uuid(),
+  group_name: z50.string(),
+  paid_by_membership_id: z50.string().uuid().nullable(),
+  paid_by_display_name: z50.string(),
+  installment_number: z50.number().int().nullable(),
+  total_installments: z50.number().int().nullable(),
+  updated_at: z50.string()
+}).strict();
+var groupMemberSummaryItemSchema = z50.object({
+  membership_id: z50.string().uuid().nullable(),
+  display_name: z50.string(),
+  role: z50.enum(GROUP_ROLES2).nullable(),
+  is_current_user: z50.boolean(),
+  paid_amount: z50.number(),
+  allocated_amount: z50.number(),
+  net_balance: z50.number(),
+  expense_count_paid: z50.number().int().nonnegative(),
+  split_count: z50.number().int().nonnegative(),
+  warnings: z50.array(groupSplitWarningSchema)
+}).strict();
+var settlementTransferSchema = z50.object({
+  from_membership_id: z50.string().uuid(),
+  from_display_name: z50.string(),
+  to_membership_id: z50.string().uuid(),
+  to_display_name: z50.string(),
+  amount: z50.number().positive()
+}).strict();
+var allocationStatusSchema = z50.enum(ALLOCATION_STATUSES);
+var settlementStatusSchema = z50.enum(SETTLEMENT_STATUSES);
+var expenseDetailsInputSchema = z50.object({ expense_id: z50.string().uuid() }).strict();
+var groupAnalysisInputSchema = z50.object({
+  group_id: z50.string().uuid(),
+  date_from: z50.string().optional(),
+  date_to: z50.string().optional()
+}).strict();
+function uniqueWarnings2(warnings) {
+  return [...new Set(warnings)];
+}
+function isRole(value) {
+  return GROUP_ROLES2.includes(value);
+}
+function isSplitType(value) {
+  return value !== null && SPLIT_TYPES.includes(value);
+}
+function decimalToScaledInteger(value, scale) {
+  const raw = String(value).trim();
+  const match = /^([+-]?)(\d+)(?:\.(\d+))?$/.exec(raw);
+  if (!match) return null;
+  const fraction = match[3] ?? "";
+  if (fraction.length > scale) return null;
+  const factor = 10 ** scale;
+  const whole = Number(match[2]);
+  const fractional = Number(fraction.padEnd(scale, "0") || "0");
+  if (!Number.isSafeInteger(whole) || !Number.isSafeInteger(fractional)) return null;
+  const absolute = whole * factor + fractional;
+  if (!Number.isSafeInteger(absolute)) return null;
+  return match[1] === "-" ? -absolute : absolute;
+}
+function moneyToCents(value) {
+  return decimalToScaledInteger(value, 2);
+}
+function centsToMoney(cents) {
+  return Number((cents / 100).toFixed(2));
+}
+function percentageToUnits(value) {
+  return decimalToScaledInteger(value, 4);
+}
+function resolvePeriod(dateFrom, dateTo) {
+  if (dateFrom !== void 0 && !isValidIsoDate(dateFrom) || dateTo !== void 0 && !isValidIsoDate(dateTo)) {
+    return { ok: false, error: mcpError("INVALID_INPUT") };
+  }
+  const defaults = currentMonthRange();
+  const from = dateFrom ?? defaults.from;
+  const to = dateTo ?? defaults.to;
+  if (from > to) return { ok: false, error: mcpError("INVALID_DATE_RANGE") };
+  const days = inclusiveDays(from, to);
+  if (days > GROUP_ANALYSIS_MAX_DAYS) {
+    return { ok: false, error: mcpError("RESULT_SET_TOO_LARGE") };
+  }
+  return {
+    ok: true,
+    period: {
+      date_from: from,
+      date_to: to,
+      days,
+      time_zone: "America/Sao_Paulo"
+    }
+  };
+}
+function membershipOrder(left, right) {
+  return (left.joined_at ?? "").localeCompare(right.joined_at ?? "") || left.id.localeCompare(right.id);
+}
+async function loadGroup(groupId, userId, ctx) {
+  const supabase = supabaseForUser(ctx);
+  const { data: rawGroup, error: groupError } = await supabase.from("shared_groups").select("id,name,created_by,is_active,updated_at").eq("id", groupId).maybeSingle();
+  if (groupError) return mcpError("READ_FAILED");
+  if (!rawGroup) return mcpError("RESOURCE_NOT_FOUND");
+  const group = rawGroup;
+  const { data: rawMemberships, error: memberError } = await supabase.from("shared_group_members").select("id,group_id,user_id,role,joined_at").eq("group_id", groupId).limit(GROUP_ANALYSIS_MAX_MEMBERS + 1);
+  if (memberError) return mcpError("READ_FAILED");
+  const memberships = rawMemberships ?? [];
+  if (memberships.length > GROUP_ANALYSIS_MAX_MEMBERS) {
+    return mcpError("RESULT_SET_TOO_LARGE");
+  }
+  const warnings = [];
+  const byUser = /* @__PURE__ */ new Map();
+  for (const membership of memberships) {
+    const rows = byUser.get(membership.user_id) ?? [];
+    rows.push(membership);
+    byUser.set(membership.user_id, rows);
+  }
+  const duplicateMembership = [...byUser.values()].some((rows) => rows.length !== 1);
+  const currentRows = byUser.get(userId) ?? [];
+  if (currentRows.length !== 1 || !isRole(currentRows[0]?.role ?? "")) {
+    warnings.push("OWNER_MEMBERSHIP_MISSING", "GROUP_ROLE_INCONSISTENCY", "DATA_INCOMPLETE");
+    return mcpError(
+      "GROUP_DATA_INCOMPLETE",
+      "Os dados de associa\xE7\xE3o do grupo n\xE3o permitem confirmar a identidade atual com seguran\xE7a."
+    );
+  }
+  const currentMembership = currentRows[0];
+  const ownerRows = memberships.filter((membership) => membership.role === "owner");
+  const ownershipConsistent = ownerRows.length === 1 && ownerRows[0].user_id === group.created_by;
+  if (!ownershipConsistent || duplicateMembership) {
+    warnings.push("GROUP_ROLE_INCONSISTENCY", "DATA_INCOMPLETE");
+  }
+  if (!byUser.has(group.created_by)) {
+    warnings.push("OWNER_MEMBERSHIP_MISSING", "DATA_INCOMPLETE");
+  }
+  if (group.is_active !== true) warnings.push("GROUP_INACTIVE");
+  if (group.updated_at === null || group.is_active === null) warnings.push("DATA_INCOMPLETE");
+  const userIds = [...byUser.keys()];
+  let profiles = [];
+  if (userIds.length > 0) {
+    const { data, error } = await supabase.from("profiles").select("user_id,display_name").in("user_id", userIds).limit(GROUP_ANALYSIS_MAX_MEMBERS);
+    if (error) return mcpError("READ_FAILED");
+    profiles = data ?? [];
+  }
+  const names = new Map(profiles.map((profile) => [profile.user_id, profile.display_name]));
+  const identities = /* @__PURE__ */ new Map();
+  for (const [memberUserId, rows] of byUser) {
+    const membership = [...rows].sort(membershipOrder)[0];
+    const displayName = names.get(memberUserId)?.trim();
+    if (!displayName) warnings.push("MEMBER_PROFILE_INCOMPLETE", "DATA_INCOMPLETE");
+    identities.set(memberUserId, {
+      internal_key: memberUserId,
+      membership_id: membership.id,
+      display_name: displayName || "Membro",
+      role: isRole(membership.role) ? membership.role : null,
+      is_current_user: memberUserId === userId,
+      historical: false,
+      profile_complete: Boolean(displayName)
+    });
+  }
+  return {
+    group,
+    memberships,
+    identities,
+    currentMembership,
+    warnings: uniqueWarnings2(warnings),
+    dataComplete: !warnings.includes("DATA_INCOMPLETE")
+  };
+}
+function historicalIdentity(internalKey, currentUserId) {
+  return {
+    internal_key: internalKey,
+    membership_id: null,
+    display_name: "Membro anterior",
+    role: null,
+    is_current_user: internalKey === currentUserId,
+    historical: true,
+    profile_complete: false
+  };
+}
+function memberFor(map, identity) {
+  const existing = map.get(identity.internal_key);
+  if (existing) return existing;
+  const warnings = [];
+  if (identity.historical) warnings.push("HISTORICAL_MEMBER_UNRESOLVED", "DATA_INCOMPLETE");
+  if (!identity.profile_complete && !identity.historical) {
+    warnings.push("MEMBER_PROFILE_INCOMPLETE", "DATA_INCOMPLETE");
+  }
+  const created = {
+    internal_key: identity.internal_key,
+    membership_id: identity.membership_id,
+    display_name: identity.display_name,
+    role: identity.role,
+    is_current_user: identity.is_current_user,
+    paid_cents: 0,
+    allocated_cents: 0,
+    expense_count_paid: 0,
+    split_count: 0,
+    warnings
+  };
+  map.set(identity.internal_key, created);
+  return created;
+}
+function allocationFacts(expense, splits) {
+  const warnings = [];
+  const expenseCents = moneyToCents(expense.amount);
+  const parsedSplits = splits.map((split) => ({
+    split,
+    cents: moneyToCents(split.share_amount)
+  }));
+  if (expenseCents === null || expenseCents < 0 || parsedSplits.some((item) => item.cents === null || (item.cents ?? 0) < 0)) {
+    warnings.push("SPLIT_AMOUNT_INVALID", "DATA_INCOMPLETE");
+  }
+  const allocatedCents = parsedSplits.reduce(
+    (total, item) => total + Math.max(item.cents ?? 0, 0),
+    0
+  );
+  const amountCents = Math.max(expenseCents ?? 0, 0);
+  let status;
+  if (splits.length === 0) {
+    status = "no_split_rows";
+    warnings.push("SPLIT_DETAILS_MISSING", "DATA_INCOMPLETE");
+  } else if (!isSplitType(expense.split_type)) {
+    status = "inconsistent";
+    warnings.push("DATA_INCOMPLETE");
+  } else if (allocatedCents < amountCents) {
+    status = "under_allocated";
+    warnings.push("SPLIT_UNDER_ALLOCATED", "DATA_INCOMPLETE");
+  } else if (allocatedCents > amountCents) {
+    status = "over_allocated";
+    warnings.push("SPLIT_OVER_ALLOCATED", "DATA_INCOMPLETE");
+  } else {
+    status = "balanced";
+  }
+  if (expense.split_type === "percentage") {
+    const percentages = splits.map(
+      (split) => split.share_percentage === null ? null : percentageToUnits(split.share_percentage)
+    );
+    const invalid = percentages.some((percentage) => percentage === null || percentage < 0 || percentage > 1e6) || percentages.reduce((total, percentage) => total + (percentage ?? 0), 0) !== 1e6;
+    if (invalid) {
+      warnings.push("SPLIT_PERCENTAGE_INVALID", "DATA_INCOMPLETE");
+      status = "inconsistent";
+    }
+  }
+  return {
+    expenseCents: amountCents,
+    allocatedCents,
+    unallocatedCents: Math.max(amountCents - allocatedCents, 0),
+    differenceCents: allocatedCents - amountCents,
+    status,
+    parsedSplits,
+    warnings: uniqueWarnings2(warnings)
+  };
+}
+async function loadGroupAnalysis(input, ctx, userId) {
+  const periodResult = resolvePeriod(input.date_from, input.date_to);
+  if (!periodResult.ok) return periodResult.error;
+  const loaded = await loadGroup(input.group_id, userId, ctx);
+  if ("isError" in loaded) return loaded;
+  const supabase = supabaseForUser(ctx);
+  const { data: rawExpenses, error: expenseError } = await supabase.from("expenses").select(
+    "id,user_id,description,amount,expense_date,shared_group_id,is_shared,paid_by,split_type,installment_number,total_installments,updated_at"
+  ).eq("shared_group_id", input.group_id).gte("expense_date", periodResult.period.date_from).lte("expense_date", periodResult.period.date_to).limit(GROUP_ANALYSIS_MAX_EXPENSES + 1);
+  if (expenseError) return mcpError("READ_FAILED");
+  const allExpenses = rawExpenses ?? [];
+  if (allExpenses.length > GROUP_ANALYSIS_MAX_EXPENSES) {
+    return mcpError("RESULT_SET_TOO_LARGE");
+  }
+  const expenses = allExpenses.filter(
+    (expense) => expense.shared_group_id === input.group_id && expense.is_shared
+  );
+  const expenseIds = expenses.map((expense) => expense.id);
+  let splits = [];
+  if (expenseIds.length > 0) {
+    const { data, error } = await supabase.from("expense_splits").select("id,expense_id,user_id,share_amount,share_percentage,created_at").in("expense_id", expenseIds).limit(GROUP_ANALYSIS_MAX_SPLITS + 1);
+    if (error) return mcpError("READ_FAILED");
+    splits = data ?? [];
+    if (splits.length > GROUP_ANALYSIS_MAX_SPLITS) {
+      return mcpError("RESULT_SET_TOO_LARGE");
+    }
+  }
+  const splitByExpense = /* @__PURE__ */ new Map();
+  for (const split of splits) {
+    const rows = splitByExpense.get(split.expense_id) ?? [];
+    rows.push(split);
+    splitByExpense.set(split.expense_id, rows);
+  }
+  const members = /* @__PURE__ */ new Map();
+  for (const identity of loaded.identities.values()) memberFor(members, identity);
+  const warnings = [...loaded.warnings];
+  let totalExpenseCents = 0;
+  let totalAllocatedCents = 0;
+  let totalUnallocatedCents = 0;
+  let splitExpenseCount = 0;
+  let incompleteExpenseCount = 0;
+  for (const expense of expenses) {
+    const expenseSplits = splitByExpense.get(expense.id) ?? [];
+    const facts = allocationFacts(expense, expenseSplits);
+    warnings.push(...facts.warnings);
+    totalExpenseCents += facts.expenseCents;
+    totalAllocatedCents += facts.allocatedCents;
+    totalUnallocatedCents += facts.unallocatedCents;
+    if (expenseSplits.length > 0) splitExpenseCount += 1;
+    if (facts.status !== "balanced") incompleteExpenseCount += 1;
+    const payerKey = expense.paid_by ?? expense.user_id;
+    const payerIdentity = loaded.identities.get(payerKey) ?? historicalIdentity(payerKey, userId);
+    const payer = memberFor(members, payerIdentity);
+    payer.paid_cents += facts.expenseCents;
+    payer.expense_count_paid += 1;
+    if (payerIdentity.historical) {
+      warnings.push("PAYER_UNRESOLVED", "HISTORICAL_MEMBER_UNRESOLVED", "DATA_INCOMPLETE");
+      incompleteExpenseCount += facts.status === "balanced" ? 1 : 0;
+    }
+    for (const parsed of facts.parsedSplits) {
+      const identity = loaded.identities.get(parsed.split.user_id) ?? historicalIdentity(parsed.split.user_id, userId);
+      const member = memberFor(members, identity);
+      member.allocated_cents += Math.max(parsed.cents ?? 0, 0);
+      member.split_count += 1;
+      if (identity.historical) {
+        warnings.push("HISTORICAL_MEMBER_UNRESOLVED", "DATA_INCOMPLETE");
+      }
+    }
+  }
+  if (expenses.length === 0) warnings.push("NO_SHARED_EXPENSES");
+  const orderedMembers = [...members.values()].sort(
+    (left, right) => (left.membership_id ?? `~${left.internal_key}`).localeCompare(
+      right.membership_id ?? `~${right.internal_key}`
+    )
+  );
+  const allWarnings = uniqueWarnings2([
+    ...warnings,
+    ...orderedMembers.flatMap((member) => member.warnings)
+  ]);
+  return {
+    loaded,
+    period: periodResult.period,
+    members: orderedMembers,
+    totalExpenseCents,
+    totalAllocatedCents,
+    totalUnallocatedCents,
+    expenseCount: expenses.length,
+    splitExpenseCount,
+    incompleteExpenseCount,
+    warnings: allWarnings,
+    dataComplete: !allWarnings.includes("DATA_INCOMPLETE")
+  };
+}
+function publicGroup(loaded) {
+  return {
+    id: loaded.group.id,
+    name: loaded.group.name,
+    is_active: loaded.group.is_active === true,
+    current_user_role: loaded.currentMembership.role,
+    updated_at: loaded.group.updated_at
+  };
+}
+function publicMember(member) {
+  return {
+    membership_id: member.membership_id,
+    display_name: member.display_name,
+    role: member.role,
+    is_current_user: member.is_current_user,
+    paid_amount: centsToMoney(member.paid_cents),
+    allocated_amount: centsToMoney(member.allocated_cents),
+    net_balance: centsToMoney(member.paid_cents - member.allocated_cents),
+    expense_count_paid: member.expense_count_paid,
+    split_count: member.split_count,
+    warnings: uniqueWarnings2(member.warnings)
+  };
+}
+function summaryContent(result) {
+  const members = result.members.map(
+    (member, index) => `${index + 1}. membership_id=${member.membership_id ?? "indispon\xEDvel"}; nome=${member.display_name}; papel=${member.role ?? "hist\xF3rico"}; is_current_user=${member.is_current_user}; pagou=${member.paid_amount}; atribu\xEDdo=${member.allocated_amount}; saldo_l\xEDquido=${member.net_balance}; despesas_pagas=${member.expense_count_paid}; rateios=${member.split_count}`
+  ).join("\n");
+  return `Consulta somente leitura do grupo ${result.group.name} (${result.group.id}), per\xEDodo ${result.period.date_from} a ${result.period.date_to}, America/Sao_Paulo. Despesas compartilhadas=${result.expense_count}; total=${result.total_group_expenses}; total_rateado=${result.total_allocated}; n\xE3o_rateado=${result.total_unallocated}; soma_saldos=${result.net_balance_sum}; despesas_incompletas=${result.incomplete_expense_count}; data_complete=${result.data_complete}; warnings=${result.warnings.join(",") || "nenhum"}.
+${members || "Nenhum membro com identidade p\xFAblica dispon\xEDvel."}
+Nenhuma transa\xE7\xE3o, despesa, associa\xE7\xE3o ou rateio foi criado ou alterado.`;
+}
+function buildSummaryResult(analysis) {
+  const members = analysis.members.map(publicMember);
+  const memberPaidCents = analysis.members.reduce((total, member) => total + member.paid_cents, 0);
+  const memberAllocatedCents = analysis.members.reduce(
+    (total, member) => total + member.allocated_cents,
+    0
+  );
+  return {
+    resource_type: "group_member_summary",
+    group: publicGroup(analysis.loaded),
+    period: analysis.period,
+    total_group_expenses: centsToMoney(analysis.totalExpenseCents),
+    total_allocated: centsToMoney(analysis.totalAllocatedCents),
+    total_unallocated: centsToMoney(analysis.totalUnallocatedCents),
+    member_paid_total: centsToMoney(memberPaidCents),
+    member_allocated_total: centsToMoney(memberAllocatedCents),
+    net_balance_sum: centsToMoney(memberPaidCents - memberAllocatedCents),
+    expense_count: analysis.expenseCount,
+    split_expense_count: analysis.splitExpenseCount,
+    incomplete_expense_count: analysis.incompleteExpenseCount,
+    members,
+    warnings: analysis.warnings,
+    data_complete: analysis.dataComplete,
+    generated_at: (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+async function getGroupMemberSummary(rawInput, ctx) {
+  const parsed = groupAnalysisInputSchema.safeParse(rawInput);
+  if (!parsed.success) return mcpError("INVALID_INPUT");
+  const userId = ctx.getUserId();
+  if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
+  try {
+    const analysis = await loadGroupAnalysis(parsed.data, ctx, userId);
+    if ("isError" in analysis) return analysis;
+    const result = buildSummaryResult(analysis);
+    return {
+      content: [{ type: "text", text: summaryContent(result) }],
+      structuredContent: result
+    };
+  } catch {
+    return mcpError("READ_FAILED");
+  }
+}
+function suggestSettlementTransfers(balances) {
+  const debtors = balances.filter((balance) => balance.net_cents < 0).map((balance) => ({ ...balance, remaining: -balance.net_cents })).sort(
+    (left, right) => right.remaining - left.remaining || left.membership_id.localeCompare(right.membership_id)
+  );
+  const creditors = balances.filter((balance) => balance.net_cents > 0).map((balance) => ({ ...balance, remaining: balance.net_cents })).sort(
+    (left, right) => right.remaining - left.remaining || left.membership_id.localeCompare(right.membership_id)
+  );
+  const transfers = [];
+  let debtorIndex = 0;
+  let creditorIndex = 0;
+  while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
+    const debtor = debtors[debtorIndex];
+    const creditor = creditors[creditorIndex];
+    const amount = Math.min(debtor.remaining, creditor.remaining);
+    if (amount > 0 && debtor.membership_id !== creditor.membership_id) {
+      transfers.push({
+        from_membership_id: debtor.membership_id,
+        from_display_name: debtor.display_name,
+        to_membership_id: creditor.membership_id,
+        to_display_name: creditor.display_name,
+        amount_cents: amount
+      });
+    }
+    debtor.remaining -= amount;
+    creditor.remaining -= amount;
+    if (debtor.remaining === 0) debtorIndex += 1;
+    if (creditor.remaining === 0) creditorIndex += 1;
+  }
+  const totalCreditCents = balances.reduce(
+    (total, balance) => total + Math.max(balance.net_cents, 0),
+    0
+  );
+  const totalDebitCents = balances.reduce(
+    (total, balance) => total + Math.max(-balance.net_cents, 0),
+    0
+  );
+  const totalTransferCents = transfers.reduce(
+    (total, transfer) => total + transfer.amount_cents,
+    0
+  );
+  return {
+    transfers,
+    totalCreditCents,
+    totalDebitCents,
+    totalTransferCents,
+    residualCents: Math.abs(totalCreditCents - totalDebitCents)
+  };
+}
+function settlementContent(result) {
+  const balances = result.member_balances.map(
+    (member) => `${member.display_name} (${member.membership_id ?? "identidade hist\xF3rica"}): pagou=${member.paid_amount}; atribu\xEDdo=${member.allocated_amount}; saldo=${member.net_balance}`
+  ).join("\n");
+  const transfers = result.transfers.map(
+    (transfer, index) => `${index + 1}. ${transfer.from_display_name} transfere ${transfer.amount} para ${transfer.to_display_name}`
+  ).join("\n");
+  return `Sugest\xF5es matem\xE1ticas de acerto para ${result.group.name}, per\xEDodo ${result.period.date_from} a ${result.period.date_to}. Status=${result.settlement_status}; total_sugerido=${result.total_to_transfer}; residual=${result.residual_amount}; data_complete=${result.data_complete}; warnings=${result.warnings.join(",") || "nenhum"}.
+Saldos:
+${balances || "Nenhum saldo."}
+Sugest\xF5es:
+${transfers || "Nenhuma transfer\xEAncia sugerida."}
+S\xE3o apenas sugest\xF5es matem\xE1ticas, n\xE3o cobran\xE7as obrigat\xF3rias. Nenhuma transfer\xEAncia foi realizada, nenhum pagamento foi confirmado e nenhuma transa\xE7\xE3o ou despesa foi criada ou alterada.`;
+}
+async function getGroupSettlement(rawInput, ctx) {
+  const parsed = groupAnalysisInputSchema.safeParse(rawInput);
+  if (!parsed.success) return mcpError("INVALID_INPUT");
+  const userId = ctx.getUserId();
+  if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
+  try {
+    const analysis = await loadGroupAnalysis(parsed.data, ctx, userId);
+    if ("isError" in analysis) return analysis;
+    const memberBalances = analysis.members.map(publicMember);
+    const resolvable = analysis.members.every((member) => member.membership_id !== null);
+    const sourceBalanced = analysis.totalExpenseCents === analysis.totalAllocatedCents && analysis.dataComplete;
+    let settlement = {
+      transfers: [],
+      totalCreditCents: analysis.members.reduce(
+        (total, member) => total + Math.max(member.paid_cents - member.allocated_cents, 0),
+        0
+      ),
+      totalDebitCents: analysis.members.reduce(
+        (total, member) => total + Math.max(member.allocated_cents - member.paid_cents, 0),
+        0
+      ),
+      totalTransferCents: 0,
+      residualCents: Math.abs(analysis.totalExpenseCents - analysis.totalAllocatedCents)
+    };
+    let status;
+    const warnings = [...analysis.warnings];
+    if (analysis.expenseCount === 0) {
+      status = "no_shared_expenses";
+    } else if (!resolvable) {
+      status = "incomplete_data";
+      warnings.push("SETTLEMENT_NOT_BALANCED", "DATA_INCOMPLETE");
+    } else if (!sourceBalanced) {
+      status = "unbalanced_source_data";
+      warnings.push("SETTLEMENT_NOT_BALANCED", "DATA_INCOMPLETE");
+    } else {
+      settlement = suggestSettlementTransfers(
+        analysis.members.map((member) => ({
+          membership_id: member.membership_id,
+          display_name: member.display_name,
+          net_cents: member.paid_cents - member.allocated_cents
+        }))
+      );
+      if (settlement.transfers.length > GROUP_ANALYSIS_MAX_TRANSFERS) {
+        return mcpError("RESULT_SET_TOO_LARGE");
+      }
+      status = settlement.transfers.length === 0 ? "settled" : "transfers_suggested";
+    }
+    if (settlement.residualCents > 0) warnings.push("RESIDUAL_AMOUNT_REMAINS");
+    const transfers = settlement.transfers.map((transfer) => ({
+      from_membership_id: transfer.from_membership_id,
+      from_display_name: transfer.from_display_name,
+      to_membership_id: transfer.to_membership_id,
+      to_display_name: transfer.to_display_name,
+      amount: centsToMoney(transfer.amount_cents)
+    }));
+    const result = {
+      resource_type: "group_settlement",
+      group: publicGroup(analysis.loaded),
+      period: analysis.period,
+      member_balances: memberBalances,
+      transfers,
+      transfer_count: transfers.length,
+      total_to_transfer: centsToMoney(settlement.totalTransferCents),
+      total_credit: centsToMoney(settlement.totalCreditCents),
+      total_debit: centsToMoney(settlement.totalDebitCents),
+      residual_amount: centsToMoney(settlement.residualCents),
+      settlement_status: status,
+      warnings: uniqueWarnings2(warnings),
+      data_complete: analysis.dataComplete && resolvable && sourceBalanced,
+      generated_at: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    return {
+      content: [{ type: "text", text: settlementContent(result) }],
+      structuredContent: result
+    };
+  } catch {
+    return mcpError("READ_FAILED");
+  }
+}
+async function getExpenseSplitDetails(rawInput, ctx) {
+  const parsed = expenseDetailsInputSchema.safeParse(rawInput);
+  if (!parsed.success) return mcpError("INVALID_INPUT");
+  const userId = ctx.getUserId();
+  if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
+  try {
+    const supabase = supabaseForUser(ctx);
+    const { data: rawExpense, error: expenseError } = await supabase.from("expenses").select(
+      "id,user_id,description,amount,expense_date,shared_group_id,is_shared,paid_by,split_type,installment_number,total_installments,updated_at"
+    ).eq("id", parsed.data.expense_id).maybeSingle();
+    if (expenseError) return mcpError("READ_FAILED");
+    if (!rawExpense) return mcpError("RESOURCE_NOT_FOUND");
+    const expense = rawExpense;
+    if (!expense.shared_group_id || !expense.is_shared) {
+      return mcpError(
+        "EXPENSE_NOT_SHARED",
+        "A despesa acess\xEDvel n\xE3o possui um rateio compartilhado."
+      );
+    }
+    const loaded = await loadGroup(expense.shared_group_id, userId, ctx);
+    if ("isError" in loaded) return loaded;
+    const { data: rawSplits, error: splitError } = await supabase.from("expense_splits").select("id,expense_id,user_id,share_amount,share_percentage,created_at").eq("expense_id", expense.id).limit(GROUP_ANALYSIS_MAX_MEMBERS + 1);
+    if (splitError) return mcpError("READ_FAILED");
+    const splits = rawSplits ?? [];
+    if (splits.length > GROUP_ANALYSIS_MAX_MEMBERS) {
+      return mcpError("RESULT_SET_TOO_LARGE");
+    }
+    const facts = allocationFacts(expense, splits);
+    const warnings = [...loaded.warnings, ...facts.warnings];
+    const payerKey = expense.paid_by ?? expense.user_id;
+    const payer = loaded.identities.get(payerKey) ?? historicalIdentity(payerKey, userId);
+    if (payer.historical) {
+      warnings.push("PAYER_UNRESOLVED", "HISTORICAL_MEMBER_UNRESOLVED", "DATA_INCOMPLETE");
+    }
+    const participants = facts.parsedSplits.map(({ split, cents }) => {
+      const identity = loaded.identities.get(split.user_id) ?? historicalIdentity(split.user_id, userId);
+      if (identity.historical) {
+        warnings.push("HISTORICAL_MEMBER_UNRESOLVED", "DATA_INCOMPLETE");
+      }
+      if (!identity.profile_complete && !identity.historical) {
+        warnings.push("MEMBER_PROFILE_INCOMPLETE", "DATA_INCOMPLETE");
+      }
+      return {
+        membership_id: identity.membership_id,
+        display_name: identity.display_name,
+        is_current_user: identity.is_current_user,
+        allocated_amount: centsToMoney(Math.max(cents ?? 0, 0)),
+        percentage: expense.split_type === "percentage" && split.share_percentage !== null ? Number(split.share_percentage) : null,
+        allocation_source: "persisted_split",
+        _sort: split.id
+      };
+    }).sort(
+      (left, right) => (left.membership_id ?? `~${left._sort}`).localeCompare(
+        right.membership_id ?? `~${right._sort}`
+      )
+    ).map(({ _sort, ...participant }) => participant);
+    const finalWarnings = uniqueWarnings2(warnings);
+    const result = {
+      resource_type: "expense_split_details",
+      expense: {
+        id: expense.id,
+        description: expense.description,
+        amount: centsToMoney(facts.expenseCents),
+        expense_date: expense.expense_date,
+        split_type: isSplitType(expense.split_type) ? expense.split_type : "unknown",
+        group_id: loaded.group.id,
+        group_name: loaded.group.name,
+        paid_by_membership_id: payer.membership_id,
+        paid_by_display_name: payer.display_name,
+        installment_number: expense.installment_number,
+        total_installments: expense.total_installments,
+        updated_at: expense.updated_at
+      },
+      participants,
+      participant_count: participants.length,
+      allocated_amount_total: centsToMoney(facts.allocatedCents),
+      unallocated_amount: centsToMoney(facts.unallocatedCents),
+      allocation_difference: centsToMoney(facts.differenceCents),
+      allocation_status: facts.status,
+      warnings: finalWarnings,
+      data_complete: !finalWarnings.includes("DATA_INCOMPLETE"),
+      generated_at: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    const participantText = participants.map(
+      (participant, index) => `${index + 1}. membership_id=${participant.membership_id ?? "indispon\xEDvel"}; nome=${participant.display_name}; is_current_user=${participant.is_current_user}; valor_atribu\xEDdo=${participant.allocated_amount}; percentual=${participant.percentage ?? "n\xE3o aplic\xE1vel"}`
+    ).join("\n");
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Consulta somente leitura do rateio da despesa ${result.expense.description} (${result.expense.id}), grupo ${result.expense.group_name} (${result.expense.group_id}). Valor=${result.expense.amount}; data=${result.expense.expense_date}; tipo=${result.expense.split_type}; pagador=${result.expense.paid_by_display_name}; paid_by_membership_id=${result.expense.paid_by_membership_id ?? "indispon\xEDvel"}; participantes=${result.participant_count}; total_atribu\xEDdo=${result.allocated_amount_total}; n\xE3o_atribu\xEDdo=${result.unallocated_amount}; diferen\xE7a=${result.allocation_difference}; status=${result.allocation_status}; data_complete=${result.data_complete}; warnings=${result.warnings.join(",") || "nenhum"}.
+${participantText || "Nenhuma linha de rateio persistida."}
+Nenhum dado foi alterado.`
+        }
+      ],
+      structuredContent: result
+    };
+  } catch {
+    return mcpError("READ_FAILED");
+  }
+}
+
+// src/lib/mcp/tools/get-expense-split-details.ts
+var get_expense_split_details_default = defineTool41({
+  name: "get_expense_split_details",
+  title: "Detalhar rateio de despesa",
+  description: "Consulta o rateio persistido de uma despesa compartilhada acess\xEDvel, resolve identidades p\xFAblicas reduzidas e valida os totais em centavos. N\xE3o altera a despesa nem o rateio.",
+  inputSchema: {
+    expense_id: z51.string().uuid()
+  },
+  outputSchema: {
+    resource_type: z51.literal("expense_split_details"),
+    expense: expenseSplitDetailsExpenseSchema,
+    participants: z51.array(expenseSplitParticipantSchema),
+    participant_count: z51.number().int().nonnegative(),
+    allocated_amount_total: z51.number(),
+    unallocated_amount: z51.number().nonnegative(),
+    allocation_difference: z51.number(),
+    allocation_status: allocationStatusSchema,
+    warnings: z51.array(groupSplitWarningSchema),
+    data_complete: z51.boolean(),
+    generated_at: z51.string().datetime()
+  },
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false
+  },
+  handler: getExpenseSplitDetails
+});
+
+// src/lib/mcp/tools/get-group-member-summary.ts
+import { defineTool as defineTool42 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z52 } from "npm:zod@^3.25.76";
+var get_group_member_summary_default = defineTool42({
+  name: "get_group_member_summary",
+  title: "Resumir rateios por membro",
+  description: "Calcula valores pagos, atribu\xEDdos e saldos l\xEDquidos dos membros de um grupo acess\xEDvel em um per\xEDodo civil. Usa os rateios persistidos e n\xE3o altera dados.",
+  inputSchema: {
+    group_id: z52.string().uuid(),
+    date_from: z52.string().optional(),
+    date_to: z52.string().optional()
+  },
+  outputSchema: {
+    resource_type: z52.literal("group_member_summary"),
+    group: groupAnalysisGroupSchema,
+    period: groupAnalysisPeriodSchema,
+    total_group_expenses: z52.number(),
+    total_allocated: z52.number(),
+    total_unallocated: z52.number().nonnegative(),
+    member_paid_total: z52.number(),
+    member_allocated_total: z52.number(),
+    net_balance_sum: z52.number(),
+    expense_count: z52.number().int().nonnegative(),
+    split_expense_count: z52.number().int().nonnegative(),
+    incomplete_expense_count: z52.number().int().nonnegative(),
+    members: z52.array(groupMemberSummaryItemSchema),
+    warnings: z52.array(groupSplitWarningSchema),
+    data_complete: z52.boolean(),
+    generated_at: z52.string().datetime()
+  },
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false
+  },
+  handler: getGroupMemberSummary
+});
+
+// src/lib/mcp/tools/get-group-settlement.ts
+import { defineTool as defineTool43 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z53 } from "npm:zod@^3.25.76";
+var get_group_settlement_default = defineTool43({
+  name: "get_group_settlement",
+  title: "Sugerir acerto do grupo",
+  description: "Calcula saldos e sugest\xF5es simplificadas de acerto em centavos para um grupo acess\xEDvel. N\xE3o executa transfer\xEAncia, n\xE3o confirma pagamento e n\xE3o cria transa\xE7\xE3o.",
+  inputSchema: {
+    group_id: z53.string().uuid(),
+    date_from: z53.string().optional(),
+    date_to: z53.string().optional()
+  },
+  outputSchema: {
+    resource_type: z53.literal("group_settlement"),
+    group: groupAnalysisGroupSchema,
+    period: groupAnalysisPeriodSchema,
+    member_balances: z53.array(groupMemberSummaryItemSchema),
+    transfers: z53.array(settlementTransferSchema),
+    transfer_count: z53.number().int().nonnegative(),
+    total_to_transfer: z53.number().nonnegative(),
+    total_credit: z53.number().nonnegative(),
+    total_debit: z53.number().nonnegative(),
+    residual_amount: z53.number().nonnegative(),
+    settlement_status: settlementStatusSchema,
+    warnings: z53.array(groupSplitWarningSchema),
+    data_complete: z53.boolean(),
+    generated_at: z53.string().datetime()
+  },
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false
+  },
+  handler: getGroupSettlement
+});
+
 // src/lib/mcp/index.ts
 var projectRef = "jaoldaqvbdllowepzwbr";
 var mcp_default = defineMcp({
   name: "gastinho-simples-mcp",
   title: "Gastinho Simples",
   version: "0.1.0",
-  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Use list_shared_groups para descobrir grupos, group_id, papel atual, membership_id e updated_at; use list_shared_group_members para identidades p\xFAblicas reduzidas dos membros. Nunca invente group_id, exponha e-mail/UUID de usu\xE1rio nem trate grupos como contas banc\xE1rias. Antes de update_expense, update_income, delete_expense ou delete_income, localize o lan\xE7amento com search_transactions, list_expenses ou list_incomes e reutilize exatamente o updated_at retornado como expected_updated_at. Exclus\xF5es s\xE3o definitivas, sempre exigem confirm_delete=true e, para parcelas, confirma\xE7\xE3o espec\xEDfica; elas removem somente a linha selecionada, nunca a s\xE9rie inteira. Nunca tente editar ou excluir recurso de outro propriet\xE1rio nem afirmar que uma s\xE9rie inteira foi alterada. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para lan\xE7amentos reais, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. get_cashflow_series representa somente realizado. get_cashflow_projection separa realizado, futuro materializado e templates recorrentes; futuro materializado s\xE3o linhas reais com data futura, recorr\xEAncias s\xE3o apenas templates, e a soma combinada pode conter sobreposi\xE7\xE3o. Ela n\xE3o representa saldo banc\xE1rio nem previs\xE3o garantida. Para templates isolados use get_recurring_forecast; para parcelas futuras j\xE1 materializadas use get_card_installments. Use list_cards para localizar o cart\xE3o e obter updated_at antes de update_card ou delete_card; delete_card exige confirma\xE7\xE3o, cart\xE3o inativo e aus\xEAncia total de despesas, parcelas ou templates vinculados. Use get_card_summary para o total registrado no per\xEDodo calculado. Recorr\xEAncias s\xE3o templates mensais: use list_recurring_transactions para list\xE1-las e get_recurring_forecast apenas para proje\xE7\xF5es baseadas nesses templates. Metas tamb\xE9m s\xE3o mensais: use list_goals para localizar uma meta e obter updated_at antes de update_goal ou delete_goal; delete_goal exige confirm_delete=true. create_goal, update_goal e delete_goal n\xE3o criam nem alteram transa\xE7\xF5es e n\xE3o representam investimento ou poupan\xE7a acumulada. Use get_goal_progress para o progresso calculado. Mantenha realizado e recorrente separados, informe o risco de sobreposi\xE7\xE3o da proje\xE7\xE3o quando houver templates participantes e n\xE3o gere recomenda\xE7\xE3o financeira. Use get_category_usage somente para fatos hist\xF3ricos sobre categorias pessoais: categorias compartilhadas n\xE3o existem no modelo atual e transa\xE7\xF5es compartilhadas de outros propriet\xE1rios n\xE3o entram. O forecast n\xE3o representa transa\xE7\xF5es efetivamente lan\xE7adas e nunca deve ser somado automaticamente a parcelas ou lan\xE7amentos futuros. Nunca chame resultados de saldo banc\xE1rio, limite real dispon\xEDvel ou fatura oficialmente paga/em aberto. Use list_categories para obter UUID e updated_at; informe include_inactive=true ao localizar uma categoria inativa antes de update_expense_category ou update_income_category. Desativar ou renomear categoria n\xE3o altera transa\xE7\xF5es, recorr\xEAncias, parcelas ou metas vinculadas. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
+  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Use list_shared_groups para descobrir grupos, group_id, papel atual, membership_id e updated_at; use list_shared_group_members para identidades p\xFAblicas reduzidas dos membros. Use get_expense_split_details para um rateio persistido espec\xEDfico, get_group_member_summary para agregados do per\xEDodo e get_group_settlement somente para sugest\xF5es matem\xE1ticas: nenhuma delas executa transfer\xEAncia, confirma pagamento ou altera dados. Nunca invente group_id, exponha e-mail/UUID de usu\xE1rio nem trate grupos como contas banc\xE1rias. Antes de update_expense, update_income, delete_expense ou delete_income, localize o lan\xE7amento com search_transactions, list_expenses ou list_incomes e reutilize exatamente o updated_at retornado como expected_updated_at. Exclus\xF5es s\xE3o definitivas, sempre exigem confirm_delete=true e, para parcelas, confirma\xE7\xE3o espec\xEDfica; elas removem somente a linha selecionada, nunca a s\xE9rie inteira. Nunca tente editar ou excluir recurso de outro propriet\xE1rio nem afirmar que uma s\xE9rie inteira foi alterada. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para lan\xE7amentos reais, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. get_cashflow_series representa somente realizado. get_cashflow_projection separa realizado, futuro materializado e templates recorrentes; futuro materializado s\xE3o linhas reais com data futura, recorr\xEAncias s\xE3o apenas templates, e a soma combinada pode conter sobreposi\xE7\xE3o. Ela n\xE3o representa saldo banc\xE1rio nem previs\xE3o garantida. Para templates isolados use get_recurring_forecast; para parcelas futuras j\xE1 materializadas use get_card_installments. Use list_cards para localizar o cart\xE3o e obter updated_at antes de update_card ou delete_card; delete_card exige confirma\xE7\xE3o, cart\xE3o inativo e aus\xEAncia total de despesas, parcelas ou templates vinculados. Use get_card_summary para o total registrado no per\xEDodo calculado. Recorr\xEAncias s\xE3o templates mensais: use list_recurring_transactions para list\xE1-las e get_recurring_forecast apenas para proje\xE7\xF5es baseadas nesses templates. Metas tamb\xE9m s\xE3o mensais: use list_goals para localizar uma meta e obter updated_at antes de update_goal ou delete_goal; delete_goal exige confirm_delete=true. create_goal, update_goal e delete_goal n\xE3o criam nem alteram transa\xE7\xF5es e n\xE3o representam investimento ou poupan\xE7a acumulada. Use get_goal_progress para o progresso calculado. Mantenha realizado e recorrente separados, informe o risco de sobreposi\xE7\xE3o da proje\xE7\xE3o quando houver templates participantes e n\xE3o gere recomenda\xE7\xE3o financeira. Use get_category_usage somente para fatos hist\xF3ricos sobre categorias pessoais: categorias compartilhadas n\xE3o existem no modelo atual e transa\xE7\xF5es compartilhadas de outros propriet\xE1rios n\xE3o entram. O forecast n\xE3o representa transa\xE7\xF5es efetivamente lan\xE7adas e nunca deve ser somado automaticamente a parcelas ou lan\xE7amentos futuros. Nunca chame resultados de saldo banc\xE1rio, limite real dispon\xEDvel ou fatura oficialmente paga/em aberto. Use list_categories para obter UUID e updated_at; informe include_inactive=true ao localizar uma categoria inativa antes de update_expense_category ou update_income_category. Desativar ou renomear categoria n\xE3o altera transa\xE7\xF5es, recorr\xEAncias, parcelas ou metas vinculadas. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
@@ -9346,7 +10185,10 @@ var mcp_default = defineMcp({
     delete_expense_category_default,
     delete_income_category_default,
     list_shared_groups_default,
-    list_shared_group_members_default
+    list_shared_group_members_default,
+    get_expense_split_details_default,
+    get_group_member_summary_default,
+    get_group_settlement_default
   ]
 });
 
