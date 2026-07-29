@@ -20,6 +20,7 @@ export const MCP_ERROR_CODES = {
   CONCURRENT_MODIFICATION: "CONCURRENT_MODIFICATION",
   INVALID_INPUT: "INVALID_INPUT",
   INVALID_PATCH: "INVALID_PATCH",
+  INVALID_GOAL_CONFIGURATION: "INVALID_GOAL_CONFIGURATION",
   CONFIRMATION_REQUIRED: "CONFIRMATION_REQUIRED",
   CATEGORY_NOT_FOUND: "CATEGORY_NOT_FOUND",
   CARD_NOT_FOUND: "CARD_NOT_FOUND",
@@ -59,6 +60,8 @@ const MESSAGES: Record<McpErrorCode, string> = {
     "O lançamento foi alterado desde a leitura. Releia o registro antes de tentar novamente.",
   INVALID_INPUT: "Os parâmetros da operação são inválidos.",
   INVALID_PATCH: "O conjunto de alterações é inválido ou está vazio.",
+  INVALID_GOAL_CONFIGURATION:
+    "A configuração da meta mensal é inválida para o tipo informado.",
   CONFIRMATION_REQUIRED: "A operação exige confirmação explícita.",
   CATEGORY_NOT_FOUND: "Categoria não encontrada para a conta autenticada.",
   CARD_NOT_FOUND: "Cartão não encontrado para a conta autenticada.",

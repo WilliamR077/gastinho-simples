@@ -7371,6 +7371,588 @@
           "additionalProperties": false,
           "$schema": "http://json-schema.org/draft-07/schema#"
         }
+      },
+      {
+        "name": "create_goal",
+        "title": "Criar meta mensal",
+        "description": "Cria uma meta ou limite mensal para a conta autenticada. Não cria nem altera transações, investimentos ou poupança acumulada.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "monthly_total",
+                "category",
+                "income_monthly_total",
+                "income_category",
+                "balance_target"
+              ]
+            },
+            "limit_amount": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "category": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "shared_group_id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "type",
+            "limit_amount"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "goal"
+            },
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "created": {
+              "type": "boolean",
+              "const": true
+            },
+            "goal": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "monthly_total",
+                    "category",
+                    "income_monthly_total",
+                    "income_category",
+                    "balance_target"
+                  ]
+                },
+                "category_reference": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "limit_amount": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "target_direction": {
+                  "type": "string",
+                  "enum": [
+                    "maximum",
+                    "minimum"
+                  ]
+                },
+                "shared_group_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "is_shared": {
+                  "type": "boolean"
+                },
+                "is_owner": {
+                  "type": "boolean",
+                  "const": true
+                },
+                "created_at": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "type": "string"
+                },
+                "data_warnings": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "INVALID_GOAL_CONFIGURATION",
+                      "CATEGORY_NOT_FOUND",
+                      "NON_POSITIVE_TARGET",
+                      "FUTURE_MONTH_NO_ACTUAL_DATA"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "type",
+                "category_reference",
+                "limit_amount",
+                "target_direction",
+                "shared_group_id",
+                "is_shared",
+                "is_owner",
+                "created_at",
+                "updated_at",
+                "data_warnings"
+              ],
+              "additionalProperties": false
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "MONTHLY_GOAL_ONLY",
+                  "NO_EFFECTIVE_CHANGES",
+                  "SHARED_GOAL_CREATED",
+                  "SHARED_GOAL_UPDATED",
+                  "SHARED_GOAL_DELETED",
+                  "GOAL_TYPE_CHANGED",
+                  "CATEGORY_REFERENCE_UPDATED",
+                  "CATEGORY_REFERENCE_STORED_AS_TEXT",
+                  "PERMANENT_DELETION",
+                  "GOAL_DELETED",
+                  "GOAL_ALERTS_DELETED"
+                ]
+              }
+            },
+            "data_complete": {
+              "type": "boolean",
+              "const": true
+            }
+          },
+          "required": [
+            "resource_type",
+            "id",
+            "created",
+            "goal",
+            "warnings",
+            "data_complete"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      },
+      {
+        "name": "update_goal",
+        "title": "Editar meta mensal",
+        "description": "Edita parcialmente uma meta mensal pertencente à conta autenticada, com concorrência otimista. Não altera transações.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "goal_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "expected_updated_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "changes": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "monthly_total",
+                    "category",
+                    "income_monthly_total",
+                    "income_category",
+                    "balance_target"
+                  ]
+                },
+                "category": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "limit_amount": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "goal_id",
+            "expected_updated_at",
+            "changes"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "goal"
+            },
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "applied": {
+              "type": "boolean"
+            },
+            "changed_fields": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "type",
+                  "category",
+                  "limit_amount"
+                ]
+              }
+            },
+            "before": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "monthly_total",
+                    "category",
+                    "income_monthly_total",
+                    "income_category",
+                    "balance_target"
+                  ]
+                },
+                "category_reference": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "limit_amount": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "target_direction": {
+                  "type": "string",
+                  "enum": [
+                    "maximum",
+                    "minimum"
+                  ]
+                },
+                "shared_group_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "is_shared": {
+                  "type": "boolean"
+                },
+                "is_owner": {
+                  "type": "boolean",
+                  "const": true
+                },
+                "created_at": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "type": "string"
+                },
+                "data_warnings": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "INVALID_GOAL_CONFIGURATION",
+                      "CATEGORY_NOT_FOUND",
+                      "NON_POSITIVE_TARGET",
+                      "FUTURE_MONTH_NO_ACTUAL_DATA"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "type",
+                "category_reference",
+                "limit_amount",
+                "target_direction",
+                "shared_group_id",
+                "is_shared",
+                "is_owner",
+                "created_at",
+                "updated_at",
+                "data_warnings"
+              ],
+              "additionalProperties": false
+            },
+            "after": {
+              "$ref": "#/properties/before"
+            },
+            "updated_at_before": {
+              "type": "string"
+            },
+            "updated_at_after": {
+              "type": "string"
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "MONTHLY_GOAL_ONLY",
+                  "NO_EFFECTIVE_CHANGES",
+                  "SHARED_GOAL_CREATED",
+                  "SHARED_GOAL_UPDATED",
+                  "SHARED_GOAL_DELETED",
+                  "GOAL_TYPE_CHANGED",
+                  "CATEGORY_REFERENCE_UPDATED",
+                  "CATEGORY_REFERENCE_STORED_AS_TEXT",
+                  "PERMANENT_DELETION",
+                  "GOAL_DELETED",
+                  "GOAL_ALERTS_DELETED"
+                ]
+              }
+            },
+            "data_complete": {
+              "type": "boolean",
+              "const": true
+            }
+          },
+          "required": [
+            "resource_type",
+            "id",
+            "applied",
+            "changed_fields",
+            "before",
+            "after",
+            "updated_at_before",
+            "updated_at_after",
+            "warnings",
+            "data_complete"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      },
+      {
+        "name": "delete_goal",
+        "title": "Excluir meta mensal",
+        "description": "Exclui permanentemente uma meta mensal pertencente à conta autenticada, com confirmação e concorrência otimista. Não exclui transações.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "goal_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "expected_updated_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "confirm_delete": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "goal_id",
+            "expected_updated_at",
+            "confirm_delete"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "goal"
+            },
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "deleted": {
+              "type": "boolean",
+              "const": true
+            },
+            "deletion_mode": {
+              "type": "string",
+              "const": "permanent"
+            },
+            "deleted_goal": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "monthly_total",
+                    "category",
+                    "income_monthly_total",
+                    "income_category",
+                    "balance_target"
+                  ]
+                },
+                "category_reference": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "limit_amount": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "target_direction": {
+                  "type": "string",
+                  "enum": [
+                    "maximum",
+                    "minimum"
+                  ]
+                },
+                "shared_group_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "is_shared": {
+                  "type": "boolean"
+                },
+                "is_owner": {
+                  "type": "boolean",
+                  "const": true
+                },
+                "created_at": {
+                  "type": "string"
+                },
+                "updated_at": {
+                  "type": "string"
+                },
+                "data_warnings": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "INVALID_GOAL_CONFIGURATION",
+                      "CATEGORY_NOT_FOUND",
+                      "NON_POSITIVE_TARGET",
+                      "FUTURE_MONTH_NO_ACTUAL_DATA"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "type",
+                "category_reference",
+                "limit_amount",
+                "target_direction",
+                "shared_group_id",
+                "is_shared",
+                "is_owner",
+                "created_at",
+                "updated_at",
+                "data_warnings"
+              ],
+              "additionalProperties": false
+            },
+            "operation_completed_at": {
+              "type": "string"
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "MONTHLY_GOAL_ONLY",
+                  "NO_EFFECTIVE_CHANGES",
+                  "SHARED_GOAL_CREATED",
+                  "SHARED_GOAL_UPDATED",
+                  "SHARED_GOAL_DELETED",
+                  "GOAL_TYPE_CHANGED",
+                  "CATEGORY_REFERENCE_UPDATED",
+                  "CATEGORY_REFERENCE_STORED_AS_TEXT",
+                  "PERMANENT_DELETION",
+                  "GOAL_DELETED",
+                  "GOAL_ALERTS_DELETED"
+                ]
+              }
+            },
+            "data_complete": {
+              "type": "boolean",
+              "const": true
+            }
+          },
+          "required": [
+            "resource_type",
+            "id",
+            "deleted",
+            "deletion_mode",
+            "deleted_goal",
+            "operation_completed_at",
+            "warnings",
+            "data_complete"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
       }
     ]
   }

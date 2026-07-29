@@ -41,6 +41,7 @@ var MESSAGES = {
   CONCURRENT_MODIFICATION: "O lan\xE7amento foi alterado desde a leitura. Releia o registro antes de tentar novamente.",
   INVALID_INPUT: "Os par\xE2metros da opera\xE7\xE3o s\xE3o inv\xE1lidos.",
   INVALID_PATCH: "O conjunto de altera\xE7\xF5es \xE9 inv\xE1lido ou est\xE1 vazio.",
+  INVALID_GOAL_CONFIGURATION: "A configura\xE7\xE3o da meta mensal \xE9 inv\xE1lida para o tipo informado.",
   CONFIRMATION_REQUIRED: "A opera\xE7\xE3o exige confirma\xE7\xE3o expl\xEDcita.",
   CATEGORY_NOT_FOUND: "Categoria n\xE3o encontrada para a conta autenticada.",
   CARD_NOT_FOUND: "Cart\xE3o n\xE3o encontrado para a conta autenticada.",
@@ -6780,13 +6781,501 @@ var delete_recurring_income_default = defineTool30({
   }
 });
 
+// src/lib/mcp/tools/create-goal.ts
+import { defineTool as defineTool31 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z37 } from "npm:zod@^3.25.76";
+
+// src/lib/mcp/shared/goal-write.ts
+import { z as z36 } from "npm:zod@^3.25.76";
+var EXPENSE_GOAL_CATEGORIES = [
+  "alimentacao",
+  "transporte",
+  "lazer",
+  "saude",
+  "educacao",
+  "moradia",
+  "vestuario",
+  "servicos",
+  "outros"
+];
+var EXPENSE_GOAL_CATEGORY_NAMES = {
+  alimentacao: "Alimenta\xE7\xE3o",
+  transporte: "Transporte",
+  lazer: "Lazer",
+  saude: "Sa\xFAde",
+  educacao: "Educa\xE7\xE3o",
+  moradia: "Moradia",
+  vestuario: "Vestu\xE1rio",
+  servicos: "Servi\xE7os",
+  outros: "Outros"
+};
+var GOAL_WRITE_WARNINGS = [
+  "MONTHLY_GOAL_ONLY",
+  "NO_EFFECTIVE_CHANGES",
+  "SHARED_GOAL_CREATED",
+  "SHARED_GOAL_UPDATED",
+  "SHARED_GOAL_DELETED",
+  "GOAL_TYPE_CHANGED",
+  "CATEGORY_REFERENCE_UPDATED",
+  "CATEGORY_REFERENCE_STORED_AS_TEXT",
+  "PERMANENT_DELETION",
+  "GOAL_DELETED",
+  "GOAL_ALERTS_DELETED"
+];
+var goalWriteWarningSchema = z36.enum(GOAL_WRITE_WARNINGS);
+var goalTypeSchema3 = z36.enum(GOAL_TYPES);
+var goalAmountSchema = z36.number().finite().positive();
+var goalCategorySchema = z36.string().trim().min(1).max(200);
+var goalChangesSchema = z36.object({
+  type: goalTypeSchema3.optional(),
+  category: goalCategorySchema.nullable().optional(),
+  limit_amount: goalAmountSchema.optional()
+}).strict().refine((changes) => Object.keys(changes).length > 0, {
+  message: "Informe pelo menos uma altera\xE7\xE3o."
+});
+var goalViewSchema = z36.object({
+  id: z36.string().uuid(),
+  type: goalTypeSchema3,
+  category_reference: z36.string().nullable(),
+  limit_amount: z36.number().finite().positive(),
+  target_direction: z36.enum(["maximum", "minimum"]),
+  shared_group_id: z36.string().uuid().nullable(),
+  is_shared: z36.boolean(),
+  is_owner: z36.literal(true),
+  created_at: z36.string(),
+  updated_at: z36.string(),
+  data_warnings: z36.array(
+    z36.enum([
+      "INVALID_GOAL_CONFIGURATION",
+      "CATEGORY_NOT_FOUND",
+      "NON_POSITIVE_TARGET",
+      "FUTURE_MONTH_NO_ACTUAL_DATA"
+    ])
+  )
+}).strict();
+function goalWriteView(row, userId) {
+  if (row.user_id !== userId) return null;
+  const view = {
+    id: row.id,
+    type: row.type,
+    category_reference: row.category,
+    limit_amount: Number(row.limit_amount),
+    target_direction: goalDirection(row.type),
+    shared_group_id: row.shared_group_id,
+    is_shared: row.shared_group_id !== null,
+    is_owner: true,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    data_warnings: goalDataWarnings(row)
+  };
+  return goalViewSchema.safeParse(view).success ? view : null;
+}
+function goalNeedsCategory(type) {
+  return type === "category" || type === "income_category";
+}
+function goalCategoryKind(type) {
+  if (type === "category") return "expense";
+  if (type === "income_category") return "income";
+  return null;
+}
+function validGoalConfiguration(type, category) {
+  return goalNeedsCategory(type) ? category !== null : category === null;
+}
+function describeGoal(goal) {
+  return `id=${goal.id}; tipo=${goal.type}; categoria=${JSON.stringify(goal.category_reference)}; valor=${goal.limit_amount}; dire\xE7\xE3o=${goal.target_direction}; escopo=${goal.is_shared ? "compartilhado" : "pessoal"}`;
+}
+function createGoalContent(result) {
+  return `Foi criada a meta ou limite mensal: ${describeGoal(result.goal)}; created_at=${result.goal.created_at}; updated_at=${result.goal.updated_at}; warnings=${JSON.stringify(result.warnings)}. Nenhuma despesa, receita ou template recorrente foi criado ou alterado. Este registro \xE9 apenas uma meta mensal calculada sobre transa\xE7\xF5es; n\xE3o \xE9 conta de investimento nem poupan\xE7a acumulada.`;
+}
+function updateGoalContent(result) {
+  const changes = result.changed_fields.map(
+    (field) => `${field}: ${JSON.stringify(result.before[field])} -> ${JSON.stringify(result.after[field])}`
+  );
+  const preserved = [
+    "id",
+    "shared_group_id",
+    "is_shared",
+    "created_at"
+  ].filter((field) => !result.changed_fields.includes(field));
+  return `Meta mensal ${result.after.id} ${result.applied ? "atualizada" : "n\xE3o alterada"}. Antes: ${describeGoal(result.before)}. Depois: ${describeGoal(result.after)}. Altera\xE7\xF5es=${changes.length ? changes.join("; ") : "nenhuma"}; campos importantes preservados=${preserved.join(",")}; updated_at=${result.updated_at_before} -> ${result.updated_at_after}; warnings=${JSON.stringify(result.warnings)}. Nenhuma despesa, receita ou template recorrente foi alterado. O registro continua sendo uma meta mensal; n\xE3o \xE9 conta de investimento nem poupan\xE7a acumulada.`;
+}
+function deleteGoalConfirmationContent(goal, alertCount) {
+  return `Confirma\xE7\xE3o obrigat\xF3ria para excluir permanentemente a meta mensal: ${describeGoal(goal)}. ${alertCount} alerta(s) vinculado(s) acess\xEDvel(is) \xE0 conta foram identificado(s); alertas filhos existentes ser\xE3o removidos automaticamente pelo banco. Nenhuma transa\xE7\xE3o, categoria ou grupo ser\xE1 exclu\xEDdo ou alterado; o hist\xF3rico financeiro permanecer\xE1 intacto. A meta deixar\xE1 de aparecer em listagens e c\xE1lculos futuros e n\xE3o h\xE1 restaura\xE7\xE3o nesta fase. Repita a chamada com confirm_delete=true para confirmar explicitamente.`;
+}
+function deleteGoalContent(result) {
+  return `A meta mensal foi exclu\xEDda permanentemente: ${describeGoal(result.deleted_goal)}; opera\xE7\xE3o conclu\xEDda em ${result.operation_completed_at}; alertas acess\xEDveis identificados antes da exclus\xE3o e removidos por ON DELETE CASCADE=${result.deletedAlertCount}; warnings=${JSON.stringify(result.warnings)}. Nenhuma despesa, receita, template recorrente, categoria ou grupo foi exclu\xEDdo ou alterado; o hist\xF3rico financeiro permanece intacto. A meta n\xE3o aparecer\xE1 em listagens e c\xE1lculos futuros.`;
+}
+
+// src/lib/mcp/tools/create-goal.ts
+var COLUMNS7 = "id,user_id,type,category,limit_amount,shared_group_id,created_at,updated_at";
+var inputProperties11 = {
+  type: goalTypeSchema3,
+  limit_amount: goalAmountSchema,
+  category: goalCategorySchema.optional(),
+  shared_group_id: z37.string().uuid().optional()
+};
+var inputValidator11 = z37.object(inputProperties11).strict();
+var create_goal_default = defineTool31({
+  name: "create_goal",
+  title: "Criar meta mensal",
+  description: "Cria uma meta ou limite mensal para a conta autenticada. N\xE3o cria nem altera transa\xE7\xF5es, investimentos ou poupan\xE7a acumulada.",
+  inputSchema: inputProperties11,
+  outputSchema: {
+    resource_type: z37.literal("goal"),
+    id: z37.string().uuid(),
+    created: z37.literal(true),
+    goal: goalViewSchema,
+    warnings: z37.array(goalWriteWarningSchema),
+    data_complete: z37.literal(true)
+  },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false
+  },
+  handler: async (rawInput, ctx) => {
+    const userId = ctx.getUserId();
+    if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
+    const parsed = inputValidator11.safeParse(rawInput);
+    if (!parsed.success) return mcpError("INVALID_INPUT");
+    const input = parsed.data;
+    const category = input.category ?? null;
+    if (!validGoalConfiguration(input.type, category)) {
+      return mcpError("INVALID_GOAL_CONFIGURATION");
+    }
+    const supabase = supabaseForUser(ctx);
+    if (input.shared_group_id) {
+      const group = await supabase.from("shared_groups").select("id").eq("id", input.shared_group_id).maybeSingle();
+      if (group.error) return mcpError("INTERNAL_ERROR");
+      if (!group.data) return mcpError("RESOURCE_NOT_FOUND");
+    }
+    const categoryKind = goalCategoryKind(input.type);
+    if (categoryKind === "expense") {
+      if (!EXPENSE_GOAL_CATEGORIES.includes(
+        category
+      )) {
+        return mcpError("CATEGORY_NOT_FOUND");
+      }
+      const expenseCategory = EXPENSE_GOAL_CATEGORY_NAMES[category];
+      const categoryResult = await supabase.from("user_categories").select("id").eq("user_id", userId).eq("name", expenseCategory).eq("is_active", true).maybeSingle();
+      if (categoryResult.error) return mcpError("INTERNAL_ERROR");
+      if (!categoryResult.data) return mcpError("CATEGORY_NOT_FOUND");
+    }
+    if (categoryKind === "income") {
+      const incomeCategoryId = z37.string().uuid().safeParse(category);
+      if (!incomeCategoryId.success) return mcpError("CATEGORY_NOT_FOUND");
+      const categoryResult = await supabase.from("user_income_categories").select("id").eq("id", incomeCategoryId.data).eq("user_id", userId).eq("is_active", true).maybeSingle();
+      if (categoryResult.error) return mcpError("INTERNAL_ERROR");
+      if (!categoryResult.data) return mcpError("CATEGORY_NOT_FOUND");
+    }
+    const insertResult = await supabase.from("budget_goals").insert({
+      user_id: userId,
+      type: input.type,
+      category,
+      limit_amount: input.limit_amount,
+      shared_group_id: input.shared_group_id ?? null
+    }).select(COLUMNS7).single();
+    if (insertResult.error || !insertResult.data) return mcpError("WRITE_FAILED");
+    const goal = goalWriteView(insertResult.data, userId);
+    if (!goal) return mcpError("INVALID_DATA");
+    const warnings = ["MONTHLY_GOAL_ONLY"];
+    if (category !== null) warnings.push("CATEGORY_REFERENCE_STORED_AS_TEXT");
+    if (goal.is_shared) warnings.push("SHARED_GOAL_CREATED");
+    const result = {
+      resource_type: "goal",
+      id: goal.id,
+      created: true,
+      goal,
+      warnings,
+      data_complete: true
+    };
+    return {
+      content: [{ type: "text", text: createGoalContent(result) }],
+      structuredContent: result
+    };
+  }
+});
+
+// src/lib/mcp/tools/update-goal.ts
+import { defineTool as defineTool32 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z38 } from "npm:zod@^3.25.76";
+var COLUMNS8 = "id,user_id,type,category,limit_amount,shared_group_id,created_at,updated_at";
+var CHANGE_FIELDS3 = ["type", "category", "limit_amount"];
+var inputProperties12 = {
+  goal_id: z38.string().uuid(),
+  expected_updated_at: expectedUpdatedAtSchema,
+  changes: goalChangesSchema
+};
+var inputValidator12 = z38.object(inputProperties12).strict();
+var update_goal_default = defineTool32({
+  name: "update_goal",
+  title: "Editar meta mensal",
+  description: "Edita parcialmente uma meta mensal pertencente \xE0 conta autenticada, com concorr\xEAncia otimista. N\xE3o altera transa\xE7\xF5es.",
+  inputSchema: inputProperties12,
+  outputSchema: {
+    resource_type: z38.literal("goal"),
+    id: z38.string().uuid(),
+    applied: z38.boolean(),
+    changed_fields: z38.array(z38.enum(CHANGE_FIELDS3)),
+    before: goalViewSchema,
+    after: goalViewSchema,
+    updated_at_before: z38.string(),
+    updated_at_after: z38.string(),
+    warnings: z38.array(goalWriteWarningSchema),
+    data_complete: z38.literal(true)
+  },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: false
+  },
+  handler: async (rawInput, ctx) => {
+    const userId = ctx.getUserId();
+    if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
+    const parsed = inputValidator12.safeParse(rawInput);
+    if (!parsed.success) {
+      return mcpError(
+        parsed.error.issues.some((issue) => issue.path[0] === "changes") ? "INVALID_PATCH" : "INVALID_INPUT"
+      );
+    }
+    const input = parsed.data;
+    const supabase = supabaseForUser(ctx);
+    const currentResult = await supabase.from("budget_goals").select(COLUMNS8).eq("id", input.goal_id).eq("user_id", userId).maybeSingle();
+    if (currentResult.error) return mcpError("INTERNAL_ERROR");
+    if (!currentResult.data) return mcpError("RESOURCE_NOT_FOUND");
+    const current = currentResult.data;
+    if (current.updated_at !== input.expected_updated_at) {
+      return mcpError(
+        "CONCURRENT_MODIFICATION",
+        "A meta mensal foi alterada desde a leitura. Releia a meta com list_goals antes de tentar novamente."
+      );
+    }
+    const before = goalWriteView(current, userId);
+    if (!before) return mcpError("INVALID_DATA");
+    const changes = input.changes;
+    const finalType = changes.type ?? current.type;
+    const typeChanged = finalType !== current.type;
+    let finalCategory = current.category;
+    const finalKind = goalCategoryKind(finalType);
+    if (finalKind === null) {
+      if (changes.category !== void 0 && changes.category !== null) {
+        return mcpError("INVALID_GOAL_CONFIGURATION");
+      }
+      finalCategory = null;
+    } else if (typeChanged) {
+      if (changes.category === void 0 || changes.category === null) {
+        return mcpError("INVALID_GOAL_CONFIGURATION");
+      }
+      finalCategory = changes.category;
+    } else if (changes.category !== void 0) {
+      finalCategory = changes.category;
+    }
+    if (!validGoalConfiguration(finalType, finalCategory)) {
+      return mcpError("INVALID_GOAL_CONFIGURATION");
+    }
+    const categoryChanged = finalCategory !== current.category;
+    if (categoryChanged || typeChanged && finalKind !== null) {
+      if (finalKind === "expense") {
+        if (!EXPENSE_GOAL_CATEGORIES.includes(
+          finalCategory
+        )) {
+          return mcpError("CATEGORY_NOT_FOUND");
+        }
+        const categoryResult = await supabase.from("user_categories").select("id").eq("user_id", userId).eq(
+          "name",
+          EXPENSE_GOAL_CATEGORY_NAMES[finalCategory]
+        ).eq("is_active", true).maybeSingle();
+        if (categoryResult.error) return mcpError("INTERNAL_ERROR");
+        if (!categoryResult.data) return mcpError("CATEGORY_NOT_FOUND");
+      }
+      if (finalKind === "income") {
+        const parsedCategory = z38.string().uuid().safeParse(finalCategory);
+        if (!parsedCategory.success) return mcpError("CATEGORY_NOT_FOUND");
+        const categoryResult = await supabase.from("user_income_categories").select("id").eq("id", parsedCategory.data).eq("user_id", userId).eq("is_active", true).maybeSingle();
+        if (categoryResult.error) return mcpError("INTERNAL_ERROR");
+        if (!categoryResult.data) return mcpError("CATEGORY_NOT_FOUND");
+      }
+    }
+    const patch = {};
+    const changedFields = [];
+    if (typeChanged) {
+      patch.type = finalType;
+      changedFields.push("type");
+    }
+    if (categoryChanged) {
+      patch.category = finalCategory;
+      changedFields.push("category");
+    }
+    if (changes.limit_amount !== void 0 && changes.limit_amount !== Number(current.limit_amount)) {
+      patch.limit_amount = changes.limit_amount;
+      changedFields.push("limit_amount");
+    }
+    const baseWarnings = ["MONTHLY_GOAL_ONLY"];
+    if (current.shared_group_id) baseWarnings.push("SHARED_GOAL_UPDATED");
+    if (typeChanged) baseWarnings.push("GOAL_TYPE_CHANGED");
+    if (categoryChanged) baseWarnings.push("CATEGORY_REFERENCE_UPDATED");
+    if (changedFields.length === 0) {
+      const result2 = {
+        resource_type: "goal",
+        id: current.id,
+        applied: false,
+        changed_fields: changedFields,
+        before,
+        after: before,
+        updated_at_before: current.updated_at,
+        updated_at_after: current.updated_at,
+        warnings: [...baseWarnings, "NO_EFFECTIVE_CHANGES"],
+        data_complete: true
+      };
+      return {
+        content: [{ type: "text", text: updateGoalContent(result2) }],
+        structuredContent: result2
+      };
+    }
+    const updateResult = await supabase.from("budget_goals").update(patch).eq("id", input.goal_id).eq("user_id", userId).eq("updated_at", input.expected_updated_at).select(COLUMNS8).maybeSingle();
+    if (updateResult.error) return mcpError("WRITE_FAILED");
+    if (!updateResult.data) {
+      const existence = await supabase.from("budget_goals").select("id,updated_at").eq("id", input.goal_id).eq("user_id", userId).maybeSingle();
+      if (existence.error) return mcpError("INTERNAL_ERROR");
+      return mcpError(
+        existence.data ? "CONCURRENT_MODIFICATION" : "RESOURCE_NOT_FOUND",
+        existence.data ? "A meta mensal mudou durante a atualiza\xE7\xE3o. Releia a meta com list_goals antes de tentar novamente." : void 0
+      );
+    }
+    const after = goalWriteView(updateResult.data, userId);
+    if (!after) return mcpError("INVALID_DATA");
+    const result = {
+      resource_type: "goal",
+      id: after.id,
+      applied: true,
+      changed_fields: changedFields,
+      before,
+      after,
+      updated_at_before: current.updated_at,
+      updated_at_after: after.updated_at,
+      warnings: baseWarnings,
+      data_complete: true
+    };
+    return {
+      content: [{ type: "text", text: updateGoalContent(result) }],
+      structuredContent: result
+    };
+  }
+});
+
+// src/lib/mcp/tools/delete-goal.ts
+import { defineTool as defineTool33 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z39 } from "npm:zod@^3.25.76";
+var COLUMNS9 = "id,user_id,type,category,limit_amount,shared_group_id,created_at,updated_at";
+var inputProperties13 = {
+  goal_id: z39.string().uuid(),
+  expected_updated_at: expectedUpdatedAtSchema,
+  confirm_delete: z39.boolean()
+};
+var inputValidator13 = z39.object({ ...inputProperties13, confirm_delete: z39.boolean().optional() }).strict();
+var delete_goal_default = defineTool33({
+  name: "delete_goal",
+  title: "Excluir meta mensal",
+  description: "Exclui permanentemente uma meta mensal pertencente \xE0 conta autenticada, com confirma\xE7\xE3o e concorr\xEAncia otimista. N\xE3o exclui transa\xE7\xF5es.",
+  inputSchema: inputProperties13,
+  outputSchema: {
+    resource_type: z39.literal("goal"),
+    id: z39.string().uuid(),
+    deleted: z39.literal(true),
+    deletion_mode: z39.literal("permanent"),
+    deleted_goal: goalViewSchema,
+    operation_completed_at: z39.string(),
+    warnings: z39.array(goalWriteWarningSchema),
+    data_complete: z39.literal(true)
+  },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: false
+  },
+  handler: async (rawInput, ctx) => {
+    const userId = ctx.getUserId();
+    if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
+    const parsed = inputValidator13.safeParse(rawInput);
+    if (!parsed.success) return mcpError("INVALID_INPUT");
+    const input = parsed.data;
+    const supabase = supabaseForUser(ctx);
+    const currentResult = await supabase.from("budget_goals").select(COLUMNS9).eq("id", input.goal_id).eq("user_id", userId).maybeSingle();
+    if (currentResult.error) return mcpError("INTERNAL_ERROR");
+    if (!currentResult.data) return mcpError("RESOURCE_NOT_FOUND");
+    const current = currentResult.data;
+    if (current.updated_at !== input.expected_updated_at) {
+      return mcpError(
+        "CONCURRENT_MODIFICATION",
+        "A meta mensal foi alterada desde a leitura. Releia a meta com list_goals antes de tentar novamente."
+      );
+    }
+    const recognizable = goalWriteView(current, userId);
+    if (!recognizable) return mcpError("INVALID_DATA");
+    const alertsResult = await supabase.from("budget_goal_alerts").select("id").eq("goal_id", input.goal_id).eq("user_id", userId);
+    if (alertsResult.error) return mcpError("INTERNAL_ERROR");
+    const alertCount = alertsResult.data?.length ?? 0;
+    if (input.confirm_delete !== true) {
+      return mcpError(
+        "CONFIRMATION_REQUIRED",
+        deleteGoalConfirmationContent(recognizable, alertCount)
+      );
+    }
+    const deleteResult = await supabase.from("budget_goals").delete().eq("id", input.goal_id).eq("user_id", userId).eq("updated_at", input.expected_updated_at).select(COLUMNS9).maybeSingle();
+    if (deleteResult.error) return mcpError("WRITE_FAILED");
+    if (!deleteResult.data) {
+      const existence = await supabase.from("budget_goals").select("id,updated_at").eq("id", input.goal_id).eq("user_id", userId).maybeSingle();
+      if (existence.error) return mcpError("INTERNAL_ERROR");
+      return mcpError(
+        existence.data ? "CONCURRENT_MODIFICATION" : "RESOURCE_NOT_FOUND",
+        existence.data ? "A meta mensal mudou durante a exclus\xE3o. Releia a meta com list_goals antes de tentar novamente." : void 0
+      );
+    }
+    const deletedGoal = goalWriteView(deleteResult.data, userId);
+    if (!deletedGoal) return mcpError("INVALID_DATA");
+    const warnings = [
+      "MONTHLY_GOAL_ONLY",
+      "PERMANENT_DELETION",
+      "GOAL_DELETED"
+    ];
+    if (deletedGoal.is_shared) warnings.push("SHARED_GOAL_DELETED");
+    if (alertCount > 0) warnings.push("GOAL_ALERTS_DELETED");
+    const operationCompletedAt = (/* @__PURE__ */ new Date()).toISOString();
+    const result = {
+      resource_type: "goal",
+      id: deletedGoal.id,
+      deleted: true,
+      deletion_mode: "permanent",
+      deleted_goal: deletedGoal,
+      operation_completed_at: operationCompletedAt,
+      warnings,
+      data_complete: true
+    };
+    return {
+      content: [
+        {
+          type: "text",
+          text: deleteGoalContent({
+            ...result,
+            deletedAlertCount: alertCount
+          })
+        }
+      ],
+      structuredContent: result
+    };
+  }
+});
+
 // src/lib/mcp/index.ts
 var projectRef = "jaoldaqvbdllowepzwbr";
 var mcp_default = defineMcp({
   name: "gastinho-simples-mcp",
   title: "Gastinho Simples",
   version: "0.1.0",
-  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Antes de update_expense, update_income, delete_expense ou delete_income, localize o lan\xE7amento com search_transactions, list_expenses ou list_incomes e reutilize exatamente o updated_at retornado como expected_updated_at. Exclus\xF5es s\xE3o definitivas, sempre exigem confirm_delete=true e, para parcelas, confirma\xE7\xE3o espec\xEDfica; elas removem somente a linha selecionada, nunca a s\xE9rie inteira. Nunca tente editar ou excluir recurso de outro propriet\xE1rio nem afirmar que uma s\xE9rie inteira foi alterada. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para lan\xE7amentos reais, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. get_cashflow_series representa somente realizado. get_cashflow_projection separa realizado, futuro materializado e templates recorrentes; futuro materializado s\xE3o linhas reais com data futura, recorr\xEAncias s\xE3o apenas templates, e a soma combinada pode conter sobreposi\xE7\xE3o. Ela n\xE3o representa saldo banc\xE1rio nem previs\xE3o garantida. Para templates isolados use get_recurring_forecast; para parcelas futuras j\xE1 materializadas use get_card_installments. Use list_cards para localizar o cart\xE3o e get_card_summary para o total registrado no per\xEDodo calculado. Recorr\xEAncias s\xE3o templates mensais: use list_recurring_transactions para list\xE1-las e get_recurring_forecast apenas para proje\xE7\xF5es baseadas nesses templates. Metas tamb\xE9m s\xE3o mensais: use list_goals e get_goal_progress; elas n\xE3o s\xE3o metas de poupan\xE7a com contribui\xE7\xF5es. Mantenha realizado e recorrente separados, informe o risco de sobreposi\xE7\xE3o da proje\xE7\xE3o quando houver templates participantes e n\xE3o gere recomenda\xE7\xE3o financeira. Use get_category_usage somente para fatos hist\xF3ricos sobre categorias pessoais: categorias compartilhadas n\xE3o existem no modelo atual e transa\xE7\xF5es compartilhadas de outros propriet\xE1rios n\xE3o entram. O forecast n\xE3o representa transa\xE7\xF5es efetivamente lan\xE7adas e nunca deve ser somado automaticamente a parcelas ou lan\xE7amentos futuros. Nunca chame resultados de saldo banc\xE1rio, limite real dispon\xEDvel ou fatura oficialmente paga/em aberto. Use list_categories para UUIDs. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
+  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Antes de update_expense, update_income, delete_expense ou delete_income, localize o lan\xE7amento com search_transactions, list_expenses ou list_incomes e reutilize exatamente o updated_at retornado como expected_updated_at. Exclus\xF5es s\xE3o definitivas, sempre exigem confirm_delete=true e, para parcelas, confirma\xE7\xE3o espec\xEDfica; elas removem somente a linha selecionada, nunca a s\xE9rie inteira. Nunca tente editar ou excluir recurso de outro propriet\xE1rio nem afirmar que uma s\xE9rie inteira foi alterada. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para lan\xE7amentos reais, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. get_cashflow_series representa somente realizado. get_cashflow_projection separa realizado, futuro materializado e templates recorrentes; futuro materializado s\xE3o linhas reais com data futura, recorr\xEAncias s\xE3o apenas templates, e a soma combinada pode conter sobreposi\xE7\xE3o. Ela n\xE3o representa saldo banc\xE1rio nem previs\xE3o garantida. Para templates isolados use get_recurring_forecast; para parcelas futuras j\xE1 materializadas use get_card_installments. Use list_cards para localizar o cart\xE3o e get_card_summary para o total registrado no per\xEDodo calculado. Recorr\xEAncias s\xE3o templates mensais: use list_recurring_transactions para list\xE1-las e get_recurring_forecast apenas para proje\xE7\xF5es baseadas nesses templates. Metas tamb\xE9m s\xE3o mensais: use list_goals para localizar uma meta e obter updated_at antes de update_goal ou delete_goal; delete_goal exige confirm_delete=true. create_goal, update_goal e delete_goal n\xE3o criam nem alteram transa\xE7\xF5es e n\xE3o representam investimento ou poupan\xE7a acumulada. Use get_goal_progress para o progresso calculado. Mantenha realizado e recorrente separados, informe o risco de sobreposi\xE7\xE3o da proje\xE7\xE3o quando houver templates participantes e n\xE3o gere recomenda\xE7\xE3o financeira. Use get_category_usage somente para fatos hist\xF3ricos sobre categorias pessoais: categorias compartilhadas n\xE3o existem no modelo atual e transa\xE7\xF5es compartilhadas de outros propriet\xE1rios n\xE3o entram. O forecast n\xE3o representa transa\xE7\xF5es efetivamente lan\xE7adas e nunca deve ser somado automaticamente a parcelas ou lan\xE7amentos futuros. Nunca chame resultados de saldo banc\xE1rio, limite real dispon\xEDvel ou fatura oficialmente paga/em aberto. Use list_categories para UUIDs. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
@@ -6821,7 +7310,10 @@ var mcp_default = defineMcp({
     update_recurring_expense_default,
     update_recurring_income_default,
     delete_recurring_expense_default,
-    delete_recurring_income_default
+    delete_recurring_income_default,
+    create_goal_default,
+    update_goal_default,
+    delete_goal_default
   ]
 });
 
