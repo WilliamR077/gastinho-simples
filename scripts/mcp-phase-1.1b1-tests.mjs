@@ -346,7 +346,7 @@ test("manifest exposes the corrected output schemas", async () => {
   const manifest = JSON.parse(
     await readFile(".lovable/mcp/manifest.json", "utf8"),
   );
-  assert.equal(manifest.mcp.tools.length, 51);
+  assert.equal(manifest.mcp.tools.length, 53);
   const byName = Object.fromEntries(manifest.mcp.tools.map((tool) => [tool.name, tool]));
   for (const name of [
     "search_transactions",

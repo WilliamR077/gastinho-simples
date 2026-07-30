@@ -1,5 +1,6 @@
 const STRICT_EMPTY_INPUT_TOOLS = new Set([
   "get_connection_identity",
+  "get_notification_settings",
   "get_profile",
 ]);
 

@@ -631,10 +631,10 @@ for (const input of [{ user_id: userId }, { email: "x@y.z" }, { include_auth: tr
 // Manifest, privacidade, isolamento e bundle.
 const manifest = JSON.parse(await readFile(".lovable/mcp/manifest.json", "utf8"));
 const tools = manifest.mcp.tools;
-equal(tools.length, 51, "manifest 51 tools");
-equal(tools.filter((tool) => tool.annotations?.readOnlyHint === true).length, 25, "25 read-only");
-equal(tools.filter((tool) => tool.annotations?.readOnlyHint === false).length, 26, "26 write");
-equal(new Set(tools.map((tool) => tool.name)).size, 51, "sem duplicidade");
+equal(tools.length, 53, "manifest 53 tools");
+equal(tools.filter((tool) => tool.annotations?.readOnlyHint === true).length, 26, "26 read-only");
+equal(tools.filter((tool) => tool.annotations?.readOnlyHint === false).length, 27, "27 write");
+equal(new Set(tools.map((tool) => tool.name)).size, 53, "sem duplicidade");
 
 const getDeclared = tools.find((tool) => tool.name === "get_profile");
 const updateDeclared = tools.find((tool) => tool.name === "update_profile");

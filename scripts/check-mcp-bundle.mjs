@@ -70,6 +70,8 @@ assert.match(source, /name:\s*"get_expense_split_details"/u);
 assert.match(source, /name:\s*"get_group_member_summary"/u);
 assert.match(source, /name:\s*"get_group_settlement"/u);
 assert.match(source, /name:\s*"update_shared_group"/u);
+assert.match(source, /name:\s*"get_notification_settings"/u);
+assert.match(source, /name:\s*"update_notification_settings"/u);
 assert.match(source, /INVALID_INPUT: \$\{invalid\.toolName\}/u);
 assert.match(source, /withStrictEmptyInputGuard/u);
 assert.match(source, /Deno\.serve/u);
@@ -81,7 +83,7 @@ const emptyInputTools = manifest.mcp.tools.filter(
 );
 assert.deepEqual(
   emptyInputTools.map((tool) => tool.name).sort(),
-  ["get_connection_identity", "get_profile"],
+  ["get_connection_identity", "get_notification_settings", "get_profile"],
   "O conjunto de tools sem parâmetros mudou; revise o guard estrutural.",
 );
 for (const tool of emptyInputTools) {

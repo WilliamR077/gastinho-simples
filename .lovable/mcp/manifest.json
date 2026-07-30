@@ -12557,6 +12557,300 @@
           "additionalProperties": false,
           "$schema": "http://json-schema.org/draft-07/schema#"
         }
+      },
+      {
+        "name": "get_notification_settings",
+        "title": "Consultar preferências de notificação",
+        "description": "Lê somente as preferências pessoais persistidas e os defaults efetivos do produto. Não consulta tokens, permissões, dispositivos ou entrega e não envia notificações.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "notification_settings"
+            },
+            "settings_exist": {
+              "type": "boolean"
+            },
+            "settings": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "is_enabled": {
+                      "type": "boolean"
+                    },
+                    "notify_3_days_before": {
+                      "type": "boolean"
+                    },
+                    "notify_1_day_before": {
+                      "type": "boolean"
+                    },
+                    "notify_on_day": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "is_enabled",
+                    "notify_3_days_before",
+                    "notify_1_day_before",
+                    "notify_on_day"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "effective_settings": {
+              "anyOf": [
+                {
+                  "$ref": "#/properties/settings/anyOf/0"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "uses_product_defaults": {
+              "type": "boolean"
+            },
+            "created_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "updated_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "can_update": {
+              "type": "boolean",
+              "const": true
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "NOTIFICATION_SETTINGS_NOT_CONFIGURED",
+                  "NOTIFICATION_SETTINGS_DATA_INCOMPLETE",
+                  "NOTIFICATION_SETTINGS_INVALID",
+                  "NOTIFICATION_SETTINGS_VERSION_MISSING",
+                  "PRODUCT_DEFAULTS_APPLIED",
+                  "DEVICE_PERMISSION_NOT_VERIFIED"
+                ]
+              }
+            },
+            "data_complete": {
+              "type": "boolean"
+            },
+            "generated_at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "resource_type",
+            "settings_exist",
+            "settings",
+            "effective_settings",
+            "uses_product_defaults",
+            "created_at",
+            "updated_at",
+            "can_update",
+            "warnings",
+            "data_complete",
+            "generated_at"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      },
+      {
+        "name": "update_notification_settings",
+        "title": "Atualizar preferências de notificação",
+        "description": "Cria ou atualiza somente os quatro toggles de notificação configuráveis na interface. Usa concorrência por updated_at e não envia notificações nem altera tokens ou permissões.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "changes": {
+              "type": "object",
+              "properties": {
+                "is_enabled": {
+                  "type": "boolean"
+                },
+                "notify_3_days_before": {
+                  "type": "boolean"
+                },
+                "notify_1_day_before": {
+                  "type": "boolean"
+                },
+                "notify_on_day": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            },
+            "expected_updated_at": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "changes"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "notification_settings"
+            },
+            "applied": {
+              "type": "boolean"
+            },
+            "created": {
+              "type": "boolean"
+            },
+            "no_op": {
+              "type": "boolean"
+            },
+            "before": {
+              "type": "object",
+              "properties": {
+                "settings_exist": {
+                  "type": "boolean"
+                },
+                "settings": {
+                  "type": "object",
+                  "properties": {
+                    "is_enabled": {
+                      "type": "boolean"
+                    },
+                    "notify_3_days_before": {
+                      "type": "boolean"
+                    },
+                    "notify_1_day_before": {
+                      "type": "boolean"
+                    },
+                    "notify_on_day": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "is_enabled",
+                    "notify_3_days_before",
+                    "notify_1_day_before",
+                    "notify_on_day"
+                  ],
+                  "additionalProperties": false
+                },
+                "created_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "updated_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "settings_exist",
+                "settings",
+                "created_at",
+                "updated_at"
+              ],
+              "additionalProperties": false
+            },
+            "after": {
+              "$ref": "#/properties/before"
+            },
+            "changed_fields": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "is_enabled",
+                  "notify_3_days_before",
+                  "notify_1_day_before",
+                  "notify_on_day"
+                ]
+              }
+            },
+            "operation_completed_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "NOTIFICATION_SETTINGS_CREATED",
+                  "NOTIFICATION_SETTINGS_UPDATED",
+                  "PRODUCT_DEFAULTS_APPLIED",
+                  "DEVICE_PERMISSION_NOT_VERIFIED",
+                  "NO_CHANGES_APPLIED"
+                ]
+              }
+            },
+            "data_complete": {
+              "type": "boolean",
+              "const": true
+            }
+          },
+          "required": [
+            "resource_type",
+            "applied",
+            "created",
+            "no_op",
+            "before",
+            "after",
+            "changed_fields",
+            "operation_completed_at",
+            "warnings",
+            "data_complete"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
       }
     ]
   }

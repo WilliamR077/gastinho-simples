@@ -22,6 +22,10 @@ export const MCP_ERROR_CODES = {
   EXPECTED_VERSION_REQUIRED: "EXPECTED_VERSION_REQUIRED",
   PROFILE_DATA_INCOMPLETE: "PROFILE_DATA_INCOMPLETE",
   PROFILE_VERSION_MISSING: "PROFILE_VERSION_MISSING",
+  NOTIFICATION_SETTINGS_DATA_INCOMPLETE:
+    "NOTIFICATION_SETTINGS_DATA_INCOMPLETE",
+  NOTIFICATION_SETTINGS_VERSION_MISSING:
+    "NOTIFICATION_SETTINGS_VERSION_MISSING",
   CONCURRENT_MODIFICATION: "CONCURRENT_MODIFICATION",
   INVALID_INPUT: "INVALID_INPUT",
   INVALID_PATCH: "INVALID_PATCH",
@@ -84,6 +88,10 @@ const MESSAGES: Record<McpErrorCode, string> = {
     "Os dados do perfil não permitem concluir a operação com segurança.",
   PROFILE_VERSION_MISSING:
     "O perfil não possui uma versão updated_at utilizável.",
+  NOTIFICATION_SETTINGS_DATA_INCOMPLETE:
+    "As preferências de notificação não permitem concluir a operação com segurança.",
+  NOTIFICATION_SETTINGS_VERSION_MISSING:
+    "As preferências de notificação não possuem uma versão updated_at utilizável.",
   CONCURRENT_MODIFICATION:
     "O lançamento foi alterado desde a leitura. Releia o registro antes de tentar novamente.",
   INVALID_INPUT: "Os parâmetros da operação são inválidos.",
