@@ -11286,6 +11286,135 @@ var mcp_default = defineMcp({
   ]
 });
 
+// src/lib/mcp/runtime/strict-empty-input.ts
+var STRICT_EMPTY_INPUT_TOOLS = /* @__PURE__ */ new Set([
+  "get_connection_identity",
+  "get_profile"
+]);
+function isPlainObject(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+function hasInvalidEmptyInput(value) {
+  return !isPlainObject(value) || Object.keys(value).length !== 0;
+}
+function guardedToolName(value) {
+  return typeof value === "string" && STRICT_EMPTY_INPUT_TOOLS.has(value) ? value : null;
+}
+function invalidMcpCall(value) {
+  if (!isPlainObject(value)) return null;
+  const request = value;
+  if (request.method !== "tools/call" || !isPlainObject(request.params)) {
+    return null;
+  }
+  const toolName = guardedToolName(request.params.name);
+  if (!toolName || request.params.arguments === void 0) return null;
+  if (!hasInvalidEmptyInput(request.params.arguments)) return null;
+  return { id: request.id ?? null, toolName };
+}
+function jsonHeaders(request) {
+  const headers = new Headers({ "content-type": "application/json" });
+  const origin = request.headers.get("origin");
+  if (origin) {
+    headers.set("access-control-allow-origin", origin);
+    headers.set("vary", "Origin");
+  }
+  return headers;
+}
+function invalidMcpResponse(request, invalid) {
+  return new Response(
+    JSON.stringify({
+      jsonrpc: "2.0",
+      id: invalid.id,
+      error: {
+        code: -32602,
+        message: `INVALID_INPUT: ${invalid.toolName} aceita somente um objeto vazio.`
+      }
+    }),
+    { status: 200, headers: jsonHeaders(request) }
+  );
+}
+function invalidRestResponse(request, toolName) {
+  return new Response(
+    JSON.stringify({
+      error: "INVALID_INPUT",
+      message: `${toolName} aceita somente um objeto vazio.`
+    }),
+    { status: 400, headers: jsonHeaders(request) }
+  );
+}
+function closeEmptyInputSchemas(value) {
+  if (!isPlainObject(value)) return false;
+  const tools = Array.isArray(value.tools) ? value.tools : isPlainObject(value.result) && Array.isArray(value.result.tools) ? value.result.tools : null;
+  if (!tools) return false;
+  let changed = false;
+  for (const tool of tools) {
+    if (!isPlainObject(tool) || !guardedToolName(tool.name)) continue;
+    const schema = tool.inputSchema;
+    if (!isPlainObject(schema)) continue;
+    schema.type = "object";
+    schema.properties = {};
+    schema.additionalProperties = false;
+    changed = true;
+  }
+  return changed;
+}
+async function closeListToolsResponse(response) {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) return response;
+  let body;
+  try {
+    body = await response.clone().json();
+  } catch {
+    return response;
+  }
+  if (!closeEmptyInputSchemas(body)) return response;
+  const headers = new Headers(response.headers);
+  headers.delete("content-length");
+  return new Response(JSON.stringify(body), {
+    status: response.status,
+    statusText: response.statusText,
+    headers
+  });
+}
+function withStrictEmptyInputGuard(handler) {
+  return async (request) => {
+    if (request.method !== "POST") return handler(request);
+    let body;
+    try {
+      body = await request.clone().json();
+    } catch {
+      return handler(request);
+    }
+    const pathname = new URL(request.url).pathname.replace(/\/+$/, "");
+    const invokeMatch = /\/\.mcp\/invoke-tool\/([^/]+)$/u.exec(pathname);
+    if (invokeMatch) {
+      let toolName;
+      try {
+        toolName = decodeURIComponent(invokeMatch[1]);
+      } catch {
+        return handler(request);
+      }
+      if (guardedToolName(toolName) && hasInvalidEmptyInput(body)) {
+        return invalidRestResponse(request, toolName);
+      }
+    }
+    const messages = Array.isArray(body) ? body : [body];
+    for (const message of messages) {
+      const invalid = invalidMcpCall(message);
+      if (invalid) return invalidMcpResponse(request, invalid);
+    }
+    const response = await handler(request);
+    const isListRequest = messages.some(
+      (message) => isPlainObject(message) && message.method === "tools/list"
+    );
+    return isListRequest || pathname.endsWith("/.mcp/list-tools") ? closeListToolsResponse(response) : response;
+  };
+}
+
 // lovable-mcp-supabase-entry.ts
 import { createSupabaseHandler } from "npm:@lovable.dev/mcp-js@0.24.0/stacks/supabase";
-Deno.serve(createSupabaseHandler(mcp_default, { functionName: "mcp" }));
+Deno.serve(withStrictEmptyInputGuard(createSupabaseHandler(mcp_default, { functionName: "mcp" })));

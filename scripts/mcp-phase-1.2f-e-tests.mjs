@@ -30,6 +30,7 @@ const bundled = await build({
       export { default as updateTool } from "./src/lib/mcp/tools/update-profile.ts";
       export * from "./src/lib/mcp/shared/profile-read.ts";
       export * from "./src/lib/mcp/shared/profile-write.ts";
+      export * from "./src/lib/mcp/runtime/strict-empty-input.ts";
     `,
     resolveDir: process.cwd(),
     sourcefile: "phase-1.2f-e-entry.ts",
@@ -203,6 +204,159 @@ const use = (profiles = [], options = {}) => {
   globalThis.__MCP_PROFILE_SUPABASE__ = db;
   return db;
 };
+
+// Pipeline HTTP publicado: o guard roda antes de o SDK descartar campos extras.
+const mcpRequest = (name, args, id = 1) =>
+  new Request("https://example.test/functions/v1/mcp", {
+    method: "POST",
+    headers: {
+      accept: "application/json, text/event-stream",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id,
+      method: "tools/call",
+      params: { name, arguments: args },
+    }),
+  });
+
+{
+  const db = use([profile()]);
+  let sdkCalls = 0;
+  const publishedPipeline = core.withStrictEmptyInputGuard(async (request) => {
+    sdkCalls += 1;
+    const payload = await request.json();
+    // Reproduz o SDK: raw shape vazio transforma o input e remove extras.
+    const result = await core.getTool.handler({}, ctx);
+    return Response.json({
+      jsonrpc: "2.0",
+      id: payload.id,
+      result,
+    });
+  });
+
+  const validResponse = await publishedPipeline(mcpRequest("get_profile", {}));
+  const validBody = await validResponse.json();
+  equal(validResponse.status, 200, "pipeline aceita objeto vazio");
+  equal(sdkCalls, 1, "chamada válida chega ao SDK");
+  equal(db.reads, 1, "chamada válida preserva leitura do perfil");
+  equal(
+    validBody.result.structuredContent.display_name,
+    db.profiles[0].display_name,
+    "contrato válido preservado",
+  );
+
+  for (const [args, label] of [
+    [{ campo_fake: "teste" }, "campo fake"],
+    [{ user_id: userId }, "user_id"],
+    [{ fields: ["display_name"] }, "fields"],
+    [{ include_auth: true }, "include_auth"],
+  ]) {
+    const beforeReads = db.reads;
+    const beforeWrites = db.writes.length;
+    const response = await publishedPipeline(mcpRequest("get_profile", args));
+    const body = await response.json();
+    equal(response.status, 200, `${label}: erro JSON-RPC`);
+    equal(body.error.code, -32602, `${label}: invalid params`);
+    check(body.error.message.includes("INVALID_INPUT"), `${label}: erro tipado`);
+    equal(db.reads, beforeReads, `${label}: nenhuma consulta`);
+    equal(db.writes.length, beforeWrites, `${label}: nenhuma escrita`);
+    check(!("result" in body), `${label}: nenhum perfil retornado`);
+    check(!JSON.stringify(body).includes(userId), `${label}: nenhum UUID`);
+    check(!JSON.stringify(body).includes("@"), `${label}: nenhum e-mail`);
+  }
+  equal(sdkCalls, 1, "inputs inválidos são bloqueados antes do SDK");
+}
+
+{
+  let forwarded = 0;
+  const pipeline = core.withStrictEmptyInputGuard(async () => {
+    forwarded += 1;
+    return Response.json({ ok: true });
+  });
+  const response = await pipeline(
+    mcpRequest("update_profile", { campo_fake: "teste" }),
+  );
+  equal(response.status, 200, "update_profile permanece fora do guard");
+  equal(forwarded, 1, "update_profile permanece entregue ao SDK");
+
+  const identityResponse = await pipeline(
+    mcpRequest("get_connection_identity", { campo_fake: "teste" }),
+  );
+  const identityBody = await identityResponse.json();
+  equal(identityBody.error.code, -32602, "outra tool vazia rejeita extra");
+  check(
+    identityBody.error.message.includes("INVALID_INPUT"),
+    "outra tool vazia usa erro tipado",
+  );
+  equal(forwarded, 1, "outra tool vazia inválida não chega ao SDK");
+}
+
+{
+  let invoked = 0;
+  const pipeline = core.withStrictEmptyInputGuard(async () => {
+    invoked += 1;
+    return Response.json({ ok: true });
+  });
+  const response = await pipeline(
+    new Request(
+      "https://example.test/functions/v1/mcp/.mcp/invoke-tool/get_profile",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ campo_fake: "teste" }),
+      },
+    ),
+  );
+  const body = await response.json();
+  equal(response.status, 400, "invoke-tool também rejeita extra");
+  equal(body.error, "INVALID_INPUT", "invoke-tool retorna erro tipado");
+  equal(invoked, 0, "invoke-tool inválido não chega ao SDK");
+}
+
+{
+  const pipeline = core.withStrictEmptyInputGuard(async () =>
+    Response.json({
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        tools: [
+          {
+            name: "get_profile",
+            inputSchema: { type: "object", properties: {} },
+          },
+          {
+            name: "update_profile",
+            inputSchema: {
+              type: "object",
+              properties: { changes: { type: "object" } },
+              additionalProperties: false,
+            },
+          },
+        ],
+      },
+    }),
+  );
+  const response = await pipeline(
+    new Request("https://example.test/functions/v1/mcp", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+    }),
+  );
+  const body = await response.json();
+  equal(
+    body.result.tools[0].inputSchema.additionalProperties,
+    false,
+    "tools/list publicado anuncia input vazio fechado",
+  );
+  equal(
+    body.result.tools[1].inputSchema.additionalProperties,
+    false,
+    "tools/list não altera schemas parametrizados",
+  );
+}
 
 // Schemas fechados e validação real do nome.
 for (const [input, valid, label] of [
@@ -488,7 +642,7 @@ check(getDeclared, "get registrada");
 check(updateDeclared, "update registrada");
 equal(getDeclared.inputSchema.properties, {}, "get input sem propriedades");
 check(
-  getDeclared.inputSchema.additionalProperties !== true,
+  getDeclared.inputSchema.additionalProperties === false,
   "get input não declara extras",
 );
 equal(getDeclared.outputSchema.additionalProperties, false, "get output fechado");
@@ -542,6 +696,8 @@ check(!writeSource.includes('.from("shared_groups")'), "sem grupos");
 const bundleSource = await readFile("supabase/functions/mcp/index.ts", "utf8");
 check(bundleSource.includes('name: "get_profile"'), "bundle get");
 check(bundleSource.includes('name: "update_profile"'), "bundle update");
+check(bundleSource.includes("withStrictEmptyInputGuard"), "bundle usa guard publicado");
+check(bundleSource.includes("INVALID_INPUT:"), "bundle preserva erro tipado");
 check(bundleSource.includes("Deno.serve"), "bundle serve");
 check(!/[A-Z]:\\\\Users\\\\/u.test(bundleSource), "bundle sem caminho absoluto");
 check(!bundleSource.includes("npm:@/"), "bundle sem alias npm");

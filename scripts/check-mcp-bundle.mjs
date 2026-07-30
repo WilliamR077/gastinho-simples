@@ -3,6 +3,8 @@ import { readFile } from "node:fs/promises";
 
 const bundlePath = new URL("../supabase/functions/mcp/index.ts", import.meta.url);
 const source = await readFile(bundlePath, "utf8");
+const manifestPath = new URL("../.lovable/mcp/manifest.json", import.meta.url);
+const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 
 const forbidden = [
   { name: "npm drive path", pattern: /npm:[A-Za-z]:/u },
@@ -68,6 +70,26 @@ assert.match(source, /name:\s*"get_expense_split_details"/u);
 assert.match(source, /name:\s*"get_group_member_summary"/u);
 assert.match(source, /name:\s*"get_group_settlement"/u);
 assert.match(source, /name:\s*"update_shared_group"/u);
+assert.match(source, /INVALID_INPUT: \$\{invalid\.toolName\}/u);
+assert.match(source, /withStrictEmptyInputGuard/u);
 assert.match(source, /Deno\.serve/u);
+
+const emptyInputTools = manifest.mcp.tools.filter(
+  (tool) =>
+    tool.inputSchema?.type === "object" &&
+    Object.keys(tool.inputSchema.properties ?? {}).length === 0,
+);
+assert.deepEqual(
+  emptyInputTools.map((tool) => tool.name).sort(),
+  ["get_connection_identity", "get_profile"],
+  "O conjunto de tools sem parâmetros mudou; revise o guard estrutural.",
+);
+for (const tool of emptyInputTools) {
+  assert.equal(
+    tool.inputSchema.additionalProperties,
+    false,
+    `${tool.name} precisa declarar input vazio fechado.`,
+  );
+}
 
 console.log("Bundle MCP autocontido e sem caminhos absolutos.");

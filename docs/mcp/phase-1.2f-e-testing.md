@@ -19,10 +19,17 @@ para evitar sobrescrita concorrente.
 
 ## Contratos
 
-`get_profile` possui input vazio; o handler aplica `z.object({}).strict()` e
-rejeita campos adicionais. O extrator da biblioteca omite
-`additionalProperties:false` especificamente para raw shapes vazios, embora
-o contrato tenha zero propriedades e o fechamento seja aplicado em runtime.
+`get_profile` possui input vazio. O SDK transforma raw shapes vazios em um
+objeto Zod permissivo e remove propriedades desconhecidas antes do handler.
+Por isso, o runtime publicado agora envolve o handler Supabase com um guard
+HTTP que valida os argumentos originais antes dessa transformação. O mesmo
+guard protege `get_connection_identity`, a única outra tool sem parâmetros,
+e fecha os schemas devolvidos por `tools/list`.
+
+O patch reproduzível de `@lovable.dev/mcp-js` também preserva
+`additionalProperties:false` no manifesto oficial para raw shapes vazios.
+Assim, `{}` continua válido e qualquer propriedade adicional recebe
+`INVALID_INPUT`/JSON-RPC `-32602` sem executar o handler.
 Ele seleciona somente
 `display_name,created_at,updated_at`, sempre filtrando internamente pelo
 usuário autenticado. Perfil ausente é um estado factual, não erro, e recebe
