@@ -605,11 +605,11 @@ equal(
 );
 
 const tools = manifest.mcp.tools;
-equal(tools.length, 48, "manifest contém exatamente 48 tools");
+equal(tools.length, 49, "manifest contém exatamente 49 tools");
 equal(
   tools.filter((tool) => tool.annotations?.readOnlyHint === true).length,
-  23,
-  "manifest contém 23 tools read-only",
+  24,
+  "manifest contém 24 tools read-only",
 );
 for (const name of ["list_recurring_transactions", "get_recurring_forecast"]) {
   const tool = tools.find((candidate) => candidate.name === name);

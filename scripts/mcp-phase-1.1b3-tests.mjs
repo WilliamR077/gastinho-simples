@@ -114,8 +114,10 @@ const transactionItems = ids.map((id, index) => ({
   payment_method: index % 2 === 0 ? "pix" : null,
   card_id: null,
   card_name: null,
+  installment_group_id: null,
   installment_number: null,
   total_installments: null,
+  is_installment: false,
   shared_group_id: null,
   is_shared: false,
   is_owner: true,
@@ -300,7 +302,7 @@ test("comparison content carries periods, metrics, changes and warnings", () => 
 
 test("synthetic structured content validates against every explicit output schema", async () => {
   const manifest = JSON.parse(await readFile(".lovable/mcp/manifest.json", "utf8"));
-  assert.equal(manifest.mcp.tools.length, 48);
+  assert.equal(manifest.mcp.tools.length, 49);
   const tools = Object.fromEntries(manifest.mcp.tools.map((tool) => [tool.name, tool]));
   const cases = [
     ["search_transactions", searchResult],

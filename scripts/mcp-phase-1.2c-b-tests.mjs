@@ -425,9 +425,9 @@ for (const [tool, table, idField] of [
 
 const manifest = JSON.parse(await readFile(".lovable/mcp/manifest.json", "utf8"));
 const tools = manifest.mcp.tools;
-equal(tools.length, 48, "manifest 48 tools");
+equal(tools.length, 49, "manifest 49 tools");
 equal(tools.filter((tool) => tool.annotations?.readOnlyHint === true).length,
-  23, "23 read-only");
+  24, "24 read-only");
 equal(tools.filter((tool) => tool.annotations?.readOnlyHint === false).length, 25, "25 write");
 for (const name of ["delete_recurring_expense", "delete_recurring_income"]) {
   const tool = tools.find((candidate) => candidate.name === name);

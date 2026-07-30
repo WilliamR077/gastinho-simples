@@ -38,6 +38,8 @@ var MESSAGES = {
   INVALID_TRANSACTION_TYPE: "Tipo de transa\xE7\xE3o inv\xE1lido.",
   INVALID_FILTER_COMBINATION: "card_id e payment_method s\xE3o exclusivos de despesas. Repita a consulta com transaction_type=expense.",
   RESOURCE_NOT_FOUND: "Recurso n\xE3o encontrado para a conta autenticada.",
+  TRANSACTION_NOT_INSTALLMENT: "A transa\xE7\xE3o existe e \xE9 acess\xEDvel, mas n\xE3o pertence a uma s\xE9rie parcelada. Nenhuma altera\xE7\xE3o foi realizada.",
+  INSTALLMENT_SERIES_REFERENCE_MISSING: "A transa\xE7\xE3o acess\xEDvel declara parcelamento, mas n\xE3o possui refer\xEAncia de s\xE9rie. Nenhuma altera\xE7\xE3o foi realizada.",
   CONCURRENT_MODIFICATION: "O lan\xE7amento foi alterado desde a leitura. Releia o registro antes de tentar novamente.",
   INVALID_INPUT: "Os par\xE2metros da opera\xE7\xE3o s\xE3o inv\xE1lidos.",
   INVALID_PATCH: "O conjunto de altera\xE7\xF5es \xE9 inv\xE1lido ou est\xE1 vazio.",
@@ -388,6 +390,40 @@ function isoWeekStart(date) {
   return parsed.toISOString().slice(0, 10);
 }
 
+// src/lib/mcp/shared/card-factual.ts
+var INSTALLMENT_DATA_WARNINGS = [
+  "MISSING_INSTALLMENT_NUMBER",
+  "MISSING_TOTAL_INSTALLMENTS",
+  "INSTALLMENT_NUMBER_EXCEEDS_TOTAL",
+  "TOTAL_INSTALLMENTS_BELOW_TWO",
+  "MISSING_INSTALLMENT_GROUP_ID",
+  "MISSING_CATEGORY",
+  "NON_CREDIT_PAYMENT_METHOD"
+];
+var INSTALLMENT_SERIES_WARNINGS = [
+  "INACTIVE_CARD",
+  "SERIES_COMPLETENESS_NOT_VERIFIED",
+  "INCONSISTENT_INSTALLMENT_METADATA_PRESENT"
+];
+function hasInstallmentEvidence(row) {
+  return row.installment_group_id !== null || (row.installment_number ?? 0) > 1 || (row.total_installments ?? 0) > 1;
+}
+function installmentWarnings(row) {
+  const warnings = [];
+  if (row.installment_number === null) warnings.push("MISSING_INSTALLMENT_NUMBER");
+  if (row.total_installments === null) warnings.push("MISSING_TOTAL_INSTALLMENTS");
+  if (row.installment_number !== null && row.total_installments !== null && row.installment_number > row.total_installments) {
+    warnings.push("INSTALLMENT_NUMBER_EXCEEDS_TOTAL");
+  }
+  if (row.total_installments !== null && row.total_installments < 2) {
+    warnings.push("TOTAL_INSTALLMENTS_BELOW_TWO");
+  }
+  if (row.installment_group_id === null) warnings.push("MISSING_INSTALLMENT_GROUP_ID");
+  if (row.category_id === null || row.category_name === null) warnings.push("MISSING_CATEGORY");
+  if (row.payment_method !== "credit") warnings.push("NON_CREDIT_PAYMENT_METHOD");
+  return warnings;
+}
+
 // src/lib/mcp/shared/transaction-query.ts
 function cursorFilterForTransactionType(query, column, cursor, rowType) {
   const equalValueMode = unifiedCursorEqualValueMode(cursor.last_item_type, rowType);
@@ -402,8 +438,8 @@ function cursorFilterForTransactionType(query, column, cursor, rowType) {
   }
   return cursor.sort_order === "asc" ? query.gt(column, cursor.sort_value) : query.lt(column, cursor.sort_value);
 }
-var EXPENSE_COLUMNS = "id, user_id, description, amount, expense_date, created_at, updated_at, category_id, category_name, category_icon, payment_method, card_id, card_name, installment_number, total_installments, shared_group_id";
-var INCOME_COLUMNS = "id, user_id, description, amount, income_date, created_at, updated_at, income_category_id, category_name, category_icon, installment_number, total_installments, shared_group_id";
+var EXPENSE_COLUMNS = "id, user_id, description, amount, expense_date, created_at, updated_at, category_id, category_name, category_icon, payment_method, card_id, card_name, installment_group_id, installment_number, total_installments, shared_group_id";
+var INCOME_COLUMNS = "id, user_id, description, amount, income_date, created_at, updated_at, income_category_id, category_name, category_icon, installment_group_id, installment_number, total_installments, shared_group_id";
 function sortColumn(sortBy, dateColumn) {
   if (sortBy === "created_at") return "created_at";
   if (sortBy === "amount") return "amount";
@@ -424,8 +460,10 @@ function expenseItem(row, userId) {
     payment_method: row.payment_method,
     card_id: row.card_id,
     card_name: row.card_name,
+    installment_group_id: row.installment_group_id ?? null,
     installment_number: row.installment_number,
     total_installments: row.total_installments,
+    is_installment: hasInstallmentEvidence(row),
     shared_group_id: row.shared_group_id,
     is_shared: row.shared_group_id !== null,
     is_owner: row.user_id === userId
@@ -443,8 +481,10 @@ function incomeItem(row, userId) {
     income_category_id: row.income_category_id,
     category_name: row.category_name,
     category_icon: row.category_icon,
+    installment_group_id: row.installment_group_id ?? null,
     installment_number: row.installment_number,
     total_installments: row.total_installments,
+    is_installment: hasInstallmentEvidence(row),
     shared_group_id: row.shared_group_id,
     is_shared: row.shared_group_id !== null,
     is_owner: row.user_id === userId
@@ -634,6 +674,8 @@ var common = {
   category_icon: z.string().nullable(),
   installment_number: z.number().int().nullable(),
   total_installments: z.number().int().nullable(),
+  installment_group_id: z.string().uuid().nullable(),
+  is_installment: z.boolean(),
   shared_group_id: z.string().uuid().nullable(),
   is_shared: z.boolean(),
   is_owner: z.boolean()
@@ -2591,8 +2633,10 @@ var transactionItemSchema = z12.object({
   payment_method: z12.enum(["pix", "credit", "debit", "cash"]).nullable(),
   card_id: z12.string().uuid().nullable(),
   card_name: z12.string().nullable(),
+  installment_group_id: z12.string().uuid().nullable(),
   installment_number: z12.number().int().nullable(),
   total_installments: z12.number().int().nullable(),
+  is_installment: z12.boolean(),
   shared_group_id: z12.string().uuid().nullable(),
   is_shared: z12.boolean(),
   is_owner: z12.boolean()
@@ -2776,8 +2820,10 @@ var search_transactions_default = defineTool9({
       payment_method: item.transaction_type === "expense" ? item.payment_method : null,
       card_id: item.transaction_type === "expense" ? item.card_id : null,
       card_name: item.transaction_type === "expense" ? item.card_name : null,
+      installment_group_id: item.installment_group_id,
       installment_number: item.installment_number,
       total_installments: item.total_installments,
+      is_installment: item.is_installment,
       shared_group_id: item.shared_group_id,
       is_shared: item.is_shared,
       is_owner: item.is_owner
@@ -3583,42 +3629,6 @@ var list_cards_default = defineTool12({
 // src/lib/mcp/tools/get-card-installments.ts
 import { defineTool as defineTool13 } from "npm:@lovable.dev/mcp-js@0.24.0";
 import { z as z16 } from "npm:zod@^3.25.76";
-
-// src/lib/mcp/shared/card-factual.ts
-var INSTALLMENT_DATA_WARNINGS = [
-  "MISSING_INSTALLMENT_NUMBER",
-  "MISSING_TOTAL_INSTALLMENTS",
-  "INSTALLMENT_NUMBER_EXCEEDS_TOTAL",
-  "TOTAL_INSTALLMENTS_BELOW_TWO",
-  "MISSING_INSTALLMENT_GROUP_ID",
-  "MISSING_CATEGORY",
-  "NON_CREDIT_PAYMENT_METHOD"
-];
-var INSTALLMENT_SERIES_WARNINGS = [
-  "INACTIVE_CARD",
-  "SERIES_COMPLETENESS_NOT_VERIFIED",
-  "INCONSISTENT_INSTALLMENT_METADATA_PRESENT"
-];
-function hasInstallmentEvidence(row) {
-  return row.installment_group_id !== null || (row.installment_number ?? 0) > 1 || (row.total_installments ?? 0) > 1;
-}
-function installmentWarnings(row) {
-  const warnings = [];
-  if (row.installment_number === null) warnings.push("MISSING_INSTALLMENT_NUMBER");
-  if (row.total_installments === null) warnings.push("MISSING_TOTAL_INSTALLMENTS");
-  if (row.installment_number !== null && row.total_installments !== null && row.installment_number > row.total_installments) {
-    warnings.push("INSTALLMENT_NUMBER_EXCEEDS_TOTAL");
-  }
-  if (row.total_installments !== null && row.total_installments < 2) {
-    warnings.push("TOTAL_INSTALLMENTS_BELOW_TWO");
-  }
-  if (row.installment_group_id === null) warnings.push("MISSING_INSTALLMENT_GROUP_ID");
-  if (row.category_id === null || row.category_name === null) warnings.push("MISSING_CATEGORY");
-  if (row.payment_method !== "credit") warnings.push("NON_CREDIT_PAYMENT_METHOD");
-  return warnings;
-}
-
-// src/lib/mcp/tools/get-card-installments.ts
 var CURSOR_CONTEXT5 = "get_card_installments";
 var warningSchema = z16.enum(INSTALLMENT_DATA_WARNINGS);
 var seriesWarningSchema = z16.enum(INSTALLMENT_SERIES_WARNINGS);
@@ -3634,8 +3644,10 @@ var installmentSchema = z16.object({
   description: z16.string(),
   amount: z16.number(),
   date: z16.string(),
+  updated_at: z16.string(),
   installment_number: z16.number().int().nullable(),
   total_installments: z16.number().int().nullable(),
+  is_installment: z16.boolean(),
   category_id: z16.string().uuid().nullable(),
   category_name: z16.string().nullable(),
   category_icon: z16.string().nullable(),
@@ -3714,7 +3726,7 @@ var get_card_installments_default = defineTool13({
     const parsedCard = cardSchema2.safeParse(card);
     if (!parsedCard.success) return mcpError("INVALID_DATA");
     let query = supabase.from("expenses").select(
-      "id,description,amount,expense_date,payment_method,card_id,card_name,category_id,category_name,category_icon,installment_group_id,installment_number,total_installments,shared_group_id"
+      "id,description,amount,expense_date,updated_at,payment_method,card_id,card_name,category_id,category_name,category_icon,installment_group_id,installment_number,total_installments,shared_group_id"
     ).eq("user_id", ctx.getUserId()).eq("card_id", input.card_id).or("installment_group_id.not.is.null,installment_number.gt.1,total_installments.gt.1");
     const today = todayIso();
     if (timeScope === "occurred") query = query.lte("expense_date", today);
@@ -3732,8 +3744,10 @@ var get_card_installments_default = defineTool13({
       description: row.description,
       amount: row.amount,
       date: row.expense_date,
+      updated_at: row.updated_at,
       installment_number: row.installment_number,
       total_installments: row.total_installments,
+      is_installment: true,
       category_id: row.category_id,
       category_name: row.category_name,
       category_icon: row.category_icon,
@@ -3796,9 +3810,1171 @@ var get_card_installments_default = defineTool13({
   }
 });
 
-// src/lib/mcp/tools/get-card-summary.ts
+// src/lib/mcp/tools/get-installment-series.ts
 import { defineTool as defineTool14 } from "npm:@lovable.dev/mcp-js@0.24.0";
+
+// src/lib/mcp/shared/installment-series-read.ts
+import { z as z18 } from "npm:zod@^3.25.76";
+
+// src/lib/mcp/shared/group-split-analysis.ts
 import { z as z17 } from "npm:zod@^3.25.76";
+var GROUP_ANALYSIS_MAX_DAYS = 366;
+var GROUP_ANALYSIS_MAX_EXPENSES = 1e3;
+var GROUP_ANALYSIS_MAX_SPLITS = 5e3;
+var GROUP_ANALYSIS_MAX_MEMBERS = 100;
+var GROUP_ANALYSIS_MAX_TRANSFERS = 100;
+var GROUP_ROLES = ["owner", "admin", "member"];
+var SPLIT_TYPES = ["equal", "percentage", "manual"];
+var SPLIT_TYPE_OUTPUTS = [...SPLIT_TYPES, "unknown"];
+var ALLOCATION_STATUSES = [
+  "balanced",
+  "under_allocated",
+  "over_allocated",
+  "no_split_rows",
+  "inconsistent"
+];
+var SETTLEMENT_STATUSES = [
+  "settled",
+  "transfers_suggested",
+  "incomplete_data",
+  "unbalanced_source_data",
+  "no_shared_expenses"
+];
+var GROUP_SPLIT_WARNINGS = [
+  "NO_SHARED_EXPENSES",
+  "SPLIT_DETAILS_MISSING",
+  "SPLIT_UNDER_ALLOCATED",
+  "SPLIT_OVER_ALLOCATED",
+  "SPLIT_PERCENTAGE_INVALID",
+  "SPLIT_AMOUNT_INVALID",
+  "PAYER_UNRESOLVED",
+  "MEMBER_PROFILE_INCOMPLETE",
+  "HISTORICAL_MEMBER_UNRESOLVED",
+  "GROUP_INACTIVE",
+  "OWNER_MEMBERSHIP_MISSING",
+  "GROUP_ROLE_INCONSISTENCY",
+  "DATA_INCOMPLETE",
+  "SETTLEMENT_NOT_BALANCED",
+  "RESIDUAL_AMOUNT_REMAINS"
+];
+var groupSplitWarningSchema = z17.enum(GROUP_SPLIT_WARNINGS);
+var groupAnalysisPeriodSchema = z17.object({
+  date_from: z17.string(),
+  date_to: z17.string(),
+  days: z17.number().int().positive(),
+  time_zone: z17.literal("America/Sao_Paulo")
+}).strict();
+var groupAnalysisGroupSchema = z17.object({
+  id: z17.string().uuid(),
+  name: z17.string(),
+  is_active: z17.boolean(),
+  current_user_role: z17.enum(GROUP_ROLES),
+  updated_at: z17.string().nullable()
+}).strict();
+var expenseSplitParticipantSchema = z17.object({
+  membership_id: z17.string().uuid().nullable(),
+  display_name: z17.string(),
+  is_current_user: z17.boolean(),
+  allocated_amount: z17.number(),
+  percentage: z17.number().nullable(),
+  allocation_source: z17.literal("persisted_split")
+}).strict();
+var expenseSplitDetailsExpenseSchema = z17.object({
+  id: z17.string().uuid(),
+  description: z17.string(),
+  amount: z17.number(),
+  expense_date: z17.string(),
+  split_type: z17.enum(SPLIT_TYPE_OUTPUTS),
+  group_id: z17.string().uuid(),
+  group_name: z17.string(),
+  paid_by_membership_id: z17.string().uuid().nullable(),
+  paid_by_display_name: z17.string(),
+  installment_number: z17.number().int().nullable(),
+  total_installments: z17.number().int().nullable(),
+  updated_at: z17.string()
+}).strict();
+var groupMemberSummaryItemSchema = z17.object({
+  membership_id: z17.string().uuid().nullable(),
+  display_name: z17.string(),
+  role: z17.enum(GROUP_ROLES).nullable(),
+  is_current_user: z17.boolean(),
+  paid_amount: z17.number(),
+  allocated_amount: z17.number(),
+  net_balance: z17.number(),
+  expense_count_paid: z17.number().int().nonnegative(),
+  split_count: z17.number().int().nonnegative(),
+  warnings: z17.array(groupSplitWarningSchema)
+}).strict();
+var settlementTransferSchema = z17.object({
+  from_membership_id: z17.string().uuid(),
+  from_display_name: z17.string(),
+  to_membership_id: z17.string().uuid(),
+  to_display_name: z17.string(),
+  amount: z17.number().positive()
+}).strict();
+var allocationStatusSchema = z17.enum(ALLOCATION_STATUSES);
+var settlementStatusSchema = z17.enum(SETTLEMENT_STATUSES);
+var expenseDetailsInputSchema = z17.object({ expense_id: z17.string().uuid() }).strict();
+var groupAnalysisInputSchema = z17.object({
+  group_id: z17.string().uuid(),
+  date_from: z17.string().optional(),
+  date_to: z17.string().optional()
+}).strict();
+function uniqueWarnings(warnings) {
+  return [...new Set(warnings)];
+}
+function isRole(value) {
+  return GROUP_ROLES.includes(value);
+}
+function isSplitType(value) {
+  return value !== null && SPLIT_TYPES.includes(value);
+}
+function decimalToScaledInteger(value, scale) {
+  const raw = String(value).trim();
+  const match = /^([+-]?)(\d+)(?:\.(\d+))?$/.exec(raw);
+  if (!match) return null;
+  const fraction = match[3] ?? "";
+  if (fraction.length > scale) return null;
+  const factor = 10 ** scale;
+  const whole = Number(match[2]);
+  const fractional = Number(fraction.padEnd(scale, "0") || "0");
+  if (!Number.isSafeInteger(whole) || !Number.isSafeInteger(fractional)) return null;
+  const absolute = whole * factor + fractional;
+  if (!Number.isSafeInteger(absolute)) return null;
+  return match[1] === "-" ? -absolute : absolute;
+}
+function moneyToCents(value) {
+  return decimalToScaledInteger(value, 2);
+}
+function centsToMoney(cents) {
+  return Number((cents / 100).toFixed(2));
+}
+function percentageToUnits(value) {
+  return decimalToScaledInteger(value, 4);
+}
+function resolvePeriod(dateFrom, dateTo) {
+  if (dateFrom !== void 0 && !isValidIsoDate(dateFrom) || dateTo !== void 0 && !isValidIsoDate(dateTo)) {
+    return { ok: false, error: mcpError("INVALID_INPUT") };
+  }
+  const defaults = currentMonthRange();
+  const from = dateFrom ?? defaults.from;
+  const to = dateTo ?? defaults.to;
+  if (from > to) return { ok: false, error: mcpError("INVALID_DATE_RANGE") };
+  const days = inclusiveDays(from, to);
+  if (days > GROUP_ANALYSIS_MAX_DAYS) {
+    return { ok: false, error: mcpError("RESULT_SET_TOO_LARGE") };
+  }
+  return {
+    ok: true,
+    period: {
+      date_from: from,
+      date_to: to,
+      days,
+      time_zone: "America/Sao_Paulo"
+    }
+  };
+}
+function membershipOrder(left, right) {
+  return (left.joined_at ?? "").localeCompare(right.joined_at ?? "") || left.id.localeCompare(right.id);
+}
+async function loadGroup(groupId, userId, ctx) {
+  const supabase = supabaseForUser(ctx);
+  const { data: rawGroup, error: groupError } = await supabase.from("shared_groups").select("id,name,created_by,is_active,updated_at").eq("id", groupId).maybeSingle();
+  if (groupError) return mcpError("READ_FAILED");
+  if (!rawGroup) return mcpError("RESOURCE_NOT_FOUND");
+  const group = rawGroup;
+  const { data: rawMemberships, error: memberError } = await supabase.from("shared_group_members").select("id,group_id,user_id,role,joined_at").eq("group_id", groupId).limit(GROUP_ANALYSIS_MAX_MEMBERS + 1);
+  if (memberError) return mcpError("READ_FAILED");
+  const memberships = rawMemberships ?? [];
+  if (memberships.length > GROUP_ANALYSIS_MAX_MEMBERS) {
+    return mcpError("RESULT_SET_TOO_LARGE");
+  }
+  const warnings = [];
+  const byUser = /* @__PURE__ */ new Map();
+  for (const membership of memberships) {
+    const rows = byUser.get(membership.user_id) ?? [];
+    rows.push(membership);
+    byUser.set(membership.user_id, rows);
+  }
+  const duplicateMembership = [...byUser.values()].some((rows) => rows.length !== 1);
+  const currentRows = byUser.get(userId) ?? [];
+  if (currentRows.length !== 1 || !isRole(currentRows[0]?.role ?? "")) {
+    warnings.push("OWNER_MEMBERSHIP_MISSING", "GROUP_ROLE_INCONSISTENCY", "DATA_INCOMPLETE");
+    return mcpError(
+      "GROUP_DATA_INCOMPLETE",
+      "Os dados de associa\xE7\xE3o do grupo n\xE3o permitem confirmar a identidade atual com seguran\xE7a."
+    );
+  }
+  const currentMembership = currentRows[0];
+  const ownerRows = memberships.filter((membership) => membership.role === "owner");
+  const ownershipConsistent = ownerRows.length === 1 && ownerRows[0].user_id === group.created_by;
+  if (!ownershipConsistent || duplicateMembership) {
+    warnings.push("GROUP_ROLE_INCONSISTENCY", "DATA_INCOMPLETE");
+  }
+  if (!byUser.has(group.created_by)) {
+    warnings.push("OWNER_MEMBERSHIP_MISSING", "DATA_INCOMPLETE");
+  }
+  if (group.is_active !== true) warnings.push("GROUP_INACTIVE");
+  if (group.updated_at === null || group.is_active === null) warnings.push("DATA_INCOMPLETE");
+  const userIds = [...byUser.keys()];
+  let profiles = [];
+  if (userIds.length > 0) {
+    const { data, error } = await supabase.from("profiles").select("user_id,display_name").in("user_id", userIds).limit(GROUP_ANALYSIS_MAX_MEMBERS);
+    if (error) return mcpError("READ_FAILED");
+    profiles = data ?? [];
+  }
+  const names = new Map(profiles.map((profile) => [profile.user_id, profile.display_name]));
+  const identities = /* @__PURE__ */ new Map();
+  for (const [memberUserId, rows] of byUser) {
+    const membership = [...rows].sort(membershipOrder)[0];
+    const displayName = names.get(memberUserId)?.trim();
+    if (!displayName) warnings.push("MEMBER_PROFILE_INCOMPLETE", "DATA_INCOMPLETE");
+    identities.set(memberUserId, {
+      internal_key: memberUserId,
+      membership_id: membership.id,
+      display_name: displayName || "Membro",
+      role: isRole(membership.role) ? membership.role : null,
+      is_current_user: memberUserId === userId,
+      historical: false,
+      profile_complete: Boolean(displayName)
+    });
+  }
+  return {
+    group,
+    memberships,
+    identities,
+    currentMembership,
+    warnings: uniqueWarnings(warnings),
+    dataComplete: !warnings.includes("DATA_INCOMPLETE")
+  };
+}
+function historicalIdentity(internalKey, currentUserId) {
+  return {
+    internal_key: internalKey,
+    membership_id: null,
+    display_name: "Membro anterior",
+    role: null,
+    is_current_user: internalKey === currentUserId,
+    historical: true,
+    profile_complete: false
+  };
+}
+function memberFor(map, identity) {
+  const existing = map.get(identity.internal_key);
+  if (existing) return existing;
+  const warnings = [];
+  if (identity.historical) warnings.push("HISTORICAL_MEMBER_UNRESOLVED", "DATA_INCOMPLETE");
+  if (!identity.profile_complete && !identity.historical) {
+    warnings.push("MEMBER_PROFILE_INCOMPLETE", "DATA_INCOMPLETE");
+  }
+  const created = {
+    internal_key: identity.internal_key,
+    membership_id: identity.membership_id,
+    display_name: identity.display_name,
+    role: identity.role,
+    is_current_user: identity.is_current_user,
+    paid_cents: 0,
+    allocated_cents: 0,
+    expense_count_paid: 0,
+    split_count: 0,
+    warnings
+  };
+  map.set(identity.internal_key, created);
+  return created;
+}
+function allocationFacts(expense, splits) {
+  const warnings = [];
+  const expenseCents = moneyToCents(expense.amount);
+  const parsedSplits = splits.map((split) => ({
+    split,
+    cents: moneyToCents(split.share_amount)
+  }));
+  if (expenseCents === null || expenseCents < 0 || parsedSplits.some((item) => item.cents === null || (item.cents ?? 0) < 0)) {
+    warnings.push("SPLIT_AMOUNT_INVALID", "DATA_INCOMPLETE");
+  }
+  const allocatedCents = parsedSplits.reduce(
+    (total, item) => total + Math.max(item.cents ?? 0, 0),
+    0
+  );
+  const amountCents = Math.max(expenseCents ?? 0, 0);
+  let status;
+  if (splits.length === 0) {
+    status = "no_split_rows";
+    warnings.push("SPLIT_DETAILS_MISSING", "DATA_INCOMPLETE");
+  } else if (!isSplitType(expense.split_type)) {
+    status = "inconsistent";
+    warnings.push("DATA_INCOMPLETE");
+  } else if (allocatedCents < amountCents) {
+    status = "under_allocated";
+    warnings.push("SPLIT_UNDER_ALLOCATED", "DATA_INCOMPLETE");
+  } else if (allocatedCents > amountCents) {
+    status = "over_allocated";
+    warnings.push("SPLIT_OVER_ALLOCATED", "DATA_INCOMPLETE");
+  } else {
+    status = "balanced";
+  }
+  if (expense.split_type === "percentage") {
+    const percentages = splits.map(
+      (split) => split.share_percentage === null ? null : percentageToUnits(split.share_percentage)
+    );
+    const invalid = percentages.some((percentage) => percentage === null || percentage < 0 || percentage > 1e6) || percentages.reduce((total, percentage) => total + (percentage ?? 0), 0) !== 1e6;
+    if (invalid) {
+      warnings.push("SPLIT_PERCENTAGE_INVALID", "DATA_INCOMPLETE");
+      status = "inconsistent";
+    }
+  }
+  return {
+    expenseCents: amountCents,
+    allocatedCents,
+    unallocatedCents: Math.max(amountCents - allocatedCents, 0),
+    differenceCents: allocatedCents - amountCents,
+    status,
+    parsedSplits,
+    warnings: uniqueWarnings(warnings)
+  };
+}
+async function loadGroupAnalysis(input, ctx, userId) {
+  const periodResult = resolvePeriod(input.date_from, input.date_to);
+  if (!periodResult.ok) return periodResult.error;
+  const loaded = await loadGroup(input.group_id, userId, ctx);
+  if ("isError" in loaded) return loaded;
+  const supabase = supabaseForUser(ctx);
+  const { data: rawExpenses, error: expenseError } = await supabase.from("expenses").select(
+    "id,user_id,description,amount,expense_date,shared_group_id,is_shared,paid_by,split_type,installment_number,total_installments,updated_at"
+  ).eq("shared_group_id", input.group_id).gte("expense_date", periodResult.period.date_from).lte("expense_date", periodResult.period.date_to).limit(GROUP_ANALYSIS_MAX_EXPENSES + 1);
+  if (expenseError) return mcpError("READ_FAILED");
+  const allExpenses = rawExpenses ?? [];
+  if (allExpenses.length > GROUP_ANALYSIS_MAX_EXPENSES) {
+    return mcpError("RESULT_SET_TOO_LARGE");
+  }
+  const expenses = allExpenses.filter(
+    (expense) => expense.shared_group_id === input.group_id && expense.is_shared
+  );
+  const expenseIds = expenses.map((expense) => expense.id);
+  let splits = [];
+  if (expenseIds.length > 0) {
+    const { data, error } = await supabase.from("expense_splits").select("id,expense_id,user_id,share_amount,share_percentage,created_at").in("expense_id", expenseIds).limit(GROUP_ANALYSIS_MAX_SPLITS + 1);
+    if (error) return mcpError("READ_FAILED");
+    splits = data ?? [];
+    if (splits.length > GROUP_ANALYSIS_MAX_SPLITS) {
+      return mcpError("RESULT_SET_TOO_LARGE");
+    }
+  }
+  const splitByExpense = /* @__PURE__ */ new Map();
+  for (const split of splits) {
+    const rows = splitByExpense.get(split.expense_id) ?? [];
+    rows.push(split);
+    splitByExpense.set(split.expense_id, rows);
+  }
+  const members = /* @__PURE__ */ new Map();
+  for (const identity of loaded.identities.values()) memberFor(members, identity);
+  const warnings = [...loaded.warnings];
+  let totalExpenseCents = 0;
+  let totalAllocatedCents = 0;
+  let totalUnallocatedCents = 0;
+  let splitExpenseCount = 0;
+  let incompleteExpenseCount = 0;
+  for (const expense of expenses) {
+    const expenseSplits = splitByExpense.get(expense.id) ?? [];
+    const facts = allocationFacts(expense, expenseSplits);
+    warnings.push(...facts.warnings);
+    totalExpenseCents += facts.expenseCents;
+    totalAllocatedCents += facts.allocatedCents;
+    totalUnallocatedCents += facts.unallocatedCents;
+    if (expenseSplits.length > 0) splitExpenseCount += 1;
+    if (facts.status !== "balanced") incompleteExpenseCount += 1;
+    const payerKey = expense.paid_by ?? expense.user_id;
+    const payerIdentity = loaded.identities.get(payerKey) ?? historicalIdentity(payerKey, userId);
+    const payer = memberFor(members, payerIdentity);
+    payer.paid_cents += facts.expenseCents;
+    payer.expense_count_paid += 1;
+    if (payerIdentity.historical) {
+      warnings.push("PAYER_UNRESOLVED", "HISTORICAL_MEMBER_UNRESOLVED", "DATA_INCOMPLETE");
+      incompleteExpenseCount += facts.status === "balanced" ? 1 : 0;
+    }
+    for (const parsed of facts.parsedSplits) {
+      const identity = loaded.identities.get(parsed.split.user_id) ?? historicalIdentity(parsed.split.user_id, userId);
+      const member = memberFor(members, identity);
+      member.allocated_cents += Math.max(parsed.cents ?? 0, 0);
+      member.split_count += 1;
+      if (identity.historical) {
+        warnings.push("HISTORICAL_MEMBER_UNRESOLVED", "DATA_INCOMPLETE");
+      }
+    }
+  }
+  if (expenses.length === 0) warnings.push("NO_SHARED_EXPENSES");
+  const orderedMembers = [...members.values()].sort(
+    (left, right) => (left.membership_id ?? `~${left.internal_key}`).localeCompare(
+      right.membership_id ?? `~${right.internal_key}`
+    )
+  );
+  const allWarnings = uniqueWarnings([
+    ...warnings,
+    ...orderedMembers.flatMap((member) => member.warnings)
+  ]);
+  return {
+    loaded,
+    period: periodResult.period,
+    members: orderedMembers,
+    totalExpenseCents,
+    totalAllocatedCents,
+    totalUnallocatedCents,
+    expenseCount: expenses.length,
+    splitExpenseCount,
+    incompleteExpenseCount,
+    warnings: allWarnings,
+    dataComplete: !allWarnings.includes("DATA_INCOMPLETE")
+  };
+}
+function publicGroup(loaded) {
+  return {
+    id: loaded.group.id,
+    name: loaded.group.name,
+    is_active: loaded.group.is_active === true,
+    current_user_role: loaded.currentMembership.role,
+    updated_at: loaded.group.updated_at
+  };
+}
+function publicMember(member) {
+  return {
+    membership_id: member.membership_id,
+    display_name: member.display_name,
+    role: member.role,
+    is_current_user: member.is_current_user,
+    paid_amount: centsToMoney(member.paid_cents),
+    allocated_amount: centsToMoney(member.allocated_cents),
+    net_balance: centsToMoney(member.paid_cents - member.allocated_cents),
+    expense_count_paid: member.expense_count_paid,
+    split_count: member.split_count,
+    warnings: uniqueWarnings(member.warnings)
+  };
+}
+function summaryContent(result) {
+  const members = result.members.map(
+    (member, index) => `${index + 1}. membership_id=${member.membership_id ?? "indispon\xEDvel"}; nome=${member.display_name}; papel=${member.role ?? "hist\xF3rico"}; is_current_user=${member.is_current_user}; pagou=${member.paid_amount}; atribu\xEDdo=${member.allocated_amount}; saldo_l\xEDquido=${member.net_balance}; despesas_pagas=${member.expense_count_paid}; rateios=${member.split_count}`
+  ).join("\n");
+  return `Consulta somente leitura do grupo ${result.group.name} (${result.group.id}), per\xEDodo ${result.period.date_from} a ${result.period.date_to}, America/Sao_Paulo. Despesas compartilhadas=${result.expense_count}; total=${result.total_group_expenses}; total_rateado=${result.total_allocated}; n\xE3o_rateado=${result.total_unallocated}; soma_saldos=${result.net_balance_sum}; despesas_incompletas=${result.incomplete_expense_count}; data_complete=${result.data_complete}; warnings=${result.warnings.join(",") || "nenhum"}.
+${members || "Nenhum membro com identidade p\xFAblica dispon\xEDvel."}
+Nenhuma transa\xE7\xE3o, despesa, associa\xE7\xE3o ou rateio foi criado ou alterado.`;
+}
+function buildSummaryResult(analysis) {
+  const members = analysis.members.map(publicMember);
+  const memberPaidCents = analysis.members.reduce((total, member) => total + member.paid_cents, 0);
+  const memberAllocatedCents = analysis.members.reduce(
+    (total, member) => total + member.allocated_cents,
+    0
+  );
+  return {
+    resource_type: "group_member_summary",
+    group: publicGroup(analysis.loaded),
+    period: analysis.period,
+    total_group_expenses: centsToMoney(analysis.totalExpenseCents),
+    total_allocated: centsToMoney(analysis.totalAllocatedCents),
+    total_unallocated: centsToMoney(analysis.totalUnallocatedCents),
+    member_paid_total: centsToMoney(memberPaidCents),
+    member_allocated_total: centsToMoney(memberAllocatedCents),
+    net_balance_sum: centsToMoney(memberPaidCents - memberAllocatedCents),
+    expense_count: analysis.expenseCount,
+    split_expense_count: analysis.splitExpenseCount,
+    incomplete_expense_count: analysis.incompleteExpenseCount,
+    members,
+    warnings: analysis.warnings,
+    data_complete: analysis.dataComplete,
+    generated_at: (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+async function getGroupMemberSummary(rawInput, ctx) {
+  const parsed = groupAnalysisInputSchema.safeParse(rawInput);
+  if (!parsed.success) return mcpError("INVALID_INPUT");
+  const userId = ctx.getUserId();
+  if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
+  try {
+    const analysis = await loadGroupAnalysis(parsed.data, ctx, userId);
+    if ("isError" in analysis) return analysis;
+    const result = buildSummaryResult(analysis);
+    return {
+      content: [{ type: "text", text: summaryContent(result) }],
+      structuredContent: result
+    };
+  } catch {
+    return mcpError("READ_FAILED");
+  }
+}
+function suggestSettlementTransfers(balances) {
+  const debtors = balances.filter((balance) => balance.net_cents < 0).map((balance) => ({ ...balance, remaining: -balance.net_cents })).sort(
+    (left, right) => right.remaining - left.remaining || left.membership_id.localeCompare(right.membership_id)
+  );
+  const creditors = balances.filter((balance) => balance.net_cents > 0).map((balance) => ({ ...balance, remaining: balance.net_cents })).sort(
+    (left, right) => right.remaining - left.remaining || left.membership_id.localeCompare(right.membership_id)
+  );
+  const transfers = [];
+  let debtorIndex = 0;
+  let creditorIndex = 0;
+  while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
+    const debtor = debtors[debtorIndex];
+    const creditor = creditors[creditorIndex];
+    const amount = Math.min(debtor.remaining, creditor.remaining);
+    if (amount > 0 && debtor.membership_id !== creditor.membership_id) {
+      transfers.push({
+        from_membership_id: debtor.membership_id,
+        from_display_name: debtor.display_name,
+        to_membership_id: creditor.membership_id,
+        to_display_name: creditor.display_name,
+        amount_cents: amount
+      });
+    }
+    debtor.remaining -= amount;
+    creditor.remaining -= amount;
+    if (debtor.remaining === 0) debtorIndex += 1;
+    if (creditor.remaining === 0) creditorIndex += 1;
+  }
+  const totalCreditCents = balances.reduce(
+    (total, balance) => total + Math.max(balance.net_cents, 0),
+    0
+  );
+  const totalDebitCents = balances.reduce(
+    (total, balance) => total + Math.max(-balance.net_cents, 0),
+    0
+  );
+  const totalTransferCents = transfers.reduce(
+    (total, transfer) => total + transfer.amount_cents,
+    0
+  );
+  return {
+    transfers,
+    totalCreditCents,
+    totalDebitCents,
+    totalTransferCents,
+    residualCents: Math.abs(totalCreditCents - totalDebitCents)
+  };
+}
+function settlementContent(result) {
+  const balances = result.member_balances.map(
+    (member) => `${member.display_name} (${member.membership_id ?? "identidade hist\xF3rica"}): pagou=${member.paid_amount}; atribu\xEDdo=${member.allocated_amount}; saldo=${member.net_balance}`
+  ).join("\n");
+  const transfers = result.transfers.map(
+    (transfer, index) => `${index + 1}. ${transfer.from_display_name} transfere ${transfer.amount} para ${transfer.to_display_name}`
+  ).join("\n");
+  return `Sugest\xF5es matem\xE1ticas de acerto para ${result.group.name}, per\xEDodo ${result.period.date_from} a ${result.period.date_to}. Status=${result.settlement_status}; total_sugerido=${result.total_to_transfer}; residual=${result.residual_amount}; data_complete=${result.data_complete}; warnings=${result.warnings.join(",") || "nenhum"}.
+Saldos:
+${balances || "Nenhum saldo."}
+Sugest\xF5es:
+${transfers || "Nenhuma transfer\xEAncia sugerida."}
+S\xE3o apenas sugest\xF5es matem\xE1ticas, n\xE3o cobran\xE7as obrigat\xF3rias. Nenhuma transfer\xEAncia foi realizada, nenhum pagamento foi confirmado e nenhuma transa\xE7\xE3o ou despesa foi criada ou alterada.`;
+}
+async function getGroupSettlement(rawInput, ctx) {
+  const parsed = groupAnalysisInputSchema.safeParse(rawInput);
+  if (!parsed.success) return mcpError("INVALID_INPUT");
+  const userId = ctx.getUserId();
+  if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
+  try {
+    const analysis = await loadGroupAnalysis(parsed.data, ctx, userId);
+    if ("isError" in analysis) return analysis;
+    const memberBalances = analysis.members.map(publicMember);
+    const resolvable = analysis.members.every((member) => member.membership_id !== null);
+    const sourceBalanced = analysis.totalExpenseCents === analysis.totalAllocatedCents && analysis.dataComplete;
+    let settlement = {
+      transfers: [],
+      totalCreditCents: analysis.members.reduce(
+        (total, member) => total + Math.max(member.paid_cents - member.allocated_cents, 0),
+        0
+      ),
+      totalDebitCents: analysis.members.reduce(
+        (total, member) => total + Math.max(member.allocated_cents - member.paid_cents, 0),
+        0
+      ),
+      totalTransferCents: 0,
+      residualCents: Math.abs(analysis.totalExpenseCents - analysis.totalAllocatedCents)
+    };
+    let status;
+    const warnings = [...analysis.warnings];
+    if (analysis.expenseCount === 0) {
+      status = "no_shared_expenses";
+    } else if (!resolvable) {
+      status = "incomplete_data";
+      warnings.push("SETTLEMENT_NOT_BALANCED", "DATA_INCOMPLETE");
+    } else if (!sourceBalanced) {
+      status = "unbalanced_source_data";
+      warnings.push("SETTLEMENT_NOT_BALANCED", "DATA_INCOMPLETE");
+    } else {
+      settlement = suggestSettlementTransfers(
+        analysis.members.map((member) => ({
+          membership_id: member.membership_id,
+          display_name: member.display_name,
+          net_cents: member.paid_cents - member.allocated_cents
+        }))
+      );
+      if (settlement.transfers.length > GROUP_ANALYSIS_MAX_TRANSFERS) {
+        return mcpError("RESULT_SET_TOO_LARGE");
+      }
+      status = settlement.transfers.length === 0 ? "settled" : "transfers_suggested";
+    }
+    if (settlement.residualCents > 0) warnings.push("RESIDUAL_AMOUNT_REMAINS");
+    const transfers = settlement.transfers.map((transfer) => ({
+      from_membership_id: transfer.from_membership_id,
+      from_display_name: transfer.from_display_name,
+      to_membership_id: transfer.to_membership_id,
+      to_display_name: transfer.to_display_name,
+      amount: centsToMoney(transfer.amount_cents)
+    }));
+    const result = {
+      resource_type: "group_settlement",
+      group: publicGroup(analysis.loaded),
+      period: analysis.period,
+      member_balances: memberBalances,
+      transfers,
+      transfer_count: transfers.length,
+      total_to_transfer: centsToMoney(settlement.totalTransferCents),
+      total_credit: centsToMoney(settlement.totalCreditCents),
+      total_debit: centsToMoney(settlement.totalDebitCents),
+      residual_amount: centsToMoney(settlement.residualCents),
+      settlement_status: status,
+      warnings: uniqueWarnings(warnings),
+      data_complete: analysis.dataComplete && resolvable && sourceBalanced,
+      generated_at: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    return {
+      content: [{ type: "text", text: settlementContent(result) }],
+      structuredContent: result
+    };
+  } catch {
+    return mcpError("READ_FAILED");
+  }
+}
+async function getExpenseSplitDetails(rawInput, ctx) {
+  const parsed = expenseDetailsInputSchema.safeParse(rawInput);
+  if (!parsed.success) return mcpError("INVALID_INPUT");
+  const userId = ctx.getUserId();
+  if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
+  try {
+    const supabase = supabaseForUser(ctx);
+    const { data: rawExpense, error: expenseError } = await supabase.from("expenses").select(
+      "id,user_id,description,amount,expense_date,shared_group_id,is_shared,paid_by,split_type,installment_number,total_installments,updated_at"
+    ).eq("id", parsed.data.expense_id).maybeSingle();
+    if (expenseError) return mcpError("READ_FAILED");
+    if (!rawExpense) return mcpError("RESOURCE_NOT_FOUND");
+    const expense = rawExpense;
+    if (!expense.shared_group_id || !expense.is_shared) {
+      return mcpError(
+        "EXPENSE_NOT_SHARED",
+        "A despesa acess\xEDvel n\xE3o possui um rateio compartilhado."
+      );
+    }
+    const loaded = await loadGroup(expense.shared_group_id, userId, ctx);
+    if ("isError" in loaded) return loaded;
+    const { data: rawSplits, error: splitError } = await supabase.from("expense_splits").select("id,expense_id,user_id,share_amount,share_percentage,created_at").eq("expense_id", expense.id).limit(GROUP_ANALYSIS_MAX_MEMBERS + 1);
+    if (splitError) return mcpError("READ_FAILED");
+    const splits = rawSplits ?? [];
+    if (splits.length > GROUP_ANALYSIS_MAX_MEMBERS) {
+      return mcpError("RESULT_SET_TOO_LARGE");
+    }
+    const facts = allocationFacts(expense, splits);
+    const warnings = [...loaded.warnings, ...facts.warnings];
+    const payerKey = expense.paid_by ?? expense.user_id;
+    const payer = loaded.identities.get(payerKey) ?? historicalIdentity(payerKey, userId);
+    if (payer.historical) {
+      warnings.push("PAYER_UNRESOLVED", "HISTORICAL_MEMBER_UNRESOLVED", "DATA_INCOMPLETE");
+    }
+    const participants = facts.parsedSplits.map(({ split, cents }) => {
+      const identity = loaded.identities.get(split.user_id) ?? historicalIdentity(split.user_id, userId);
+      if (identity.historical) {
+        warnings.push("HISTORICAL_MEMBER_UNRESOLVED", "DATA_INCOMPLETE");
+      }
+      if (!identity.profile_complete && !identity.historical) {
+        warnings.push("MEMBER_PROFILE_INCOMPLETE", "DATA_INCOMPLETE");
+      }
+      return {
+        membership_id: identity.membership_id,
+        display_name: identity.display_name,
+        is_current_user: identity.is_current_user,
+        allocated_amount: centsToMoney(Math.max(cents ?? 0, 0)),
+        percentage: expense.split_type === "percentage" && split.share_percentage !== null ? Number(split.share_percentage) : null,
+        allocation_source: "persisted_split",
+        _sort: split.id
+      };
+    }).sort(
+      (left, right) => (left.membership_id ?? `~${left._sort}`).localeCompare(
+        right.membership_id ?? `~${right._sort}`
+      )
+    ).map(({ _sort, ...participant }) => participant);
+    const finalWarnings = uniqueWarnings(warnings);
+    const result = {
+      resource_type: "expense_split_details",
+      expense: {
+        id: expense.id,
+        description: expense.description,
+        amount: centsToMoney(facts.expenseCents),
+        expense_date: expense.expense_date,
+        split_type: isSplitType(expense.split_type) ? expense.split_type : "unknown",
+        group_id: loaded.group.id,
+        group_name: loaded.group.name,
+        paid_by_membership_id: payer.membership_id,
+        paid_by_display_name: payer.display_name,
+        installment_number: expense.installment_number,
+        total_installments: expense.total_installments,
+        updated_at: expense.updated_at
+      },
+      participants,
+      participant_count: participants.length,
+      allocated_amount_total: centsToMoney(facts.allocatedCents),
+      unallocated_amount: centsToMoney(facts.unallocatedCents),
+      allocation_difference: centsToMoney(facts.differenceCents),
+      allocation_status: facts.status,
+      warnings: finalWarnings,
+      data_complete: !finalWarnings.includes("DATA_INCOMPLETE"),
+      generated_at: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    const participantText = participants.map(
+      (participant, index) => `${index + 1}. membership_id=${participant.membership_id ?? "indispon\xEDvel"}; nome=${participant.display_name}; is_current_user=${participant.is_current_user}; valor_atribu\xEDdo=${participant.allocated_amount}; percentual=${participant.percentage ?? "n\xE3o aplic\xE1vel"}`
+    ).join("\n");
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Consulta somente leitura do rateio da despesa ${result.expense.description} (${result.expense.id}), grupo ${result.expense.group_name} (${result.expense.group_id}). Valor=${result.expense.amount}; data=${result.expense.expense_date}; tipo=${result.expense.split_type}; pagador=${result.expense.paid_by_display_name}; paid_by_membership_id=${result.expense.paid_by_membership_id ?? "indispon\xEDvel"}; participantes=${result.participant_count}; total_atribu\xEDdo=${result.allocated_amount_total}; n\xE3o_atribu\xEDdo=${result.unallocated_amount}; diferen\xE7a=${result.allocation_difference}; status=${result.allocation_status}; data_complete=${result.data_complete}; warnings=${result.warnings.join(",") || "nenhum"}.
+${participantText || "Nenhuma linha de rateio persistida."}
+Nenhum dado foi alterado.`
+        }
+      ],
+      structuredContent: result
+    };
+  } catch {
+    return mcpError("READ_FAILED");
+  }
+}
+
+// src/lib/mcp/shared/installment-series-read.ts
+var INSTALLMENT_SERIES_MAX_ROWS = 48;
+var INSTALLMENT_SERIES_INTEGRITY_STATUSES = [
+  "complete",
+  "incomplete",
+  "inconsistent",
+  "legacy_reference_missing"
+];
+var INSTALLMENT_SERIES_READ_WARNINGS = [
+  "INSTALLMENT_SERIES_INCOMPLETE",
+  "INSTALLMENT_TOTAL_INCONSISTENT",
+  "INSTALLMENT_TOTAL_INVALID",
+  "INSTALLMENT_NUMBER_MISSING",
+  "INSTALLMENT_NUMBER_INVALID",
+  "INSTALLMENT_NUMBER_DUPLICATE",
+  "INSTALLMENT_NUMBER_OUT_OF_RANGE",
+  "INSTALLMENT_SERIES_REFERENCE_INCONSISTENT",
+  "INSTALLMENT_DATE_INVALID",
+  "INSTALLMENT_VERSION_MISSING",
+  "INSTALLMENT_CARD_INCONSISTENT",
+  "INSTALLMENT_GROUP_SCOPE_INCONSISTENT",
+  "INSTALLMENT_DESCRIPTION_VARIES",
+  "INSTALLMENT_CATEGORY_VARIES",
+  "INSTALLMENT_PAYMENT_METHOD_VARIES",
+  "INSTALLMENT_AMOUNT_INVALID",
+  "INSTALLMENT_MATERIALIZED_COUNT_MISMATCH"
+];
+var installmentSeriesInputSchema = z18.object({
+  transaction_type: z18.enum(["expense", "income"]),
+  installment_group_id: z18.string().uuid().optional(),
+  transaction_id: z18.string().uuid().optional()
+}).strict().refine(
+  (input) => Number(input.installment_group_id !== void 0) + Number(input.transaction_id !== void 0) === 1,
+  { message: "Informe exatamente uma refer\xEAncia da s\xE9rie." }
+);
+var nullableUuid = z18.string().uuid().nullable();
+var nullableInteger = z18.number().int().nullable();
+var nullableText = z18.string().nullable();
+var installmentSeriesWarningSchema = z18.enum(
+  INSTALLMENT_SERIES_READ_WARNINGS
+);
+var installmentCommonSchema = {
+  id: z18.string().uuid(),
+  installment_group_id: nullableUuid,
+  installment_number: nullableInteger,
+  total_installments: nullableInteger,
+  amount: z18.number().nullable(),
+  transaction_date: nullableText,
+  description: z18.string(),
+  shared_group_id: nullableUuid,
+  created_at: nullableText,
+  updated_at: nullableText
+};
+var expenseSeriesInstallmentSchema = z18.object({
+  ...installmentCommonSchema,
+  category_id: nullableUuid,
+  card_id: nullableUuid,
+  payment_method: z18.enum(["pix", "credit", "debit", "cash"]).nullable()
+}).strict();
+var incomeSeriesInstallmentSchema = z18.object({
+  ...installmentCommonSchema,
+  income_category_id: nullableUuid
+}).strict();
+var seriesCommonSchema = {
+  installment_group_id: z18.string().uuid(),
+  materialized_installment_count: z18.number().int().nonnegative(),
+  declared_total_installments: nullableInteger,
+  observed_total_installments: z18.array(z18.number().int()),
+  first_installment_number: nullableInteger,
+  last_installment_number: nullableInteger,
+  first_installment_date: nullableText,
+  last_installment_date: nullableText,
+  total_series_amount: z18.number(),
+  average_installment_amount: z18.number().nullable(),
+  currency: z18.literal("BRL"),
+  missing_installment_numbers: z18.array(z18.number().int().positive()),
+  duplicate_installment_numbers: z18.array(z18.number().int()),
+  out_of_range_installment_numbers: z18.array(z18.number().int()),
+  integrity_status: z18.enum(INSTALLMENT_SERIES_INTEGRITY_STATUSES),
+  is_complete: z18.boolean(),
+  shared_group_id: nullableUuid,
+  warnings: z18.array(installmentSeriesWarningSchema)
+};
+var expenseInstallmentSeriesSummarySchema = z18.object({
+  ...seriesCommonSchema,
+  transaction_type: z18.literal("expense"),
+  card_id: nullableUuid
+}).strict();
+var incomeInstallmentSeriesSummarySchema = z18.object({
+  ...seriesCommonSchema,
+  transaction_type: z18.literal("income")
+}).strict();
+var installmentSeriesOutputSchema = z18.object({
+  resource_type: z18.literal("installment_series"),
+  transaction_type: z18.enum(["expense", "income"]),
+  installment_group_id: z18.string().uuid(),
+  series: z18.union([
+    expenseInstallmentSeriesSummarySchema,
+    incomeInstallmentSeriesSummarySchema
+  ]),
+  installments: z18.array(
+    z18.union([expenseSeriesInstallmentSchema, incomeSeriesInstallmentSchema])
+  ),
+  warnings: z18.array(installmentSeriesWarningSchema),
+  data_complete: z18.boolean(),
+  generated_at: z18.string()
+}).strict();
+function uniqueSorted(values) {
+  return [...new Set(values)].sort(
+    (left, right) => typeof left === "number" && typeof right === "number" ? left - right : String(left).localeCompare(String(right))
+  );
+}
+function distinctKey(values) {
+  return uniqueSorted(values.map((value) => value ?? "__NULL__"));
+}
+function amountToCents(value) {
+  const text = String(value).trim();
+  const match = /^(-?)(\d+)(?:\.(\d+))?$/u.exec(text);
+  if (!match) return null;
+  const whole = Number(match[2]);
+  if (!Number.isSafeInteger(whole)) return null;
+  const fraction = match[3] ?? "";
+  const centDigits = fraction.slice(0, 2).padEnd(2, "0");
+  let absolute = whole * 100 + Number(centDigits);
+  if (fraction.length > 2 && Number(fraction[2]) >= 5) absolute += 1;
+  if (!Number.isSafeInteger(absolute)) return null;
+  return match[1] === "-" ? -absolute : absolute;
+}
+function validInstallmentNumber(value) {
+  return value !== null && Number.isInteger(value) && value > 0;
+}
+function rowDate(type, row) {
+  const raw = type === "expense" ? row.expense_date : row.income_date;
+  if (!raw) return null;
+  if (isValidIsoDate(raw)) return raw;
+  if (type === "expense") return raw;
+  const instant = new Date(raw);
+  if (Number.isNaN(instant.getTime())) return raw;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: DEFAULT_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(instant);
+  const part = (name) => parts.find((candidate) => candidate.type === name)?.value;
+  const year = part("year");
+  const month = part("month");
+  const day = part("day");
+  return year && month && day ? `${year}-${month}-${day}` : raw;
+}
+function rowOrder(type, left, right) {
+  const leftNumber = validInstallmentNumber(left.installment_number) ? left.installment_number : Number.MAX_SAFE_INTEGER;
+  const rightNumber = validInstallmentNumber(right.installment_number) ? right.installment_number : Number.MAX_SAFE_INTEGER;
+  return leftNumber - rightNumber || (rowDate(type, left) ?? "").localeCompare(rowDate(type, right) ?? "") || left.id.localeCompare(right.id);
+}
+function warningPush(warnings, warning) {
+  if (!warnings.includes(warning)) warnings.push(warning);
+}
+function mappedInstallment(type, row, amountCents) {
+  const common2 = {
+    id: row.id,
+    installment_group_id: row.installment_group_id,
+    installment_number: row.installment_number,
+    total_installments: row.total_installments,
+    amount: amountCents === null ? null : centsToMoney(amountCents),
+    transaction_date: rowDate(type, row),
+    description: row.description,
+    shared_group_id: row.shared_group_id,
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  };
+  return type === "expense" ? {
+    ...common2,
+    category_id: row.category_id ?? null,
+    card_id: row.card_id ?? null,
+    payment_method: row.payment_method ?? null
+  } : {
+    ...common2,
+    income_category_id: row.income_category_id ?? null
+  };
+}
+function analyzeInstallmentSeries(type, installmentGroupId, sourceRows) {
+  const rows = [...sourceRows].sort(
+    (left, right) => rowOrder(type, left, right)
+  );
+  const warnings = [];
+  if (rows.length === 0) {
+    warningPush(warnings, "INSTALLMENT_SERIES_INCOMPLETE");
+    warningPush(warnings, "INSTALLMENT_MATERIALIZED_COUNT_MISMATCH");
+  }
+  const observedTotals = uniqueSorted(
+    rows.map((row) => row.total_installments).filter((value) => value !== null && Number.isInteger(value))
+  );
+  const validTotals = observedTotals.filter((value) => value >= 2);
+  const allTotalsValid = rows.length > 0 && rows.every(
+    (row) => row.total_installments !== null && Number.isInteger(row.total_installments) && row.total_installments >= 2
+  );
+  const declaredTotal = allTotalsValid && observedTotals.length === 1 && validTotals.length === 1 ? observedTotals[0] : null;
+  if (observedTotals.length > 1) {
+    warningPush(warnings, "INSTALLMENT_TOTAL_INCONSISTENT");
+  }
+  if (rows.some(
+    (row) => row.total_installments === null || !Number.isInteger(row.total_installments) || row.total_installments < 2
+  )) {
+    warningPush(warnings, "INSTALLMENT_TOTAL_INVALID");
+  }
+  const validNumbers = rows.map((row) => row.installment_number).filter(validInstallmentNumber);
+  if (rows.some((row) => row.installment_number === null)) {
+    warningPush(warnings, "INSTALLMENT_NUMBER_MISSING");
+  }
+  if (rows.some(
+    (row) => row.installment_number !== null && (!Number.isInteger(row.installment_number) || row.installment_number <= 0)
+  )) {
+    warningPush(warnings, "INSTALLMENT_NUMBER_INVALID");
+  }
+  const counts = /* @__PURE__ */ new Map();
+  for (const number of validNumbers) {
+    counts.set(number, (counts.get(number) ?? 0) + 1);
+  }
+  const duplicates = uniqueSorted(
+    [...counts.entries()].filter(([, count]) => count > 1).map(([number]) => number)
+  );
+  if (duplicates.length > 0) warningPush(warnings, "INSTALLMENT_NUMBER_DUPLICATE");
+  const outOfRange = uniqueSorted(
+    rows.filter(
+      (row) => validInstallmentNumber(row.installment_number) && row.total_installments !== null && Number.isInteger(row.total_installments) && row.total_installments >= 2 && row.installment_number > row.total_installments
+    ).map((row) => row.installment_number)
+  );
+  if (outOfRange.length > 0) {
+    warningPush(warnings, "INSTALLMENT_NUMBER_OUT_OF_RANGE");
+  }
+  const missing = declaredTotal === null ? [] : Array.from({ length: declaredTotal }, (_, index) => index + 1).filter(
+    (number) => !counts.has(number)
+  );
+  if (missing.length > 0) warningPush(warnings, "INSTALLMENT_SERIES_INCOMPLETE");
+  if (declaredTotal !== null && rows.length !== declaredTotal) {
+    warningPush(warnings, "INSTALLMENT_MATERIALIZED_COUNT_MISMATCH");
+    warningPush(warnings, "INSTALLMENT_SERIES_INCOMPLETE");
+  }
+  if (rows.some(
+    (row) => row.installment_group_id === null || row.installment_group_id !== installmentGroupId
+  )) {
+    warningPush(warnings, "INSTALLMENT_SERIES_REFERENCE_INCONSISTENT");
+  }
+  const validDates = rows.map((row) => rowDate(type, row)).filter((date) => isValidIsoDate(date));
+  if (rows.some((row) => !isValidIsoDate(rowDate(type, row)))) {
+    warningPush(warnings, "INSTALLMENT_DATE_INVALID");
+  }
+  if (rows.some((row) => !row.updated_at)) {
+    warningPush(warnings, "INSTALLMENT_VERSION_MISSING");
+  }
+  const sharedGroups = distinctKey(rows.map((row) => row.shared_group_id));
+  const sharedGroupId = sharedGroups.length === 1 && sharedGroups[0] !== "__NULL__" ? sharedGroups[0] : null;
+  if (sharedGroups.length > 1) {
+    warningPush(warnings, "INSTALLMENT_GROUP_SCOPE_INCONSISTENT");
+  }
+  const cardIds = type === "expense" ? distinctKey(rows.map((row) => row.card_id)) : [];
+  const cardId = cardIds.length === 1 && cardIds[0] !== "__NULL__" ? cardIds[0] : null;
+  if (type === "expense" && cardIds.length > 1) {
+    warningPush(warnings, "INSTALLMENT_CARD_INCONSISTENT");
+  }
+  const semanticDescriptions = rows.map(
+    (row) => row.description.replace(/\s*\(\d+\/\d+\)\s*$/u, "").trim()
+  );
+  if (distinctKey(semanticDescriptions).length > 1) {
+    warningPush(warnings, "INSTALLMENT_DESCRIPTION_VARIES");
+  }
+  const categoryValues = type === "expense" ? rows.map((row) => row.category_id) : rows.map((row) => row.income_category_id);
+  if (distinctKey(categoryValues).length > 1) {
+    warningPush(warnings, "INSTALLMENT_CATEGORY_VARIES");
+  }
+  if (type === "expense" && distinctKey(rows.map((row) => row.payment_method)).length > 1) {
+    warningPush(warnings, "INSTALLMENT_PAYMENT_METHOD_VARIES");
+  }
+  const cents = rows.map((row) => amountToCents(row.amount));
+  if (cents.some((value) => value === null)) {
+    warningPush(warnings, "INSTALLMENT_AMOUNT_INVALID");
+  }
+  const factualCents = cents.filter((value) => value !== null);
+  const totalCents = factualCents.reduce((total, value) => total + value, 0);
+  const averageCents = factualCents.length === rows.length && rows.length > 0 && totalCents % rows.length === 0 ? totalCents / rows.length : null;
+  const structuralWarnings = [
+    "INSTALLMENT_TOTAL_INCONSISTENT",
+    "INSTALLMENT_TOTAL_INVALID",
+    "INSTALLMENT_NUMBER_MISSING",
+    "INSTALLMENT_NUMBER_INVALID",
+    "INSTALLMENT_NUMBER_DUPLICATE",
+    "INSTALLMENT_NUMBER_OUT_OF_RANGE",
+    "INSTALLMENT_SERIES_REFERENCE_INCONSISTENT",
+    "INSTALLMENT_DATE_INVALID",
+    "INSTALLMENT_VERSION_MISSING",
+    "INSTALLMENT_CARD_INCONSISTENT",
+    "INSTALLMENT_GROUP_SCOPE_INCONSISTENT",
+    "INSTALLMENT_AMOUNT_INVALID"
+  ];
+  const inconsistent = warnings.some(
+    (warning) => structuralWarnings.includes(warning)
+  );
+  const incomplete = rows.length === 0 || missing.length > 0 || warnings.includes("INSTALLMENT_MATERIALIZED_COUNT_MISMATCH");
+  const integrityStatus = inconsistent ? "inconsistent" : incomplete ? "incomplete" : "complete";
+  const isComplete = integrityStatus === "complete";
+  const numbersForBounds = uniqueSorted(validNumbers);
+  const datesForBounds = uniqueSorted(validDates);
+  const commonSummary = {
+    installment_group_id: installmentGroupId,
+    transaction_type: type,
+    materialized_installment_count: rows.length,
+    declared_total_installments: declaredTotal,
+    observed_total_installments: observedTotals,
+    first_installment_number: numbersForBounds[0] ?? null,
+    last_installment_number: numbersForBounds.at(-1) ?? null,
+    first_installment_date: datesForBounds[0] ?? null,
+    last_installment_date: datesForBounds.at(-1) ?? null,
+    total_series_amount: centsToMoney(totalCents),
+    average_installment_amount: averageCents === null ? null : centsToMoney(averageCents),
+    currency: "BRL",
+    missing_installment_numbers: missing,
+    duplicate_installment_numbers: duplicates,
+    out_of_range_installment_numbers: outOfRange,
+    integrity_status: integrityStatus,
+    is_complete: isComplete,
+    shared_group_id: sharedGroupId,
+    warnings
+  };
+  const series = type === "expense" ? { ...commonSummary, card_id: cardId } : commonSummary;
+  return {
+    resource_type: "installment_series",
+    transaction_type: type,
+    installment_group_id: installmentGroupId,
+    series,
+    installments: rows.map(
+      (row, index) => mappedInstallment(type, row, cents[index])
+    ),
+    warnings,
+    data_complete: isComplete,
+    generated_at: (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+var EXPENSE_COLUMNS2 = "id,description,amount,expense_date,category_id,payment_method,card_id,installment_group_id,installment_number,total_installments,shared_group_id,created_at,updated_at";
+var INCOME_COLUMNS2 = "id,description,amount,income_date,income_category_id,installment_group_id,installment_number,total_installments,shared_group_id,created_at,updated_at";
+function referenceMissingError() {
+  return mcpError(
+    "INSTALLMENT_SERIES_REFERENCE_MISSING",
+    "A transa\xE7\xE3o acess\xEDvel declara parcelamento, mas n\xE3o possui installment_group_id. A s\xE9rie n\xE3o foi inferida e nenhuma altera\xE7\xE3o foi realizada."
+  );
+}
+async function getInstallmentSeries(rawInput, ctx) {
+  const parsed = installmentSeriesInputSchema.safeParse(rawInput);
+  if (!parsed.success) return mcpError("INVALID_INPUT");
+  if (!ctx.isAuthenticated() || !ctx.getUserId()) {
+    return mcpError("UNAUTHENTICATED");
+  }
+  const { transaction_type: type } = parsed.data;
+  const table = type === "expense" ? "expenses" : "incomes";
+  const columns = type === "expense" ? EXPENSE_COLUMNS2 : INCOME_COLUMNS2;
+  const supabase = supabaseForUser(ctx);
+  try {
+    let installmentGroupId = parsed.data.installment_group_id;
+    if (parsed.data.transaction_id) {
+      const { data: data2, error: error2 } = await supabase.from(table).select(columns).eq("id", parsed.data.transaction_id).maybeSingle();
+      if (error2) return mcpError("READ_FAILED");
+      if (!data2) return mcpError("RESOURCE_NOT_FOUND");
+      const reference = data2;
+      if (!hasInstallmentEvidence(reference)) {
+        return mcpError(
+          "TRANSACTION_NOT_INSTALLMENT",
+          "A transa\xE7\xE3o existe e \xE9 acess\xEDvel, mas n\xE3o pertence a uma s\xE9rie parcelada. Nenhuma altera\xE7\xE3o foi realizada."
+        );
+      }
+      if (!reference.installment_group_id) return referenceMissingError();
+      installmentGroupId = reference.installment_group_id;
+    }
+    if (!installmentGroupId) return mcpError("INVALID_INPUT");
+    const { data, error } = await supabase.from(table).select(columns).eq("installment_group_id", installmentGroupId).order("installment_number", { ascending: true, nullsFirst: false }).order(type === "expense" ? "expense_date" : "income_date", {
+      ascending: true
+    }).order("id", { ascending: true }).limit(INSTALLMENT_SERIES_MAX_ROWS + 1);
+    if (error) return mcpError("READ_FAILED");
+    const rows = data ?? [];
+    if (rows.length === 0) return mcpError("RESOURCE_NOT_FOUND");
+    if (rows.length > INSTALLMENT_SERIES_MAX_ROWS) {
+      return mcpError(
+        "RESULT_SET_TOO_LARGE",
+        `A s\xE9rie acess\xEDvel excede o limite comprovado de ${INSTALLMENT_SERIES_MAX_ROWS} linhas e n\xE3o foi analisada parcialmente. Revise a integridade da s\xE9rie. Nenhuma altera\xE7\xE3o foi realizada.`
+      );
+    }
+    const result = analyzeInstallmentSeries(type, installmentGroupId, rows);
+    const validated = installmentSeriesOutputSchema.safeParse(result);
+    if (!validated.success) return mcpError("INVALID_DATA");
+    const installments = validated.data.installments.map(
+      (item) => `id=${item.id}; parcela=${item.installment_number ?? "ausente"}/${item.total_installments ?? "ausente"}; data=${item.transaction_date ?? "inv\xE1lida"}; valor=${item.amount ?? "inv\xE1lido"}; updated_at=${item.updated_at ?? "ausente"}`
+    ).join("\n");
+    const summary = validated.data.series;
+    return {
+      content: [
+        {
+          type: "text",
+          text: `S\xE9rie parcelada de ${type === "expense" ? "despesa" : "receita"}; installment_group_id=${installmentGroupId}; materializadas=${summary.materialized_installment_count}; total_declarado=${summary.declared_total_installments ?? "inconsistente/ausente"}; per\xEDodo=${summary.first_installment_date ?? "indispon\xEDvel"} a ${summary.last_installment_date ?? "indispon\xEDvel"}; total_factual=${summary.total_series_amount} BRL; integridade=${summary.integrity_status}; lacunas=${JSON.stringify(summary.missing_installment_numbers)}; duplicidades=${JSON.stringify(summary.duplicate_installment_numbers)}; warnings=${JSON.stringify(summary.warnings)}.
+${installments}
+Consulta somente leitura. Nenhuma transa\xE7\xE3o foi criada, editada ou exclu\xEDda.`
+        }
+      ],
+      structuredContent: validated.data
+    };
+  } catch {
+    return mcpError("READ_FAILED");
+  }
+}
+
+// src/lib/mcp/tools/get-installment-series.ts
+import { z as z19 } from "npm:zod@^3.25.76";
+var get_installment_series_default = defineTool14({
+  name: "get_installment_series",
+  title: "Consultar s\xE9rie parcelada",
+  description: "L\xEA, sob RLS, todas as linhas acess\xEDveis de uma s\xE9rie parcelada de despesa ou receita, por installment_group_id ou transaction_id. Retorna IDs, datas, valores, vers\xF5es individuais e diagn\xF3stico factual de integridade; n\xE3o altera transa\xE7\xF5es.",
+  inputSchema: {
+    transaction_type: z19.enum(["expense", "income"]),
+    installment_group_id: z19.string().uuid().optional(),
+    transaction_id: z19.string().uuid().optional()
+  },
+  outputSchema: installmentSeriesOutputSchema.shape,
+  annotations: {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false
+  },
+  handler: getInstallmentSeries
+});
+
+// src/lib/mcp/tools/get-card-summary.ts
+import { defineTool as defineTool15 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z20 } from "npm:zod@^3.25.76";
 
 // src/utils/billing-period.ts
 import { addMonths, format } from "npm:date-fns@^3.6.0";
@@ -3970,67 +5146,67 @@ function resolveCardBillingPeriod(billingMonth, config2) {
 // src/lib/mcp/tools/get-card-summary.ts
 var HARD_CAP = 1e4;
 var BILLING_MONTH_RE2 = /^\d{4}-(0[1-9]|1[0-2])$/;
-var warningSchema2 = z17.enum(CARD_SUMMARY_WARNINGS);
-var cardSchema3 = z17.object({
-  id: z17.string().uuid(),
-  name: z17.string(),
-  card_type: z17.enum(["credit", "debit", "both"]),
-  is_active: z17.boolean(),
-  card_limit: z17.number().nullable(),
-  opening_day: z17.number().int().nullable(),
-  closing_day: z17.number().int().nullable(),
-  due_day: z17.number().int().nullable(),
-  days_before_due: z17.number().int().nullable()
+var warningSchema2 = z20.enum(CARD_SUMMARY_WARNINGS);
+var cardSchema3 = z20.object({
+  id: z20.string().uuid(),
+  name: z20.string(),
+  card_type: z20.enum(["credit", "debit", "both"]),
+  is_active: z20.boolean(),
+  card_limit: z20.number().nullable(),
+  opening_day: z20.number().int().nullable(),
+  closing_day: z20.number().int().nullable(),
+  due_day: z20.number().int().nullable(),
+  days_before_due: z20.number().int().nullable()
 }).strict();
-var billingPeriodSchema = z17.object({
-  billing_month: z17.string().regex(BILLING_MONTH_RE2),
-  start_date: z17.string(),
-  end_date: z17.string(),
-  closing_date: z17.string().nullable(),
-  due_date: z17.string().nullable(),
-  calculation_mode: z17.enum(["due_date", "legacy_opening_closing"])
+var billingPeriodSchema = z20.object({
+  billing_month: z20.string().regex(BILLING_MONTH_RE2),
+  start_date: z20.string(),
+  end_date: z20.string(),
+  closing_date: z20.string().nullable(),
+  due_date: z20.string().nullable(),
+  calculation_mode: z20.enum(["due_date", "legacy_opening_closing"])
 }).strict();
-var largestTransactionSchema2 = z17.object({
-  transaction_id: z17.string().uuid(),
-  description: z17.string(),
-  amount: z17.number(),
-  date: z17.string(),
-  category_name: z17.string().nullable(),
-  installment_number: z17.number().int().nullable(),
-  total_installments: z17.number().int().nullable()
+var largestTransactionSchema2 = z20.object({
+  transaction_id: z20.string().uuid(),
+  description: z20.string(),
+  amount: z20.number(),
+  date: z20.string(),
+  category_name: z20.string().nullable(),
+  installment_number: z20.number().int().nullable(),
+  total_installments: z20.number().int().nullable()
 }).strict();
-var categorySummarySchema = z17.object({
-  category_name: z17.string(),
-  total: z17.number(),
-  transaction_count: z17.number().int().nonnegative(),
-  percentage: z17.number()
+var categorySummarySchema = z20.object({
+  category_name: z20.string(),
+  total: z20.number(),
+  transaction_count: z20.number().int().nonnegative(),
+  percentage: z20.number()
 }).strict();
-var get_card_summary_default = defineTool14({
+var get_card_summary_default = defineTool15({
   name: "get_card_summary",
   title: "Resumir lan\xE7amentos do cart\xE3o",
   description: "Calcula um resumo factual dos lan\xE7amentos pr\xF3prios de cr\xE9dito registrados no Gastinho para o per\xEDodo do cart\xE3o. billing_month \xE9 o m\xEAs de refer\xEAncia da fatura calculada; n\xE3o informa pagamento, quita\xE7\xE3o, saldo banc\xE1rio ou fatura oficial do emissor.",
   inputSchema: {
-    card_id: z17.string().uuid(),
-    billing_month: z17.string().regex(BILLING_MONTH_RE2).optional(),
-    time_scope: z17.enum(["occurred", "all"]).optional()
+    card_id: z20.string().uuid(),
+    billing_month: z20.string().regex(BILLING_MONTH_RE2).optional(),
+    time_scope: z20.enum(["occurred", "all"]).optional()
   },
   outputSchema: {
     card: cardSchema3,
     billing_period: billingPeriodSchema,
-    metrics: z17.object({
-      registered_total: z17.number(),
-      occurred_total: z17.number(),
-      future_materialized_total: z17.number(),
-      transaction_count: z17.number().int().nonnegative(),
-      occurred_transaction_count: z17.number().int().nonnegative(),
-      future_transaction_count: z17.number().int().nonnegative(),
-      installment_total: z17.number(),
-      non_installment_total: z17.number()
+    metrics: z20.object({
+      registered_total: z20.number(),
+      occurred_total: z20.number(),
+      future_materialized_total: z20.number(),
+      transaction_count: z20.number().int().nonnegative(),
+      occurred_transaction_count: z20.number().int().nonnegative(),
+      future_transaction_count: z20.number().int().nonnegative(),
+      installment_total: z20.number(),
+      non_installment_total: z20.number()
     }).strict(),
     largest_transaction: largestTransactionSchema2.nullable(),
-    categories_summary: z17.array(categorySummarySchema).max(10),
-    data_complete: z17.boolean(),
-    warnings: z17.array(warningSchema2)
+    categories_summary: z20.array(categorySummarySchema).max(10),
+    data_complete: z20.boolean(),
+    warnings: z20.array(warningSchema2)
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async (input, ctx) => {
@@ -4156,8 +5332,8 @@ var get_card_summary_default = defineTool14({
 });
 
 // src/lib/mcp/tools/list-recurring-transactions.ts
-import { defineTool as defineTool15 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z18 } from "npm:zod@^3.25.76";
+import { defineTool as defineTool16 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z21 } from "npm:zod@^3.25.76";
 
 // src/lib/mcp/shared/recurring.ts
 var RECURRING_DATA_WARNINGS = [
@@ -4370,36 +5546,36 @@ function projectRecurringTemplates(templates, startDate, endDate, granularity, o
 // src/lib/mcp/tools/list-recurring-transactions.ts
 var CURSOR_CONTEXT6 = "list_recurring_transactions";
 var CURSOR_SORT = "day_of_month|transaction_type|id";
-var warningSchema3 = z18.enum(RECURRING_DATA_WARNINGS);
+var warningSchema3 = z21.enum(RECURRING_DATA_WARNINGS);
 var commonShape = {
-  id: z18.string().uuid(),
-  transaction_type: z18.enum(["expense", "income"]),
-  description: z18.string(),
-  amount: z18.number(),
-  day_of_month: z18.number().int(),
-  start_date: z18.string().nullable(),
-  end_date: z18.string().nullable(),
-  is_active: z18.boolean(),
-  category_id: z18.string().uuid().nullable(),
-  category_name: z18.string().nullable(),
-  shared_group_id: z18.string().uuid().nullable(),
-  is_shared: z18.boolean(),
-  is_owner: z18.boolean(),
-  created_at: z18.string(),
-  updated_at: z18.string(),
-  data_warnings: z18.array(warningSchema3)
+  id: z21.string().uuid(),
+  transaction_type: z21.enum(["expense", "income"]),
+  description: z21.string(),
+  amount: z21.number(),
+  day_of_month: z21.number().int(),
+  start_date: z21.string().nullable(),
+  end_date: z21.string().nullable(),
+  is_active: z21.boolean(),
+  category_id: z21.string().uuid().nullable(),
+  category_name: z21.string().nullable(),
+  shared_group_id: z21.string().uuid().nullable(),
+  is_shared: z21.boolean(),
+  is_owner: z21.boolean(),
+  created_at: z21.string(),
+  updated_at: z21.string(),
+  data_warnings: z21.array(warningSchema3)
 };
-var recurringItemSchema = z18.discriminatedUnion("transaction_type", [
-  z18.object({
+var recurringItemSchema = z21.discriminatedUnion("transaction_type", [
+  z21.object({
     ...commonShape,
-    transaction_type: z18.literal("expense"),
-    payment_method: z18.enum(["pix", "credit", "debit", "cash"]),
-    card_id: z18.string().uuid().nullable(),
-    card_name: z18.string().nullable()
+    transaction_type: z21.literal("expense"),
+    payment_method: z21.enum(["pix", "credit", "debit", "cash"]),
+    card_id: z21.string().uuid().nullable(),
+    card_name: z21.string().nullable()
   }).strict(),
-  z18.object({
+  z21.object({
     ...commonShape,
-    transaction_type: z18.literal("income")
+    transaction_type: z21.literal("income")
   }).strict()
 ]);
 function applyCursor(query, transactionType, cursor) {
@@ -4412,32 +5588,32 @@ function applyCursor(query, transactionType, cursor) {
   }
   return cursorType === "expense" && transactionType === "income" ? query.gte("day_of_month", day) : query.gt("day_of_month", day);
 }
-var list_recurring_transactions_default = defineTool15({
+var list_recurring_transactions_default = defineTool16({
   name: "list_recurring_transactions",
   title: "Listar templates recorrentes",
   description: "Lista templates mensais de despesas e receitas recorrentes acess\xEDveis \xE0 conta autenticada. N\xE3o representa lan\xE7amentos financeiros j\xE1 realizados.",
   inputSchema: {
-    transaction_type: z18.enum(["expense", "income", "all"]).optional(),
-    scope: z18.enum(["personal", "shared", "all_accessible"]).optional(),
-    group_id: z18.string().uuid().optional(),
-    status: z18.enum(["active", "inactive", "all"]).optional(),
-    query: z18.string().trim().min(1).max(100).optional(),
-    limit: z18.number().int().min(1).max(100).optional(),
-    cursor: z18.string().min(1).max(1e3).optional()
+    transaction_type: z21.enum(["expense", "income", "all"]).optional(),
+    scope: z21.enum(["personal", "shared", "all_accessible"]).optional(),
+    group_id: z21.string().uuid().optional(),
+    status: z21.enum(["active", "inactive", "all"]).optional(),
+    query: z21.string().trim().min(1).max(100).optional(),
+    limit: z21.number().int().min(1).max(100).optional(),
+    cursor: z21.string().min(1).max(1e3).optional()
   },
   outputSchema: {
-    items: z18.array(recurringItemSchema),
-    count: z18.number().int().nonnegative(),
-    has_more: z18.boolean(),
-    next_cursor: z18.string().nullable(),
-    cursor_version: z18.literal(3),
-    applied_filters: z18.object({
-      transaction_type: z18.enum(["expense", "income", "all"]),
-      scope: z18.enum(["personal", "shared", "all_accessible"]),
-      group_id: z18.string().uuid().nullable(),
-      status: z18.enum(["active", "inactive", "all"]),
-      query: z18.string().nullable(),
-      limit: z18.number().int().min(1).max(100)
+    items: z21.array(recurringItemSchema),
+    count: z21.number().int().nonnegative(),
+    has_more: z21.boolean(),
+    next_cursor: z21.string().nullable(),
+    cursor_version: z21.literal(3),
+    applied_filters: z21.object({
+      transaction_type: z21.enum(["expense", "income", "all"]),
+      scope: z21.enum(["personal", "shared", "all_accessible"]),
+      group_id: z21.string().uuid().nullable(),
+      status: z21.enum(["active", "inactive", "all"]),
+      query: z21.string().nullable(),
+      limit: z21.number().int().min(1).max(100)
     }).strict()
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
@@ -4552,62 +5728,62 @@ var list_recurring_transactions_default = defineTool15({
 });
 
 // src/lib/mcp/tools/get-recurring-forecast.ts
-import { defineTool as defineTool16 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z19 } from "npm:zod@^3.25.76";
+import { defineTool as defineTool17 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z22 } from "npm:zod@^3.25.76";
 var TEMPLATE_CAP = 100;
 var OCCURRENCE_CAP = 1e3;
-var warningSchema4 = z19.enum(RECURRING_DATA_WARNINGS);
-var occurrenceSchema = z19.object({
-  date: z19.string().regex(ISO_DATE_RE),
-  transaction_type: z19.enum(["expense", "income"]),
-  amount: z19.number(),
-  recurring_transaction_id: z19.string().uuid(),
-  description: z19.string(),
-  category_name: z19.string().nullable(),
-  source: z19.literal("recurring_template"),
-  shared_group_id: z19.string().uuid().nullable(),
-  is_owner: z19.boolean(),
-  data_warnings: z19.array(warningSchema4)
+var warningSchema4 = z22.enum(RECURRING_DATA_WARNINGS);
+var occurrenceSchema = z22.object({
+  date: z22.string().regex(ISO_DATE_RE),
+  transaction_type: z22.enum(["expense", "income"]),
+  amount: z22.number(),
+  recurring_transaction_id: z22.string().uuid(),
+  description: z22.string(),
+  category_name: z22.string().nullable(),
+  source: z22.literal("recurring_template"),
+  shared_group_id: z22.string().uuid().nullable(),
+  is_owner: z22.boolean(),
+  data_warnings: z22.array(warningSchema4)
 }).strict();
-var seriesPointSchema = z19.object({
-  period: z19.string(),
-  projected_income: z19.number(),
-  projected_expenses: z19.number(),
-  projected_balance: z19.number(),
-  occurrence_count: z19.number().int().nonnegative()
+var seriesPointSchema = z22.object({
+  period: z22.string(),
+  projected_income: z22.number(),
+  projected_expenses: z22.number(),
+  projected_balance: z22.number(),
+  occurrence_count: z22.number().int().nonnegative()
 }).strict();
-var get_recurring_forecast_default = defineTool16({
+var get_recurring_forecast_default = defineTool17({
   name: "get_recurring_forecast",
   title: "Projetar templates recorrentes",
   description: "Projeta ocorr\xEAncias mensais exclusivamente a partir dos templates recorrentes cadastrados. N\xE3o consulta nem representa despesas, receitas ou parcelas j\xE1 materializadas.",
   inputSchema: {
-    start_date: z19.string().regex(ISO_DATE_RE),
-    end_date: z19.string().regex(ISO_DATE_RE),
-    transaction_type: z19.enum(["expense", "income", "all"]).optional(),
-    scope: z19.enum(["personal", "shared", "all_accessible"]).optional(),
-    group_id: z19.string().uuid().optional(),
-    granularity: z19.enum(["day", "week", "month"]).optional(),
-    include_occurrences: z19.boolean().optional()
+    start_date: z22.string().regex(ISO_DATE_RE),
+    end_date: z22.string().regex(ISO_DATE_RE),
+    transaction_type: z22.enum(["expense", "income", "all"]).optional(),
+    scope: z22.enum(["personal", "shared", "all_accessible"]).optional(),
+    group_id: z22.string().uuid().optional(),
+    granularity: z22.enum(["day", "week", "month"]).optional(),
+    include_occurrences: z22.boolean().optional()
   },
   outputSchema: {
-    requested_period: z19.object({
-      start_date: z19.string().regex(ISO_DATE_RE),
-      end_date: z19.string().regex(ISO_DATE_RE)
+    requested_period: z22.object({
+      start_date: z22.string().regex(ISO_DATE_RE),
+      end_date: z22.string().regex(ISO_DATE_RE)
     }).strict(),
-    effective_period: z19.object({
-      start_date: z19.string().regex(ISO_DATE_RE),
-      end_date: z19.string().regex(ISO_DATE_RE),
-      days: z19.number().int().positive()
+    effective_period: z22.object({
+      start_date: z22.string().regex(ISO_DATE_RE),
+      end_date: z22.string().regex(ISO_DATE_RE),
+      days: z22.number().int().positive()
     }).strict(),
-    scope: z19.enum(["personal", "shared", "all_accessible"]),
-    templates_considered: z19.number().int().nonnegative(),
-    occurrences: z19.array(occurrenceSchema),
-    series: z19.array(seriesPointSchema),
-    projected_income: z19.number(),
-    projected_expenses: z19.number(),
-    projected_balance: z19.number(),
-    warnings: z19.array(warningSchema4),
-    data_complete: z19.boolean()
+    scope: z22.enum(["personal", "shared", "all_accessible"]),
+    templates_considered: z22.number().int().nonnegative(),
+    occurrences: z22.array(occurrenceSchema),
+    series: z22.array(seriesPointSchema),
+    projected_income: z22.number(),
+    projected_expenses: z22.number(),
+    projected_balance: z22.number(),
+    warnings: z22.array(warningSchema4),
+    data_complete: z22.boolean()
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async (input, ctx) => {
@@ -4701,49 +5877,49 @@ var get_recurring_forecast_default = defineTool16({
 });
 
 // src/lib/mcp/tools/list-goals.ts
-import { defineTool as defineTool17 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z20 } from "npm:zod@^3.25.76";
+import { defineTool as defineTool18 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z23 } from "npm:zod@^3.25.76";
 var CURSOR_CONTEXT7 = "list_goals";
 var CURSOR_SORT2 = "type|category_reference|id";
-var goalTypeSchema2 = z20.enum(GOAL_TYPES);
-var warningSchema5 = z20.enum(GOAL_WARNINGS);
-var goalSchema = z20.object({
-  id: z20.string().uuid(),
+var goalTypeSchema2 = z23.enum(GOAL_TYPES);
+var warningSchema5 = z23.enum(GOAL_WARNINGS);
+var goalSchema = z23.object({
+  id: z23.string().uuid(),
   type: goalTypeSchema2,
-  category_reference: z20.string().nullable(),
-  limit_amount: z20.number(),
-  shared_group_id: z20.string().uuid().nullable(),
-  is_shared: z20.boolean(),
-  is_owner: z20.boolean(),
-  created_at: z20.string(),
-  updated_at: z20.string(),
-  data_warnings: z20.array(warningSchema5)
+  category_reference: z23.string().nullable(),
+  limit_amount: z23.number(),
+  shared_group_id: z23.string().uuid().nullable(),
+  is_shared: z23.boolean(),
+  is_owner: z23.boolean(),
+  created_at: z23.string(),
+  updated_at: z23.string(),
+  data_warnings: z23.array(warningSchema5)
 }).strict();
 function postgrestString(value) {
   return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
-var list_goals_default = defineTool17({
+var list_goals_default = defineTool18({
   name: "list_goals",
   title: "Listar metas mensais",
   description: "Lista metas ou limites mensais acess\xEDveis \xE0 conta autenticada. N\xE3o representa contas de investimento, contribui\xE7\xF5es acumuladas ou metas de poupan\xE7a com prazo.",
   inputSchema: {
-    scope: z20.enum(["personal", "shared", "all_accessible"]).optional(),
-    group_id: z20.string().uuid().optional(),
+    scope: z23.enum(["personal", "shared", "all_accessible"]).optional(),
+    group_id: z23.string().uuid().optional(),
     type: goalTypeSchema2.optional(),
-    limit: z20.number().int().min(1).max(100).optional(),
-    cursor: z20.string().min(1).max(1e3).optional()
+    limit: z23.number().int().min(1).max(100).optional(),
+    cursor: z23.string().min(1).max(1e3).optional()
   },
   outputSchema: {
-    goals: z20.array(goalSchema),
-    count: z20.number().int().nonnegative(),
-    has_more: z20.boolean(),
-    next_cursor: z20.string().nullable(),
-    cursor_version: z20.literal(3),
-    applied_filters: z20.object({
-      scope: z20.enum(["personal", "shared", "all_accessible"]),
-      group_id: z20.string().uuid().nullable(),
+    goals: z23.array(goalSchema),
+    count: z23.number().int().nonnegative(),
+    has_more: z23.boolean(),
+    next_cursor: z23.string().nullable(),
+    cursor_version: z23.literal(3),
+    applied_filters: z23.object({
+      scope: z23.enum(["personal", "shared", "all_accessible"]),
+      group_id: z23.string().uuid().nullable(),
       type: goalTypeSchema2.nullable(),
-      limit: z20.number().int().min(1).max(100)
+      limit: z23.number().int().min(1).max(100)
     }).strict()
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
@@ -4838,66 +6014,66 @@ var list_goals_default = defineTool17({
 });
 
 // src/lib/mcp/tools/get-goal-progress.ts
-import { defineTool as defineTool18 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z21 } from "npm:zod@^3.25.76";
+import { defineTool as defineTool19 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z24 } from "npm:zod@^3.25.76";
 var TRANSACTION_CAP = 1e4;
 var TEMPLATE_CAP2 = 100;
 var MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
-var goalTypeSchema3 = z21.enum(GOAL_TYPES);
-var goalWarningSchema = z21.enum(GOAL_WARNINGS);
-var projectionWarningSchema = z21.enum(PROJECTION_WARNINGS);
-var goalSchema2 = z21.object({
-  id: z21.string().uuid(),
+var goalTypeSchema3 = z24.enum(GOAL_TYPES);
+var goalWarningSchema = z24.enum(GOAL_WARNINGS);
+var projectionWarningSchema = z24.enum(PROJECTION_WARNINGS);
+var goalSchema2 = z24.object({
+  id: z24.string().uuid(),
   type: goalTypeSchema3,
-  category_reference: z21.string().nullable(),
-  limit_amount: z21.number(),
-  shared_group_id: z21.string().uuid().nullable(),
-  is_shared: z21.boolean(),
-  is_owner: z21.boolean(),
-  created_at: z21.string(),
-  updated_at: z21.string(),
-  data_warnings: z21.array(goalWarningSchema)
+  category_reference: z24.string().nullable(),
+  limit_amount: z24.number(),
+  shared_group_id: z24.string().uuid().nullable(),
+  is_shared: z24.boolean(),
+  is_owner: z24.boolean(),
+  created_at: z24.string(),
+  updated_at: z24.string(),
+  data_warnings: z24.array(goalWarningSchema)
 }).strict();
-var get_goal_progress_default = defineTool18({
+var get_goal_progress_default = defineTool19({
   name: "get_goal_progress",
   title: "Consultar progresso mensal da meta",
   description: "Calcula o progresso factual de uma meta ou limite mensal a partir dos lan\xE7amentos acess\xEDveis. A proje\xE7\xE3o recorrente, quando solicitada, permanece separada e pode sobrepor lan\xE7amentos manuais.",
   inputSchema: {
-    goal_id: z21.string().uuid(),
-    reference_month: z21.string().regex(MONTH_RE).optional(),
-    projection_mode: z21.enum(["none", "recurring_templates"]).optional()
+    goal_id: z24.string().uuid(),
+    reference_month: z24.string().regex(MONTH_RE).optional(),
+    projection_mode: z24.enum(["none", "recurring_templates"]).optional()
   },
   outputSchema: {
     goal: goalSchema2,
-    reference_period: z21.object({
-      requested_period: z21.object({
-        start_date: z21.string(),
-        end_date: z21.string()
+    reference_period: z24.object({
+      requested_period: z24.object({
+        start_date: z24.string(),
+        end_date: z24.string()
       }).strict(),
-      effective_period: z21.object({
-        start_date: z21.string(),
-        end_date: z21.string()
+      effective_period: z24.object({
+        start_date: z24.string(),
+        end_date: z24.string()
       }).strict().nullable()
     }).strict(),
-    actual_value: z21.number(),
-    target_value: z21.number(),
-    actual_percentage: z21.number().nullable(),
-    actual_remaining: z21.number(),
-    actual_excess: z21.number(),
-    target_direction: z21.enum(["maximum", "minimum"]),
-    days_in_month: z21.number().int().positive(),
-    elapsed_days: z21.number().int().nonnegative(),
-    remaining_days: z21.number().int().nonnegative(),
-    transaction_count: z21.number().int().nonnegative(),
-    warnings: z21.array(goalWarningSchema),
-    projection_mode: z21.enum(["none", "recurring_templates"]),
-    recurring_projected_value: z21.number().nullable(),
-    projected_value: z21.number().nullable(),
-    projected_percentage: z21.number().nullable(),
-    projected_remaining: z21.number().nullable(),
-    projected_excess: z21.number().nullable(),
-    recurring_templates_considered: z21.number().int().nonnegative().nullable(),
-    projection_warnings: z21.array(projectionWarningSchema)
+    actual_value: z24.number(),
+    target_value: z24.number(),
+    actual_percentage: z24.number().nullable(),
+    actual_remaining: z24.number(),
+    actual_excess: z24.number(),
+    target_direction: z24.enum(["maximum", "minimum"]),
+    days_in_month: z24.number().int().positive(),
+    elapsed_days: z24.number().int().nonnegative(),
+    remaining_days: z24.number().int().nonnegative(),
+    transaction_count: z24.number().int().nonnegative(),
+    warnings: z24.array(goalWarningSchema),
+    projection_mode: z24.enum(["none", "recurring_templates"]),
+    recurring_projected_value: z24.number().nullable(),
+    projected_value: z24.number().nullable(),
+    projected_percentage: z24.number().nullable(),
+    projected_remaining: z24.number().nullable(),
+    projected_excess: z24.number().nullable(),
+    recurring_templates_considered: z24.number().int().nonnegative().nullable(),
+    projection_warnings: z24.array(projectionWarningSchema)
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async (input, ctx) => {
@@ -5105,8 +6281,8 @@ var get_goal_progress_default = defineTool18({
 });
 
 // src/lib/mcp/tools/get-category-usage.ts
-import { defineTool as defineTool19 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z22 } from "npm:zod@^3.25.76";
+import { defineTool as defineTool20 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z25 } from "npm:zod@^3.25.76";
 
 // src/lib/mcp/shared/category-usage.ts
 var CATEGORY_USAGE_WARNINGS = [
@@ -5250,59 +6426,59 @@ function calculateCategoryUsage(catalog, transactions, options) {
 
 // src/lib/mcp/tools/get-category-usage.ts
 var TRANSACTION_CAP2 = 1e4;
-var warningSchema6 = z22.enum(CATEGORY_USAGE_WARNINGS);
-var monthlyPointSchema = z22.object({
-  month: z22.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
-  total: z22.number(),
-  transaction_count: z22.number().int().nonnegative()
+var warningSchema6 = z25.enum(CATEGORY_USAGE_WARNINGS);
+var monthlyPointSchema = z25.object({
+  month: z25.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+  total: z25.number(),
+  transaction_count: z25.number().int().nonnegative()
 }).strict();
-var categorySchema = z22.object({
-  category_id: z22.string().uuid(),
-  name: z22.string(),
-  icon: z22.string().nullable(),
-  color: z22.string().nullable(),
-  is_active: z22.boolean(),
-  is_default: z22.boolean(),
-  transaction_count: z22.number().int().nonnegative(),
-  total: z22.number(),
-  percentage: z22.number(),
-  first_used_at: z22.string().nullable(),
-  last_used_at: z22.string().nullable(),
-  monthly_average: z22.number(),
-  monthly_series: z22.array(monthlyPointSchema)
+var categorySchema = z25.object({
+  category_id: z25.string().uuid(),
+  name: z25.string(),
+  icon: z25.string().nullable(),
+  color: z25.string().nullable(),
+  is_active: z25.boolean(),
+  is_default: z25.boolean(),
+  transaction_count: z25.number().int().nonnegative(),
+  total: z25.number(),
+  percentage: z25.number(),
+  first_used_at: z25.string().nullable(),
+  last_used_at: z25.string().nullable(),
+  monthly_average: z25.number(),
+  monthly_series: z25.array(monthlyPointSchema)
 }).strict();
-var get_category_usage_default = defineTool19({
+var get_category_usage_default = defineTool20({
   name: "get_category_usage",
   title: "Consultar uso pessoal de categorias",
   description: "Apresenta fatos hist\xF3ricos sobre o uso das categorias pessoais de despesas ou receitas da conta autenticada. N\xE3o inclui categorias compartilhadas nem transa\xE7\xF5es de outros propriet\xE1rios.",
   inputSchema: {
-    kind: z22.enum(["expense", "income"]),
-    start_date: z22.string(),
-    end_date: z22.string(),
-    include_inactive: z22.boolean().optional(),
-    include_unused: z22.boolean().optional(),
-    trend_granularity: z22.literal("month").optional(),
-    limit: z22.number().int().min(1).max(100).optional()
+    kind: z25.enum(["expense", "income"]),
+    start_date: z25.string(),
+    end_date: z25.string(),
+    include_inactive: z25.boolean().optional(),
+    include_unused: z25.boolean().optional(),
+    trend_granularity: z25.literal("month").optional(),
+    limit: z25.number().int().min(1).max(100).optional()
   },
   outputSchema: {
-    kind: z22.enum(["expense", "income"]),
-    requested_period: z22.object({
-      start_date: z22.string(),
-      end_date: z22.string()
+    kind: z25.enum(["expense", "income"]),
+    requested_period: z25.object({
+      start_date: z25.string(),
+      end_date: z25.string()
     }).strict(),
-    categories: z22.array(categorySchema),
-    uncategorized: z22.object({
-      transaction_count: z22.number().int().nonnegative(),
-      total: z22.number(),
-      percentage: z22.number()
+    categories: z25.array(categorySchema),
+    uncategorized: z25.object({
+      transaction_count: z25.number().int().nonnegative(),
+      total: z25.number(),
+      percentage: z25.number()
     }).strict(),
-    total_amount: z22.number(),
-    total_transaction_count: z22.number().int().nonnegative(),
-    categories_truncated: z22.boolean(),
-    total_category_count: z22.number().int().nonnegative(),
-    returned_category_count: z22.number().int().nonnegative(),
-    data_complete: z22.boolean(),
-    warnings: z22.array(warningSchema6)
+    total_amount: z25.number(),
+    total_transaction_count: z25.number().int().nonnegative(),
+    categories_truncated: z25.boolean(),
+    total_category_count: z25.number().int().nonnegative(),
+    returned_category_count: z25.number().int().nonnegative(),
+    data_complete: z25.boolean(),
+    warnings: z25.array(warningSchema6)
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async (input, ctx) => {
@@ -5416,60 +6592,60 @@ var get_category_usage_default = defineTool19({
 });
 
 // src/lib/mcp/tools/get-cashflow-series.ts
-import { defineTool as defineTool20 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z23 } from "npm:zod@^3.25.76";
+import { defineTool as defineTool21 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z26 } from "npm:zod@^3.25.76";
 var TRANSACTION_CAP3 = 1e4;
-var warningSchema7 = z23.enum(CASHFLOW_WARNINGS);
-var periodSchema = z23.object({
-  start_date: z23.string(),
-  end_date: z23.string()
+var warningSchema7 = z26.enum(CASHFLOW_WARNINGS);
+var periodSchema = z26.object({
+  start_date: z26.string(),
+  end_date: z26.string()
 }).strict();
-var effectivePeriodSchema2 = z23.object({
-  start_date: z23.string(),
-  end_date: z23.string(),
-  days: z23.number().int().positive()
+var effectivePeriodSchema2 = z26.object({
+  start_date: z26.string(),
+  end_date: z26.string(),
+  days: z26.number().int().positive()
 }).strict().nullable();
-var pointSchema = z23.object({
-  period_start: z23.string(),
-  period_end: z23.string(),
-  label: z23.string(),
-  realized_income: z23.number(),
-  realized_expenses: z23.number(),
-  realized_balance: z23.number(),
-  cumulative_balance: z23.number(),
-  income_count: z23.number().int().nonnegative(),
-  expense_count: z23.number().int().nonnegative(),
-  transaction_count: z23.number().int().nonnegative()
+var pointSchema = z26.object({
+  period_start: z26.string(),
+  period_end: z26.string(),
+  label: z26.string(),
+  realized_income: z26.number(),
+  realized_expenses: z26.number(),
+  realized_balance: z26.number(),
+  cumulative_balance: z26.number(),
+  income_count: z26.number().int().nonnegative(),
+  expense_count: z26.number().int().nonnegative(),
+  transaction_count: z26.number().int().nonnegative()
 }).strict();
-var get_cashflow_series_default = defineTool20({
+var get_cashflow_series_default = defineTool21({
   name: "get_cashflow_series",
   title: "Consultar fluxo de caixa realizado",
   description: "Apresenta uma s\xE9rie factual de receitas e despesas efetivamente registradas at\xE9 hoje. N\xE3o inclui proje\xE7\xF5es, templates recorrentes ou transa\xE7\xF5es futuras e n\xE3o representa saldo banc\xE1rio.",
   inputSchema: {
-    start_date: z23.string(),
-    end_date: z23.string(),
-    scope: z23.enum(["personal", "shared", "all_accessible"]).optional(),
-    group_id: z23.string().uuid().optional(),
-    granularity: z23.enum(["day", "week", "month"]).optional(),
-    include_empty_periods: z23.boolean().optional()
+    start_date: z26.string(),
+    end_date: z26.string(),
+    scope: z26.enum(["personal", "shared", "all_accessible"]).optional(),
+    group_id: z26.string().uuid().optional(),
+    granularity: z26.enum(["day", "week", "month"]).optional(),
+    include_empty_periods: z26.boolean().optional()
   },
   outputSchema: {
     requested_period: periodSchema,
     effective_period: effectivePeriodSchema2,
-    coverage_warning: z23.string().nullable(),
-    granularity: z23.enum(["day", "week", "month"]),
-    scope: z23.enum(["personal", "shared", "all_accessible"]),
-    data_complete: z23.boolean(),
-    series: z23.array(pointSchema),
-    total_income: z23.number(),
-    total_expenses: z23.number(),
-    total_balance: z23.number(),
-    income_count: z23.number().int().nonnegative(),
-    expense_count: z23.number().int().nonnegative(),
-    transaction_count: z23.number().int().nonnegative(),
-    opening_cumulative_balance: z23.literal(0),
-    closing_cumulative_balance: z23.number(),
-    warnings: z23.array(warningSchema7)
+    coverage_warning: z26.string().nullable(),
+    granularity: z26.enum(["day", "week", "month"]),
+    scope: z26.enum(["personal", "shared", "all_accessible"]),
+    data_complete: z26.boolean(),
+    series: z26.array(pointSchema),
+    total_income: z26.number(),
+    total_expenses: z26.number(),
+    total_balance: z26.number(),
+    income_count: z26.number().int().nonnegative(),
+    expense_count: z26.number().int().nonnegative(),
+    transaction_count: z26.number().int().nonnegative(),
+    opening_cumulative_balance: z26.literal(0),
+    closing_cumulative_balance: z26.number(),
+    warnings: z26.array(warningSchema7)
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async (input, ctx) => {
@@ -5618,8 +6794,8 @@ var get_cashflow_series_default = defineTool20({
 });
 
 // src/lib/mcp/tools/get-cashflow-projection.ts
-import { defineTool as defineTool21 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z24 } from "npm:zod@^3.25.76";
+import { defineTool as defineTool22 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z27 } from "npm:zod@^3.25.76";
 
 // src/lib/mcp/shared/cashflow-projection.ts
 var CASHFLOW_PROJECTION_WARNINGS = [
@@ -5756,82 +6932,82 @@ function cashflowProjectionInvariantsHold(projection) {
 var TRANSACTION_CAP4 = 1e4;
 var TEMPLATE_CAP3 = 100;
 var OCCURRENCE_CAP2 = 1e3;
-var warningSchema8 = z24.enum(CASHFLOW_PROJECTION_WARNINGS);
-var periodSchema2 = z24.object({
-  start_date: z24.string(),
-  end_date: z24.string()
+var warningSchema8 = z27.enum(CASHFLOW_PROJECTION_WARNINGS);
+var periodSchema2 = z27.object({
+  start_date: z27.string(),
+  end_date: z27.string()
 }).strict();
-var optionalPeriodSchema = z24.object({
-  start_date: z24.string(),
-  end_date: z24.string(),
-  days: z24.number().int().positive()
+var optionalPeriodSchema = z27.object({
+  start_date: z27.string(),
+  end_date: z27.string(),
+  days: z27.number().int().positive()
 }).strict().nullable();
-var componentSchema = z24.object({
-  income: z24.number(),
-  expenses: z24.number(),
-  balance: z24.number(),
-  income_count: z24.number().int().nonnegative(),
-  expense_count: z24.number().int().nonnegative(),
-  transaction_count: z24.number().int().nonnegative()
+var componentSchema = z27.object({
+  income: z27.number(),
+  expenses: z27.number(),
+  balance: z27.number(),
+  income_count: z27.number().int().nonnegative(),
+  expense_count: z27.number().int().nonnegative(),
+  transaction_count: z27.number().int().nonnegative()
 }).strict();
 var recurringComponentSchema = componentSchema.extend({
-  templates_considered: z24.number().int().nonnegative(),
-  occurrence_count: z24.number().int().nonnegative()
+  templates_considered: z27.number().int().nonnegative(),
+  occurrence_count: z27.number().int().nonnegative()
 }).strict();
-var pointSchema2 = z24.object({
-  period_start: z24.string(),
-  period_end: z24.string(),
-  label: z24.string(),
-  realized_income: z24.number(),
-  realized_expenses: z24.number(),
-  realized_balance: z24.number(),
-  future_materialized_income: z24.number(),
-  future_materialized_expenses: z24.number(),
-  future_materialized_balance: z24.number(),
-  recurring_projected_income: z24.number(),
-  recurring_projected_expenses: z24.number(),
-  recurring_projected_balance: z24.number(),
-  combined_income: z24.number(),
-  combined_expenses: z24.number(),
-  combined_balance: z24.number(),
-  cumulative_combined_balance: z24.number(),
-  realized_transaction_count: z24.number().int().nonnegative(),
-  future_materialized_transaction_count: z24.number().int().nonnegative(),
-  recurring_occurrence_count: z24.number().int().nonnegative()
+var pointSchema2 = z27.object({
+  period_start: z27.string(),
+  period_end: z27.string(),
+  label: z27.string(),
+  realized_income: z27.number(),
+  realized_expenses: z27.number(),
+  realized_balance: z27.number(),
+  future_materialized_income: z27.number(),
+  future_materialized_expenses: z27.number(),
+  future_materialized_balance: z27.number(),
+  recurring_projected_income: z27.number(),
+  recurring_projected_expenses: z27.number(),
+  recurring_projected_balance: z27.number(),
+  combined_income: z27.number(),
+  combined_expenses: z27.number(),
+  combined_balance: z27.number(),
+  cumulative_combined_balance: z27.number(),
+  realized_transaction_count: z27.number().int().nonnegative(),
+  future_materialized_transaction_count: z27.number().int().nonnegative(),
+  recurring_occurrence_count: z27.number().int().nonnegative()
 }).strict();
-var get_cashflow_projection_default = defineTool21({
+var get_cashflow_projection_default = defineTool22({
   name: "get_cashflow_projection",
   title: "Projetar fluxo de caixa por componentes",
   description: "Combina matematicamente realizado, lan\xE7amentos futuros materializados e templates recorrentes, mantendo os tr\xEAs componentes separados. N\xE3o representa saldo banc\xE1rio nem previs\xE3o garantida.",
   inputSchema: {
-    start_date: z24.string(),
-    end_date: z24.string(),
-    scope: z24.enum(["personal", "shared", "all_accessible"]).optional(),
-    group_id: z24.string().uuid().optional(),
-    granularity: z24.enum(["day", "week", "month"]).optional(),
-    include_empty_periods: z24.boolean().optional(),
-    include_realized: z24.boolean().optional(),
-    include_future_materialized: z24.boolean().optional(),
-    include_recurring_templates: z24.boolean().optional()
+    start_date: z27.string(),
+    end_date: z27.string(),
+    scope: z27.enum(["personal", "shared", "all_accessible"]).optional(),
+    group_id: z27.string().uuid().optional(),
+    granularity: z27.enum(["day", "week", "month"]).optional(),
+    include_empty_periods: z27.boolean().optional(),
+    include_realized: z27.boolean().optional(),
+    include_future_materialized: z27.boolean().optional(),
+    include_recurring_templates: z27.boolean().optional()
   },
   outputSchema: {
     requested_period: periodSchema2,
     realized_period: optionalPeriodSchema,
     future_projection_period: optionalPeriodSchema,
-    today: z24.string(),
-    granularity: z24.enum(["day", "week", "month"]),
-    scope: z24.enum(["personal", "shared", "all_accessible"]),
-    data_complete: z24.boolean(),
+    today: z27.string(),
+    granularity: z27.enum(["day", "week", "month"]),
+    scope: z27.enum(["personal", "shared", "all_accessible"]),
+    data_complete: z27.boolean(),
     realized: componentSchema,
     future_materialized: componentSchema,
     recurring_projection: recurringComponentSchema,
-    combined_income: z24.number(),
-    combined_expenses: z24.number(),
-    combined_balance: z24.number(),
-    opening_cumulative_balance: z24.literal(0),
-    closing_cumulative_balance: z24.number(),
-    series: z24.array(pointSchema2),
-    warnings: z24.array(warningSchema8)
+    combined_income: z27.number(),
+    combined_expenses: z27.number(),
+    combined_balance: z27.number(),
+    opening_cumulative_balance: z27.literal(0),
+    closing_cumulative_balance: z27.number(),
+    series: z27.array(pointSchema2),
+    warnings: z27.array(warningSchema8)
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async (input, ctx) => {
@@ -6081,27 +7257,27 @@ var get_cashflow_projection_default = defineTool21({
 });
 
 // src/lib/mcp/tools/update-expense.ts
-import { defineTool as defineTool22 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z25 } from "npm:zod@^3.25.76";
-var EXPENSE_COLUMNS2 = "id,user_id,description,amount,expense_date,category_id,category_name,category_icon,payment_method,card_id,card_name,card_color,shared_group_id,is_shared,installment_group_id,installment_number,total_installments,created_at,updated_at";
+import { defineTool as defineTool23 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z28 } from "npm:zod@^3.25.76";
+var EXPENSE_COLUMNS3 = "id,user_id,description,amount,expense_date,category_id,category_name,category_icon,payment_method,card_id,card_name,card_color,shared_group_id,is_shared,installment_group_id,installment_number,total_installments,created_at,updated_at";
 var inputProperties = {
-  expense_id: z25.string().uuid(),
+  expense_id: z28.string().uuid(),
   expected_updated_at: expectedUpdatedAtSchema,
   changes: expenseChangesSchema,
-  confirm_single_installment_update: z25.boolean().optional()
+  confirm_single_installment_update: z28.boolean().optional()
 };
-var inputValidator = z25.object(inputProperties).strict();
-var update_expense_default = defineTool22({
+var inputValidator = z28.object(inputProperties).strict();
+var update_expense_default = defineTool23({
   name: "update_expense",
   title: "Editar despesa com seguran\xE7a",
   description: "Edita somente uma despesa pertencente \xE0 conta autenticada, com concorr\xEAncia otimista por expected_updated_at. Parcelas exigem confirma\xE7\xE3o expl\xEDcita e apenas a linha selecionada \xE9 alterada.",
   inputSchema: inputProperties,
   outputSchema: {
-    resource_type: z25.literal("expense"),
-    id: z25.string().uuid(),
-    applied: z25.boolean(),
-    changed_fields: z25.array(
-      z25.enum([
+    resource_type: z28.literal("expense"),
+    id: z28.string().uuid(),
+    applied: z28.boolean(),
+    changed_fields: z28.array(
+      z28.enum([
         "description",
         "amount",
         "expense_date",
@@ -6112,10 +7288,10 @@ var update_expense_default = defineTool22({
     ),
     before: expenseViewSchema,
     after: expenseViewSchema,
-    updated_at_before: z25.string(),
-    updated_at_after: z25.string(),
-    warnings: z25.array(updateWarningSchema),
-    data_complete: z25.boolean()
+    updated_at_before: z28.string(),
+    updated_at_after: z28.string(),
+    warnings: z28.array(updateWarningSchema),
+    data_complete: z28.boolean()
   },
   annotations: {
     readOnlyHint: false,
@@ -6136,7 +7312,7 @@ var update_expense_default = defineTool22({
     const input = parsed.data;
     const userId = ctx.getUserId();
     const supabase = supabaseForUser(ctx);
-    const currentResult = await supabase.from("expenses").select(EXPENSE_COLUMNS2).eq("id", input.expense_id).eq("user_id", userId).maybeSingle();
+    const currentResult = await supabase.from("expenses").select(EXPENSE_COLUMNS3).eq("id", input.expense_id).eq("user_id", userId).maybeSingle();
     if (currentResult.error) return mcpError("INTERNAL_ERROR");
     if (!currentResult.data) return mcpError("RESOURCE_NOT_FOUND");
     const current = currentResult.data;
@@ -6239,7 +7415,7 @@ var update_expense_default = defineTool22({
         structuredContent: result2
       };
     }
-    const updateResult = await supabase.from("expenses").update(patch).eq("id", input.expense_id).eq("user_id", userId).eq("updated_at", input.expected_updated_at).select(EXPENSE_COLUMNS2).maybeSingle();
+    const updateResult = await supabase.from("expenses").update(patch).eq("id", input.expense_id).eq("user_id", userId).eq("updated_at", input.expected_updated_at).select(EXPENSE_COLUMNS3).maybeSingle();
     if (updateResult.error) return mcpError("WRITE_FAILED");
     if (!updateResult.data) {
       const existence = await supabase.from("expenses").select("id,updated_at").eq("id", input.expense_id).eq("user_id", userId).maybeSingle();
@@ -6274,33 +7450,33 @@ var update_expense_default = defineTool22({
 });
 
 // src/lib/mcp/tools/update-income.ts
-import { defineTool as defineTool23 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z26 } from "npm:zod@^3.25.76";
-var INCOME_COLUMNS2 = "id,user_id,description,amount,income_date,income_category_id,category_name,category_icon,shared_group_id,installment_group_id,installment_number,total_installments,created_at,updated_at";
+import { defineTool as defineTool24 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z29 } from "npm:zod@^3.25.76";
+var INCOME_COLUMNS3 = "id,user_id,description,amount,income_date,income_category_id,category_name,category_icon,shared_group_id,installment_group_id,installment_number,total_installments,created_at,updated_at";
 var inputProperties2 = {
-  income_id: z26.string().uuid(),
+  income_id: z29.string().uuid(),
   expected_updated_at: expectedUpdatedAtSchema,
   changes: incomeChangesSchema
 };
-var inputValidator2 = z26.object(inputProperties2).strict();
-var update_income_default = defineTool23({
+var inputValidator2 = z29.object(inputProperties2).strict();
+var update_income_default = defineTool24({
   name: "update_income",
   title: "Editar receita com seguran\xE7a",
   description: "Edita somente uma receita pertencente \xE0 conta autenticada, com concorr\xEAncia otimista por expected_updated_at. A altera\xE7\xE3o \xE9 parcial e nunca atualiza uma s\xE9rie inteira.",
   inputSchema: inputProperties2,
   outputSchema: {
-    resource_type: z26.literal("income"),
-    id: z26.string().uuid(),
-    applied: z26.boolean(),
-    changed_fields: z26.array(
-      z26.enum(["description", "amount", "income_date", "income_category_id"])
+    resource_type: z29.literal("income"),
+    id: z29.string().uuid(),
+    applied: z29.boolean(),
+    changed_fields: z29.array(
+      z29.enum(["description", "amount", "income_date", "income_category_id"])
     ),
     before: incomeViewSchema,
     after: incomeViewSchema,
-    updated_at_before: z26.string(),
-    updated_at_after: z26.string(),
-    warnings: z26.array(updateWarningSchema),
-    data_complete: z26.boolean()
+    updated_at_before: z29.string(),
+    updated_at_after: z29.string(),
+    warnings: z29.array(updateWarningSchema),
+    data_complete: z29.boolean()
   },
   annotations: {
     readOnlyHint: false,
@@ -6321,7 +7497,7 @@ var update_income_default = defineTool23({
     const input = parsed.data;
     const userId = ctx.getUserId();
     const supabase = supabaseForUser(ctx);
-    const currentResult = await supabase.from("incomes").select(INCOME_COLUMNS2).eq("id", input.income_id).eq("user_id", userId).maybeSingle();
+    const currentResult = await supabase.from("incomes").select(INCOME_COLUMNS3).eq("id", input.income_id).eq("user_id", userId).maybeSingle();
     if (currentResult.error) return mcpError("INTERNAL_ERROR");
     if (!currentResult.data) return mcpError("RESOURCE_NOT_FOUND");
     const current = currentResult.data;
@@ -6386,7 +7562,7 @@ var update_income_default = defineTool23({
         structuredContent: result2
       };
     }
-    const updateResult = await supabase.from("incomes").update(patch).eq("id", input.income_id).eq("user_id", userId).eq("updated_at", input.expected_updated_at).select(INCOME_COLUMNS2).maybeSingle();
+    const updateResult = await supabase.from("incomes").update(patch).eq("id", input.income_id).eq("user_id", userId).eq("updated_at", input.expected_updated_at).select(INCOME_COLUMNS3).maybeSingle();
     if (updateResult.error) return mcpError("WRITE_FAILED");
     if (!updateResult.data) {
       const existence = await supabase.from("incomes").select("id,updated_at").eq("id", input.income_id).eq("user_id", userId).maybeSingle();
@@ -6420,17 +7596,17 @@ var update_income_default = defineTool23({
 });
 
 // src/lib/mcp/tools/delete-expense.ts
-import { defineTool as defineTool24 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z28 } from "npm:zod@^3.25.76";
+import { defineTool as defineTool25 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z31 } from "npm:zod@^3.25.76";
 
 // src/lib/mcp/shared/transaction-delete.ts
-import { z as z27 } from "npm:zod@^3.25.76";
+import { z as z30 } from "npm:zod@^3.25.76";
 var DELETE_WARNINGS = [
   "ONLY_ONE_INSTALLMENT_DELETED",
   "SHARED_RECORD_DELETED",
   "PERMANENT_DELETION"
 ];
-var deleteWarningSchema = z27.enum(DELETE_WARNINGS);
+var deleteWarningSchema = z30.enum(DELETE_WARNINGS);
 function confirmationRequiredContent(resourceType, record, installmentConfirmationMissing) {
   const label = resourceType === "expense" ? "despesa" : "receita";
   const date = record.expense_date ?? record.income_date ?? "desconhecida";
@@ -6449,31 +7625,31 @@ function deleteContent(result) {
 }
 
 // src/lib/mcp/tools/delete-expense.ts
-var EXPENSE_COLUMNS3 = "id,user_id,description,amount,expense_date,category_id,category_name,category_icon,payment_method,card_id,card_name,card_color,shared_group_id,is_shared,installment_group_id,installment_number,total_installments,created_at,updated_at";
+var EXPENSE_COLUMNS4 = "id,user_id,description,amount,expense_date,category_id,category_name,category_icon,payment_method,card_id,card_name,card_color,shared_group_id,is_shared,installment_group_id,installment_number,total_installments,created_at,updated_at";
 var inputProperties3 = {
-  expense_id: z28.string().uuid(),
+  expense_id: z31.string().uuid(),
   expected_updated_at: expectedUpdatedAtSchema,
-  confirm_delete: z28.boolean(),
-  confirm_single_installment_delete: z28.boolean().optional()
+  confirm_delete: z31.boolean(),
+  confirm_single_installment_delete: z31.boolean().optional()
 };
-var inputValidator3 = z28.object({
+var inputValidator3 = z31.object({
   ...inputProperties3,
-  confirm_delete: z28.boolean().optional()
+  confirm_delete: z31.boolean().optional()
 }).strict();
-var delete_expense_default = defineTool24({
+var delete_expense_default = defineTool25({
   name: "delete_expense",
   title: "Excluir despesa definitivamente",
   description: "Exclui definitivamente uma \xFAnica despesa pertencente \xE0 conta autenticada. Exige confirm_delete=true, expected_updated_at atual e confirma\xE7\xE3o adicional para parcelas.",
   inputSchema: inputProperties3,
   outputSchema: {
-    resource_type: z28.literal("expense"),
-    id: z28.string().uuid(),
-    deleted: z28.literal(true),
-    deletion_mode: z28.literal("permanent"),
+    resource_type: z31.literal("expense"),
+    id: z31.string().uuid(),
+    deleted: z31.literal(true),
+    deletion_mode: z31.literal("permanent"),
     deleted_record: expenseViewSchema,
-    operation_completed_at: z28.string(),
-    warnings: z28.array(deleteWarningSchema),
-    data_complete: z28.literal(true)
+    operation_completed_at: z31.string(),
+    warnings: z31.array(deleteWarningSchema),
+    data_complete: z31.literal(true)
   },
   annotations: {
     readOnlyHint: false,
@@ -6490,7 +7666,7 @@ var delete_expense_default = defineTool24({
     const input = parsed.data;
     const userId = ctx.getUserId();
     const supabase = supabaseForUser(ctx);
-    const currentResult = await supabase.from("expenses").select(EXPENSE_COLUMNS3).eq("id", input.expense_id).eq("user_id", userId).maybeSingle();
+    const currentResult = await supabase.from("expenses").select(EXPENSE_COLUMNS4).eq("id", input.expense_id).eq("user_id", userId).maybeSingle();
     if (currentResult.error) return mcpError("INTERNAL_ERROR");
     if (!currentResult.data) return mcpError("RESOURCE_NOT_FOUND");
     const current = currentResult.data;
@@ -6514,7 +7690,7 @@ var delete_expense_default = defineTool24({
         confirmationRequiredContent("expense", recognizable, true)
       );
     }
-    const deleteResult = await supabase.from("expenses").delete().eq("id", input.expense_id).eq("user_id", userId).eq("updated_at", input.expected_updated_at).select(EXPENSE_COLUMNS3).maybeSingle();
+    const deleteResult = await supabase.from("expenses").delete().eq("id", input.expense_id).eq("user_id", userId).eq("updated_at", input.expected_updated_at).select(EXPENSE_COLUMNS4).maybeSingle();
     if (deleteResult.error) return mcpError("WRITE_FAILED");
     if (!deleteResult.data) {
       const existence = await supabase.from("expenses").select("id,updated_at").eq("id", input.expense_id).eq("user_id", userId).maybeSingle();
@@ -6548,33 +7724,33 @@ var delete_expense_default = defineTool24({
 });
 
 // src/lib/mcp/tools/delete-income.ts
-import { defineTool as defineTool25 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z29 } from "npm:zod@^3.25.76";
-var INCOME_COLUMNS3 = "id,user_id,description,amount,income_date,income_category_id,category_name,category_icon,shared_group_id,installment_group_id,installment_number,total_installments,created_at,updated_at";
+import { defineTool as defineTool26 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z32 } from "npm:zod@^3.25.76";
+var INCOME_COLUMNS4 = "id,user_id,description,amount,income_date,income_category_id,category_name,category_icon,shared_group_id,installment_group_id,installment_number,total_installments,created_at,updated_at";
 var inputProperties4 = {
-  income_id: z29.string().uuid(),
+  income_id: z32.string().uuid(),
   expected_updated_at: expectedUpdatedAtSchema,
-  confirm_delete: z29.boolean(),
-  confirm_single_installment_delete: z29.boolean().optional()
+  confirm_delete: z32.boolean(),
+  confirm_single_installment_delete: z32.boolean().optional()
 };
-var inputValidator4 = z29.object({
+var inputValidator4 = z32.object({
   ...inputProperties4,
-  confirm_delete: z29.boolean().optional()
+  confirm_delete: z32.boolean().optional()
 }).strict();
-var delete_income_default = defineTool25({
+var delete_income_default = defineTool26({
   name: "delete_income",
   title: "Excluir receita definitivamente",
   description: "Exclui definitivamente uma \xFAnica receita pertencente \xE0 conta autenticada. Exige confirm_delete=true, expected_updated_at atual e confirma\xE7\xE3o adicional para parcelas.",
   inputSchema: inputProperties4,
   outputSchema: {
-    resource_type: z29.literal("income"),
-    id: z29.string().uuid(),
-    deleted: z29.literal(true),
-    deletion_mode: z29.literal("permanent"),
+    resource_type: z32.literal("income"),
+    id: z32.string().uuid(),
+    deleted: z32.literal(true),
+    deletion_mode: z32.literal("permanent"),
     deleted_record: incomeViewSchema,
-    operation_completed_at: z29.string(),
-    warnings: z29.array(deleteWarningSchema),
-    data_complete: z29.literal(true)
+    operation_completed_at: z32.string(),
+    warnings: z32.array(deleteWarningSchema),
+    data_complete: z32.literal(true)
   },
   annotations: {
     readOnlyHint: false,
@@ -6591,7 +7767,7 @@ var delete_income_default = defineTool25({
     const input = parsed.data;
     const userId = ctx.getUserId();
     const supabase = supabaseForUser(ctx);
-    const currentResult = await supabase.from("incomes").select(INCOME_COLUMNS3).eq("id", input.income_id).eq("user_id", userId).maybeSingle();
+    const currentResult = await supabase.from("incomes").select(INCOME_COLUMNS4).eq("id", input.income_id).eq("user_id", userId).maybeSingle();
     if (currentResult.error) return mcpError("INTERNAL_ERROR");
     if (!currentResult.data) return mcpError("RESOURCE_NOT_FOUND");
     const current = currentResult.data;
@@ -6615,7 +7791,7 @@ var delete_income_default = defineTool25({
         confirmationRequiredContent("income", recognizable, true)
       );
     }
-    const deleteResult = await supabase.from("incomes").delete().eq("id", input.income_id).eq("user_id", userId).eq("updated_at", input.expected_updated_at).select(INCOME_COLUMNS3).maybeSingle();
+    const deleteResult = await supabase.from("incomes").delete().eq("id", input.income_id).eq("user_id", userId).eq("updated_at", input.expected_updated_at).select(INCOME_COLUMNS4).maybeSingle();
     if (deleteResult.error) return mcpError("WRITE_FAILED");
     if (!deleteResult.data) {
       const existence = await supabase.from("incomes").select("id,updated_at").eq("id", input.income_id).eq("user_id", userId).maybeSingle();
@@ -6649,11 +7825,11 @@ var delete_income_default = defineTool25({
 });
 
 // src/lib/mcp/tools/create-recurring-expense.ts
-import { defineTool as defineTool26 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z31 } from "npm:zod@^3.25.76";
+import { defineTool as defineTool27 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z34 } from "npm:zod@^3.25.76";
 
 // src/lib/mcp/shared/recurring-write.ts
-import { z as z30 } from "npm:zod@^3.25.76";
+import { z as z33 } from "npm:zod@^3.25.76";
 var RECURRING_WRITE_WARNINGS = [
   "NO_EFFECTIVE_CHANGES",
   "RECURRING_TEMPLATE_ONLY",
@@ -6664,58 +7840,58 @@ var RECURRING_WRITE_WARNINGS = [
   "SHARED_TEMPLATE_CREATED",
   "SHARED_TEMPLATE_UPDATED"
 ];
-var recurringWarningSchema = z30.enum(RECURRING_WRITE_WARNINGS);
-var recurringDaySchema = z30.number().int().min(1).max(31);
-var recurringExpenseChangesSchema = z30.object({
+var recurringWarningSchema = z33.enum(RECURRING_WRITE_WARNINGS);
+var recurringDaySchema = z33.number().int().min(1).max(31);
+var recurringExpenseChangesSchema = z33.object({
   description: descriptionSchema.optional(),
   amount: amountSchema.optional(),
   day_of_month: recurringDaySchema.optional(),
   start_date: civilDateSchema.optional(),
   end_date: civilDateSchema.nullable().optional(),
-  category_id: z30.string().uuid().nullable().optional(),
-  payment_method: z30.enum(PAYMENT_METHODS).optional(),
-  card_id: z30.string().uuid().nullable().optional(),
-  is_active: z30.boolean().optional()
+  category_id: z33.string().uuid().nullable().optional(),
+  payment_method: z33.enum(PAYMENT_METHODS).optional(),
+  card_id: z33.string().uuid().nullable().optional(),
+  is_active: z33.boolean().optional()
 }).strict().refine((changes) => Object.keys(changes).length > 0, {
   message: "Informe pelo menos uma altera\xE7\xE3o."
 });
-var recurringIncomeChangesSchema = z30.object({
+var recurringIncomeChangesSchema = z33.object({
   description: descriptionSchema.optional(),
   amount: amountSchema.optional(),
   day_of_month: recurringDaySchema.optional(),
   start_date: civilDateSchema.optional(),
   end_date: civilDateSchema.nullable().optional(),
-  income_category_id: z30.string().uuid().nullable().optional(),
-  is_active: z30.boolean().optional()
+  income_category_id: z33.string().uuid().nullable().optional(),
+  is_active: z33.boolean().optional()
 }).strict().refine((changes) => Object.keys(changes).length > 0, {
   message: "Informe pelo menos uma altera\xE7\xE3o."
 });
 var recurringBaseViewShape = {
-  id: z30.string().uuid(),
-  description: z30.string(),
-  amount: z30.number(),
+  id: z33.string().uuid(),
+  description: z33.string(),
+  amount: z33.number(),
   day_of_month: recurringDaySchema,
   start_date: civilDateSchema.nullable(),
   end_date: civilDateSchema.nullable(),
-  is_active: z30.boolean(),
-  category_name: z30.string().nullable(),
-  category_icon: z30.string().nullable(),
-  is_shared: z30.boolean(),
-  shared_group_id: z30.string().uuid().nullable(),
-  created_at: z30.string(),
-  updated_at: z30.string()
+  is_active: z33.boolean(),
+  category_name: z33.string().nullable(),
+  category_icon: z33.string().nullable(),
+  is_shared: z33.boolean(),
+  shared_group_id: z33.string().uuid().nullable(),
+  created_at: z33.string(),
+  updated_at: z33.string()
 };
-var recurringExpenseViewSchema = z30.object({
+var recurringExpenseViewSchema = z33.object({
   ...recurringBaseViewShape,
-  category_id: z30.string().uuid().nullable(),
-  payment_method: z30.enum(PAYMENT_METHODS),
-  card_id: z30.string().uuid().nullable(),
-  card_name: z30.string().nullable(),
-  card_color: z30.string().nullable()
+  category_id: z33.string().uuid().nullable(),
+  payment_method: z33.enum(PAYMENT_METHODS),
+  card_id: z33.string().uuid().nullable(),
+  card_name: z33.string().nullable(),
+  card_color: z33.string().nullable()
 }).strict();
-var recurringIncomeViewSchema = z30.object({
+var recurringIncomeViewSchema = z33.object({
   ...recurringBaseViewShape,
-  income_category_id: z30.string().uuid().nullable()
+  income_category_id: z33.string().uuid().nullable()
 }).strict();
 function datesForView(row) {
   const startDate = row.start_date === null ? null : preserveSqlDate(row.start_date);
@@ -6795,25 +7971,25 @@ var inputProperties5 = {
   day_of_month: recurringDaySchema,
   start_date: civilDateSchema.optional(),
   end_date: civilDateSchema.nullable().optional(),
-  category_id: z31.string().uuid().nullable().optional(),
-  payment_method: z31.enum(PAYMENT_METHODS),
-  card_id: z31.string().uuid().nullable().optional(),
-  is_active: z31.boolean().optional(),
-  shared_group_id: z31.string().uuid().optional()
+  category_id: z34.string().uuid().nullable().optional(),
+  payment_method: z34.enum(PAYMENT_METHODS),
+  card_id: z34.string().uuid().nullable().optional(),
+  is_active: z34.boolean().optional(),
+  shared_group_id: z34.string().uuid().optional()
 };
-var inputValidator5 = z31.object(inputProperties5).strict();
-var create_recurring_expense_default = defineTool26({
+var inputValidator5 = z34.object(inputProperties5).strict();
+var create_recurring_expense_default = defineTool27({
   name: "create_recurring_expense",
   title: "Criar template mensal de despesa",
   description: "Cria somente um template mensal de despesa para a conta autenticada. N\xE3o cria nem materializa uma despesa real.",
   inputSchema: inputProperties5,
   outputSchema: {
-    resource_type: z31.literal("recurring_expense"),
-    id: z31.string().uuid(),
-    created: z31.literal(true),
+    resource_type: z34.literal("recurring_expense"),
+    id: z34.string().uuid(),
+    created: z34.literal(true),
     template: recurringExpenseViewSchema,
-    warnings: z31.array(recurringWarningSchema),
-    data_complete: z31.literal(true)
+    warnings: z34.array(recurringWarningSchema),
+    data_complete: z34.literal(true)
   },
   annotations: {
     readOnlyHint: false,
@@ -6906,8 +8082,8 @@ var create_recurring_expense_default = defineTool26({
 });
 
 // src/lib/mcp/tools/create-recurring-income.ts
-import { defineTool as defineTool27 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z32 } from "npm:zod@^3.25.76";
+import { defineTool as defineTool28 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z35 } from "npm:zod@^3.25.76";
 var COLUMNS3 = "id,user_id,description,amount,day_of_month,start_date,end_date,is_active,income_category_id,category_name,category_icon,shared_group_id,created_at,updated_at";
 var inputProperties6 = {
   description: descriptionSchema,
@@ -6915,23 +8091,23 @@ var inputProperties6 = {
   day_of_month: recurringDaySchema,
   start_date: civilDateSchema.optional(),
   end_date: civilDateSchema.nullable().optional(),
-  income_category_id: z32.string().uuid().nullable().optional(),
-  is_active: z32.boolean().optional(),
-  shared_group_id: z32.string().uuid().optional()
+  income_category_id: z35.string().uuid().nullable().optional(),
+  is_active: z35.boolean().optional(),
+  shared_group_id: z35.string().uuid().optional()
 };
-var inputValidator6 = z32.object(inputProperties6).strict();
-var create_recurring_income_default = defineTool27({
+var inputValidator6 = z35.object(inputProperties6).strict();
+var create_recurring_income_default = defineTool28({
   name: "create_recurring_income",
   title: "Criar template mensal de receita",
   description: "Cria somente um template mensal de receita para a conta autenticada. N\xE3o cria nem materializa uma receita real.",
   inputSchema: inputProperties6,
   outputSchema: {
-    resource_type: z32.literal("recurring_income"),
-    id: z32.string().uuid(),
-    created: z32.literal(true),
+    resource_type: z35.literal("recurring_income"),
+    id: z35.string().uuid(),
+    created: z35.literal(true),
     template: recurringIncomeViewSchema,
-    warnings: z32.array(recurringWarningSchema),
-    data_complete: z32.literal(true)
+    warnings: z35.array(recurringWarningSchema),
+    data_complete: z35.literal(true)
   },
   annotations: {
     readOnlyHint: false,
@@ -7005,8 +8181,8 @@ var create_recurring_income_default = defineTool27({
 });
 
 // src/lib/mcp/tools/update-recurring-expense.ts
-import { defineTool as defineTool28 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z33 } from "npm:zod@^3.25.76";
+import { defineTool as defineTool29 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z36 } from "npm:zod@^3.25.76";
 var COLUMNS4 = "id,user_id,description,amount,day_of_month,start_date,end_date,is_active,category_id,category_name,category_icon,payment_method,card_id,card_name,card_color,shared_group_id,created_at,updated_at";
 var CHANGE_FIELDS2 = [
   "description",
@@ -7020,27 +8196,27 @@ var CHANGE_FIELDS2 = [
   "is_active"
 ];
 var inputProperties7 = {
-  recurring_expense_id: z33.string().uuid(),
+  recurring_expense_id: z36.string().uuid(),
   expected_updated_at: expectedUpdatedAtSchema,
   changes: recurringExpenseChangesSchema
 };
-var inputValidator7 = z33.object(inputProperties7).strict();
-var update_recurring_expense_default = defineTool28({
+var inputValidator7 = z36.object(inputProperties7).strict();
+var update_recurring_expense_default = defineTool29({
   name: "update_recurring_expense",
   title: "Editar template mensal de despesa",
   description: "Edita parcialmente somente um template mensal de despesa pertencente \xE0 conta autenticada, com concorr\xEAncia otimista. N\xE3o altera despesas reais.",
   inputSchema: inputProperties7,
   outputSchema: {
-    resource_type: z33.literal("recurring_expense"),
-    id: z33.string().uuid(),
-    applied: z33.boolean(),
-    changed_fields: z33.array(z33.enum(CHANGE_FIELDS2)),
+    resource_type: z36.literal("recurring_expense"),
+    id: z36.string().uuid(),
+    applied: z36.boolean(),
+    changed_fields: z36.array(z36.enum(CHANGE_FIELDS2)),
     before: recurringExpenseViewSchema,
     after: recurringExpenseViewSchema,
-    updated_at_before: z33.string(),
-    updated_at_after: z33.string(),
-    warnings: z33.array(recurringWarningSchema),
-    data_complete: z33.literal(true)
+    updated_at_before: z36.string(),
+    updated_at_after: z36.string(),
+    warnings: z36.array(recurringWarningSchema),
+    data_complete: z36.literal(true)
   },
   annotations: {
     readOnlyHint: false,
@@ -7201,8 +8377,8 @@ var update_recurring_expense_default = defineTool28({
 });
 
 // src/lib/mcp/tools/update-recurring-income.ts
-import { defineTool as defineTool29 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z34 } from "npm:zod@^3.25.76";
+import { defineTool as defineTool30 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z37 } from "npm:zod@^3.25.76";
 var COLUMNS5 = "id,user_id,description,amount,day_of_month,start_date,end_date,is_active,income_category_id,category_name,category_icon,shared_group_id,created_at,updated_at";
 var CHANGE_FIELDS3 = [
   "description",
@@ -7214,27 +8390,27 @@ var CHANGE_FIELDS3 = [
   "is_active"
 ];
 var inputProperties8 = {
-  recurring_income_id: z34.string().uuid(),
+  recurring_income_id: z37.string().uuid(),
   expected_updated_at: expectedUpdatedAtSchema,
   changes: recurringIncomeChangesSchema
 };
-var inputValidator8 = z34.object(inputProperties8).strict();
-var update_recurring_income_default = defineTool29({
+var inputValidator8 = z37.object(inputProperties8).strict();
+var update_recurring_income_default = defineTool30({
   name: "update_recurring_income",
   title: "Editar template mensal de receita",
   description: "Edita parcialmente somente um template mensal de receita pertencente \xE0 conta autenticada, com concorr\xEAncia otimista. N\xE3o altera receitas reais.",
   inputSchema: inputProperties8,
   outputSchema: {
-    resource_type: z34.literal("recurring_income"),
-    id: z34.string().uuid(),
-    applied: z34.boolean(),
-    changed_fields: z34.array(z34.enum(CHANGE_FIELDS3)),
+    resource_type: z37.literal("recurring_income"),
+    id: z37.string().uuid(),
+    applied: z37.boolean(),
+    changed_fields: z37.array(z37.enum(CHANGE_FIELDS3)),
     before: recurringIncomeViewSchema,
     after: recurringIncomeViewSchema,
-    updated_at_before: z34.string(),
-    updated_at_after: z34.string(),
-    warnings: z34.array(recurringWarningSchema),
-    data_complete: z34.literal(true)
+    updated_at_before: z37.string(),
+    updated_at_after: z37.string(),
+    warnings: z37.array(recurringWarningSchema),
+    data_complete: z37.literal(true)
   },
   annotations: {
     readOnlyHint: false,
@@ -7359,18 +8535,18 @@ var update_recurring_income_default = defineTool29({
 });
 
 // src/lib/mcp/tools/delete-recurring-expense.ts
-import { defineTool as defineTool30 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z36 } from "npm:zod@^3.25.76";
+import { defineTool as defineTool31 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z39 } from "npm:zod@^3.25.76";
 
 // src/lib/mcp/shared/recurring-delete.ts
-import { z as z35 } from "npm:zod@^3.25.76";
+import { z as z38 } from "npm:zod@^3.25.76";
 var RECURRING_DELETE_WARNINGS = [
   "PERMANENT_DELETION",
   "RECURRING_TEMPLATE_DELETED",
   "SHARED_TEMPLATE_DELETED",
   "FORECAST_WILL_CHANGE"
 ];
-var recurringDeleteWarningSchema = z35.enum(
+var recurringDeleteWarningSchema = z38.enum(
   RECURRING_DELETE_WARNINGS
 );
 function templateFacts(resourceType, template) {
@@ -7389,25 +8565,25 @@ function recurringDeleteContent(result) {
 // src/lib/mcp/tools/delete-recurring-expense.ts
 var COLUMNS6 = "id,user_id,description,amount,day_of_month,start_date,end_date,is_active,category_id,category_name,category_icon,payment_method,card_id,card_name,card_color,shared_group_id,created_at,updated_at";
 var inputProperties9 = {
-  recurring_expense_id: z36.string().uuid(),
+  recurring_expense_id: z39.string().uuid(),
   expected_updated_at: expectedUpdatedAtSchema,
-  confirm_delete: z36.boolean()
+  confirm_delete: z39.boolean()
 };
-var inputValidator9 = z36.object({ ...inputProperties9, confirm_delete: z36.boolean().optional() }).strict();
-var delete_recurring_expense_default = defineTool30({
+var inputValidator9 = z39.object({ ...inputProperties9, confirm_delete: z39.boolean().optional() }).strict();
+var delete_recurring_expense_default = defineTool31({
   name: "delete_recurring_expense",
   title: "Excluir template mensal de despesa",
   description: "Exclui permanentemente somente um template mensal de despesa pertencente \xE0 conta autenticada. N\xE3o exclui despesas nem ocorr\xEAncias reais.",
   inputSchema: inputProperties9,
   outputSchema: {
-    resource_type: z36.literal("recurring_expense"),
-    id: z36.string().uuid(),
-    deleted: z36.literal(true),
-    deletion_mode: z36.literal("permanent"),
+    resource_type: z39.literal("recurring_expense"),
+    id: z39.string().uuid(),
+    deleted: z39.literal(true),
+    deletion_mode: z39.literal("permanent"),
     deleted_template: recurringExpenseViewSchema,
-    operation_completed_at: z36.string(),
-    warnings: z36.array(recurringDeleteWarningSchema),
-    data_complete: z36.literal(true)
+    operation_completed_at: z39.string(),
+    warnings: z39.array(recurringDeleteWarningSchema),
+    data_complete: z39.literal(true)
   },
   annotations: {
     readOnlyHint: false,
@@ -7483,29 +8659,29 @@ var delete_recurring_expense_default = defineTool30({
 });
 
 // src/lib/mcp/tools/delete-recurring-income.ts
-import { defineTool as defineTool31 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z37 } from "npm:zod@^3.25.76";
+import { defineTool as defineTool32 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z40 } from "npm:zod@^3.25.76";
 var COLUMNS7 = "id,user_id,description,amount,day_of_month,start_date,end_date,is_active,income_category_id,category_name,category_icon,shared_group_id,created_at,updated_at";
 var inputProperties10 = {
-  recurring_income_id: z37.string().uuid(),
+  recurring_income_id: z40.string().uuid(),
   expected_updated_at: expectedUpdatedAtSchema,
-  confirm_delete: z37.boolean()
+  confirm_delete: z40.boolean()
 };
-var inputValidator10 = z37.object({ ...inputProperties10, confirm_delete: z37.boolean().optional() }).strict();
-var delete_recurring_income_default = defineTool31({
+var inputValidator10 = z40.object({ ...inputProperties10, confirm_delete: z40.boolean().optional() }).strict();
+var delete_recurring_income_default = defineTool32({
   name: "delete_recurring_income",
   title: "Excluir template mensal de receita",
   description: "Exclui permanentemente somente um template mensal de receita pertencente \xE0 conta autenticada. N\xE3o exclui receitas nem ocorr\xEAncias reais.",
   inputSchema: inputProperties10,
   outputSchema: {
-    resource_type: z37.literal("recurring_income"),
-    id: z37.string().uuid(),
-    deleted: z37.literal(true),
-    deletion_mode: z37.literal("permanent"),
+    resource_type: z40.literal("recurring_income"),
+    id: z40.string().uuid(),
+    deleted: z40.literal(true),
+    deletion_mode: z40.literal("permanent"),
     deleted_template: recurringIncomeViewSchema,
-    operation_completed_at: z37.string(),
-    warnings: z37.array(recurringDeleteWarningSchema),
-    data_complete: z37.literal(true)
+    operation_completed_at: z40.string(),
+    warnings: z40.array(recurringDeleteWarningSchema),
+    data_complete: z40.literal(true)
   },
   annotations: {
     readOnlyHint: false,
@@ -7581,28 +8757,28 @@ var delete_recurring_income_default = defineTool31({
 });
 
 // src/lib/mcp/tools/create-goal.ts
-import { defineTool as defineTool32 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z38 } from "npm:zod@^3.25.76";
+import { defineTool as defineTool33 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z41 } from "npm:zod@^3.25.76";
 var COLUMNS8 = "id,user_id,type,category,limit_amount,shared_group_id,created_at,updated_at";
 var inputProperties11 = {
   type: goalTypeSchema,
   limit_amount: goalAmountSchema,
   category: goalCategorySchema.optional(),
-  shared_group_id: z38.string().uuid().optional()
+  shared_group_id: z41.string().uuid().optional()
 };
-var inputValidator11 = z38.object(inputProperties11).strict();
-var create_goal_default = defineTool32({
+var inputValidator11 = z41.object(inputProperties11).strict();
+var create_goal_default = defineTool33({
   name: "create_goal",
   title: "Criar meta mensal",
   description: "Cria uma meta ou limite mensal para a conta autenticada. N\xE3o cria nem altera transa\xE7\xF5es, investimentos ou poupan\xE7a acumulada.",
   inputSchema: inputProperties11,
   outputSchema: {
-    resource_type: z38.literal("goal"),
-    id: z38.string().uuid(),
-    created: z38.literal(true),
+    resource_type: z41.literal("goal"),
+    id: z41.string().uuid(),
+    created: z41.literal(true),
     goal: goalViewSchema,
-    warnings: z38.array(goalWriteWarningSchema),
-    data_complete: z38.literal(true)
+    warnings: z41.array(goalWriteWarningSchema),
+    data_complete: z41.literal(true)
   },
   annotations: {
     readOnlyHint: false,
@@ -7642,7 +8818,7 @@ var create_goal_default = defineTool32({
       categoryName = resolution.category.name;
     }
     if (categoryKind === "income") {
-      const incomeCategoryId = z38.string().uuid().safeParse(categoryReference);
+      const incomeCategoryId = z41.string().uuid().safeParse(categoryReference);
       if (!incomeCategoryId.success) return mcpError("CATEGORY_NOT_FOUND");
       const categoryResult = await supabase.from("user_income_categories").select("id,name").eq("id", incomeCategoryId.data).eq("user_id", userId).eq("is_active", true).maybeSingle();
       if (categoryResult.error) return mcpError("INTERNAL_ERROR");
@@ -7684,32 +8860,32 @@ var create_goal_default = defineTool32({
 });
 
 // src/lib/mcp/tools/update-goal.ts
-import { defineTool as defineTool33 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z39 } from "npm:zod@^3.25.76";
+import { defineTool as defineTool34 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z42 } from "npm:zod@^3.25.76";
 var COLUMNS9 = "id,user_id,type,category,limit_amount,shared_group_id,created_at,updated_at";
 var CHANGE_FIELDS4 = ["type", "category", "limit_amount"];
 var inputProperties12 = {
-  goal_id: z39.string().uuid(),
+  goal_id: z42.string().uuid(),
   expected_updated_at: expectedUpdatedAtSchema,
   changes: goalChangesSchema
 };
-var inputValidator12 = z39.object(inputProperties12).strict();
-var update_goal_default = defineTool33({
+var inputValidator12 = z42.object(inputProperties12).strict();
+var update_goal_default = defineTool34({
   name: "update_goal",
   title: "Editar meta mensal",
   description: "Edita parcialmente uma meta mensal pertencente \xE0 conta autenticada, com concorr\xEAncia otimista. N\xE3o altera transa\xE7\xF5es.",
   inputSchema: inputProperties12,
   outputSchema: {
-    resource_type: z39.literal("goal"),
-    id: z39.string().uuid(),
-    applied: z39.boolean(),
-    changed_fields: z39.array(z39.enum(CHANGE_FIELDS4)),
+    resource_type: z42.literal("goal"),
+    id: z42.string().uuid(),
+    applied: z42.boolean(),
+    changed_fields: z42.array(z42.enum(CHANGE_FIELDS4)),
     before: goalViewSchema,
     after: goalViewSchema,
-    updated_at_before: z39.string(),
-    updated_at_after: z39.string(),
-    warnings: z39.array(goalWriteWarningSchema),
-    data_complete: z39.literal(true)
+    updated_at_before: z42.string(),
+    updated_at_after: z42.string(),
+    warnings: z42.array(goalWriteWarningSchema),
+    data_complete: z42.literal(true)
   },
   annotations: {
     readOnlyHint: false,
@@ -7776,7 +8952,7 @@ var update_goal_default = defineTool33({
         finalCategory = resolution.reference;
       }
       if (finalKind === "income") {
-        const parsedCategory = z39.string().uuid().safeParse(finalCategory);
+        const parsedCategory = z42.string().uuid().safeParse(finalCategory);
         if (!parsedCategory.success) return mcpError("CATEGORY_NOT_FOUND");
         const categoryResult = await supabase.from("user_income_categories").select("id").eq("id", parsedCategory.data).eq("user_id", userId).eq("is_active", true).maybeSingle();
         if (categoryResult.error) return mcpError("INTERNAL_ERROR");
@@ -7853,29 +9029,29 @@ var update_goal_default = defineTool33({
 });
 
 // src/lib/mcp/tools/delete-goal.ts
-import { defineTool as defineTool34 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z40 } from "npm:zod@^3.25.76";
+import { defineTool as defineTool35 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z43 } from "npm:zod@^3.25.76";
 var COLUMNS10 = "id,user_id,type,category,limit_amount,shared_group_id,created_at,updated_at";
 var inputProperties13 = {
-  goal_id: z40.string().uuid(),
+  goal_id: z43.string().uuid(),
   expected_updated_at: expectedUpdatedAtSchema,
-  confirm_delete: z40.boolean()
+  confirm_delete: z43.boolean()
 };
-var inputValidator13 = z40.object({ ...inputProperties13, confirm_delete: z40.boolean().optional() }).strict();
-var delete_goal_default = defineTool34({
+var inputValidator13 = z43.object({ ...inputProperties13, confirm_delete: z43.boolean().optional() }).strict();
+var delete_goal_default = defineTool35({
   name: "delete_goal",
   title: "Excluir meta mensal",
   description: "Exclui permanentemente uma meta mensal pertencente \xE0 conta autenticada, com confirma\xE7\xE3o e concorr\xEAncia otimista. N\xE3o exclui transa\xE7\xF5es.",
   inputSchema: inputProperties13,
   outputSchema: {
-    resource_type: z40.literal("goal"),
-    id: z40.string().uuid(),
-    deleted: z40.literal(true),
-    deletion_mode: z40.literal("permanent"),
+    resource_type: z43.literal("goal"),
+    id: z43.string().uuid(),
+    deleted: z43.literal(true),
+    deletion_mode: z43.literal("permanent"),
     deleted_goal: goalViewSchema,
-    operation_completed_at: z40.string(),
-    warnings: z40.array(goalWriteWarningSchema),
-    data_complete: z40.literal(true)
+    operation_completed_at: z43.string(),
+    warnings: z43.array(goalWriteWarningSchema),
+    data_complete: z43.literal(true)
   },
   annotations: {
     readOnlyHint: false,
@@ -7957,11 +9133,11 @@ var delete_goal_default = defineTool34({
 });
 
 // src/lib/mcp/tools/create-card.ts
-import { defineTool as defineTool35 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z42 } from "npm:zod@^3.25.76";
+import { defineTool as defineTool36 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z45 } from "npm:zod@^3.25.76";
 
 // src/lib/mcp/shared/card-write.ts
-import { z as z41 } from "npm:zod@^3.25.76";
+import { z as z44 } from "npm:zod@^3.25.76";
 var CARD_TYPES = ["credit", "debit", "both"];
 var CARD_COLORS = [
   "#FFA500",
@@ -7995,42 +9171,42 @@ var CARD_WRITE_WARNINGS = [
   "CARD_CREATED_INACTIVE",
   "NO_EFFECTIVE_CHANGES"
 ];
-var cardTypeSchema = z41.enum(CARD_TYPES);
-var cardColorSchema = z41.enum(CARD_COLORS);
-var cardNameSchema = z41.string().trim().min(1).max(100);
-var cardLimitSchema = z41.number().finite().positive();
-var billingDaySchema = z41.number().int().min(1).max(31);
-var daysBeforeDueSchema = z41.number().int().min(1).max(28);
-var cardWriteWarningSchema = z41.enum(CARD_WRITE_WARNINGS);
-var cardChangesSchema = z41.object({
+var cardTypeSchema = z44.enum(CARD_TYPES);
+var cardColorSchema = z44.enum(CARD_COLORS);
+var cardNameSchema = z44.string().trim().min(1).max(100);
+var cardLimitSchema = z44.number().finite().positive();
+var billingDaySchema = z44.number().int().min(1).max(31);
+var daysBeforeDueSchema = z44.number().int().min(1).max(28);
+var cardWriteWarningSchema = z44.enum(CARD_WRITE_WARNINGS);
+var cardChangesSchema = z44.object({
   name: cardNameSchema.optional(),
   card_type: cardTypeSchema.optional(),
   color: cardColorSchema.optional(),
   card_limit: cardLimitSchema.nullable().optional(),
   due_day: billingDaySchema.nullable().optional(),
   days_before_due: daysBeforeDueSchema.nullable().optional(),
-  is_active: z41.boolean().optional()
+  is_active: z44.boolean().optional()
 }).strict().refine((changes) => Object.keys(changes).length > 0, {
   message: "Informe pelo menos uma altera\xE7\xE3o."
 });
-var cardViewSchema = z41.object({
-  id: z41.string().uuid(),
-  name: z41.string(),
+var cardViewSchema = z44.object({
+  id: z44.string().uuid(),
+  name: z44.string(),
   card_type: cardTypeSchema,
   color: cardColorSchema,
-  card_limit: z41.number().finite().positive().nullable(),
+  card_limit: z44.number().finite().positive().nullable(),
   opening_day: billingDaySchema.nullable(),
   closing_day: billingDaySchema.nullable(),
   due_day: billingDaySchema.nullable(),
   days_before_due: daysBeforeDueSchema.nullable(),
-  is_active: z41.boolean(),
-  created_at: z41.string(),
-  updated_at: z41.string()
+  is_active: z44.boolean(),
+  created_at: z44.string(),
+  updated_at: z44.string()
 }).strict();
-var referenceSummarySchema = z41.object({
-  historical_expense_count: z41.number().int().nonnegative().nullable(),
-  future_materialized_expense_count: z41.number().int().nonnegative().nullable(),
-  active_recurring_template_count: z41.number().int().nonnegative().nullable()
+var referenceSummarySchema = z44.object({
+  historical_expense_count: z44.number().int().nonnegative().nullable(),
+  future_materialized_expense_count: z44.number().int().nonnegative().nullable(),
+  active_recurring_template_count: z44.number().int().nonnegative().nullable()
 }).strict();
 function cardWriteView(row, userId) {
   if (row.user_id !== userId) return null;
@@ -8094,21 +9270,21 @@ var inputProperties14 = {
   card_limit: cardLimitSchema.nullable().optional(),
   due_day: billingDaySchema.optional(),
   days_before_due: daysBeforeDueSchema.optional(),
-  is_active: z42.boolean().optional()
+  is_active: z45.boolean().optional()
 };
-var inputValidator14 = z42.object(inputProperties14).strict();
-var create_card_default = defineTool35({
+var inputValidator14 = z45.object(inputProperties14).strict();
+var create_card_default = defineTool36({
   name: "create_card",
   title: "Criar cart\xE3o",
   description: "Cria um cadastro pessoal de cart\xE3o no Gastinho. N\xE3o solicita n\xFAmero, CVV ou credenciais e n\xE3o se comunica com banco emissor.",
   inputSchema: inputProperties14,
   outputSchema: {
-    resource_type: z42.literal("card"),
-    id: z42.string().uuid(),
-    created: z42.literal(true),
+    resource_type: z45.literal("card"),
+    id: z45.string().uuid(),
+    created: z45.literal(true),
     card: cardViewSchema,
-    warnings: z42.array(cardWriteWarningSchema),
-    data_complete: z42.literal(true)
+    warnings: z45.array(cardWriteWarningSchema),
+    data_complete: z45.literal(true)
   },
   annotations: {
     readOnlyHint: false,
@@ -8167,8 +9343,8 @@ var create_card_default = defineTool35({
 });
 
 // src/lib/mcp/tools/update-card.ts
-import { defineTool as defineTool36 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z43 } from "npm:zod@^3.25.76";
+import { defineTool as defineTool37 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z46 } from "npm:zod@^3.25.76";
 var COLUMNS12 = "id,user_id,name,card_type,color,card_limit,opening_day,closing_day,due_day,days_before_due,is_active,created_at,updated_at";
 var CHANGE_FIELDS5 = [
   "name",
@@ -8182,33 +9358,33 @@ var CHANGE_FIELDS5 = [
   "is_active"
 ];
 var inputProperties15 = {
-  card_id: z43.string().uuid(),
+  card_id: z46.string().uuid(),
   expected_updated_at: expectedUpdatedAtSchema,
   changes: cardChangesSchema
 };
-var inputValidator15 = z43.object(inputProperties15).strict();
+var inputValidator15 = z46.object(inputProperties15).strict();
 var emptyReferenceSummary = () => ({
   historical_expense_count: null,
   future_materialized_expense_count: null,
   active_recurring_template_count: null
 });
-var update_card_default = defineTool36({
+var update_card_default = defineTool37({
   name: "update_card",
   title: "Editar cart\xE3o",
   description: "Edita parcialmente um cadastro pessoal de cart\xE3o com concorr\xEAncia otimista. N\xE3o altera despesas, parcelas, templates ou o cart\xE3o no banco emissor.",
   inputSchema: inputProperties15,
   outputSchema: {
-    resource_type: z43.literal("card"),
-    id: z43.string().uuid(),
-    applied: z43.boolean(),
-    changed_fields: z43.array(z43.enum(CHANGE_FIELDS5)),
+    resource_type: z46.literal("card"),
+    id: z46.string().uuid(),
+    applied: z46.boolean(),
+    changed_fields: z46.array(z46.enum(CHANGE_FIELDS5)),
     before: cardViewSchema,
     after: cardViewSchema,
-    updated_at_before: z43.string(),
-    updated_at_after: z43.string(),
+    updated_at_before: z46.string(),
+    updated_at_after: z46.string(),
     reference_summary: referenceSummarySchema,
-    warnings: z43.array(cardWriteWarningSchema),
-    data_complete: z43.literal(true)
+    warnings: z46.array(cardWriteWarningSchema),
+    data_complete: z46.literal(true)
   },
   annotations: {
     readOnlyHint: false,
@@ -8375,26 +9551,26 @@ var update_card_default = defineTool36({
 });
 
 // src/lib/mcp/tools/delete-card.ts
-import { defineTool as defineTool37 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z45 } from "npm:zod@^3.25.76";
+import { defineTool as defineTool38 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z48 } from "npm:zod@^3.25.76";
 
 // src/lib/mcp/shared/card-delete.ts
-import { z as z44 } from "npm:zod@^3.25.76";
+import { z as z47 } from "npm:zod@^3.25.76";
 var CARD_DELETE_WARNINGS = [
   "PERMANENT_DELETION",
   "CARD_DELETED",
   "BANK_ISSUER_UNAFFECTED"
 ];
-var cardDeleteWarningSchema = z44.enum(CARD_DELETE_WARNINGS);
-var cardDeleteReferenceSummarySchema = z44.object({
-  historical_expense_count: z44.number().int().nonnegative(),
-  future_materialized_expense_count: z44.number().int().nonnegative(),
-  installment_expense_count: z44.number().int().nonnegative(),
-  active_recurring_template_count: z44.number().int().nonnegative(),
-  inactive_recurring_template_count: z44.number().int().nonnegative(),
-  total_expense_reference_count: z44.number().int().nonnegative(),
-  total_recurring_reference_count: z44.number().int().nonnegative(),
-  total_reference_count: z44.number().int().nonnegative()
+var cardDeleteWarningSchema = z47.enum(CARD_DELETE_WARNINGS);
+var cardDeleteReferenceSummarySchema = z47.object({
+  historical_expense_count: z47.number().int().nonnegative(),
+  future_materialized_expense_count: z47.number().int().nonnegative(),
+  installment_expense_count: z47.number().int().nonnegative(),
+  active_recurring_template_count: z47.number().int().nonnegative(),
+  inactive_recurring_template_count: z47.number().int().nonnegative(),
+  total_expense_reference_count: z47.number().int().nonnegative(),
+  total_recurring_reference_count: z47.number().int().nonnegative(),
+  total_reference_count: z47.number().int().nonnegative()
 }).strict();
 var emptyCardDeleteReferenceSummary = () => ({
   historical_expense_count: 0,
@@ -8426,11 +9602,11 @@ function deleteCardContent(result) {
 // src/lib/mcp/tools/delete-card.ts
 var COLUMNS13 = "id,user_id,name,card_type,color,card_limit,opening_day,closing_day,due_day,days_before_due,is_active,created_at,updated_at";
 var inputProperties16 = {
-  card_id: z45.string().uuid(),
+  card_id: z48.string().uuid(),
   expected_updated_at: expectedUpdatedAtSchema,
-  confirm_delete: z45.boolean()
+  confirm_delete: z48.boolean()
 };
-var inputValidator16 = z45.object({ ...inputProperties16, confirm_delete: z45.boolean().optional() }).strict();
+var inputValidator16 = z48.object({ ...inputProperties16, confirm_delete: z48.boolean().optional() }).strict();
 function referenceSummary(expenses, recurring, today) {
   const dates = expenses.map((row) => preserveSqlDate(row.expense_date));
   if (dates.some((date) => date === null)) return null;
@@ -8452,21 +9628,21 @@ function referenceSummary(expenses, recurring, today) {
     total_reference_count: expenses.length + recurring.length
   };
 }
-var delete_card_default = defineTool37({
+var delete_card_default = defineTool38({
   name: "delete_card",
   title: "Excluir cart\xE3o",
   description: "Exclui permanentemente somente um cart\xE3o pessoal inativo, sem despesas, parcelas ou templates recorrentes vinculados, com confirma\xE7\xE3o e concorr\xEAncia otimista.",
   inputSchema: inputProperties16,
   outputSchema: {
-    resource_type: z45.literal("card"),
-    id: z45.string().uuid(),
-    deleted: z45.literal(true),
-    deletion_mode: z45.literal("permanent"),
+    resource_type: z48.literal("card"),
+    id: z48.string().uuid(),
+    deleted: z48.literal(true),
+    deletion_mode: z48.literal("permanent"),
     deleted_card: cardViewSchema,
     reference_summary: cardDeleteReferenceSummarySchema,
-    operation_completed_at: z45.string(),
-    warnings: z45.array(cardDeleteWarningSchema),
-    data_complete: z45.literal(true)
+    operation_completed_at: z48.string(),
+    warnings: z48.array(cardDeleteWarningSchema),
+    data_complete: z48.literal(true)
   },
   annotations: {
     readOnlyHint: false,
@@ -8587,33 +9763,33 @@ var create_income_category_default = createCategoryTool("income");
 var update_income_category_default = updateCategoryTool("income");
 
 // src/lib/mcp/shared/category-delete.ts
-import { defineTool as defineTool38 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z46 } from "npm:zod@^3.25.76";
+import { defineTool as defineTool39 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z49 } from "npm:zod@^3.25.76";
 var COLUMNS14 = "id,user_id,name,icon,color,is_default,is_active,display_order,created_at,updated_at";
-var expenseCategoryDeleteReferenceSchema = z46.object({
-  historical_expense_count: z46.number().int().nonnegative(),
-  future_expense_count: z46.number().int().nonnegative(),
-  installment_expense_count: z46.number().int().nonnegative(),
-  active_recurring_expense_count: z46.number().int().nonnegative(),
-  inactive_recurring_expense_count: z46.number().int().nonnegative(),
-  uuid_goal_count: z46.number().int().nonnegative(),
-  legacy_goal_count: z46.number().int().nonnegative(),
-  total_goal_count: z46.number().int().nonnegative(),
-  total_expense_reference_count: z46.number().int().nonnegative(),
-  total_recurring_reference_count: z46.number().int().nonnegative(),
-  total_reference_count: z46.number().int().nonnegative()
+var expenseCategoryDeleteReferenceSchema = z49.object({
+  historical_expense_count: z49.number().int().nonnegative(),
+  future_expense_count: z49.number().int().nonnegative(),
+  installment_expense_count: z49.number().int().nonnegative(),
+  active_recurring_expense_count: z49.number().int().nonnegative(),
+  inactive_recurring_expense_count: z49.number().int().nonnegative(),
+  uuid_goal_count: z49.number().int().nonnegative(),
+  legacy_goal_count: z49.number().int().nonnegative(),
+  total_goal_count: z49.number().int().nonnegative(),
+  total_expense_reference_count: z49.number().int().nonnegative(),
+  total_recurring_reference_count: z49.number().int().nonnegative(),
+  total_reference_count: z49.number().int().nonnegative()
 }).strict();
-var incomeCategoryDeleteReferenceSchema = z46.object({
-  historical_income_count: z46.number().int().nonnegative(),
-  future_income_count: z46.number().int().nonnegative(),
-  active_recurring_income_count: z46.number().int().nonnegative(),
-  inactive_recurring_income_count: z46.number().int().nonnegative(),
-  goal_count: z46.number().int().nonnegative(),
-  total_income_reference_count: z46.number().int().nonnegative(),
-  total_recurring_reference_count: z46.number().int().nonnegative(),
-  total_reference_count: z46.number().int().nonnegative()
+var incomeCategoryDeleteReferenceSchema = z49.object({
+  historical_income_count: z49.number().int().nonnegative(),
+  future_income_count: z49.number().int().nonnegative(),
+  active_recurring_income_count: z49.number().int().nonnegative(),
+  inactive_recurring_income_count: z49.number().int().nonnegative(),
+  goal_count: z49.number().int().nonnegative(),
+  total_income_reference_count: z49.number().int().nonnegative(),
+  total_recurring_reference_count: z49.number().int().nonnegative(),
+  total_reference_count: z49.number().int().nonnegative()
 }).strict();
-var warningSchema9 = z46.enum([
+var warningSchema9 = z49.enum([
   "PERMANENT_DELETION",
   "CATEGORY_DELETED",
   "EXPENSE_CATEGORY_DELETED",
@@ -8718,27 +9894,27 @@ function deleteCategoryTool(kind) {
   const outputCategorySchema = kind === "expense" ? expenseCategoryViewSchema : incomeCategoryViewSchema;
   const referenceSchema = kind === "expense" ? expenseCategoryDeleteReferenceSchema : incomeCategoryDeleteReferenceSchema;
   const inputProperties17 = {
-    category_id: z46.string().uuid(),
+    category_id: z49.string().uuid(),
     expected_updated_at: expectedUpdatedAtSchema,
-    confirm_delete: z46.boolean()
+    confirm_delete: z49.boolean()
   };
-  const validator = z46.object(inputProperties17).strict();
-  return defineTool38({
+  const validator = z49.object(inputProperties17).strict();
+  return defineTool39({
     name: `delete_${kind}_category`,
     title: `Excluir categoria de ${kind === "expense" ? "despesa" : "receita"}`,
     description: "Exclui permanentemente somente uma categoria pessoal inativa, n\xE3o protegida e sem qualquer refer\xEAncia.",
     inputSchema: inputProperties17,
     outputSchema: {
-      resource_type: z46.literal("category"),
-      category_kind: z46.literal(kind),
-      id: z46.string().uuid(),
-      deleted: z46.literal(true),
-      deletion_mode: z46.literal("permanent"),
+      resource_type: z49.literal("category"),
+      category_kind: z49.literal(kind),
+      id: z49.string().uuid(),
+      deleted: z49.literal(true),
+      deletion_mode: z49.literal("permanent"),
       deleted_category: outputCategorySchema,
       reference_summary: referenceSchema,
-      operation_completed_at: z46.string(),
-      warnings: z46.array(warningSchema9),
-      data_complete: z46.literal(true)
+      operation_completed_at: z49.string(),
+      warnings: z49.array(warningSchema9),
+      data_complete: z49.literal(true)
     },
     annotations: {
       readOnlyHint: false,
@@ -8845,12 +10021,12 @@ var delete_expense_category_default = deleteCategoryTool("expense");
 var delete_income_category_default = deleteCategoryTool("income");
 
 // src/lib/mcp/tools/list-shared-groups.ts
-import { defineTool as defineTool39 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z48 } from "npm:zod@^3.25.76";
+import { defineTool as defineTool40 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z51 } from "npm:zod@^3.25.76";
 
 // src/lib/mcp/shared/shared-group-read.ts
-import { z as z47 } from "npm:zod@^3.25.76";
-var GROUP_ROLES = ["owner", "admin", "member"];
+import { z as z50 } from "npm:zod@^3.25.76";
+var GROUP_ROLES2 = ["owner", "admin", "member"];
 var SHARED_GROUP_WARNINGS = [
   "GROUP_INACTIVE",
   "OWNER_MEMBERSHIP_MISSING",
@@ -8876,63 +10052,63 @@ var SHARED_GROUP_MEMBER_WARNINGS = [
 var MAX_GROUPS = 100;
 var MAX_MEMBERS_PER_GROUP = 100;
 var MAX_MEMBERS_ACROSS_GROUPS = 1e4;
-var groupRoleSchema = z47.enum(GROUP_ROLES);
-var sharedGroupWarningSchema = z47.enum(SHARED_GROUP_WARNINGS);
-var sharedGroupCollectionWarningSchema = z47.enum(
+var groupRoleSchema = z50.enum(GROUP_ROLES2);
+var sharedGroupWarningSchema = z50.enum(SHARED_GROUP_WARNINGS);
+var sharedGroupCollectionWarningSchema = z50.enum(
   SHARED_GROUP_COLLECTION_WARNINGS
 );
-var sharedGroupMemberWarningSchema = z47.enum(
+var sharedGroupMemberWarningSchema = z50.enum(
   SHARED_GROUP_MEMBER_WARNINGS
 );
-var sharedGroupSchema = z47.object({
-  id: z47.string().uuid(),
-  name: z47.string(),
-  description: z47.string().nullable(),
-  color: z47.string().nullable(),
-  is_active: z47.boolean(),
+var sharedGroupSchema = z50.object({
+  id: z50.string().uuid(),
+  name: z50.string(),
+  description: z50.string().nullable(),
+  color: z50.string().nullable(),
+  is_active: z50.boolean(),
   current_user_role: groupRoleSchema.nullable(),
-  current_membership_id: z47.string().uuid().nullable(),
-  is_owner: z47.boolean(),
-  can_manage: z47.boolean(),
-  member_count: z47.number().int().nonnegative().nullable(),
-  max_members: z47.number().int().nullable(),
-  capacity_remaining: z47.number().int().nonnegative().nullable(),
-  created_at: z47.string().nullable(),
-  updated_at: z47.string().nullable(),
-  invite_code: z47.string().optional(),
-  warnings: z47.array(sharedGroupWarningSchema)
+  current_membership_id: z50.string().uuid().nullable(),
+  is_owner: z50.boolean(),
+  can_manage: z50.boolean(),
+  member_count: z50.number().int().nonnegative().nullable(),
+  max_members: z50.number().int().nullable(),
+  capacity_remaining: z50.number().int().nonnegative().nullable(),
+  created_at: z50.string().nullable(),
+  updated_at: z50.string().nullable(),
+  invite_code: z50.string().optional(),
+  warnings: z50.array(sharedGroupWarningSchema)
 }).strict();
-var publicGroupMemberSchema = z47.object({
-  membership_id: z47.string().uuid(),
-  display_name: z47.string(),
+var publicGroupMemberSchema = z50.object({
+  membership_id: z50.string().uuid(),
+  display_name: z50.string(),
   role: groupRoleSchema,
-  is_current_user: z47.boolean(),
-  joined_at: z47.string().nullable()
+  is_current_user: z50.boolean(),
+  joined_at: z50.string().nullable()
 }).strict();
-var sharedGroupSummarySchema = z47.object({
-  id: z47.string().uuid(),
-  name: z47.string(),
+var sharedGroupSummarySchema = z50.object({
+  id: z50.string().uuid(),
+  name: z50.string(),
   current_user_role: groupRoleSchema.nullable(),
-  is_owner: z47.boolean(),
-  can_manage: z47.boolean(),
-  is_active: z47.boolean(),
-  member_count: z47.number().int().nonnegative().nullable(),
-  max_members: z47.number().int().nullable(),
-  capacity_remaining: z47.number().int().nonnegative().nullable(),
-  updated_at: z47.string().nullable()
+  is_owner: z50.boolean(),
+  can_manage: z50.boolean(),
+  is_active: z50.boolean(),
+  member_count: z50.number().int().nonnegative().nullable(),
+  max_members: z50.number().int().nullable(),
+  capacity_remaining: z50.number().int().nonnegative().nullable(),
+  updated_at: z50.string().nullable()
 }).strict();
-var listGroupsInputSchema = z47.object({
-  include_inactive: z47.boolean().optional(),
-  include_invite_code: z47.boolean().optional()
+var listGroupsInputSchema = z50.object({
+  include_inactive: z50.boolean().optional(),
+  include_invite_code: z50.boolean().optional()
 }).strict();
-var listMembersInputSchema = z47.object({
-  group_id: z47.string().uuid()
+var listMembersInputSchema = z50.object({
+  group_id: z50.string().uuid()
 }).strict();
-function uniqueWarnings(warnings) {
+function uniqueWarnings2(warnings) {
   return [...new Set(warnings)];
 }
 function validRole(value) {
-  return GROUP_ROLES.includes(value);
+  return GROUP_ROLES2.includes(value);
 }
 function compareMemberships(a, b) {
   const joinedA = a.joined_at ?? "";
@@ -9024,13 +10200,13 @@ function inspectGroup(group, memberships, userId, includeInviteCode) {
     capacity_remaining: capacity.capacityRemaining,
     created_at: group.created_at,
     updated_at: group.updated_at,
-    warnings: uniqueWarnings(warnings)
+    warnings: uniqueWarnings2(warnings)
   };
   if (includeInviteCode) {
     if (canManage && group.invite_code) {
       publicGroup2.invite_code = group.invite_code;
     } else {
-      publicGroup2.warnings = uniqueWarnings([
+      publicGroup2.warnings = uniqueWarnings2([
         ...publicGroup2.warnings,
         "INVITE_CODE_NOT_AVAILABLE"
       ]);
@@ -9116,7 +10292,7 @@ async function listSharedGroups(rawInput, ctx) {
       total_accessible_count: resolved.length,
       active_count: activeCount,
       inactive_count: inactiveCount,
-      warnings: uniqueWarnings(collectionWarnings),
+      warnings: uniqueWarnings2(collectionWarnings),
       data_complete: dataComplete,
       generated_at: (/* @__PURE__ */ new Date()).toISOString()
     };
@@ -9201,7 +10377,7 @@ async function listSharedGroupMembers(rawInput, ctx) {
     if (members.some((member) => member.joined_at === null) || inspected.updated_at === null) {
       warnings.push("DATA_INCOMPLETE");
     }
-    const finalWarnings = uniqueWarnings(warnings);
+    const finalWarnings = uniqueWarnings2(warnings);
     const dataComplete = !finalWarnings.includes("DATA_INCOMPLETE");
     const result = {
       resource_type: "shared_group_member_collection",
@@ -9238,24 +10414,24 @@ async function listSharedGroupMembers(rawInput, ctx) {
 }
 
 // src/lib/mcp/tools/list-shared-groups.ts
-var list_shared_groups_default = defineTool39({
+var list_shared_groups_default = defineTool40({
   name: "list_shared_groups",
   title: "Listar grupos compartilhados",
   description: "Lista grupos compartilhados acess\xEDveis \xE0 conta autenticada, incluindo IDs, papel atual, associa\xE7\xE3o, capacidade e updated_at. N\xE3o deriva grupos de transa\xE7\xF5es e n\xE3o altera dados.",
   inputSchema: {
-    include_inactive: z48.boolean().optional(),
-    include_invite_code: z48.boolean().optional()
+    include_inactive: z51.boolean().optional(),
+    include_invite_code: z51.boolean().optional()
   },
   outputSchema: {
-    resource_type: z48.literal("shared_group_collection"),
-    groups: z48.array(sharedGroupSchema),
-    returned_count: z48.number().int().nonnegative(),
-    total_accessible_count: z48.number().int().nonnegative(),
-    active_count: z48.number().int().nonnegative(),
-    inactive_count: z48.number().int().nonnegative(),
-    warnings: z48.array(sharedGroupCollectionWarningSchema),
-    data_complete: z48.boolean(),
-    generated_at: z48.string().datetime()
+    resource_type: z51.literal("shared_group_collection"),
+    groups: z51.array(sharedGroupSchema),
+    returned_count: z51.number().int().nonnegative(),
+    total_accessible_count: z51.number().int().nonnegative(),
+    active_count: z51.number().int().nonnegative(),
+    inactive_count: z51.number().int().nonnegative(),
+    warnings: z51.array(sharedGroupCollectionWarningSchema),
+    data_complete: z51.boolean(),
+    generated_at: z51.string().datetime()
   },
   annotations: {
     readOnlyHint: true,
@@ -9267,23 +10443,23 @@ var list_shared_groups_default = defineTool39({
 });
 
 // src/lib/mcp/tools/list-shared-group-members.ts
-import { defineTool as defineTool40 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z49 } from "npm:zod@^3.25.76";
-var list_shared_group_members_default = defineTool40({
+import { defineTool as defineTool41 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z52 } from "npm:zod@^3.25.76";
+var list_shared_group_members_default = defineTool41({
   name: "list_shared_group_members",
   title: "Listar membros do grupo compartilhado",
   description: "Lista identidades p\xFAblicas reduzidas dos membros de um grupo acess\xEDvel. Nunca retorna UUID de usu\xE1rio, e-mail, propriet\xE1rio interno ou c\xF3digo de convite e n\xE3o altera dados.",
   inputSchema: {
-    group_id: z49.string().uuid()
+    group_id: z52.string().uuid()
   },
   outputSchema: {
-    resource_type: z49.literal("shared_group_member_collection"),
+    resource_type: z52.literal("shared_group_member_collection"),
     group: sharedGroupSummarySchema,
-    members: z49.array(publicGroupMemberSchema),
-    returned_count: z49.number().int().nonnegative(),
-    warnings: z49.array(sharedGroupMemberWarningSchema),
-    data_complete: z49.boolean(),
-    generated_at: z49.string().datetime()
+    members: z52.array(publicGroupMemberSchema),
+    returned_count: z52.number().int().nonnegative(),
+    warnings: z52.array(sharedGroupMemberWarningSchema),
+    data_complete: z52.boolean(),
+    generated_at: z52.string().datetime()
   },
   annotations: {
     readOnlyHint: true,
@@ -9295,756 +10471,27 @@ var list_shared_group_members_default = defineTool40({
 });
 
 // src/lib/mcp/tools/get-expense-split-details.ts
-import { defineTool as defineTool41 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z51 } from "npm:zod@^3.25.76";
-
-// src/lib/mcp/shared/group-split-analysis.ts
-import { z as z50 } from "npm:zod@^3.25.76";
-var GROUP_ANALYSIS_MAX_DAYS = 366;
-var GROUP_ANALYSIS_MAX_EXPENSES = 1e3;
-var GROUP_ANALYSIS_MAX_SPLITS = 5e3;
-var GROUP_ANALYSIS_MAX_MEMBERS = 100;
-var GROUP_ANALYSIS_MAX_TRANSFERS = 100;
-var GROUP_ROLES2 = ["owner", "admin", "member"];
-var SPLIT_TYPES = ["equal", "percentage", "manual"];
-var SPLIT_TYPE_OUTPUTS = [...SPLIT_TYPES, "unknown"];
-var ALLOCATION_STATUSES = [
-  "balanced",
-  "under_allocated",
-  "over_allocated",
-  "no_split_rows",
-  "inconsistent"
-];
-var SETTLEMENT_STATUSES = [
-  "settled",
-  "transfers_suggested",
-  "incomplete_data",
-  "unbalanced_source_data",
-  "no_shared_expenses"
-];
-var GROUP_SPLIT_WARNINGS = [
-  "NO_SHARED_EXPENSES",
-  "SPLIT_DETAILS_MISSING",
-  "SPLIT_UNDER_ALLOCATED",
-  "SPLIT_OVER_ALLOCATED",
-  "SPLIT_PERCENTAGE_INVALID",
-  "SPLIT_AMOUNT_INVALID",
-  "PAYER_UNRESOLVED",
-  "MEMBER_PROFILE_INCOMPLETE",
-  "HISTORICAL_MEMBER_UNRESOLVED",
-  "GROUP_INACTIVE",
-  "OWNER_MEMBERSHIP_MISSING",
-  "GROUP_ROLE_INCONSISTENCY",
-  "DATA_INCOMPLETE",
-  "SETTLEMENT_NOT_BALANCED",
-  "RESIDUAL_AMOUNT_REMAINS"
-];
-var groupSplitWarningSchema = z50.enum(GROUP_SPLIT_WARNINGS);
-var groupAnalysisPeriodSchema = z50.object({
-  date_from: z50.string(),
-  date_to: z50.string(),
-  days: z50.number().int().positive(),
-  time_zone: z50.literal("America/Sao_Paulo")
-}).strict();
-var groupAnalysisGroupSchema = z50.object({
-  id: z50.string().uuid(),
-  name: z50.string(),
-  is_active: z50.boolean(),
-  current_user_role: z50.enum(GROUP_ROLES2),
-  updated_at: z50.string().nullable()
-}).strict();
-var expenseSplitParticipantSchema = z50.object({
-  membership_id: z50.string().uuid().nullable(),
-  display_name: z50.string(),
-  is_current_user: z50.boolean(),
-  allocated_amount: z50.number(),
-  percentage: z50.number().nullable(),
-  allocation_source: z50.literal("persisted_split")
-}).strict();
-var expenseSplitDetailsExpenseSchema = z50.object({
-  id: z50.string().uuid(),
-  description: z50.string(),
-  amount: z50.number(),
-  expense_date: z50.string(),
-  split_type: z50.enum(SPLIT_TYPE_OUTPUTS),
-  group_id: z50.string().uuid(),
-  group_name: z50.string(),
-  paid_by_membership_id: z50.string().uuid().nullable(),
-  paid_by_display_name: z50.string(),
-  installment_number: z50.number().int().nullable(),
-  total_installments: z50.number().int().nullable(),
-  updated_at: z50.string()
-}).strict();
-var groupMemberSummaryItemSchema = z50.object({
-  membership_id: z50.string().uuid().nullable(),
-  display_name: z50.string(),
-  role: z50.enum(GROUP_ROLES2).nullable(),
-  is_current_user: z50.boolean(),
-  paid_amount: z50.number(),
-  allocated_amount: z50.number(),
-  net_balance: z50.number(),
-  expense_count_paid: z50.number().int().nonnegative(),
-  split_count: z50.number().int().nonnegative(),
-  warnings: z50.array(groupSplitWarningSchema)
-}).strict();
-var settlementTransferSchema = z50.object({
-  from_membership_id: z50.string().uuid(),
-  from_display_name: z50.string(),
-  to_membership_id: z50.string().uuid(),
-  to_display_name: z50.string(),
-  amount: z50.number().positive()
-}).strict();
-var allocationStatusSchema = z50.enum(ALLOCATION_STATUSES);
-var settlementStatusSchema = z50.enum(SETTLEMENT_STATUSES);
-var expenseDetailsInputSchema = z50.object({ expense_id: z50.string().uuid() }).strict();
-var groupAnalysisInputSchema = z50.object({
-  group_id: z50.string().uuid(),
-  date_from: z50.string().optional(),
-  date_to: z50.string().optional()
-}).strict();
-function uniqueWarnings2(warnings) {
-  return [...new Set(warnings)];
-}
-function isRole(value) {
-  return GROUP_ROLES2.includes(value);
-}
-function isSplitType(value) {
-  return value !== null && SPLIT_TYPES.includes(value);
-}
-function decimalToScaledInteger(value, scale) {
-  const raw = String(value).trim();
-  const match = /^([+-]?)(\d+)(?:\.(\d+))?$/.exec(raw);
-  if (!match) return null;
-  const fraction = match[3] ?? "";
-  if (fraction.length > scale) return null;
-  const factor = 10 ** scale;
-  const whole = Number(match[2]);
-  const fractional = Number(fraction.padEnd(scale, "0") || "0");
-  if (!Number.isSafeInteger(whole) || !Number.isSafeInteger(fractional)) return null;
-  const absolute = whole * factor + fractional;
-  if (!Number.isSafeInteger(absolute)) return null;
-  return match[1] === "-" ? -absolute : absolute;
-}
-function moneyToCents(value) {
-  return decimalToScaledInteger(value, 2);
-}
-function centsToMoney(cents) {
-  return Number((cents / 100).toFixed(2));
-}
-function percentageToUnits(value) {
-  return decimalToScaledInteger(value, 4);
-}
-function resolvePeriod(dateFrom, dateTo) {
-  if (dateFrom !== void 0 && !isValidIsoDate(dateFrom) || dateTo !== void 0 && !isValidIsoDate(dateTo)) {
-    return { ok: false, error: mcpError("INVALID_INPUT") };
-  }
-  const defaults = currentMonthRange();
-  const from = dateFrom ?? defaults.from;
-  const to = dateTo ?? defaults.to;
-  if (from > to) return { ok: false, error: mcpError("INVALID_DATE_RANGE") };
-  const days = inclusiveDays(from, to);
-  if (days > GROUP_ANALYSIS_MAX_DAYS) {
-    return { ok: false, error: mcpError("RESULT_SET_TOO_LARGE") };
-  }
-  return {
-    ok: true,
-    period: {
-      date_from: from,
-      date_to: to,
-      days,
-      time_zone: "America/Sao_Paulo"
-    }
-  };
-}
-function membershipOrder(left, right) {
-  return (left.joined_at ?? "").localeCompare(right.joined_at ?? "") || left.id.localeCompare(right.id);
-}
-async function loadGroup(groupId, userId, ctx) {
-  const supabase = supabaseForUser(ctx);
-  const { data: rawGroup, error: groupError } = await supabase.from("shared_groups").select("id,name,created_by,is_active,updated_at").eq("id", groupId).maybeSingle();
-  if (groupError) return mcpError("READ_FAILED");
-  if (!rawGroup) return mcpError("RESOURCE_NOT_FOUND");
-  const group = rawGroup;
-  const { data: rawMemberships, error: memberError } = await supabase.from("shared_group_members").select("id,group_id,user_id,role,joined_at").eq("group_id", groupId).limit(GROUP_ANALYSIS_MAX_MEMBERS + 1);
-  if (memberError) return mcpError("READ_FAILED");
-  const memberships = rawMemberships ?? [];
-  if (memberships.length > GROUP_ANALYSIS_MAX_MEMBERS) {
-    return mcpError("RESULT_SET_TOO_LARGE");
-  }
-  const warnings = [];
-  const byUser = /* @__PURE__ */ new Map();
-  for (const membership of memberships) {
-    const rows = byUser.get(membership.user_id) ?? [];
-    rows.push(membership);
-    byUser.set(membership.user_id, rows);
-  }
-  const duplicateMembership = [...byUser.values()].some((rows) => rows.length !== 1);
-  const currentRows = byUser.get(userId) ?? [];
-  if (currentRows.length !== 1 || !isRole(currentRows[0]?.role ?? "")) {
-    warnings.push("OWNER_MEMBERSHIP_MISSING", "GROUP_ROLE_INCONSISTENCY", "DATA_INCOMPLETE");
-    return mcpError(
-      "GROUP_DATA_INCOMPLETE",
-      "Os dados de associa\xE7\xE3o do grupo n\xE3o permitem confirmar a identidade atual com seguran\xE7a."
-    );
-  }
-  const currentMembership = currentRows[0];
-  const ownerRows = memberships.filter((membership) => membership.role === "owner");
-  const ownershipConsistent = ownerRows.length === 1 && ownerRows[0].user_id === group.created_by;
-  if (!ownershipConsistent || duplicateMembership) {
-    warnings.push("GROUP_ROLE_INCONSISTENCY", "DATA_INCOMPLETE");
-  }
-  if (!byUser.has(group.created_by)) {
-    warnings.push("OWNER_MEMBERSHIP_MISSING", "DATA_INCOMPLETE");
-  }
-  if (group.is_active !== true) warnings.push("GROUP_INACTIVE");
-  if (group.updated_at === null || group.is_active === null) warnings.push("DATA_INCOMPLETE");
-  const userIds = [...byUser.keys()];
-  let profiles = [];
-  if (userIds.length > 0) {
-    const { data, error } = await supabase.from("profiles").select("user_id,display_name").in("user_id", userIds).limit(GROUP_ANALYSIS_MAX_MEMBERS);
-    if (error) return mcpError("READ_FAILED");
-    profiles = data ?? [];
-  }
-  const names = new Map(profiles.map((profile) => [profile.user_id, profile.display_name]));
-  const identities = /* @__PURE__ */ new Map();
-  for (const [memberUserId, rows] of byUser) {
-    const membership = [...rows].sort(membershipOrder)[0];
-    const displayName = names.get(memberUserId)?.trim();
-    if (!displayName) warnings.push("MEMBER_PROFILE_INCOMPLETE", "DATA_INCOMPLETE");
-    identities.set(memberUserId, {
-      internal_key: memberUserId,
-      membership_id: membership.id,
-      display_name: displayName || "Membro",
-      role: isRole(membership.role) ? membership.role : null,
-      is_current_user: memberUserId === userId,
-      historical: false,
-      profile_complete: Boolean(displayName)
-    });
-  }
-  return {
-    group,
-    memberships,
-    identities,
-    currentMembership,
-    warnings: uniqueWarnings2(warnings),
-    dataComplete: !warnings.includes("DATA_INCOMPLETE")
-  };
-}
-function historicalIdentity(internalKey, currentUserId) {
-  return {
-    internal_key: internalKey,
-    membership_id: null,
-    display_name: "Membro anterior",
-    role: null,
-    is_current_user: internalKey === currentUserId,
-    historical: true,
-    profile_complete: false
-  };
-}
-function memberFor(map, identity) {
-  const existing = map.get(identity.internal_key);
-  if (existing) return existing;
-  const warnings = [];
-  if (identity.historical) warnings.push("HISTORICAL_MEMBER_UNRESOLVED", "DATA_INCOMPLETE");
-  if (!identity.profile_complete && !identity.historical) {
-    warnings.push("MEMBER_PROFILE_INCOMPLETE", "DATA_INCOMPLETE");
-  }
-  const created = {
-    internal_key: identity.internal_key,
-    membership_id: identity.membership_id,
-    display_name: identity.display_name,
-    role: identity.role,
-    is_current_user: identity.is_current_user,
-    paid_cents: 0,
-    allocated_cents: 0,
-    expense_count_paid: 0,
-    split_count: 0,
-    warnings
-  };
-  map.set(identity.internal_key, created);
-  return created;
-}
-function allocationFacts(expense, splits) {
-  const warnings = [];
-  const expenseCents = moneyToCents(expense.amount);
-  const parsedSplits = splits.map((split) => ({
-    split,
-    cents: moneyToCents(split.share_amount)
-  }));
-  if (expenseCents === null || expenseCents < 0 || parsedSplits.some((item) => item.cents === null || (item.cents ?? 0) < 0)) {
-    warnings.push("SPLIT_AMOUNT_INVALID", "DATA_INCOMPLETE");
-  }
-  const allocatedCents = parsedSplits.reduce(
-    (total, item) => total + Math.max(item.cents ?? 0, 0),
-    0
-  );
-  const amountCents = Math.max(expenseCents ?? 0, 0);
-  let status;
-  if (splits.length === 0) {
-    status = "no_split_rows";
-    warnings.push("SPLIT_DETAILS_MISSING", "DATA_INCOMPLETE");
-  } else if (!isSplitType(expense.split_type)) {
-    status = "inconsistent";
-    warnings.push("DATA_INCOMPLETE");
-  } else if (allocatedCents < amountCents) {
-    status = "under_allocated";
-    warnings.push("SPLIT_UNDER_ALLOCATED", "DATA_INCOMPLETE");
-  } else if (allocatedCents > amountCents) {
-    status = "over_allocated";
-    warnings.push("SPLIT_OVER_ALLOCATED", "DATA_INCOMPLETE");
-  } else {
-    status = "balanced";
-  }
-  if (expense.split_type === "percentage") {
-    const percentages = splits.map(
-      (split) => split.share_percentage === null ? null : percentageToUnits(split.share_percentage)
-    );
-    const invalid = percentages.some((percentage) => percentage === null || percentage < 0 || percentage > 1e6) || percentages.reduce((total, percentage) => total + (percentage ?? 0), 0) !== 1e6;
-    if (invalid) {
-      warnings.push("SPLIT_PERCENTAGE_INVALID", "DATA_INCOMPLETE");
-      status = "inconsistent";
-    }
-  }
-  return {
-    expenseCents: amountCents,
-    allocatedCents,
-    unallocatedCents: Math.max(amountCents - allocatedCents, 0),
-    differenceCents: allocatedCents - amountCents,
-    status,
-    parsedSplits,
-    warnings: uniqueWarnings2(warnings)
-  };
-}
-async function loadGroupAnalysis(input, ctx, userId) {
-  const periodResult = resolvePeriod(input.date_from, input.date_to);
-  if (!periodResult.ok) return periodResult.error;
-  const loaded = await loadGroup(input.group_id, userId, ctx);
-  if ("isError" in loaded) return loaded;
-  const supabase = supabaseForUser(ctx);
-  const { data: rawExpenses, error: expenseError } = await supabase.from("expenses").select(
-    "id,user_id,description,amount,expense_date,shared_group_id,is_shared,paid_by,split_type,installment_number,total_installments,updated_at"
-  ).eq("shared_group_id", input.group_id).gte("expense_date", periodResult.period.date_from).lte("expense_date", periodResult.period.date_to).limit(GROUP_ANALYSIS_MAX_EXPENSES + 1);
-  if (expenseError) return mcpError("READ_FAILED");
-  const allExpenses = rawExpenses ?? [];
-  if (allExpenses.length > GROUP_ANALYSIS_MAX_EXPENSES) {
-    return mcpError("RESULT_SET_TOO_LARGE");
-  }
-  const expenses = allExpenses.filter(
-    (expense) => expense.shared_group_id === input.group_id && expense.is_shared
-  );
-  const expenseIds = expenses.map((expense) => expense.id);
-  let splits = [];
-  if (expenseIds.length > 0) {
-    const { data, error } = await supabase.from("expense_splits").select("id,expense_id,user_id,share_amount,share_percentage,created_at").in("expense_id", expenseIds).limit(GROUP_ANALYSIS_MAX_SPLITS + 1);
-    if (error) return mcpError("READ_FAILED");
-    splits = data ?? [];
-    if (splits.length > GROUP_ANALYSIS_MAX_SPLITS) {
-      return mcpError("RESULT_SET_TOO_LARGE");
-    }
-  }
-  const splitByExpense = /* @__PURE__ */ new Map();
-  for (const split of splits) {
-    const rows = splitByExpense.get(split.expense_id) ?? [];
-    rows.push(split);
-    splitByExpense.set(split.expense_id, rows);
-  }
-  const members = /* @__PURE__ */ new Map();
-  for (const identity of loaded.identities.values()) memberFor(members, identity);
-  const warnings = [...loaded.warnings];
-  let totalExpenseCents = 0;
-  let totalAllocatedCents = 0;
-  let totalUnallocatedCents = 0;
-  let splitExpenseCount = 0;
-  let incompleteExpenseCount = 0;
-  for (const expense of expenses) {
-    const expenseSplits = splitByExpense.get(expense.id) ?? [];
-    const facts = allocationFacts(expense, expenseSplits);
-    warnings.push(...facts.warnings);
-    totalExpenseCents += facts.expenseCents;
-    totalAllocatedCents += facts.allocatedCents;
-    totalUnallocatedCents += facts.unallocatedCents;
-    if (expenseSplits.length > 0) splitExpenseCount += 1;
-    if (facts.status !== "balanced") incompleteExpenseCount += 1;
-    const payerKey = expense.paid_by ?? expense.user_id;
-    const payerIdentity = loaded.identities.get(payerKey) ?? historicalIdentity(payerKey, userId);
-    const payer = memberFor(members, payerIdentity);
-    payer.paid_cents += facts.expenseCents;
-    payer.expense_count_paid += 1;
-    if (payerIdentity.historical) {
-      warnings.push("PAYER_UNRESOLVED", "HISTORICAL_MEMBER_UNRESOLVED", "DATA_INCOMPLETE");
-      incompleteExpenseCount += facts.status === "balanced" ? 1 : 0;
-    }
-    for (const parsed of facts.parsedSplits) {
-      const identity = loaded.identities.get(parsed.split.user_id) ?? historicalIdentity(parsed.split.user_id, userId);
-      const member = memberFor(members, identity);
-      member.allocated_cents += Math.max(parsed.cents ?? 0, 0);
-      member.split_count += 1;
-      if (identity.historical) {
-        warnings.push("HISTORICAL_MEMBER_UNRESOLVED", "DATA_INCOMPLETE");
-      }
-    }
-  }
-  if (expenses.length === 0) warnings.push("NO_SHARED_EXPENSES");
-  const orderedMembers = [...members.values()].sort(
-    (left, right) => (left.membership_id ?? `~${left.internal_key}`).localeCompare(
-      right.membership_id ?? `~${right.internal_key}`
-    )
-  );
-  const allWarnings = uniqueWarnings2([
-    ...warnings,
-    ...orderedMembers.flatMap((member) => member.warnings)
-  ]);
-  return {
-    loaded,
-    period: periodResult.period,
-    members: orderedMembers,
-    totalExpenseCents,
-    totalAllocatedCents,
-    totalUnallocatedCents,
-    expenseCount: expenses.length,
-    splitExpenseCount,
-    incompleteExpenseCount,
-    warnings: allWarnings,
-    dataComplete: !allWarnings.includes("DATA_INCOMPLETE")
-  };
-}
-function publicGroup(loaded) {
-  return {
-    id: loaded.group.id,
-    name: loaded.group.name,
-    is_active: loaded.group.is_active === true,
-    current_user_role: loaded.currentMembership.role,
-    updated_at: loaded.group.updated_at
-  };
-}
-function publicMember(member) {
-  return {
-    membership_id: member.membership_id,
-    display_name: member.display_name,
-    role: member.role,
-    is_current_user: member.is_current_user,
-    paid_amount: centsToMoney(member.paid_cents),
-    allocated_amount: centsToMoney(member.allocated_cents),
-    net_balance: centsToMoney(member.paid_cents - member.allocated_cents),
-    expense_count_paid: member.expense_count_paid,
-    split_count: member.split_count,
-    warnings: uniqueWarnings2(member.warnings)
-  };
-}
-function summaryContent(result) {
-  const members = result.members.map(
-    (member, index) => `${index + 1}. membership_id=${member.membership_id ?? "indispon\xEDvel"}; nome=${member.display_name}; papel=${member.role ?? "hist\xF3rico"}; is_current_user=${member.is_current_user}; pagou=${member.paid_amount}; atribu\xEDdo=${member.allocated_amount}; saldo_l\xEDquido=${member.net_balance}; despesas_pagas=${member.expense_count_paid}; rateios=${member.split_count}`
-  ).join("\n");
-  return `Consulta somente leitura do grupo ${result.group.name} (${result.group.id}), per\xEDodo ${result.period.date_from} a ${result.period.date_to}, America/Sao_Paulo. Despesas compartilhadas=${result.expense_count}; total=${result.total_group_expenses}; total_rateado=${result.total_allocated}; n\xE3o_rateado=${result.total_unallocated}; soma_saldos=${result.net_balance_sum}; despesas_incompletas=${result.incomplete_expense_count}; data_complete=${result.data_complete}; warnings=${result.warnings.join(",") || "nenhum"}.
-${members || "Nenhum membro com identidade p\xFAblica dispon\xEDvel."}
-Nenhuma transa\xE7\xE3o, despesa, associa\xE7\xE3o ou rateio foi criado ou alterado.`;
-}
-function buildSummaryResult(analysis) {
-  const members = analysis.members.map(publicMember);
-  const memberPaidCents = analysis.members.reduce((total, member) => total + member.paid_cents, 0);
-  const memberAllocatedCents = analysis.members.reduce(
-    (total, member) => total + member.allocated_cents,
-    0
-  );
-  return {
-    resource_type: "group_member_summary",
-    group: publicGroup(analysis.loaded),
-    period: analysis.period,
-    total_group_expenses: centsToMoney(analysis.totalExpenseCents),
-    total_allocated: centsToMoney(analysis.totalAllocatedCents),
-    total_unallocated: centsToMoney(analysis.totalUnallocatedCents),
-    member_paid_total: centsToMoney(memberPaidCents),
-    member_allocated_total: centsToMoney(memberAllocatedCents),
-    net_balance_sum: centsToMoney(memberPaidCents - memberAllocatedCents),
-    expense_count: analysis.expenseCount,
-    split_expense_count: analysis.splitExpenseCount,
-    incomplete_expense_count: analysis.incompleteExpenseCount,
-    members,
-    warnings: analysis.warnings,
-    data_complete: analysis.dataComplete,
-    generated_at: (/* @__PURE__ */ new Date()).toISOString()
-  };
-}
-async function getGroupMemberSummary(rawInput, ctx) {
-  const parsed = groupAnalysisInputSchema.safeParse(rawInput);
-  if (!parsed.success) return mcpError("INVALID_INPUT");
-  const userId = ctx.getUserId();
-  if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
-  try {
-    const analysis = await loadGroupAnalysis(parsed.data, ctx, userId);
-    if ("isError" in analysis) return analysis;
-    const result = buildSummaryResult(analysis);
-    return {
-      content: [{ type: "text", text: summaryContent(result) }],
-      structuredContent: result
-    };
-  } catch {
-    return mcpError("READ_FAILED");
-  }
-}
-function suggestSettlementTransfers(balances) {
-  const debtors = balances.filter((balance) => balance.net_cents < 0).map((balance) => ({ ...balance, remaining: -balance.net_cents })).sort(
-    (left, right) => right.remaining - left.remaining || left.membership_id.localeCompare(right.membership_id)
-  );
-  const creditors = balances.filter((balance) => balance.net_cents > 0).map((balance) => ({ ...balance, remaining: balance.net_cents })).sort(
-    (left, right) => right.remaining - left.remaining || left.membership_id.localeCompare(right.membership_id)
-  );
-  const transfers = [];
-  let debtorIndex = 0;
-  let creditorIndex = 0;
-  while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
-    const debtor = debtors[debtorIndex];
-    const creditor = creditors[creditorIndex];
-    const amount = Math.min(debtor.remaining, creditor.remaining);
-    if (amount > 0 && debtor.membership_id !== creditor.membership_id) {
-      transfers.push({
-        from_membership_id: debtor.membership_id,
-        from_display_name: debtor.display_name,
-        to_membership_id: creditor.membership_id,
-        to_display_name: creditor.display_name,
-        amount_cents: amount
-      });
-    }
-    debtor.remaining -= amount;
-    creditor.remaining -= amount;
-    if (debtor.remaining === 0) debtorIndex += 1;
-    if (creditor.remaining === 0) creditorIndex += 1;
-  }
-  const totalCreditCents = balances.reduce(
-    (total, balance) => total + Math.max(balance.net_cents, 0),
-    0
-  );
-  const totalDebitCents = balances.reduce(
-    (total, balance) => total + Math.max(-balance.net_cents, 0),
-    0
-  );
-  const totalTransferCents = transfers.reduce(
-    (total, transfer) => total + transfer.amount_cents,
-    0
-  );
-  return {
-    transfers,
-    totalCreditCents,
-    totalDebitCents,
-    totalTransferCents,
-    residualCents: Math.abs(totalCreditCents - totalDebitCents)
-  };
-}
-function settlementContent(result) {
-  const balances = result.member_balances.map(
-    (member) => `${member.display_name} (${member.membership_id ?? "identidade hist\xF3rica"}): pagou=${member.paid_amount}; atribu\xEDdo=${member.allocated_amount}; saldo=${member.net_balance}`
-  ).join("\n");
-  const transfers = result.transfers.map(
-    (transfer, index) => `${index + 1}. ${transfer.from_display_name} transfere ${transfer.amount} para ${transfer.to_display_name}`
-  ).join("\n");
-  return `Sugest\xF5es matem\xE1ticas de acerto para ${result.group.name}, per\xEDodo ${result.period.date_from} a ${result.period.date_to}. Status=${result.settlement_status}; total_sugerido=${result.total_to_transfer}; residual=${result.residual_amount}; data_complete=${result.data_complete}; warnings=${result.warnings.join(",") || "nenhum"}.
-Saldos:
-${balances || "Nenhum saldo."}
-Sugest\xF5es:
-${transfers || "Nenhuma transfer\xEAncia sugerida."}
-S\xE3o apenas sugest\xF5es matem\xE1ticas, n\xE3o cobran\xE7as obrigat\xF3rias. Nenhuma transfer\xEAncia foi realizada, nenhum pagamento foi confirmado e nenhuma transa\xE7\xE3o ou despesa foi criada ou alterada.`;
-}
-async function getGroupSettlement(rawInput, ctx) {
-  const parsed = groupAnalysisInputSchema.safeParse(rawInput);
-  if (!parsed.success) return mcpError("INVALID_INPUT");
-  const userId = ctx.getUserId();
-  if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
-  try {
-    const analysis = await loadGroupAnalysis(parsed.data, ctx, userId);
-    if ("isError" in analysis) return analysis;
-    const memberBalances = analysis.members.map(publicMember);
-    const resolvable = analysis.members.every((member) => member.membership_id !== null);
-    const sourceBalanced = analysis.totalExpenseCents === analysis.totalAllocatedCents && analysis.dataComplete;
-    let settlement = {
-      transfers: [],
-      totalCreditCents: analysis.members.reduce(
-        (total, member) => total + Math.max(member.paid_cents - member.allocated_cents, 0),
-        0
-      ),
-      totalDebitCents: analysis.members.reduce(
-        (total, member) => total + Math.max(member.allocated_cents - member.paid_cents, 0),
-        0
-      ),
-      totalTransferCents: 0,
-      residualCents: Math.abs(analysis.totalExpenseCents - analysis.totalAllocatedCents)
-    };
-    let status;
-    const warnings = [...analysis.warnings];
-    if (analysis.expenseCount === 0) {
-      status = "no_shared_expenses";
-    } else if (!resolvable) {
-      status = "incomplete_data";
-      warnings.push("SETTLEMENT_NOT_BALANCED", "DATA_INCOMPLETE");
-    } else if (!sourceBalanced) {
-      status = "unbalanced_source_data";
-      warnings.push("SETTLEMENT_NOT_BALANCED", "DATA_INCOMPLETE");
-    } else {
-      settlement = suggestSettlementTransfers(
-        analysis.members.map((member) => ({
-          membership_id: member.membership_id,
-          display_name: member.display_name,
-          net_cents: member.paid_cents - member.allocated_cents
-        }))
-      );
-      if (settlement.transfers.length > GROUP_ANALYSIS_MAX_TRANSFERS) {
-        return mcpError("RESULT_SET_TOO_LARGE");
-      }
-      status = settlement.transfers.length === 0 ? "settled" : "transfers_suggested";
-    }
-    if (settlement.residualCents > 0) warnings.push("RESIDUAL_AMOUNT_REMAINS");
-    const transfers = settlement.transfers.map((transfer) => ({
-      from_membership_id: transfer.from_membership_id,
-      from_display_name: transfer.from_display_name,
-      to_membership_id: transfer.to_membership_id,
-      to_display_name: transfer.to_display_name,
-      amount: centsToMoney(transfer.amount_cents)
-    }));
-    const result = {
-      resource_type: "group_settlement",
-      group: publicGroup(analysis.loaded),
-      period: analysis.period,
-      member_balances: memberBalances,
-      transfers,
-      transfer_count: transfers.length,
-      total_to_transfer: centsToMoney(settlement.totalTransferCents),
-      total_credit: centsToMoney(settlement.totalCreditCents),
-      total_debit: centsToMoney(settlement.totalDebitCents),
-      residual_amount: centsToMoney(settlement.residualCents),
-      settlement_status: status,
-      warnings: uniqueWarnings2(warnings),
-      data_complete: analysis.dataComplete && resolvable && sourceBalanced,
-      generated_at: (/* @__PURE__ */ new Date()).toISOString()
-    };
-    return {
-      content: [{ type: "text", text: settlementContent(result) }],
-      structuredContent: result
-    };
-  } catch {
-    return mcpError("READ_FAILED");
-  }
-}
-async function getExpenseSplitDetails(rawInput, ctx) {
-  const parsed = expenseDetailsInputSchema.safeParse(rawInput);
-  if (!parsed.success) return mcpError("INVALID_INPUT");
-  const userId = ctx.getUserId();
-  if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
-  try {
-    const supabase = supabaseForUser(ctx);
-    const { data: rawExpense, error: expenseError } = await supabase.from("expenses").select(
-      "id,user_id,description,amount,expense_date,shared_group_id,is_shared,paid_by,split_type,installment_number,total_installments,updated_at"
-    ).eq("id", parsed.data.expense_id).maybeSingle();
-    if (expenseError) return mcpError("READ_FAILED");
-    if (!rawExpense) return mcpError("RESOURCE_NOT_FOUND");
-    const expense = rawExpense;
-    if (!expense.shared_group_id || !expense.is_shared) {
-      return mcpError(
-        "EXPENSE_NOT_SHARED",
-        "A despesa acess\xEDvel n\xE3o possui um rateio compartilhado."
-      );
-    }
-    const loaded = await loadGroup(expense.shared_group_id, userId, ctx);
-    if ("isError" in loaded) return loaded;
-    const { data: rawSplits, error: splitError } = await supabase.from("expense_splits").select("id,expense_id,user_id,share_amount,share_percentage,created_at").eq("expense_id", expense.id).limit(GROUP_ANALYSIS_MAX_MEMBERS + 1);
-    if (splitError) return mcpError("READ_FAILED");
-    const splits = rawSplits ?? [];
-    if (splits.length > GROUP_ANALYSIS_MAX_MEMBERS) {
-      return mcpError("RESULT_SET_TOO_LARGE");
-    }
-    const facts = allocationFacts(expense, splits);
-    const warnings = [...loaded.warnings, ...facts.warnings];
-    const payerKey = expense.paid_by ?? expense.user_id;
-    const payer = loaded.identities.get(payerKey) ?? historicalIdentity(payerKey, userId);
-    if (payer.historical) {
-      warnings.push("PAYER_UNRESOLVED", "HISTORICAL_MEMBER_UNRESOLVED", "DATA_INCOMPLETE");
-    }
-    const participants = facts.parsedSplits.map(({ split, cents }) => {
-      const identity = loaded.identities.get(split.user_id) ?? historicalIdentity(split.user_id, userId);
-      if (identity.historical) {
-        warnings.push("HISTORICAL_MEMBER_UNRESOLVED", "DATA_INCOMPLETE");
-      }
-      if (!identity.profile_complete && !identity.historical) {
-        warnings.push("MEMBER_PROFILE_INCOMPLETE", "DATA_INCOMPLETE");
-      }
-      return {
-        membership_id: identity.membership_id,
-        display_name: identity.display_name,
-        is_current_user: identity.is_current_user,
-        allocated_amount: centsToMoney(Math.max(cents ?? 0, 0)),
-        percentage: expense.split_type === "percentage" && split.share_percentage !== null ? Number(split.share_percentage) : null,
-        allocation_source: "persisted_split",
-        _sort: split.id
-      };
-    }).sort(
-      (left, right) => (left.membership_id ?? `~${left._sort}`).localeCompare(
-        right.membership_id ?? `~${right._sort}`
-      )
-    ).map(({ _sort, ...participant }) => participant);
-    const finalWarnings = uniqueWarnings2(warnings);
-    const result = {
-      resource_type: "expense_split_details",
-      expense: {
-        id: expense.id,
-        description: expense.description,
-        amount: centsToMoney(facts.expenseCents),
-        expense_date: expense.expense_date,
-        split_type: isSplitType(expense.split_type) ? expense.split_type : "unknown",
-        group_id: loaded.group.id,
-        group_name: loaded.group.name,
-        paid_by_membership_id: payer.membership_id,
-        paid_by_display_name: payer.display_name,
-        installment_number: expense.installment_number,
-        total_installments: expense.total_installments,
-        updated_at: expense.updated_at
-      },
-      participants,
-      participant_count: participants.length,
-      allocated_amount_total: centsToMoney(facts.allocatedCents),
-      unallocated_amount: centsToMoney(facts.unallocatedCents),
-      allocation_difference: centsToMoney(facts.differenceCents),
-      allocation_status: facts.status,
-      warnings: finalWarnings,
-      data_complete: !finalWarnings.includes("DATA_INCOMPLETE"),
-      generated_at: (/* @__PURE__ */ new Date()).toISOString()
-    };
-    const participantText = participants.map(
-      (participant, index) => `${index + 1}. membership_id=${participant.membership_id ?? "indispon\xEDvel"}; nome=${participant.display_name}; is_current_user=${participant.is_current_user}; valor_atribu\xEDdo=${participant.allocated_amount}; percentual=${participant.percentage ?? "n\xE3o aplic\xE1vel"}`
-    ).join("\n");
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Consulta somente leitura do rateio da despesa ${result.expense.description} (${result.expense.id}), grupo ${result.expense.group_name} (${result.expense.group_id}). Valor=${result.expense.amount}; data=${result.expense.expense_date}; tipo=${result.expense.split_type}; pagador=${result.expense.paid_by_display_name}; paid_by_membership_id=${result.expense.paid_by_membership_id ?? "indispon\xEDvel"}; participantes=${result.participant_count}; total_atribu\xEDdo=${result.allocated_amount_total}; n\xE3o_atribu\xEDdo=${result.unallocated_amount}; diferen\xE7a=${result.allocation_difference}; status=${result.allocation_status}; data_complete=${result.data_complete}; warnings=${result.warnings.join(",") || "nenhum"}.
-${participantText || "Nenhuma linha de rateio persistida."}
-Nenhum dado foi alterado.`
-        }
-      ],
-      structuredContent: result
-    };
-  } catch {
-    return mcpError("READ_FAILED");
-  }
-}
-
-// src/lib/mcp/tools/get-expense-split-details.ts
-var get_expense_split_details_default = defineTool41({
+import { defineTool as defineTool42 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z53 } from "npm:zod@^3.25.76";
+var get_expense_split_details_default = defineTool42({
   name: "get_expense_split_details",
   title: "Detalhar rateio de despesa",
   description: "Consulta o rateio persistido de uma despesa compartilhada acess\xEDvel, resolve identidades p\xFAblicas reduzidas e valida os totais em centavos. N\xE3o altera a despesa nem o rateio.",
   inputSchema: {
-    expense_id: z51.string().uuid()
+    expense_id: z53.string().uuid()
   },
   outputSchema: {
-    resource_type: z51.literal("expense_split_details"),
+    resource_type: z53.literal("expense_split_details"),
     expense: expenseSplitDetailsExpenseSchema,
-    participants: z51.array(expenseSplitParticipantSchema),
-    participant_count: z51.number().int().nonnegative(),
-    allocated_amount_total: z51.number(),
-    unallocated_amount: z51.number().nonnegative(),
-    allocation_difference: z51.number(),
+    participants: z53.array(expenseSplitParticipantSchema),
+    participant_count: z53.number().int().nonnegative(),
+    allocated_amount_total: z53.number(),
+    unallocated_amount: z53.number().nonnegative(),
+    allocation_difference: z53.number(),
     allocation_status: allocationStatusSchema,
-    warnings: z51.array(groupSplitWarningSchema),
-    data_complete: z51.boolean(),
-    generated_at: z51.string().datetime()
+    warnings: z53.array(groupSplitWarningSchema),
+    data_complete: z53.boolean(),
+    generated_at: z53.string().datetime()
   },
   annotations: {
     readOnlyHint: true,
@@ -10056,34 +10503,34 @@ var get_expense_split_details_default = defineTool41({
 });
 
 // src/lib/mcp/tools/get-group-member-summary.ts
-import { defineTool as defineTool42 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z52 } from "npm:zod@^3.25.76";
-var get_group_member_summary_default = defineTool42({
+import { defineTool as defineTool43 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z54 } from "npm:zod@^3.25.76";
+var get_group_member_summary_default = defineTool43({
   name: "get_group_member_summary",
   title: "Resumir rateios por membro",
   description: "Calcula valores pagos, atribu\xEDdos e saldos l\xEDquidos dos membros de um grupo acess\xEDvel em um per\xEDodo civil. Usa os rateios persistidos e n\xE3o altera dados.",
   inputSchema: {
-    group_id: z52.string().uuid(),
-    date_from: z52.string().optional(),
-    date_to: z52.string().optional()
+    group_id: z54.string().uuid(),
+    date_from: z54.string().optional(),
+    date_to: z54.string().optional()
   },
   outputSchema: {
-    resource_type: z52.literal("group_member_summary"),
+    resource_type: z54.literal("group_member_summary"),
     group: groupAnalysisGroupSchema,
     period: groupAnalysisPeriodSchema,
-    total_group_expenses: z52.number(),
-    total_allocated: z52.number(),
-    total_unallocated: z52.number().nonnegative(),
-    member_paid_total: z52.number(),
-    member_allocated_total: z52.number(),
-    net_balance_sum: z52.number(),
-    expense_count: z52.number().int().nonnegative(),
-    split_expense_count: z52.number().int().nonnegative(),
-    incomplete_expense_count: z52.number().int().nonnegative(),
-    members: z52.array(groupMemberSummaryItemSchema),
-    warnings: z52.array(groupSplitWarningSchema),
-    data_complete: z52.boolean(),
-    generated_at: z52.string().datetime()
+    total_group_expenses: z54.number(),
+    total_allocated: z54.number(),
+    total_unallocated: z54.number().nonnegative(),
+    member_paid_total: z54.number(),
+    member_allocated_total: z54.number(),
+    net_balance_sum: z54.number(),
+    expense_count: z54.number().int().nonnegative(),
+    split_expense_count: z54.number().int().nonnegative(),
+    incomplete_expense_count: z54.number().int().nonnegative(),
+    members: z54.array(groupMemberSummaryItemSchema),
+    warnings: z54.array(groupSplitWarningSchema),
+    data_complete: z54.boolean(),
+    generated_at: z54.string().datetime()
   },
   annotations: {
     readOnlyHint: true,
@@ -10095,32 +10542,32 @@ var get_group_member_summary_default = defineTool42({
 });
 
 // src/lib/mcp/tools/get-group-settlement.ts
-import { defineTool as defineTool43 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z53 } from "npm:zod@^3.25.76";
-var get_group_settlement_default = defineTool43({
+import { defineTool as defineTool44 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z55 } from "npm:zod@^3.25.76";
+var get_group_settlement_default = defineTool44({
   name: "get_group_settlement",
   title: "Sugerir acerto do grupo",
   description: "Calcula saldos e sugest\xF5es simplificadas de acerto em centavos para um grupo acess\xEDvel. N\xE3o executa transfer\xEAncia, n\xE3o confirma pagamento e n\xE3o cria transa\xE7\xE3o.",
   inputSchema: {
-    group_id: z53.string().uuid(),
-    date_from: z53.string().optional(),
-    date_to: z53.string().optional()
+    group_id: z55.string().uuid(),
+    date_from: z55.string().optional(),
+    date_to: z55.string().optional()
   },
   outputSchema: {
-    resource_type: z53.literal("group_settlement"),
+    resource_type: z55.literal("group_settlement"),
     group: groupAnalysisGroupSchema,
     period: groupAnalysisPeriodSchema,
-    member_balances: z53.array(groupMemberSummaryItemSchema),
-    transfers: z53.array(settlementTransferSchema),
-    transfer_count: z53.number().int().nonnegative(),
-    total_to_transfer: z53.number().nonnegative(),
-    total_credit: z53.number().nonnegative(),
-    total_debit: z53.number().nonnegative(),
-    residual_amount: z53.number().nonnegative(),
+    member_balances: z55.array(groupMemberSummaryItemSchema),
+    transfers: z55.array(settlementTransferSchema),
+    transfer_count: z55.number().int().nonnegative(),
+    total_to_transfer: z55.number().nonnegative(),
+    total_credit: z55.number().nonnegative(),
+    total_debit: z55.number().nonnegative(),
+    residual_amount: z55.number().nonnegative(),
     settlement_status: settlementStatusSchema,
-    warnings: z53.array(groupSplitWarningSchema),
-    data_complete: z53.boolean(),
-    generated_at: z53.string().datetime()
+    warnings: z55.array(groupSplitWarningSchema),
+    data_complete: z55.boolean(),
+    generated_at: z55.string().datetime()
   },
   annotations: {
     readOnlyHint: true,
@@ -10132,11 +10579,11 @@ var get_group_settlement_default = defineTool43({
 });
 
 // src/lib/mcp/tools/update-shared-group.ts
-import { defineTool as defineTool44 } from "npm:@lovable.dev/mcp-js@0.24.0";
-import { z as z55 } from "npm:zod@^3.25.76";
+import { defineTool as defineTool45 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z57 } from "npm:zod@^3.25.76";
 
 // src/lib/mcp/shared/shared-group-write.ts
-import { z as z54 } from "npm:zod@^3.25.76";
+import { z as z56 } from "npm:zod@^3.25.76";
 var SHARED_GROUP_COLORS = [
   "#6366f1",
   "#8b5cf6",
@@ -10181,13 +10628,13 @@ function hasDangerousTextareaControl(value) {
     return code <= 8 || code === 11 || code === 12 || code >= 14 && code <= 31 || code === 127;
   });
 }
-var sharedGroupNameSchema = z54.string().transform(normalizeName).pipe(
-  z54.string().min(1).max(50).refine((value) => !hasAnyControl(value), "Nome cont\xE9m controle.").refine((value) => !HTML_DELIMITERS.test(value), "Nome cont\xE9m marca\xE7\xE3o.")
+var sharedGroupNameSchema = z56.string().transform(normalizeName).pipe(
+  z56.string().min(1).max(50).refine((value) => !hasAnyControl(value), "Nome cont\xE9m controle.").refine((value) => !HTML_DELIMITERS.test(value), "Nome cont\xE9m marca\xE7\xE3o.")
 );
-var sharedGroupDescriptionSchema = z54.union([
-  z54.null(),
-  z54.string().transform(normalizeDescription).pipe(
-    z54.string().min(1).max(200).refine(
+var sharedGroupDescriptionSchema = z56.union([
+  z56.null(),
+  z56.string().transform(normalizeDescription).pipe(
+    z56.string().min(1).max(200).refine(
       (value) => !hasDangerousTextareaControl(value),
       "Descri\xE7\xE3o cont\xE9m controle."
     ).refine(
@@ -10196,8 +10643,8 @@ var sharedGroupDescriptionSchema = z54.union([
     )
   )
 ]);
-var sharedGroupColorSchema = z54.string().transform((value) => value.toLowerCase()).pipe(z54.enum(SHARED_GROUP_COLORS));
-var sharedGroupChangesSchema = z54.object({
+var sharedGroupColorSchema = z56.string().transform((value) => value.toLowerCase()).pipe(z56.enum(SHARED_GROUP_COLORS));
+var sharedGroupChangesSchema = z56.object({
   name: sharedGroupNameSchema.optional(),
   description: sharedGroupDescriptionSchema.optional(),
   color: sharedGroupColorSchema.optional()
@@ -10205,22 +10652,22 @@ var sharedGroupChangesSchema = z54.object({
   message: "Informe pelo menos uma altera\xE7\xE3o."
 });
 var updateSharedGroupInputProperties = {
-  group_id: z54.string().uuid(),
+  group_id: z56.string().uuid(),
   expected_updated_at: expectedUpdatedAtSchema,
   changes: sharedGroupChangesSchema
 };
-var updateSharedGroupInputSchema = z54.object(updateSharedGroupInputProperties).strict();
-var sharedGroupWriteViewSchema = z54.object({
-  id: z54.string().uuid(),
-  name: z54.string(),
-  description: z54.string().nullable(),
-  color: z54.string().nullable(),
-  is_active: z54.boolean(),
-  max_members: z54.number().int().nullable(),
-  created_at: z54.string().nullable(),
-  updated_at: z54.string()
+var updateSharedGroupInputSchema = z56.object(updateSharedGroupInputProperties).strict();
+var sharedGroupWriteViewSchema = z56.object({
+  id: z56.string().uuid(),
+  name: z56.string(),
+  description: z56.string().nullable(),
+  color: z56.string().nullable(),
+  is_active: z56.boolean(),
+  max_members: z56.number().int().nullable(),
+  created_at: z56.string().nullable(),
+  updated_at: z56.string()
 }).strict();
-var sharedGroupWriteWarningSchema = z54.enum(
+var sharedGroupWriteWarningSchema = z56.enum(
   SHARED_GROUP_WRITE_WARNINGS
 );
 function writeView(row) {
@@ -10414,24 +10861,24 @@ async function updateSharedGroup(rawInput, ctx) {
 }
 
 // src/lib/mcp/tools/update-shared-group.ts
-var update_shared_group_default = defineTool44({
+var update_shared_group_default = defineTool45({
   name: "update_shared_group",
   title: "Editar grupo compartilhado",
   description: "Edita nome, descri\xE7\xE3o ou cor de um grupo ativo e estruturalmente consistente quando a associa\xE7\xE3o autenticada \xE9 owner ou admin. Exige updated_at para concorr\xEAncia otimista e n\xE3o altera membros, pap\xE9is, convites, capacidade ou dados financeiros.",
   inputSchema: updateSharedGroupInputProperties,
   outputSchema: {
-    resource_type: z55.literal("shared_group"),
-    id: z55.string().uuid(),
-    applied: z55.boolean(),
-    no_op: z55.boolean(),
+    resource_type: z57.literal("shared_group"),
+    id: z57.string().uuid(),
+    applied: z57.boolean(),
+    no_op: z57.boolean(),
     before: sharedGroupWriteViewSchema,
     after: sharedGroupWriteViewSchema,
-    changed_fields: z55.array(z55.enum(SHARED_GROUP_EDITABLE_FIELDS)),
-    current_user_role: z55.enum(["owner", "admin"]),
-    can_manage: z55.literal(true),
-    operation_completed_at: z55.string().datetime(),
-    warnings: z55.array(sharedGroupWriteWarningSchema),
-    data_complete: z55.literal(true)
+    changed_fields: z57.array(z57.enum(SHARED_GROUP_EDITABLE_FIELDS)),
+    current_user_role: z57.enum(["owner", "admin"]),
+    can_manage: z57.literal(true),
+    operation_completed_at: z57.string().datetime(),
+    warnings: z57.array(sharedGroupWriteWarningSchema),
+    data_complete: z57.literal(true)
   },
   annotations: {
     readOnlyHint: false,
@@ -10448,7 +10895,7 @@ var mcp_default = defineMcp({
   name: "gastinho-simples-mcp",
   title: "Gastinho Simples",
   version: "0.1.0",
-  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Use list_shared_groups para descobrir grupos, group_id, papel atual, membership_id e updated_at; use list_shared_group_members para identidades p\xFAblicas reduzidas dos membros. update_shared_group edita somente nome, descri\xE7\xE3o e cor de grupo ativo e consistente para owner/admin, sempre reutilizando exatamente o updated_at de list_shared_groups. Use get_expense_split_details para um rateio persistido espec\xEDfico, get_group_member_summary para agregados do per\xEDodo e get_group_settlement somente para sugest\xF5es matem\xE1ticas: nenhuma delas executa transfer\xEAncia, confirma pagamento ou altera dados. Nunca invente group_id, exponha e-mail/UUID de usu\xE1rio nem trate grupos como contas banc\xE1rias. Antes de update_expense, update_income, delete_expense ou delete_income, localize o lan\xE7amento com search_transactions, list_expenses ou list_incomes e reutilize exatamente o updated_at retornado como expected_updated_at. Exclus\xF5es s\xE3o definitivas, sempre exigem confirm_delete=true e, para parcelas, confirma\xE7\xE3o espec\xEDfica; elas removem somente a linha selecionada, nunca a s\xE9rie inteira. Nunca tente editar ou excluir recurso de outro propriet\xE1rio nem afirmar que uma s\xE9rie inteira foi alterada. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para lan\xE7amentos reais, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. get_cashflow_series representa somente realizado. get_cashflow_projection separa realizado, futuro materializado e templates recorrentes; futuro materializado s\xE3o linhas reais com data futura, recorr\xEAncias s\xE3o apenas templates, e a soma combinada pode conter sobreposi\xE7\xE3o. Ela n\xE3o representa saldo banc\xE1rio nem previs\xE3o garantida. Para templates isolados use get_recurring_forecast; para parcelas futuras j\xE1 materializadas use get_card_installments. Use list_cards para localizar o cart\xE3o e obter updated_at antes de update_card ou delete_card; delete_card exige confirma\xE7\xE3o, cart\xE3o inativo e aus\xEAncia total de despesas, parcelas ou templates vinculados. Use get_card_summary para o total registrado no per\xEDodo calculado. Recorr\xEAncias s\xE3o templates mensais: use list_recurring_transactions para list\xE1-las e get_recurring_forecast apenas para proje\xE7\xF5es baseadas nesses templates. Metas tamb\xE9m s\xE3o mensais: use list_goals para localizar uma meta e obter updated_at antes de update_goal ou delete_goal; delete_goal exige confirm_delete=true. create_goal, update_goal e delete_goal n\xE3o criam nem alteram transa\xE7\xF5es e n\xE3o representam investimento ou poupan\xE7a acumulada. Use get_goal_progress para o progresso calculado. Mantenha realizado e recorrente separados, informe o risco de sobreposi\xE7\xE3o da proje\xE7\xE3o quando houver templates participantes e n\xE3o gere recomenda\xE7\xE3o financeira. Use get_category_usage somente para fatos hist\xF3ricos sobre categorias pessoais: categorias compartilhadas n\xE3o existem no modelo atual e transa\xE7\xF5es compartilhadas de outros propriet\xE1rios n\xE3o entram. O forecast n\xE3o representa transa\xE7\xF5es efetivamente lan\xE7adas e nunca deve ser somado automaticamente a parcelas ou lan\xE7amentos futuros. Nunca chame resultados de saldo banc\xE1rio, limite real dispon\xEDvel ou fatura oficialmente paga/em aberto. Use list_categories para obter UUID e updated_at; informe include_inactive=true ao localizar uma categoria inativa antes de update_expense_category ou update_income_category. Desativar ou renomear categoria n\xE3o altera transa\xE7\xF5es, recorr\xEAncias, parcelas ou metas vinculadas. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
+  instructions: "Use get_installment_series para ler a s\xE9rie completa de uma despesa ou receita parcelada, incluindo IDs, datas e updated_at individuais; a tool \xE9 somente leitura e n\xE3o reconstr\xF3i parcelas ausentes. Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Use list_shared_groups para descobrir grupos, group_id, papel atual, membership_id e updated_at; use list_shared_group_members para identidades p\xFAblicas reduzidas dos membros. update_shared_group edita somente nome, descri\xE7\xE3o e cor de grupo ativo e consistente para owner/admin, sempre reutilizando exatamente o updated_at de list_shared_groups. Use get_expense_split_details para um rateio persistido espec\xEDfico, get_group_member_summary para agregados do per\xEDodo e get_group_settlement somente para sugest\xF5es matem\xE1ticas: nenhuma delas executa transfer\xEAncia, confirma pagamento ou altera dados. Nunca invente group_id, exponha e-mail/UUID de usu\xE1rio nem trate grupos como contas banc\xE1rias. Antes de update_expense, update_income, delete_expense ou delete_income, localize o lan\xE7amento com search_transactions, list_expenses ou list_incomes e reutilize exatamente o updated_at retornado como expected_updated_at. Exclus\xF5es s\xE3o definitivas, sempre exigem confirm_delete=true e, para parcelas, confirma\xE7\xE3o espec\xEDfica; elas removem somente a linha selecionada, nunca a s\xE9rie inteira. Nunca tente editar ou excluir recurso de outro propriet\xE1rio nem afirmar que uma s\xE9rie inteira foi alterada. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para lan\xE7amentos reais, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. get_cashflow_series representa somente realizado. get_cashflow_projection separa realizado, futuro materializado e templates recorrentes; futuro materializado s\xE3o linhas reais com data futura, recorr\xEAncias s\xE3o apenas templates, e a soma combinada pode conter sobreposi\xE7\xE3o. Ela n\xE3o representa saldo banc\xE1rio nem previs\xE3o garantida. Para templates isolados use get_recurring_forecast; para parcelas futuras j\xE1 materializadas use get_card_installments. Use list_cards para localizar o cart\xE3o e obter updated_at antes de update_card ou delete_card; delete_card exige confirma\xE7\xE3o, cart\xE3o inativo e aus\xEAncia total de despesas, parcelas ou templates vinculados. Use get_card_summary para o total registrado no per\xEDodo calculado. Recorr\xEAncias s\xE3o templates mensais: use list_recurring_transactions para list\xE1-las e get_recurring_forecast apenas para proje\xE7\xF5es baseadas nesses templates. Metas tamb\xE9m s\xE3o mensais: use list_goals para localizar uma meta e obter updated_at antes de update_goal ou delete_goal; delete_goal exige confirm_delete=true. create_goal, update_goal e delete_goal n\xE3o criam nem alteram transa\xE7\xF5es e n\xE3o representam investimento ou poupan\xE7a acumulada. Use get_goal_progress para o progresso calculado. Mantenha realizado e recorrente separados, informe o risco de sobreposi\xE7\xE3o da proje\xE7\xE3o quando houver templates participantes e n\xE3o gere recomenda\xE7\xE3o financeira. Use get_category_usage somente para fatos hist\xF3ricos sobre categorias pessoais: categorias compartilhadas n\xE3o existem no modelo atual e transa\xE7\xF5es compartilhadas de outros propriet\xE1rios n\xE3o entram. O forecast n\xE3o representa transa\xE7\xF5es efetivamente lan\xE7adas e nunca deve ser somado automaticamente a parcelas ou lan\xE7amentos futuros. Nunca chame resultados de saldo banc\xE1rio, limite real dispon\xEDvel ou fatura oficialmente paga/em aberto. Use list_categories para obter UUID e updated_at; informe include_inactive=true ao localizar uma categoria inativa antes de update_expense_category ou update_income_category. Desativar ou renomear categoria n\xE3o altera transa\xE7\xF5es, recorr\xEAncias, parcelas ou metas vinculadas. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
@@ -10466,6 +10913,7 @@ var mcp_default = defineMcp({
     compare_periods_default,
     list_cards_default,
     get_card_installments_default,
+    get_installment_series_default,
     get_card_summary_default,
     list_recurring_transactions_default,
     get_recurring_forecast_default,

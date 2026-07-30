@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { McpScope } from "./scope";
+import { hasInstallmentEvidence } from "./card-factual";
 import {
   decodeCursor,
   deduplicateById,
@@ -57,6 +58,7 @@ export interface ExpenseRow {
   payment_method: PaymentMethod;
   card_id: string | null;
   card_name: string | null;
+  installment_group_id: string | null;
   installment_number: number | null;
   total_installments: number | null;
   shared_group_id: string | null;
@@ -73,6 +75,7 @@ export interface IncomeRow {
   income_category_id: string | null;
   category_name: string | null;
   category_icon: string | null;
+  installment_group_id: string | null;
   installment_number: number | null;
   total_installments: number | null;
   shared_group_id: string | null;
@@ -86,8 +89,10 @@ export interface ExpenseItem extends SortableTransaction {
   payment_method: PaymentMethod;
   card_id: string | null;
   card_name: string | null;
+  installment_group_id: string | null;
   installment_number: number | null;
   total_installments: number | null;
+  is_installment: boolean;
   shared_group_id: string | null;
   is_shared: boolean;
   is_owner: boolean;
@@ -100,8 +105,10 @@ export interface IncomeItem extends SortableTransaction {
   income_category_id: string | null;
   category_name: string | null;
   category_icon: string | null;
+  installment_group_id: string | null;
   installment_number: number | null;
   total_installments: number | null;
+  is_installment: boolean;
   shared_group_id: string | null;
   is_shared: boolean;
   is_owner: boolean;
@@ -149,9 +156,9 @@ function cursorFilterForTransactionType<
 }
 
 const EXPENSE_COLUMNS =
-  "id, user_id, description, amount, expense_date, created_at, updated_at, category_id, category_name, category_icon, payment_method, card_id, card_name, installment_number, total_installments, shared_group_id";
+  "id, user_id, description, amount, expense_date, created_at, updated_at, category_id, category_name, category_icon, payment_method, card_id, card_name, installment_group_id, installment_number, total_installments, shared_group_id";
 const INCOME_COLUMNS =
-  "id, user_id, description, amount, income_date, created_at, updated_at, income_category_id, category_name, category_icon, installment_number, total_installments, shared_group_id";
+  "id, user_id, description, amount, income_date, created_at, updated_at, income_category_id, category_name, category_icon, installment_group_id, installment_number, total_installments, shared_group_id";
 
 function sortColumn(sortBy: McpSortBy, dateColumn: string): string {
   if (sortBy === "created_at") return "created_at";
@@ -174,8 +181,10 @@ export function expenseItem(row: ExpenseRow, userId: string): ExpenseItem {
     payment_method: row.payment_method,
     card_id: row.card_id,
     card_name: row.card_name,
+    installment_group_id: row.installment_group_id ?? null,
     installment_number: row.installment_number,
     total_installments: row.total_installments,
+    is_installment: hasInstallmentEvidence(row),
     shared_group_id: row.shared_group_id,
     is_shared: row.shared_group_id !== null,
     is_owner: row.user_id === userId,
@@ -194,8 +203,10 @@ export function incomeItem(row: IncomeRow, userId: string): IncomeItem {
     income_category_id: row.income_category_id,
     category_name: row.category_name,
     category_icon: row.category_icon,
+    installment_group_id: row.installment_group_id ?? null,
     installment_number: row.installment_number,
     total_installments: row.total_installments,
+    is_installment: hasInstallmentEvidence(row),
     shared_group_id: row.shared_group_id,
     is_shared: row.shared_group_id !== null,
     is_owner: row.user_id === userId,

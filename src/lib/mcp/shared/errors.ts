@@ -17,6 +17,8 @@ export const MCP_ERROR_CODES = {
   INVALID_TRANSACTION_TYPE: "INVALID_TRANSACTION_TYPE",
   INVALID_FILTER_COMBINATION: "INVALID_FILTER_COMBINATION",
   RESOURCE_NOT_FOUND: "RESOURCE_NOT_FOUND",
+  TRANSACTION_NOT_INSTALLMENT: "TRANSACTION_NOT_INSTALLMENT",
+  INSTALLMENT_SERIES_REFERENCE_MISSING: "INSTALLMENT_SERIES_REFERENCE_MISSING",
   CONCURRENT_MODIFICATION: "CONCURRENT_MODIFICATION",
   INVALID_INPUT: "INVALID_INPUT",
   INVALID_PATCH: "INVALID_PATCH",
@@ -69,6 +71,10 @@ const MESSAGES: Record<McpErrorCode, string> = {
   INVALID_FILTER_COMBINATION:
     "card_id e payment_method são exclusivos de despesas. Repita a consulta com transaction_type=expense.",
   RESOURCE_NOT_FOUND: "Recurso não encontrado para a conta autenticada.",
+  TRANSACTION_NOT_INSTALLMENT:
+    "A transação existe e é acessível, mas não pertence a uma série parcelada. Nenhuma alteração foi realizada.",
+  INSTALLMENT_SERIES_REFERENCE_MISSING:
+    "A transação acessível declara parcelamento, mas não possui referência de série. Nenhuma alteração foi realizada.",
   CONCURRENT_MODIFICATION:
     "O lançamento foi alterado desde a leitura. Releia o registro antes de tentar novamente.",
   INVALID_INPUT: "Os parâmetros da operação são inválidos.",

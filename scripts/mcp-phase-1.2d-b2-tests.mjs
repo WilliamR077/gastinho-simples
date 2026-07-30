@@ -415,9 +415,9 @@ check(core.deleteCard.inputSchema.confirm_delete !== undefined, "confirmação o
 
 const manifest = JSON.parse(await readFile(".lovable/mcp/manifest.json", "utf8"));
 const tools = manifest.mcp.tools;
-equal(tools.length, 48, "manifest 48 tools");
+equal(tools.length, 49, "manifest 49 tools");
 equal(tools.filter((tool) => tool.annotations?.readOnlyHint === true).length,
-  23, "23 read-only");
+  24, "24 read-only");
 equal(tools.filter((tool) => tool.annotations?.readOnlyHint === false).length, 25, "25 write");
 const declared = tools.find((tool) => tool.name === "delete_card");
 check(declared, "delete_card registrada");

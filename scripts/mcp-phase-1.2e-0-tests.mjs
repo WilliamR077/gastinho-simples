@@ -98,11 +98,11 @@ const manifest = JSON.parse(
   await readFile(".lovable/mcp/manifest.json", "utf8"),
 );
 const tools = manifest.mcp.tools;
-equal(tools.length, 48, "manifest mantém 48 tools");
+equal(tools.length, 49, "manifest mantém 49 tools");
 equal(
   tools.filter((tool) => tool.annotations?.readOnlyHint === true).length,
-  23,
-  "manifest mantém 23 read-only",
+  24,
+  "manifest mantém 24 read-only",
 );
 equal(
   tools.filter((tool) => tool.annotations?.readOnlyHint === false).length,

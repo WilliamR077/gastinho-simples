@@ -124,6 +124,7 @@ function expense(overrides = {}) {
     installment_number: 1,
     total_installments: 8,
     shared_group_id: null,
+    updated_at: "2026-07-30T12:00:00.000Z",
     ...overrides,
   };
 }
@@ -880,12 +881,13 @@ check(
 
 const tools = manifest.mcp.tools;
 const names = tools.map((tool) => tool.name);
-equal(tools.length, 48, "manifest contém exatamente 48 tools");
+equal(tools.length, 49, "manifest contém exatamente 49 tools");
 equal(
-  names.slice(10, 30),
+  names.slice(10, 31),
   [
     "list_cards",
     "get_card_installments",
+    "get_installment_series",
     "get_card_summary",
     "list_recurring_transactions",
     "get_recurring_forecast",

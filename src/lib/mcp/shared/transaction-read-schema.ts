@@ -11,6 +11,8 @@ const common = {
   category_icon: z.string().nullable(),
   installment_number: z.number().int().nullable(),
   total_installments: z.number().int().nullable(),
+  installment_group_id: z.string().uuid().nullable(),
+  is_installment: z.boolean(),
   shared_group_id: z.string().uuid().nullable(),
   is_shared: z.boolean(),
   is_owner: z.boolean(),

@@ -223,6 +223,20 @@
                       }
                     ]
                   },
+                  "installment_group_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "is_installment": {
+                    "type": "boolean"
+                  },
                   "shared_group_id": {
                     "anyOf": [
                       {
@@ -292,6 +306,8 @@
                   "category_icon",
                   "installment_number",
                   "total_installments",
+                  "installment_group_id",
+                  "is_installment",
                   "shared_group_id",
                   "is_shared",
                   "is_owner",
@@ -618,6 +634,20 @@
                       }
                     ]
                   },
+                  "installment_group_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "is_installment": {
+                    "type": "boolean"
+                  },
                   "shared_group_id": {
                     "anyOf": [
                       {
@@ -661,6 +691,8 @@
                   "category_icon",
                   "installment_number",
                   "total_installments",
+                  "installment_group_id",
+                  "is_installment",
                   "shared_group_id",
                   "is_shared",
                   "is_owner",
@@ -1312,6 +1344,17 @@
                       "null"
                     ]
                   },
+                  "installment_group_id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "installment_number": {
                     "anyOf": [
                       {
@@ -1331,6 +1374,9 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "is_installment": {
+                    "type": "boolean"
                   },
                   "shared_group_id": {
                     "anyOf": [
@@ -1364,8 +1410,10 @@
                   "payment_method",
                   "card_id",
                   "card_name",
+                  "installment_group_id",
                   "installment_number",
                   "total_installments",
+                  "is_installment",
                   "shared_group_id",
                   "is_shared",
                   "is_owner"
@@ -2536,6 +2584,9 @@
                   "date": {
                     "type": "string"
                   },
+                  "updated_at": {
+                    "type": "string"
+                  },
                   "installment_number": {
                     "anyOf": [
                       {
@@ -2555,6 +2606,9 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "is_installment": {
+                    "type": "boolean"
                   },
                   "category_id": {
                     "anyOf": [
@@ -2634,8 +2688,10 @@
                   "description",
                   "amount",
                   "date",
+                  "updated_at",
                   "installment_number",
                   "total_installments",
+                  "is_installment",
                   "category_id",
                   "category_name",
                   "category_icon",
@@ -2739,6 +2795,465 @@
             "time_scope",
             "applied_filters",
             "series_warnings"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      },
+      {
+        "name": "get_installment_series",
+        "title": "Consultar série parcelada",
+        "description": "Lê, sob RLS, todas as linhas acessíveis de uma série parcelada de despesa ou receita, por installment_group_id ou transaction_id. Retorna IDs, datas, valores, versões individuais e diagnóstico factual de integridade; não altera transações.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "transaction_type": {
+              "type": "string",
+              "enum": [
+                "expense",
+                "income"
+              ]
+            },
+            "installment_group_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "transaction_id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "transaction_type"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "installment_series"
+            },
+            "transaction_type": {
+              "type": "string",
+              "enum": [
+                "expense",
+                "income"
+              ]
+            },
+            "installment_group_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "series": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "installment_group_id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "materialized_installment_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "declared_total_installments": {
+                      "anyOf": [
+                        {
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "observed_total_installments": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    },
+                    "first_installment_number": {
+                      "$ref": "#/properties/series/anyOf/0/properties/declared_total_installments"
+                    },
+                    "last_installment_number": {
+                      "$ref": "#/properties/series/anyOf/0/properties/declared_total_installments"
+                    },
+                    "first_installment_date": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "last_installment_date": {
+                      "$ref": "#/properties/series/anyOf/0/properties/first_installment_date"
+                    },
+                    "total_series_amount": {
+                      "type": "number"
+                    },
+                    "average_installment_amount": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "currency": {
+                      "type": "string",
+                      "const": "BRL"
+                    },
+                    "missing_installment_numbers": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      }
+                    },
+                    "duplicate_installment_numbers": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    },
+                    "out_of_range_installment_numbers": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    },
+                    "integrity_status": {
+                      "type": "string",
+                      "enum": [
+                        "complete",
+                        "incomplete",
+                        "inconsistent",
+                        "legacy_reference_missing"
+                      ]
+                    },
+                    "is_complete": {
+                      "type": "boolean"
+                    },
+                    "shared_group_id": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "warnings": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "INSTALLMENT_SERIES_INCOMPLETE",
+                          "INSTALLMENT_TOTAL_INCONSISTENT",
+                          "INSTALLMENT_TOTAL_INVALID",
+                          "INSTALLMENT_NUMBER_MISSING",
+                          "INSTALLMENT_NUMBER_INVALID",
+                          "INSTALLMENT_NUMBER_DUPLICATE",
+                          "INSTALLMENT_NUMBER_OUT_OF_RANGE",
+                          "INSTALLMENT_SERIES_REFERENCE_INCONSISTENT",
+                          "INSTALLMENT_DATE_INVALID",
+                          "INSTALLMENT_VERSION_MISSING",
+                          "INSTALLMENT_CARD_INCONSISTENT",
+                          "INSTALLMENT_GROUP_SCOPE_INCONSISTENT",
+                          "INSTALLMENT_DESCRIPTION_VARIES",
+                          "INSTALLMENT_CATEGORY_VARIES",
+                          "INSTALLMENT_PAYMENT_METHOD_VARIES",
+                          "INSTALLMENT_AMOUNT_INVALID",
+                          "INSTALLMENT_MATERIALIZED_COUNT_MISMATCH"
+                        ]
+                      }
+                    },
+                    "transaction_type": {
+                      "type": "string",
+                      "const": "expense"
+                    },
+                    "card_id": {
+                      "$ref": "#/properties/series/anyOf/0/properties/shared_group_id"
+                    }
+                  },
+                  "required": [
+                    "installment_group_id",
+                    "materialized_installment_count",
+                    "declared_total_installments",
+                    "observed_total_installments",
+                    "first_installment_number",
+                    "last_installment_number",
+                    "first_installment_date",
+                    "last_installment_date",
+                    "total_series_amount",
+                    "average_installment_amount",
+                    "currency",
+                    "missing_installment_numbers",
+                    "duplicate_installment_numbers",
+                    "out_of_range_installment_numbers",
+                    "integrity_status",
+                    "is_complete",
+                    "shared_group_id",
+                    "warnings",
+                    "transaction_type",
+                    "card_id"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "installment_group_id": {
+                      "$ref": "#/properties/series/anyOf/0/properties/installment_group_id"
+                    },
+                    "materialized_installment_count": {
+                      "$ref": "#/properties/series/anyOf/0/properties/materialized_installment_count"
+                    },
+                    "declared_total_installments": {
+                      "$ref": "#/properties/series/anyOf/0/properties/declared_total_installments"
+                    },
+                    "observed_total_installments": {
+                      "$ref": "#/properties/series/anyOf/0/properties/observed_total_installments"
+                    },
+                    "first_installment_number": {
+                      "$ref": "#/properties/series/anyOf/0/properties/declared_total_installments"
+                    },
+                    "last_installment_number": {
+                      "$ref": "#/properties/series/anyOf/0/properties/declared_total_installments"
+                    },
+                    "first_installment_date": {
+                      "$ref": "#/properties/series/anyOf/0/properties/first_installment_date"
+                    },
+                    "last_installment_date": {
+                      "$ref": "#/properties/series/anyOf/0/properties/first_installment_date"
+                    },
+                    "total_series_amount": {
+                      "$ref": "#/properties/series/anyOf/0/properties/total_series_amount"
+                    },
+                    "average_installment_amount": {
+                      "$ref": "#/properties/series/anyOf/0/properties/average_installment_amount"
+                    },
+                    "currency": {
+                      "$ref": "#/properties/series/anyOf/0/properties/currency"
+                    },
+                    "missing_installment_numbers": {
+                      "$ref": "#/properties/series/anyOf/0/properties/missing_installment_numbers"
+                    },
+                    "duplicate_installment_numbers": {
+                      "$ref": "#/properties/series/anyOf/0/properties/duplicate_installment_numbers"
+                    },
+                    "out_of_range_installment_numbers": {
+                      "$ref": "#/properties/series/anyOf/0/properties/out_of_range_installment_numbers"
+                    },
+                    "integrity_status": {
+                      "$ref": "#/properties/series/anyOf/0/properties/integrity_status"
+                    },
+                    "is_complete": {
+                      "$ref": "#/properties/series/anyOf/0/properties/is_complete"
+                    },
+                    "shared_group_id": {
+                      "$ref": "#/properties/series/anyOf/0/properties/shared_group_id"
+                    },
+                    "warnings": {
+                      "$ref": "#/properties/series/anyOf/0/properties/warnings"
+                    },
+                    "transaction_type": {
+                      "type": "string",
+                      "const": "income"
+                    }
+                  },
+                  "required": [
+                    "installment_group_id",
+                    "materialized_installment_count",
+                    "declared_total_installments",
+                    "observed_total_installments",
+                    "first_installment_number",
+                    "last_installment_number",
+                    "first_installment_date",
+                    "last_installment_date",
+                    "total_series_amount",
+                    "average_installment_amount",
+                    "currency",
+                    "missing_installment_numbers",
+                    "duplicate_installment_numbers",
+                    "out_of_range_installment_numbers",
+                    "integrity_status",
+                    "is_complete",
+                    "shared_group_id",
+                    "warnings",
+                    "transaction_type"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "installments": {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "installment_group_id": {
+                        "$ref": "#/properties/series/anyOf/0/properties/shared_group_id"
+                      },
+                      "installment_number": {
+                        "$ref": "#/properties/series/anyOf/0/properties/declared_total_installments"
+                      },
+                      "total_installments": {
+                        "$ref": "#/properties/series/anyOf/0/properties/declared_total_installments"
+                      },
+                      "amount": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "transaction_date": {
+                        "$ref": "#/properties/series/anyOf/0/properties/first_installment_date"
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "shared_group_id": {
+                        "$ref": "#/properties/series/anyOf/0/properties/shared_group_id"
+                      },
+                      "created_at": {
+                        "$ref": "#/properties/series/anyOf/0/properties/first_installment_date"
+                      },
+                      "updated_at": {
+                        "$ref": "#/properties/series/anyOf/0/properties/first_installment_date"
+                      },
+                      "category_id": {
+                        "$ref": "#/properties/series/anyOf/0/properties/shared_group_id"
+                      },
+                      "card_id": {
+                        "$ref": "#/properties/series/anyOf/0/properties/shared_group_id"
+                      },
+                      "payment_method": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "pix",
+                              "credit",
+                              "debit",
+                              "cash"
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "installment_group_id",
+                      "installment_number",
+                      "total_installments",
+                      "amount",
+                      "transaction_date",
+                      "description",
+                      "shared_group_id",
+                      "created_at",
+                      "updated_at",
+                      "category_id",
+                      "card_id",
+                      "payment_method"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "$ref": "#/properties/installments/items/anyOf/0/properties/id"
+                      },
+                      "installment_group_id": {
+                        "$ref": "#/properties/series/anyOf/0/properties/shared_group_id"
+                      },
+                      "installment_number": {
+                        "$ref": "#/properties/series/anyOf/0/properties/declared_total_installments"
+                      },
+                      "total_installments": {
+                        "$ref": "#/properties/series/anyOf/0/properties/declared_total_installments"
+                      },
+                      "amount": {
+                        "$ref": "#/properties/installments/items/anyOf/0/properties/amount"
+                      },
+                      "transaction_date": {
+                        "$ref": "#/properties/series/anyOf/0/properties/first_installment_date"
+                      },
+                      "description": {
+                        "$ref": "#/properties/installments/items/anyOf/0/properties/description"
+                      },
+                      "shared_group_id": {
+                        "$ref": "#/properties/series/anyOf/0/properties/shared_group_id"
+                      },
+                      "created_at": {
+                        "$ref": "#/properties/series/anyOf/0/properties/first_installment_date"
+                      },
+                      "updated_at": {
+                        "$ref": "#/properties/series/anyOf/0/properties/first_installment_date"
+                      },
+                      "income_category_id": {
+                        "$ref": "#/properties/series/anyOf/0/properties/shared_group_id"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "installment_group_id",
+                      "installment_number",
+                      "total_installments",
+                      "amount",
+                      "transaction_date",
+                      "description",
+                      "shared_group_id",
+                      "created_at",
+                      "updated_at",
+                      "income_category_id"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "$ref": "#/properties/series/anyOf/0/properties/warnings/items"
+              }
+            },
+            "data_complete": {
+              "type": "boolean"
+            },
+            "generated_at": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "resource_type",
+            "transaction_type",
+            "installment_group_id",
+            "series",
+            "installments",
+            "warnings",
+            "data_complete",
+            "generated_at"
           ],
           "additionalProperties": false,
           "$schema": "http://json-schema.org/draft-07/schema#"

@@ -36,8 +36,10 @@ const installmentSchema = z.object({
   description: z.string(),
   amount: z.number(),
   date: z.string(),
+  updated_at: z.string(),
   installment_number: z.number().int().nullable(),
   total_installments: z.number().int().nullable(),
+  is_installment: z.boolean(),
   category_id: z.string().uuid().nullable(),
   category_name: z.string().nullable(),
   category_icon: z.string().nullable(),
@@ -128,7 +130,7 @@ export default defineTool({
     let query = supabase
       .from("expenses")
       .select(
-        "id,description,amount,expense_date,payment_method,card_id,card_name,category_id,category_name,category_icon,installment_group_id,installment_number,total_installments,shared_group_id",
+        "id,description,amount,expense_date,updated_at,payment_method,card_id,card_name,category_id,category_name,category_icon,installment_group_id,installment_number,total_installments,shared_group_id",
       )
       .eq("user_id", ctx.getUserId()!)
       .eq("card_id", input.card_id)
@@ -153,8 +155,10 @@ export default defineTool({
       description: row.description,
       amount: row.amount,
       date: row.expense_date,
+      updated_at: row.updated_at,
       installment_number: row.installment_number,
       total_installments: row.total_installments,
+      is_installment: true,
       category_id: row.category_id,
       category_name: row.category_name,
       category_icon: row.category_icon,
