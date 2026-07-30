@@ -447,15 +447,15 @@ const rows = [
 }
 
 const tools = manifest.mcp.tools;
-equal(tools.length, 49, "manifest contém exatamente 49 tools");
+equal(tools.length, 51, "manifest contém exatamente 51 tools");
 equal(
   tools.filter((tool) => tool.annotations?.readOnlyHint === true).length,
-  24,
+  25,
   "manifest contém 24 tools read-only",
 );
 equal(
-  tools.filter((tool) => tool.annotations?.readOnlyHint !== true).length,
-  25,
+  tools.filter((tool) => tool.annotations?.readOnlyHint === false).length,
+  26,
   "manifest contém 24 tools write",
 );
 const manifestTool = tools.find((tool) => tool.name === "get_card_summary");

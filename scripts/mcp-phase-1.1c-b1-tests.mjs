@@ -693,10 +693,10 @@ equal(
 );
 
 const tools = manifest.mcp.tools;
-equal(tools.length, 49, "manifest contém exatamente 49 tools");
+equal(tools.length, 51, "manifest contém exatamente 51 tools");
 equal(
   tools.filter((tool) => tool.annotations?.readOnlyHint === true).length,
-  24,
+  25,
   "manifest contém 24 tools read-only",
 );
 for (const name of ["list_goals", "get_goal_progress"]) {

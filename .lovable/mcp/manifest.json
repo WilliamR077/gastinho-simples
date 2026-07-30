@@ -12326,6 +12326,235 @@
           "additionalProperties": false,
           "$schema": "http://json-schema.org/draft-07/schema#"
         }
+      },
+      {
+        "name": "get_profile",
+        "title": "Consultar perfil pessoal",
+        "description": "Lê somente o perfil público reduzido da conta autenticada. Retorna display_name e versões do perfil, sem UUID, e-mail, Auth, assinatura ou dados financeiros.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "user_profile"
+            },
+            "profile_exists": {
+              "type": "boolean"
+            },
+            "display_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "profile_complete": {
+              "type": "boolean"
+            },
+            "created_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "updated_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "can_update": {
+              "type": "boolean",
+              "const": true
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "PROFILE_NOT_CONFIGURED",
+                  "PROFILE_INCOMPLETE",
+                  "PROFILE_DATA_INCOMPLETE",
+                  "PROFILE_VERSION_MISSING"
+                ]
+              }
+            },
+            "data_complete": {
+              "type": "boolean"
+            },
+            "generated_at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "resource_type",
+            "profile_exists",
+            "display_name",
+            "profile_complete",
+            "created_at",
+            "updated_at",
+            "can_update",
+            "warnings",
+            "data_complete",
+            "generated_at"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      },
+      {
+        "name": "update_profile",
+        "title": "Atualizar perfil pessoal",
+        "description": "Cria com segurança o perfil público ausente ou atualiza somente display_name no perfil próprio. Perfis existentes exigem expected_updated_at; no-op não escreve. Não altera Auth, e-mail ou outros módulos.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "changes": {
+              "type": "object",
+              "properties": {
+                "display_name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "display_name"
+              ],
+              "additionalProperties": false
+            },
+            "expected_updated_at": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "changes"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string",
+              "const": "user_profile"
+            },
+            "applied": {
+              "type": "boolean"
+            },
+            "created": {
+              "type": "boolean"
+            },
+            "no_op": {
+              "type": "boolean"
+            },
+            "before": {
+              "type": "object",
+              "properties": {
+                "profile_exists": {
+                  "type": "boolean"
+                },
+                "display_name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "profile_complete": {
+                  "type": "boolean"
+                },
+                "created_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "updated_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "profile_exists",
+                "display_name",
+                "profile_complete",
+                "created_at",
+                "updated_at"
+              ],
+              "additionalProperties": false
+            },
+            "after": {
+              "$ref": "#/properties/before"
+            },
+            "changed_fields": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "const": "display_name"
+              }
+            },
+            "operation_completed_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "PROFILE_CREATED",
+                  "PROFILE_UPDATED",
+                  "DISPLAY_NAME_UPDATED",
+                  "NO_CHANGES_APPLIED"
+                ]
+              }
+            },
+            "data_complete": {
+              "type": "boolean",
+              "const": true
+            }
+          },
+          "required": [
+            "resource_type",
+            "applied",
+            "created",
+            "no_op",
+            "before",
+            "after",
+            "changed_fields",
+            "operation_completed_at",
+            "warnings",
+            "data_complete"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
       }
     ]
   }

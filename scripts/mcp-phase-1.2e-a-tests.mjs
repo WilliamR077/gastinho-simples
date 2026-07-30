@@ -993,16 +993,16 @@ const manifest = JSON.parse(
   await readFile(".lovable/mcp/manifest.json", "utf8"),
 );
 const tools = manifest.mcp.tools;
-equal(tools.length, 49, "manifest 49 tools");
+equal(tools.length, 51, "manifest 51 tools");
 equal(
   tools.filter((tool) => tool.annotations?.readOnlyHint === true).length,
-  24,
-  "24 read-only",
+  25,
+  "25 read-only",
 );
 equal(
   tools.filter((tool) => tool.annotations?.readOnlyHint === false).length,
-  25,
-  "25 write",
+  26,
+  "26 write",
 );
 for (const name of [
   "create_expense_category",

@@ -19,6 +19,9 @@ export const MCP_ERROR_CODES = {
   RESOURCE_NOT_FOUND: "RESOURCE_NOT_FOUND",
   TRANSACTION_NOT_INSTALLMENT: "TRANSACTION_NOT_INSTALLMENT",
   INSTALLMENT_SERIES_REFERENCE_MISSING: "INSTALLMENT_SERIES_REFERENCE_MISSING",
+  EXPECTED_VERSION_REQUIRED: "EXPECTED_VERSION_REQUIRED",
+  PROFILE_DATA_INCOMPLETE: "PROFILE_DATA_INCOMPLETE",
+  PROFILE_VERSION_MISSING: "PROFILE_VERSION_MISSING",
   CONCURRENT_MODIFICATION: "CONCURRENT_MODIFICATION",
   INVALID_INPUT: "INVALID_INPUT",
   INVALID_PATCH: "INVALID_PATCH",
@@ -75,6 +78,12 @@ const MESSAGES: Record<McpErrorCode, string> = {
     "A transação existe e é acessível, mas não pertence a uma série parcelada. Nenhuma alteração foi realizada.",
   INSTALLMENT_SERIES_REFERENCE_MISSING:
     "A transação acessível declara parcelamento, mas não possui referência de série. Nenhuma alteração foi realizada.",
+  EXPECTED_VERSION_REQUIRED:
+    "A versão updated_at atual é obrigatória para alterar este recurso.",
+  PROFILE_DATA_INCOMPLETE:
+    "Os dados do perfil não permitem concluir a operação com segurança.",
+  PROFILE_VERSION_MISSING:
+    "O perfil não possui uma versão updated_at utilizável.",
   CONCURRENT_MODIFICATION:
     "O lançamento foi alterado desde a leitura. Releia o registro antes de tentar novamente.",
   INVALID_INPUT: "Os parâmetros da operação são inválidos.",

@@ -37,6 +37,8 @@ for (const check of forbidden) {
 }
 
 assert.match(source, /name:\s*"search_transactions"/u);
+assert.match(source, /name:\s*"get_profile"/u);
+assert.match(source, /name:\s*"update_profile"/u);
 assert.match(source, /name:\s*"get_spending_breakdown"/u);
 assert.match(source, /name:\s*"compare_periods"/u);
 assert.match(source, /name:\s*"list_cards"/u);
