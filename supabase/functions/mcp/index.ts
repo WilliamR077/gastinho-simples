@@ -48,6 +48,7 @@ var MESSAGES = {
   BUSINESS_RULE_VIOLATION: "A opera\xE7\xE3o viola uma regra do lan\xE7amento.",
   EXPENSE_NOT_SHARED: "A despesa acess\xEDvel n\xE3o possui um rateio compartilhado.",
   GROUP_DATA_INCOMPLETE: "Os dados do grupo n\xE3o permitem concluir a an\xE1lise com seguran\xE7a.",
+  GROUP_INACTIVE: "O grupo est\xE1 inativo e n\xE3o pode ser alterado.",
   READ_FAILED: "N\xE3o foi poss\xEDvel concluir a consulta solicitada.",
   WRITE_FAILED: "N\xE3o foi poss\xEDvel concluir a opera\xE7\xE3o de escrita.",
   INVALID_CARD_TYPE: "Tipo de cart\xE3o inv\xE1lido. Use credit, debit ou both.",
@@ -10130,13 +10131,324 @@ var get_group_settlement_default = defineTool43({
   handler: getGroupSettlement
 });
 
+// src/lib/mcp/tools/update-shared-group.ts
+import { defineTool as defineTool44 } from "npm:@lovable.dev/mcp-js@0.24.0";
+import { z as z55 } from "npm:zod@^3.25.76";
+
+// src/lib/mcp/shared/shared-group-write.ts
+import { z as z54 } from "npm:zod@^3.25.76";
+var SHARED_GROUP_COLORS = [
+  "#6366f1",
+  "#8b5cf6",
+  "#ec4899",
+  "#ef4444",
+  "#f97316",
+  "#eab308",
+  "#22c55e",
+  "#14b8a6",
+  "#06b6d4",
+  "#3b82f6"
+];
+var SHARED_GROUP_EDITABLE_FIELDS = [
+  "name",
+  "description",
+  "color"
+];
+var SHARED_GROUP_WRITE_WARNINGS = [
+  "GROUP_UPDATED",
+  "GROUP_NAME_UPDATED",
+  "GROUP_DESCRIPTION_UPDATED",
+  "GROUP_COLOR_UPDATED",
+  "NO_CHANGES_APPLIED"
+];
+var HTML_DELIMITERS = /[<>]/u;
+var MAX_MEMBERSHIP_ROWS = 100;
+function normalizeName(value) {
+  return value.trim();
+}
+function normalizeDescription(value) {
+  return value.replace(/\r\n?/gu, "\n").trim();
+}
+function hasAnyControl(value) {
+  return [...value].some((character) => {
+    const code = character.charCodeAt(0);
+    return code <= 31 || code === 127;
+  });
+}
+function hasDangerousTextareaControl(value) {
+  return [...value].some((character) => {
+    const code = character.charCodeAt(0);
+    return code <= 8 || code === 11 || code === 12 || code >= 14 && code <= 31 || code === 127;
+  });
+}
+var sharedGroupNameSchema = z54.string().transform(normalizeName).pipe(
+  z54.string().min(1).max(50).refine((value) => !hasAnyControl(value), "Nome cont\xE9m controle.").refine((value) => !HTML_DELIMITERS.test(value), "Nome cont\xE9m marca\xE7\xE3o.")
+);
+var sharedGroupDescriptionSchema = z54.union([
+  z54.null(),
+  z54.string().transform(normalizeDescription).pipe(
+    z54.string().min(1).max(200).refine(
+      (value) => !hasDangerousTextareaControl(value),
+      "Descri\xE7\xE3o cont\xE9m controle."
+    ).refine(
+      (value) => !HTML_DELIMITERS.test(value),
+      "Descri\xE7\xE3o cont\xE9m marca\xE7\xE3o."
+    )
+  )
+]);
+var sharedGroupColorSchema = z54.string().transform((value) => value.toLowerCase()).pipe(z54.enum(SHARED_GROUP_COLORS));
+var sharedGroupChangesSchema = z54.object({
+  name: sharedGroupNameSchema.optional(),
+  description: sharedGroupDescriptionSchema.optional(),
+  color: sharedGroupColorSchema.optional()
+}).strict().refine((changes) => Object.keys(changes).length > 0, {
+  message: "Informe pelo menos uma altera\xE7\xE3o."
+});
+var updateSharedGroupInputProperties = {
+  group_id: z54.string().uuid(),
+  expected_updated_at: expectedUpdatedAtSchema,
+  changes: sharedGroupChangesSchema
+};
+var updateSharedGroupInputSchema = z54.object(updateSharedGroupInputProperties).strict();
+var sharedGroupWriteViewSchema = z54.object({
+  id: z54.string().uuid(),
+  name: z54.string(),
+  description: z54.string().nullable(),
+  color: z54.string().nullable(),
+  is_active: z54.boolean(),
+  max_members: z54.number().int().nullable(),
+  created_at: z54.string().nullable(),
+  updated_at: z54.string()
+}).strict();
+var sharedGroupWriteWarningSchema = z54.enum(
+  SHARED_GROUP_WRITE_WARNINGS
+);
+function writeView(row) {
+  const candidate = {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    color: row.color,
+    is_active: row.is_active === true,
+    max_members: row.max_members,
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  };
+  const parsed = sharedGroupWriteViewSchema.safeParse(candidate);
+  return parsed.success ? parsed.data : null;
+}
+function groupIncomplete() {
+  return mcpError(
+    "GROUP_DATA_INCOMPLETE",
+    "Os dados de associa\xE7\xE3o n\xE3o permitem confirmar a autoriza\xE7\xE3o. Nada foi alterado; o grupo precisa de corre\xE7\xE3o administrativa futura."
+  );
+}
+function groupInactive() {
+  return mcpError(
+    "GROUP_INACTIVE",
+    "O grupo est\xE1 inativo e seus metadados n\xE3o podem ser editados nesta fase. Nada foi alterado; esta opera\xE7\xE3o n\xE3o reativa grupos."
+  );
+}
+function permissionDenied() {
+  return mcpError(
+    "FORBIDDEN",
+    "A associa\xE7\xE3o atual n\xE3o possui permiss\xE3o para editar este grupo. Nada foi alterado."
+  );
+}
+async function authorizeGroup(groupId, userId, ctx) {
+  const supabase = supabaseForUser(ctx);
+  const groupResult = await supabase.from("shared_groups").select(
+    "id,name,description,color,created_by,invite_code,max_members,is_active,created_at,updated_at"
+  ).eq("id", groupId).maybeSingle();
+  if (groupResult.error) return mcpError("READ_FAILED");
+  if (!groupResult.data) return mcpError("RESOURCE_NOT_FOUND");
+  const row = groupResult.data;
+  const memberResult = await supabase.from("shared_group_members").select("id,group_id,user_id,role,joined_at").eq("group_id", groupId).limit(MAX_MEMBERSHIP_ROWS + 1);
+  if (memberResult.error) return mcpError("READ_FAILED");
+  const memberships = memberResult.data ?? [];
+  if (memberships.length > MAX_MEMBERSHIP_ROWS) return groupIncomplete();
+  const byUser = /* @__PURE__ */ new Map();
+  for (const membership of memberships) {
+    const rows = byUser.get(membership.user_id) ?? [];
+    rows.push(membership);
+    byUser.set(membership.user_id, rows);
+  }
+  const currentRows = byUser.get(userId) ?? [];
+  const duplicateMembership = [...byUser.values()].some(
+    (rows) => rows.length !== 1
+  );
+  const ownerRows = memberships.filter(
+    (membership) => membership.role === "owner"
+  );
+  const rolesValid = memberships.every(
+    (membership) => ["owner", "admin", "member"].includes(membership.role)
+  );
+  const structurallyConsistent = !duplicateMembership && rolesValid && currentRows.length === 1 && ownerRows.length === 1 && ownerRows[0].user_id === row.created_by && byUser.has(row.created_by) && row.updated_at !== null && row.is_active !== null;
+  if (!structurallyConsistent) return groupIncomplete();
+  if (row.is_active !== true) return groupInactive();
+  const role = currentRows[0].role;
+  if (role !== "owner" && role !== "admin") return permissionDenied();
+  return { row, role };
+}
+function updateContent3(result) {
+  const changes = result.changed_fields.map(
+    (field) => `${field}: ${JSON.stringify(result.before[field])} -> ${JSON.stringify(result.after[field])}`
+  );
+  const outcome = result.applied ? `atualizado; campos=${changes.join("; ")}` : "n\xE3o alterado; nenhum valor mudou e nenhuma escrita foi executada";
+  return `Grupo ${compactText(result.after.name, 50)} (${result.id}) ${outcome}. Papel atual=${result.current_user_role}; can_manage=true; no_op=${result.no_op}; updated_at=${result.before.updated_at} -> ${result.after.updated_at}; warnings=${result.warnings.join(",") || "nenhum"}. Membros, pap\xE9is, convite, capacidade, status, dados financeiros, recorr\xEAncias, metas e rateios n\xE3o foram alterados.`;
+}
+function changedWarnings(fields) {
+  const warnings = ["GROUP_UPDATED"];
+  if (fields.includes("name")) warnings.push("GROUP_NAME_UPDATED");
+  if (fields.includes("description")) {
+    warnings.push("GROUP_DESCRIPTION_UPDATED");
+  }
+  if (fields.includes("color")) warnings.push("GROUP_COLOR_UPDATED");
+  return warnings;
+}
+async function updateSharedGroup(rawInput, ctx) {
+  const userId = ctx.getUserId();
+  if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
+  const parsed = updateSharedGroupInputSchema.safeParse(rawInput);
+  if (!parsed.success) return mcpError("INVALID_INPUT");
+  const input = parsed.data;
+  try {
+    const authorized = await authorizeGroup(
+      input.group_id,
+      userId,
+      ctx
+    );
+    if ("isError" in authorized) return authorized;
+    const current = authorized.row;
+    if (current.updated_at !== input.expected_updated_at) {
+      return mcpError(
+        "CONCURRENT_MODIFICATION",
+        "O grupo mudou desde a leitura. Releia-o com list_shared_groups antes de tentar novamente; nada foi alterado."
+      );
+    }
+    const before = writeView(current);
+    if (!before) return groupIncomplete();
+    const finalValues = {
+      name: input.changes.name ?? current.name,
+      description: input.changes.description !== void 0 ? input.changes.description : current.description,
+      color: input.changes.color ?? current.color
+    };
+    const patch = {};
+    const changedFields = [];
+    for (const field of SHARED_GROUP_EDITABLE_FIELDS) {
+      if (finalValues[field] !== current[field]) {
+        patch[field] = finalValues[field];
+        changedFields.push(field);
+      }
+    }
+    if (changedFields.length === 0) {
+      const result2 = {
+        resource_type: "shared_group",
+        id: before.id,
+        applied: false,
+        no_op: true,
+        before,
+        after: before,
+        changed_fields: changedFields,
+        current_user_role: authorized.role,
+        can_manage: true,
+        operation_completed_at: (/* @__PURE__ */ new Date()).toISOString(),
+        warnings: ["NO_CHANGES_APPLIED"],
+        data_complete: true
+      };
+      return {
+        content: [{ type: "text", text: updateContent3(result2) }],
+        structuredContent: result2
+      };
+    }
+    const supabase = supabaseForUser(ctx);
+    const updateResult = await supabase.from("shared_groups").update(patch).eq("id", input.group_id).eq("updated_at", input.expected_updated_at).eq("is_active", true).select(
+      "id,name,description,color,created_by,invite_code,max_members,is_active,created_at,updated_at"
+    ).maybeSingle();
+    if (updateResult.error) return mcpError("WRITE_FAILED");
+    if (!updateResult.data) {
+      const latest = await authorizeGroup(input.group_id, userId, ctx);
+      if ("isError" in latest) return latest;
+      if (latest.row.updated_at !== input.expected_updated_at) {
+        return mcpError(
+          "CONCURRENT_MODIFICATION",
+          "O grupo mudou durante a atualiza\xE7\xE3o. Releia-o com list_shared_groups antes de tentar novamente; nada foi alterado."
+        );
+      }
+      return mcpError(
+        "WRITE_FAILED",
+        "N\xE3o foi poss\xEDvel concluir a atualiza\xE7\xE3o segura. Nada foi alterado."
+      );
+    }
+    const updated = updateResult.data;
+    const after = writeView(updated);
+    if (!after) return groupIncomplete();
+    const protectedFieldsPreserved = updated.created_by === current.created_by && updated.invite_code === current.invite_code && updated.max_members === current.max_members && updated.is_active === current.is_active && updated.created_at === current.created_at;
+    if (!protectedFieldsPreserved) {
+      return mcpError(
+        "WRITE_FAILED",
+        "A resposta da atualiza\xE7\xE3o n\xE3o confirmou a preserva\xE7\xE3o dos campos protegidos."
+      );
+    }
+    const result = {
+      resource_type: "shared_group",
+      id: after.id,
+      applied: true,
+      no_op: false,
+      before,
+      after,
+      changed_fields: changedFields,
+      current_user_role: authorized.role,
+      can_manage: true,
+      operation_completed_at: (/* @__PURE__ */ new Date()).toISOString(),
+      warnings: changedWarnings(changedFields),
+      data_complete: true
+    };
+    return {
+      content: [{ type: "text", text: updateContent3(result) }],
+      structuredContent: result
+    };
+  } catch {
+    return mcpError("WRITE_FAILED");
+  }
+}
+
+// src/lib/mcp/tools/update-shared-group.ts
+var update_shared_group_default = defineTool44({
+  name: "update_shared_group",
+  title: "Editar grupo compartilhado",
+  description: "Edita nome, descri\xE7\xE3o ou cor de um grupo ativo e estruturalmente consistente quando a associa\xE7\xE3o autenticada \xE9 owner ou admin. Exige updated_at para concorr\xEAncia otimista e n\xE3o altera membros, pap\xE9is, convites, capacidade ou dados financeiros.",
+  inputSchema: updateSharedGroupInputProperties,
+  outputSchema: {
+    resource_type: z55.literal("shared_group"),
+    id: z55.string().uuid(),
+    applied: z55.boolean(),
+    no_op: z55.boolean(),
+    before: sharedGroupWriteViewSchema,
+    after: sharedGroupWriteViewSchema,
+    changed_fields: z55.array(z55.enum(SHARED_GROUP_EDITABLE_FIELDS)),
+    current_user_role: z55.enum(["owner", "admin"]),
+    can_manage: z55.literal(true),
+    operation_completed_at: z55.string().datetime(),
+    warnings: z55.array(sharedGroupWriteWarningSchema),
+    data_complete: z55.literal(true)
+  },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: false
+  },
+  handler: updateSharedGroup
+});
+
 // src/lib/mcp/index.ts
 var projectRef = "jaoldaqvbdllowepzwbr";
 var mcp_default = defineMcp({
   name: "gastinho-simples-mcp",
   title: "Gastinho Simples",
   version: "0.1.0",
-  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Use list_shared_groups para descobrir grupos, group_id, papel atual, membership_id e updated_at; use list_shared_group_members para identidades p\xFAblicas reduzidas dos membros. Use get_expense_split_details para um rateio persistido espec\xEDfico, get_group_member_summary para agregados do per\xEDodo e get_group_settlement somente para sugest\xF5es matem\xE1ticas: nenhuma delas executa transfer\xEAncia, confirma pagamento ou altera dados. Nunca invente group_id, exponha e-mail/UUID de usu\xE1rio nem trate grupos como contas banc\xE1rias. Antes de update_expense, update_income, delete_expense ou delete_income, localize o lan\xE7amento com search_transactions, list_expenses ou list_incomes e reutilize exatamente o updated_at retornado como expected_updated_at. Exclus\xF5es s\xE3o definitivas, sempre exigem confirm_delete=true e, para parcelas, confirma\xE7\xE3o espec\xEDfica; elas removem somente a linha selecionada, nunca a s\xE9rie inteira. Nunca tente editar ou excluir recurso de outro propriet\xE1rio nem afirmar que uma s\xE9rie inteira foi alterada. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para lan\xE7amentos reais, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. get_cashflow_series representa somente realizado. get_cashflow_projection separa realizado, futuro materializado e templates recorrentes; futuro materializado s\xE3o linhas reais com data futura, recorr\xEAncias s\xE3o apenas templates, e a soma combinada pode conter sobreposi\xE7\xE3o. Ela n\xE3o representa saldo banc\xE1rio nem previs\xE3o garantida. Para templates isolados use get_recurring_forecast; para parcelas futuras j\xE1 materializadas use get_card_installments. Use list_cards para localizar o cart\xE3o e obter updated_at antes de update_card ou delete_card; delete_card exige confirma\xE7\xE3o, cart\xE3o inativo e aus\xEAncia total de despesas, parcelas ou templates vinculados. Use get_card_summary para o total registrado no per\xEDodo calculado. Recorr\xEAncias s\xE3o templates mensais: use list_recurring_transactions para list\xE1-las e get_recurring_forecast apenas para proje\xE7\xF5es baseadas nesses templates. Metas tamb\xE9m s\xE3o mensais: use list_goals para localizar uma meta e obter updated_at antes de update_goal ou delete_goal; delete_goal exige confirm_delete=true. create_goal, update_goal e delete_goal n\xE3o criam nem alteram transa\xE7\xF5es e n\xE3o representam investimento ou poupan\xE7a acumulada. Use get_goal_progress para o progresso calculado. Mantenha realizado e recorrente separados, informe o risco de sobreposi\xE7\xE3o da proje\xE7\xE3o quando houver templates participantes e n\xE3o gere recomenda\xE7\xE3o financeira. Use get_category_usage somente para fatos hist\xF3ricos sobre categorias pessoais: categorias compartilhadas n\xE3o existem no modelo atual e transa\xE7\xF5es compartilhadas de outros propriet\xE1rios n\xE3o entram. O forecast n\xE3o representa transa\xE7\xF5es efetivamente lan\xE7adas e nunca deve ser somado automaticamente a parcelas ou lan\xE7amentos futuros. Nunca chame resultados de saldo banc\xE1rio, limite real dispon\xEDvel ou fatura oficialmente paga/em aberto. Use list_categories para obter UUID e updated_at; informe include_inactive=true ao localizar uma categoria inativa antes de update_expense_category ou update_income_category. Desativar ou renomear categoria n\xE3o altera transa\xE7\xF5es, recorr\xEAncias, parcelas ou metas vinculadas. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
+  instructions: "Ferramentas do Gastinho Simples. Confirme a conta com get_connection_identity. Use list_shared_groups para descobrir grupos, group_id, papel atual, membership_id e updated_at; use list_shared_group_members para identidades p\xFAblicas reduzidas dos membros. update_shared_group edita somente nome, descri\xE7\xE3o e cor de grupo ativo e consistente para owner/admin, sempre reutilizando exatamente o updated_at de list_shared_groups. Use get_expense_split_details para um rateio persistido espec\xEDfico, get_group_member_summary para agregados do per\xEDodo e get_group_settlement somente para sugest\xF5es matem\xE1ticas: nenhuma delas executa transfer\xEAncia, confirma pagamento ou altera dados. Nunca invente group_id, exponha e-mail/UUID de usu\xE1rio nem trate grupos como contas banc\xE1rias. Antes de update_expense, update_income, delete_expense ou delete_income, localize o lan\xE7amento com search_transactions, list_expenses ou list_incomes e reutilize exatamente o updated_at retornado como expected_updated_at. Exclus\xF5es s\xE3o definitivas, sempre exigem confirm_delete=true e, para parcelas, confirma\xE7\xE3o espec\xEDfica; elas removem somente a linha selecionada, nunca a s\xE9rie inteira. Nunca tente editar ou excluir recurso de outro propriet\xE1rio nem afirmar que uma s\xE9rie inteira foi alterada. Em pedidos sobre gastos recentes, \xFAltimos ou realizados, use time_scope=occurred; para pr\xF3ximas parcelas use future; use all somente quando o usu\xE1rio pedir todos os registros. Use search_transactions para lan\xE7amentos reais, get_spending_breakdown para valores por categoria, cart\xE3o ou forma de pagamento e compare_periods para compara\xE7\xF5es factuais. get_cashflow_series representa somente realizado. get_cashflow_projection separa realizado, futuro materializado e templates recorrentes; futuro materializado s\xE3o linhas reais com data futura, recorr\xEAncias s\xE3o apenas templates, e a soma combinada pode conter sobreposi\xE7\xE3o. Ela n\xE3o representa saldo banc\xE1rio nem previs\xE3o garantida. Para templates isolados use get_recurring_forecast; para parcelas futuras j\xE1 materializadas use get_card_installments. Use list_cards para localizar o cart\xE3o e obter updated_at antes de update_card ou delete_card; delete_card exige confirma\xE7\xE3o, cart\xE3o inativo e aus\xEAncia total de despesas, parcelas ou templates vinculados. Use get_card_summary para o total registrado no per\xEDodo calculado. Recorr\xEAncias s\xE3o templates mensais: use list_recurring_transactions para list\xE1-las e get_recurring_forecast apenas para proje\xE7\xF5es baseadas nesses templates. Metas tamb\xE9m s\xE3o mensais: use list_goals para localizar uma meta e obter updated_at antes de update_goal ou delete_goal; delete_goal exige confirm_delete=true. create_goal, update_goal e delete_goal n\xE3o criam nem alteram transa\xE7\xF5es e n\xE3o representam investimento ou poupan\xE7a acumulada. Use get_goal_progress para o progresso calculado. Mantenha realizado e recorrente separados, informe o risco de sobreposi\xE7\xE3o da proje\xE7\xE3o quando houver templates participantes e n\xE3o gere recomenda\xE7\xE3o financeira. Use get_category_usage somente para fatos hist\xF3ricos sobre categorias pessoais: categorias compartilhadas n\xE3o existem no modelo atual e transa\xE7\xF5es compartilhadas de outros propriet\xE1rios n\xE3o entram. O forecast n\xE3o representa transa\xE7\xF5es efetivamente lan\xE7adas e nunca deve ser somado automaticamente a parcelas ou lan\xE7amentos futuros. Nunca chame resultados de saldo banc\xE1rio, limite real dispon\xEDvel ou fatura oficialmente paga/em aberto. Use list_categories para obter UUID e updated_at; informe include_inactive=true ao localizar uma categoria inativa antes de update_expense_category ou update_income_category. Desativar ou renomear categoria n\xE3o altera transa\xE7\xF5es, recorr\xEAncias, parcelas ou metas vinculadas. N\xE3o invente dados quando uma busca n\xE3o retornar resultados.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
@@ -10188,7 +10500,8 @@ var mcp_default = defineMcp({
     list_shared_group_members_default,
     get_expense_split_details_default,
     get_group_member_summary_default,
-    get_group_settlement_default
+    get_group_settlement_default,
+    update_shared_group_default
   ]
 });
 

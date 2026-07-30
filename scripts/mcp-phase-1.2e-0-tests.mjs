@@ -98,7 +98,7 @@ const manifest = JSON.parse(
   await readFile(".lovable/mcp/manifest.json", "utf8"),
 );
 const tools = manifest.mcp.tools;
-equal(tools.length, 47, "manifest mantém 47 tools");
+equal(tools.length, 48, "manifest mantém 48 tools");
 equal(
   tools.filter((tool) => tool.annotations?.readOnlyHint === true).length,
   23,
@@ -106,8 +106,8 @@ equal(
 );
 equal(
   tools.filter((tool) => tool.annotations?.readOnlyHint === false).length,
-  24,
-  "manifest mantém 24 write",
+  25,
+  "manifest mantém 25 write",
 );
 
 const changedMigrations = execFileSync(

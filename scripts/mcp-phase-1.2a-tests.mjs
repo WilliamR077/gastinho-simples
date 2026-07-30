@@ -707,10 +707,10 @@ equal(readIncome.updated_at, t0, "list_incomes recebe updated_at");
 
 const manifest = JSON.parse(await readFile(".lovable/mcp/manifest.json", "utf8"));
 const tools = manifest.mcp.tools;
-equal(tools.length, 47, "manifest 47 tools");
+equal(tools.length, 48, "manifest 48 tools");
 equal(tools.filter((tool) => tool.annotations?.readOnlyHint === true).length,
   23, "23 read-only");
-equal(tools.filter((tool) => tool.annotations?.readOnlyHint !== true).length, 24, "24 write");
+equal(tools.filter((tool) => tool.annotations?.readOnlyHint !== true).length, 25, "25 write");
 for (const name of ["update_expense", "update_income"]) {
   const tool = tools.find((candidate) => candidate.name === name);
   check(tool, `${name} no manifest`);

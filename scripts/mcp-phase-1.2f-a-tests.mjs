@@ -644,7 +644,7 @@ const manifest = JSON.parse(
   await readFile(".lovable/mcp/manifest.json", "utf8"),
 );
 const tools = manifest.mcp.tools;
-equal(tools.length, 47, "manifest 47 tools");
+equal(tools.length, 48, "manifest 48 tools");
 equal(
   tools.filter((tool) => tool.annotations?.readOnlyHint === true).length,
   23,
@@ -652,8 +652,8 @@ equal(
 );
 equal(
   tools.filter((tool) => tool.annotations?.readOnlyHint === false).length,
-  24,
-  "24 write",
+  25,
+  "25 write",
 );
 for (const name of ["list_shared_groups", "list_shared_group_members"]) {
   const tool = tools.find((candidate) => candidate.name === name);

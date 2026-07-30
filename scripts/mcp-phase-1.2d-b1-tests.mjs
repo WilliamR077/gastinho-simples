@@ -690,10 +690,10 @@ check(core.updateCard.inputSchema.changes !== undefined, "changes presente");
 
 const manifest = JSON.parse(await readFile(".lovable/mcp/manifest.json", "utf8"));
 const tools = manifest.mcp.tools;
-equal(tools.length, 47, "manifest 47 tools");
+equal(tools.length, 48, "manifest 48 tools");
 equal(tools.filter((tool) => tool.annotations?.readOnlyHint === true).length,
   23, "23 read-only");
-equal(tools.filter((tool) => tool.annotations?.readOnlyHint === false).length, 24, "24 write");
+equal(tools.filter((tool) => tool.annotations?.readOnlyHint === false).length, 25, "25 write");
 for (const [name, destructive] of [
   ["create_card", false],
   ["update_card", true],

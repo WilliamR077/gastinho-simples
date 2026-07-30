@@ -605,7 +605,7 @@ equal(
 );
 
 const tools = manifest.mcp.tools;
-equal(tools.length, 47, "manifest contém exatamente 47 tools");
+equal(tools.length, 48, "manifest contém exatamente 48 tools");
 equal(
   tools.filter((tool) => tool.annotations?.readOnlyHint === true).length,
   23,

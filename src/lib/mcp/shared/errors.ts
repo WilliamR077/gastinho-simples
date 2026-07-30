@@ -27,6 +27,7 @@ export const MCP_ERROR_CODES = {
   BUSINESS_RULE_VIOLATION: "BUSINESS_RULE_VIOLATION",
   EXPENSE_NOT_SHARED: "EXPENSE_NOT_SHARED",
   GROUP_DATA_INCOMPLETE: "GROUP_DATA_INCOMPLETE",
+  GROUP_INACTIVE: "GROUP_INACTIVE",
   READ_FAILED: "READ_FAILED",
   WRITE_FAILED: "WRITE_FAILED",
   INVALID_CARD_TYPE: "INVALID_CARD_TYPE",
@@ -81,6 +82,7 @@ const MESSAGES: Record<McpErrorCode, string> = {
   EXPENSE_NOT_SHARED: "A despesa acessível não possui um rateio compartilhado.",
   GROUP_DATA_INCOMPLETE:
     "Os dados do grupo não permitem concluir a análise com segurança.",
+  GROUP_INACTIVE: "O grupo está inativo e não pode ser alterado.",
   READ_FAILED: "Não foi possível concluir a consulta solicitada.",
   WRITE_FAILED: "Não foi possível concluir a operação de escrita.",
   INVALID_CARD_TYPE: "Tipo de cartão inválido. Use credit, debit ou both.",
