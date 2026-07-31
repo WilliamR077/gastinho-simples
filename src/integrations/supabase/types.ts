@@ -923,6 +923,27 @@ export type Database = {
       can_add_budget_goal: { Args: { user_id_param: string }; Returns: boolean }
       can_add_card: { Args: { user_id_param: string }; Returns: boolean }
       can_create_group: { Args: { user_id_param: string }; Returns: boolean }
+      create_shared_group_atomic: {
+        Args: {
+          p_color?: string
+          p_description?: string
+          p_name: string
+        }
+        Returns: {
+          color: string
+          created_at: string
+          description: string | null
+          group_id: string
+          invite_code: string
+          is_active: boolean
+          joined_at: string
+          max_members: number | null
+          membership_id: string
+          name: string
+          role: Database["public"]["Enums"]["group_member_role"]
+          updated_at: string
+        }[]
+      }
       check_rate_limit: {
         Args: {
           p_bucket_key: string

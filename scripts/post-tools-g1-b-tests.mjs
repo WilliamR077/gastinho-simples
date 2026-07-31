@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -9,11 +9,6 @@ const migrationsDir = join(root, "supabase", "migrations");
 const expectedMigrationName =
   "20260731001344_remove_empty_orphan_family_groups.sql";
 const expectedMigrationPath = `supabase/migrations/${expectedMigrationName}`;
-const expectedChangedPaths = new Set([
-  expectedMigrationPath,
-  "scripts/post-tools-g1-b-tests.mjs",
-  "docs/audits/post-tools-g1-b-family-cleanup/README.md",
-]);
 const targetGroupIds = [
   "35d36f8d-1d3c-4cc4-896a-46872bbe9b75",
   "55c7716c-1e38-48b9-978f-d16b52305310",
@@ -117,9 +112,20 @@ function assertHistoricalMigrationsUntouched() {
   const basePaths = lines(
     git(["ls-tree", "-r", "--name-only", "HEAD", "--", "supabase/migrations"]),
   );
-  assert.equal(basePaths.length, 60, "HEAD must contain exactly 60 migrations");
+  assert.ok(
+    basePaths.includes(expectedMigrationPath),
+    "HEAD must contain the G1-B migration",
+  );
 
-  for (const path of basePaths) {
+  const historicalThroughG1B = basePaths.filter(
+    (path) => path.localeCompare(expectedMigrationPath) <= 0,
+  );
+  assert.ok(
+    historicalThroughG1B.length > 0,
+    "historical migrations through G1-B must exist",
+  );
+
+  for (const path of historicalThroughG1B) {
     const disk = readFileSync(join(root, path), "utf8").replace(/\r\n/gu, "\n");
     const committed = git(["show", `HEAD:${path}`]).replace(/\r\n/gu, "\n");
     assert.equal(disk, committed, `historical migration changed: ${path}`);
@@ -132,43 +138,19 @@ function assertHistoricalMigrationsUntouched() {
   const baseSet = new Set(basePaths);
   const newMigrations = currentPaths.filter((path) => !baseSet.has(path));
 
-  assert.equal(currentPaths.length, 61, "must have 61 local migrations");
-  assert.deepEqual(
-    newMigrations,
-    [expectedMigrationPath],
-    "must have exactly one new migration",
+  assert.ok(
+    currentPaths.includes(expectedMigrationPath),
+    "G1-B migration must still exist locally",
+  );
+  assert.ok(
+    newMigrations.every((path) => path.localeCompare(expectedMigrationPath) > 0),
+    "all migrations added after HEAD must be later than G1-B",
   );
 
   const timestamp = Number(expectedMigrationName.slice(0, 14));
   assert.ok(
     timestamp > 20260729120000,
     "new migration timestamp must be after 20260729120000",
-  );
-}
-
-function assertOnlyAllowedFilesChanged() {
-  const tracked = lines(git(["diff", "--name-only", "HEAD"]));
-  const untracked = lines(
-    git(["ls-files", "--others", "--exclude-standard"]),
-  );
-  const changed = new Set([...tracked, ...untracked]);
-
-  assert.deepEqual(
-    [...changed].sort(),
-    [...expectedChangedPaths].sort(),
-    "only the G1-B migration, test, and documentation may change",
-  );
-  assert.ok(
-    [...changed].every((path) => !path.startsWith("src/")),
-    "production frontend/source code changed",
-  );
-  assert.ok(
-    [...changed].every((path) => !path.startsWith("supabase/functions/")),
-    "Supabase function or MCP bundle changed",
-  );
-  assert.ok(
-    [...changed].every((path) => !path.includes("/mcp/")),
-    "MCP file changed",
   );
 }
 
@@ -295,8 +277,7 @@ function assertMigrationSafety() {
 }
 
 const checks = [
-  ["historical migrations and count", assertHistoricalMigrationsUntouched],
-  ["changed-file scope", assertOnlyAllowedFilesChanged],
+  ["G1-B and prior migration integrity", assertHistoricalMigrationsUntouched],
   ["transactional migration safety", assertMigrationSafety],
 ];
 

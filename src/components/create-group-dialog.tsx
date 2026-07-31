@@ -44,7 +44,7 @@ export function CreateGroupDialog({ open, onOpenChange }: CreateGroupDialogProps
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!name.trim()) return;
+    if (isLoading || !name.trim()) return;
 
     setIsLoading(true);
     try {

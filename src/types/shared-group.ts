@@ -7,7 +7,7 @@ export interface SharedGroup {
   created_by: string;
   invite_code: string;
   color: string;
-  max_members: number;
+  max_members: number | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;

@@ -39,7 +39,8 @@
     "test:mcp:1.2f-c": "node scripts/mcp-phase-1.2f-c-tests.mjs",
     "test:mcp:1.2f-d": "node scripts/mcp-phase-1.2f-d-tests.mjs",
     "test:mcp:1.2f-e": "node scripts/mcp-phase-1.2f-e-tests.mjs",
-    "test:mcp:1.2f-f": "node scripts/mcp-phase-1.2f-f-tests.mjs"
+    "test:mcp:1.2f-f": "node scripts/mcp-phase-1.2f-f-tests.mjs",
+    "test:g1-c": "node scripts/post-tools-g1-c-tests.mjs"
   },
   "dependencies": {
     "@capacitor-community/admob": "^7.2.0",

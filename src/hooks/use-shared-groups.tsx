@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, createContext, useContext, ReactNode } from 'react';
+import { useState, useEffect, useCallback, createContext, useContext, ReactNode, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './use-auth';
 import { useSubscription } from './use-subscription';
@@ -47,6 +47,27 @@ const SharedGroupsContext = createContext<SharedGroupsContextType | undefined>(u
 
 const CONTEXT_STORAGE_KEY = 'gastinho_group_context';
 
+const CREATE_GROUP_ERROR_MESSAGES: Record<string, string> = {
+  G1C_NOT_AUTHENTICATED: 'Você precisa estar logado',
+  G1C_INVALID_NAME: 'Informe um nome válido com até 50 caracteres',
+  G1C_INVALID_DESCRIPTION: 'A descrição deve ter até 200 caracteres',
+  G1C_INVALID_COLOR: 'Selecione uma cor válida',
+  G1C_PLAN_REQUIRED: 'Apenas assinantes Premium podem criar grupos',
+  G1C_GROUP_LIMIT_REACHED: 'Você atingiu o limite de 3 grupos',
+  G1C_INVITE_CODE_UNAVAILABLE: 'Não foi possível criar o grupo. Tente novamente',
+  G1C_MEMBERSHIP_FAILED: 'Não foi possível criar o grupo. Nenhuma alteração foi salva',
+  G1C_CREATE_FAILED: 'Não foi possível criar o grupo. Nenhuma alteração foi salva',
+};
+
+function getCreateGroupErrorMessage(error: unknown): string {
+  const message = typeof error === 'object' && error !== null && 'message' in error
+    ? String(error.message)
+    : '';
+
+  const code = Object.keys(CREATE_GROUP_ERROR_MESSAGES).find((key) => message.includes(key));
+  return code ? CREATE_GROUP_ERROR_MESSAGES[code] : 'Erro ao criar grupo';
+}
+
 export function SharedGroupsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { tier } = useSubscription();
@@ -55,6 +76,7 @@ export function SharedGroupsProvider({ children }: { children: ReactNode }) {
   const [currentContext, setCurrentContext] = useState<SharedGroupContext>({ type: 'personal' });
   const [isLoading, setIsLoading] = useState(true);
   const [groupsCreatedCount, setGroupsCreatedCount] = useState(0);
+  const createGroupInFlightRef = useRef(false);
 
   // Permissões baseadas no tier
   const isPremium = tier === 'premium' || tier === 'premium_plus';
@@ -180,6 +202,10 @@ export function SharedGroupsProvider({ children }: { children: ReactNode }) {
 
   // Criar grupo
   const createGroup = useCallback(async (input: CreateGroupInput): Promise<SharedGroup | null> => {
+    if (createGroupInFlightRef.current) {
+      return null;
+    }
+
     if (!user) {
       toast.error('Você precisa estar logado');
       return null;
@@ -194,58 +220,64 @@ export function SharedGroupsProvider({ children }: { children: ReactNode }) {
       return null;
     }
 
+    createGroupInFlightRef.current = true;
+
     try {
-      // Gerar código de convite
-      const { data: codeData, error: codeError } = await supabase
-        .rpc('generate_invite_code');
+      const normalizedName = input.name.trim();
+      const normalizedDescription = input.description?.trim() || null;
+      const normalizedColor = input.color?.trim() || '#6366f1';
 
-      if (codeError) throw codeError;
+      const { data, error } = await supabase.rpc('create_shared_group_atomic', {
+        p_name: normalizedName,
+        p_description: normalizedDescription,
+        p_color: normalizedColor,
+      });
 
-      const inviteCode = codeData as string;
+      if (error) throw error;
+      if (!data || data.length !== 1) {
+        throw new Error('G1C_CREATE_FAILED');
+      }
 
-      // Criar o grupo
-      const { data: groupData, error: groupError } = await supabase
-        .from('shared_groups')
-        .insert({
-          name: input.name,
-          description: input.description || null,
-          color: input.color || '#6366f1',
-          created_by: user.id,
-          invite_code: inviteCode,
-        })
-        .select()
-        .single();
+      const created = data[0];
+      if (created.role !== 'owner' || !created.group_id || !created.membership_id) {
+        throw new Error('G1C_CREATE_FAILED');
+      }
 
-      if (groupError) throw groupError;
-
-      // Adicionar criador como owner
-      const { error: memberError } = await supabase
-        .from('shared_group_members')
-        .insert({
-          group_id: groupData.id,
-          user_id: user.id,
-          role: 'owner',
-        });
-
-      if (memberError) throw memberError;
+      const groupData: SharedGroup = {
+        id: created.group_id,
+        name: created.name,
+        description: created.description,
+        color: created.color,
+        created_by: user.id,
+        invite_code: created.invite_code,
+        max_members: created.max_members,
+        is_active: created.is_active,
+        created_at: created.created_at,
+        updated_at: created.updated_at,
+        member_count: 1,
+        my_role: created.role,
+      };
 
       toast.success('Grupo criado com sucesso!');
       
       // Atualizar lista e mudar contexto
       await fetchGroups();
-      setGroupContext(groupData.id);
+      setCurrentContext({
+        type: 'group',
+        groupId: groupData.id,
+        groupName: groupData.name,
+        groupColor: groupData.color,
+      });
 
-      return {
-        ...groupData,
-        member_count: 1,
-        my_role: 'owner',
-      };
-    } catch (error: any) {
+      return groupData;
+    } catch (error: unknown) {
       console.error('Erro ao criar grupo:', error);
-      toast.error(error.message || 'Erro ao criar grupo');
+      toast.error(getCreateGroupErrorMessage(error));
       return null;
+    } finally {
+      createGroupInFlightRef.current = false;
     }
-  }, [user, canCreateGroup, isPremium, maxGroups, fetchGroups, setGroupContext]);
+  }, [user, canCreateGroup, isPremium, maxGroups, fetchGroups]);
 
   // Entrar em grupo via código
   const joinGroup = useCallback(async (inviteCode: string): Promise<boolean> => {
