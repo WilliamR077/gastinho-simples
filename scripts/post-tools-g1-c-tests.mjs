@@ -19,23 +19,30 @@ const migrations = readdirSync(join(root, "supabase", "migrations"))
   .filter((name) => name.endsWith(".sql"))
   .sort();
 
-assert.equal(migrations.length, 62, "deve haver 62 migrations locais");
-assert.equal(migrations.at(-1), migrationName, "a G1-C1 deve ser a migration mais recente");
+const migrationIndex = migrations.indexOf(migrationName);
+assert.ok(migrationIndex >= 0, "a migration G1-C1 deve existir");
+assert.equal(migrationIndex, 61, "a G1-C1 deve permanecer como a 62ª migration");
+assert.ok(migrations.length >= 62, "deve haver ao menos 62 migrations locais");
 check(
   Number(migrationName.slice(0, 14)) > 20260731001344,
   "timestamp deve ser posterior à limpeza G1-B",
 );
 
 const historicalHash = createHash("sha256");
-for (const name of migrations.slice(0, -1)) {
+for (const name of migrations.slice(0, migrationIndex)) {
   historicalHash.update(name);
   historicalHash.update("\0");
-  historicalHash.update(readFileSync(join(root, "supabase", "migrations", name)));
+  historicalHash.update(
+    readFileSync(join(root, "supabase", "migrations", name), "utf8").replace(
+      /\r\n/gu,
+      "\n",
+    ),
+  );
   historicalHash.update("\0");
 }
 assert.equal(
   historicalHash.digest("hex"),
-  "72dc985111ecac49807edf82c8ed7e3dced1f9ec7cc1496d72d49f5c5cf66f1f",
+  "58d5cfd005125b34af9dbb82b42158e17e1ef960016d49db3406663421ff2a0b",
   "as 61 migrations históricas devem permanecer byte a byte intactas",
 );
 

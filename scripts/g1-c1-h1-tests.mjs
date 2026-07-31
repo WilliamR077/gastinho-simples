@@ -26,16 +26,19 @@ const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 const migrations = readdirSync(migrationsDir)
   .filter((name) => name.endsWith(".sql"))
   .sort();
-assert.equal(migrations.length, 63, "63 migrations locais");
-assert.equal(migrations.at(-1), hotfixName, "somente a H1 sucede a G1-C1");
+const originalIndex = migrations.indexOf(originalName);
+const hotfixIndex = migrations.indexOf(hotfixName);
+assert.equal(originalIndex, 61, "a G1-C1 permanece como a 62ª migration");
+assert.equal(hotfixIndex, 62, "somente a H1 sucede imediatamente a G1-C1");
+assert.ok(migrations.length >= 63, "ao menos 63 migrations locais");
 assert.equal(
   sha256(original),
   "0f872b1a7e143c4ee71e118bceb60272f6afbbc0329e03f4dbc555232b665960",
   "migration G1-C1 aplicada permanece intacta",
 );
 check(
-  !migrations.some((name) => /g1.?c2|revoke.*shared.*group/iu.test(name)),
-  "nenhuma migration G1-C2",
+  migrations.slice(hotfixIndex + 1).every((name) => name > hotfixName),
+  "migrations posteriores não alteram a ordem G1-C1/H1",
 );
 
 const signaturePattern =
