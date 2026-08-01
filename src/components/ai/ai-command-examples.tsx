@@ -56,6 +56,8 @@ export function AiCommandExamples() {
   });
   const [activeCategory, setActiveCategory] =
     useState<AiCommandCategory | "todos">("todos");
+  const [dialogCategory, setDialogCategory] =
+    useState<AiCommandCategory | "todos">("todos");
 
   const visibleFeatured =
     activeCategory === "todos"
@@ -130,15 +132,47 @@ export function AiCommandExamples() {
             Ver mais exemplos
           </Button>
         </DialogTrigger>
-        <DialogContent className="max-h-[85vh] overflow-y-auto">
+        <DialogContent className="flex max-h-[85vh] flex-col gap-3 overflow-hidden">
           <DialogHeader>
             <DialogTitle>Exemplos de comandos</DialogTitle>
             <DialogDescription>
-              Comandos organizados por categoria.
+              Filtre por categoria e copie o comando que quiser usar.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            {AI_COMMAND_CATEGORIES.map((category) => {
+
+          <div
+            className="flex flex-wrap gap-2"
+            role="group"
+            aria-label="Filtrar exemplos do modal por categoria"
+          >
+            {[{ id: "todos" as const, label: "Todos" }, ...AI_COMMAND_CATEGORIES].map(
+              (category) => {
+                const isActive = dialogCategory === category.id;
+                return (
+                  <button
+                    key={category.id}
+                    type="button"
+                    aria-pressed={isActive}
+                    onClick={() => setDialogCategory(category.id)}
+                    className={cn(
+                      "inline-flex min-h-11 items-center rounded-full border px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 motion-reduce:transition-none",
+                      isActive
+                        ? "border-primary bg-primary/10 font-medium text-foreground"
+                        : "bg-card text-muted-foreground hover:bg-muted",
+                    )}
+                  >
+                    {category.label}
+                  </button>
+                );
+              },
+            )}
+          </div>
+
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+            {AI_COMMAND_CATEGORIES.filter(
+              (category) =>
+                dialogCategory === "todos" || dialogCategory === category.id,
+            ).map((category) => {
               const items = AI_COMMAND_EXAMPLES.filter(
                 (example) => example.category === category.id,
               );

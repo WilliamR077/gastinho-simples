@@ -6,9 +6,19 @@ import { useCopyText } from "@/components/ai/use-copy-text";
 import { MCP_SERVER_URL } from "@/lib/mcp/config";
 
 const steps = [
-  "Copie o endereço do servidor.",
-  "Escolha seu assistente.",
-  "Envie seu primeiro comando.",
+  {
+    title: "Copie o endereço",
+    description: "Use este link para conectar o Gastinho à sua IA.",
+  },
+  {
+    title: "Configure seu assistente",
+    description: "Escolha abaixo o Claude ou outro assistente e siga o tutorial.",
+  },
+  {
+    title: "Autorize e converse",
+    description:
+      "Autorize sua conta do Gastinho e envie um dos comandos de exemplo.",
+  },
 ];
 
 export function AiSetupCard() {
@@ -29,7 +39,7 @@ export function AiSetupCard() {
         <ol className="grid gap-2 sm:grid-cols-3">
           {steps.map((step, index) => (
             <li
-              key={step}
+              key={step.title}
               className="flex items-start gap-2 rounded-lg bg-muted/50 p-2.5 text-sm"
             >
               <span
@@ -38,7 +48,12 @@ export function AiSetupCard() {
               >
                 {index + 1}
               </span>
-              <span className="leading-snug">{step}</span>
+              <span className="min-w-0 leading-snug">
+                <span className="block font-medium">{step.title}</span>
+                <span className="block text-muted-foreground">
+                  {step.description}
+                </span>
+              </span>
             </li>
           ))}
         </ol>
