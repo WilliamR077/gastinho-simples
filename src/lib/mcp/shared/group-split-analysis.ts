@@ -508,7 +508,9 @@ async function loadGroupAnalysis(
   userId: string,
 ): Promise<GroupAnalysis | McpToolError> {
   const periodResult = resolvePeriod(input.date_from, input.date_to);
-  if (!periodResult.ok) return periodResult.error;
+  if (!periodResult.ok) {
+    return (periodResult as Extract<typeof periodResult, { ok: false }>).error;
+  }
   const loaded = await loadGroup(input.group_id, userId, ctx);
   if ("isError" in loaded) return loaded;
   const supabase = supabaseForUser(ctx as never);

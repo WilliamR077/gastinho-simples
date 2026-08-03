@@ -26,7 +26,7 @@ import {
   type RecurringRow,
 } from "../shared/recurring";
 import type { McpScope } from "../shared/scope";
-import { supabaseForUser } from "../shared/supabase-client";
+import { supabaseForUser, type McpQueryLike } from "../shared/supabase-client";
 
 const TRANSACTION_CAP = 10_000;
 const TEMPLATE_CAP = 100;
@@ -125,7 +125,9 @@ export default defineTool({
     const userId = ctx.getUserId();
     if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
     const range = validateBoundedDateRange(input.start_date, input.end_date);
-    if (!range.ok) return mcpError(range.code);
+    if (!range.ok) {
+      return mcpError((range as Extract<typeof range, { ok: false }>).code);
+    }
     const scope: McpScope = input.scope ?? "personal";
     const granularity = input.granularity ?? "month";
     const includeEmpty = input.include_empty_periods ?? true;
@@ -166,7 +168,7 @@ export default defineTool({
       input.end_date,
       granularity,
     )) {
-      warnings.add(warning);
+      warnings.add(warning as never);
     }
     const supabase = supabaseForUser(ctx);
     const configure = <
@@ -211,7 +213,9 @@ export default defineTool({
       while (offset <= TRANSACTION_CAP) {
         const end = Math.min(offset + 999, TRANSACTION_CAP);
         let query = configure(
-          supabase.from(table).select(`amount,${dateColumn}`),
+          supabase
+            .from(table)
+            .select(`amount,${dateColumn}`) as unknown as McpQueryLike,
         );
         if (table === "expenses") {
           query = query
@@ -302,14 +306,14 @@ export default defineTool({
           .from("recurring_expenses")
           .select(
             "id,user_id,description,amount,day_of_month,start_date,end_date,is_active,category_id,category_name,shared_group_id,created_at,updated_at,payment_method,card_id,card_name",
-          ),
+          ) as unknown as McpQueryLike,
       ).eq("is_active", true).limit(TEMPLATE_CAP + 1);
       const incomeTemplatesPromise = configure(
         supabase
           .from("recurring_incomes")
           .select(
             "id,user_id,description,amount,day_of_month,start_date,end_date,is_active,income_category_id,category_name,shared_group_id,created_at,updated_at",
-          ),
+          ) as unknown as McpQueryLike,
       ).eq("is_active", true).limit(TEMPLATE_CAP + 1);
       const [expenseTemplates, incomeTemplates] = await Promise.all([
         expenseTemplatesPromise,
@@ -335,7 +339,11 @@ export default defineTool({
         granularity,
         OCCURRENCE_CAP,
       );
-      if (!projection.ok) return mcpError(projection.code);
+      if (!projection.ok) {
+        return mcpError(
+          (projection as Extract<typeof projection, { ok: false }>).code,
+        );
+      }
       for (const warning of projection.warnings) {
         if (warning === "MISSING_START_DATE_USING_CREATED_AT") {
           warnings.add("RECURRING_START_DATE_FALLBACK");

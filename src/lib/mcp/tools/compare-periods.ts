@@ -341,7 +341,7 @@ export default defineTool({
           text: comparisonContent({
             periodA: result.period_a,
             periodB: result.period_b,
-            absoluteChanges: result.absolute_changes,
+            absoluteChanges: result.absolute_changes as unknown as Record<string, number>,
             percentageChanges: result.percentage_changes,
             breakdownChanges: result.breakdown_changes,
             scope,
