@@ -26,6 +26,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useAdBannerLock } from "@/services/admob-visibility-coordinator";
+import { AiHelpHint } from "@/components/ai/ai-help-hint";
+import { AI_CONTEXTUAL_HINTS } from "@/lib/mcp/aiContextualHints";
 
 // P2: Expanded emoji list for personal finance categories
 const EMOJI_OPTIONS = [
@@ -313,6 +315,14 @@ export function CategoryManager({ open, onOpenChange, context = "expense" }: Cat
                   data-onboarding="category-manager-header"
                 >
                   ✏️ Gerenciar Categorias
+                  {context === "expense" && (
+                    <AiHelpHint
+                      title={AI_CONTEXTUAL_HINTS.expenseCategories.title}
+                      description={AI_CONTEXTUAL_HINTS.expenseCategories.description}
+                      prompt={AI_CONTEXTUAL_HINTS.expenseCategories.prompt}
+                      ariaLabel={AI_CONTEXTUAL_HINTS.expenseCategories.ariaLabel}
+                    />
+                  )}
                 </SheetTitle>
                 <SheetDescription>
                   Adicione, edite, oculte ou exclua categorias. A categoria "Outros" não pode

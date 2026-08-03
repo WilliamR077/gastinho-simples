@@ -19,6 +19,8 @@ import { useSubscription } from "@/hooks/use-subscription";
 import { useCategories } from "@/hooks/use-categories";
 import { buildReportViewModel } from "@/utils/report-view-model";
 import { UpgradeDialog } from "@/components/upgrade-dialog";
+import { AiHelpHint } from "@/components/ai/ai-help-hint";
+import { AI_CONTEXTUAL_HINTS, buildReportsPrompt } from "@/lib/mcp/aiContextualHints";
 
 interface GroupMember {
   user_id: string;
@@ -259,7 +261,14 @@ const Reports = () => {
               <h1 className="text-lg sm:text-2xl font-bold text-foreground truncate">
                 Relatórios
               </h1>
+              <AiHelpHint
+                title={AI_CONTEXTUAL_HINTS.reports.title}
+                description={AI_CONTEXTUAL_HINTS.reports.description}
+                prompt={buildReportsPrompt(periodLabel)}
+                ariaLabel={AI_CONTEXTUAL_HINTS.reports.ariaLabel}
+              />
             </div>
+
             <Button
               variant="default"
               size="sm"
