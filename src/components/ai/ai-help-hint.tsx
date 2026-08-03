@@ -19,6 +19,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useCopyText } from "@/components/ai/use-copy-text";
 import { CLAUDE_WEB_URL } from "@/lib/mcp/aiContextualHints";
 import { cn } from "@/lib/utils";
 
@@ -50,40 +51,12 @@ export function AiHelpHint({
   className,
 }: AiHelpHintProps) {
   const [open, setOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
   const statusId = useId();
-
-  const handleCopy = async () => {
-    let ok = false;
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(prompt);
-        ok = true;
-      }
-    } catch {
-      ok = false;
-    }
-    if (!ok) {
-      const el = document.createElement("textarea");
-      el.value = prompt;
-      el.setAttribute("readonly", "");
-      el.style.position = "fixed";
-      el.style.opacity = "0";
-      document.body.appendChild(el);
-      el.select();
-      try {
-        document.execCommand("copy");
-        ok = true;
-      } catch {
-        ok = false;
-      }
-      document.body.removeChild(el);
-    }
-    if (ok) {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2500);
-    }
-  };
+  const { copy, copiedKey } = useCopyText({
+    successTitle: "Comando copiado",
+    successDescription: "Cole o comando no seu assistente de IA.",
+  });
+  const copied = copiedKey === prompt;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -144,7 +117,7 @@ export function AiHelpHint({
 
           <DialogFooter className="flex-col gap-2 border-t p-4 sm:flex-row sm:justify-end">
             <Button
-              onClick={handleCopy}
+              onClick={() => copy(prompt)}
               className="w-full min-h-11 sm:w-auto"
               aria-describedby={statusId}
             >
