@@ -263,7 +263,7 @@ export default defineTool({
                 .from("recurring_expenses")
                 .select(
                   "id,user_id,description,amount,day_of_month,start_date,end_date,is_active,category,category_id,category_name,shared_group_id,created_at,updated_at,payment_method,card_id,card_name",
-                ),
+                ) as never,
             ).limit(TEMPLATE_CAP + 1)
           : Promise.resolve({ data: [], error: null });
       const incomeTemplatesPromise =
@@ -273,7 +273,7 @@ export default defineTool({
                 .from("recurring_incomes")
                 .select(
                   "id,user_id,description,amount,day_of_month,start_date,end_date,is_active,category,income_category_id,category_name,shared_group_id,created_at,updated_at",
-                ),
+                ) as never,
             ).limit(TEMPLATE_CAP + 1)
           : Promise.resolve({ data: [], error: null });
       const [expenseTemplatesResult, incomeTemplatesResult] = await Promise.all([
