@@ -4883,7 +4883,9 @@ function allocationFacts(expense, splits) {
 }
 async function loadGroupAnalysis(input, ctx, userId) {
   const periodResult = resolvePeriod(input.date_from, input.date_to);
-  if (!periodResult.ok) return periodResult.error;
+  if (!periodResult.ok) {
+    return periodResult.error;
+  }
   const loaded = await loadGroup(input.group_id, userId, ctx);
   if ("isError" in loaded) return loaded;
   const supabase = supabaseForUser(ctx);
@@ -7233,7 +7235,9 @@ var get_category_usage_default = defineTool24({
     const userId = ctx.getUserId();
     if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
     const range = validateBoundedDateRange(input.start_date, input.end_date);
-    if (!range.ok) return mcpError(range.code);
+    if (!range.ok) {
+      return mcpError(range.code);
+    }
     const includeInactive = input.include_inactive ?? true;
     const includeUnused = input.include_unused ?? true;
     const limit = input.limit ?? 50;
@@ -7400,7 +7404,9 @@ var get_cashflow_series_default = defineTool25({
     const userId = ctx.getUserId();
     if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
     const range = validateBoundedDateRange(input.start_date, input.end_date);
-    if (!range.ok) return mcpError(range.code);
+    if (!range.ok) {
+      return mcpError(range.code);
+    }
     const scope = input.scope ?? "personal";
     const granularity = input.granularity ?? "month";
     const includeEmptyPeriods = input.include_empty_periods ?? true;
@@ -7762,7 +7768,9 @@ var get_cashflow_projection_default = defineTool26({
     const userId = ctx.getUserId();
     if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
     const range = validateBoundedDateRange(input.start_date, input.end_date);
-    if (!range.ok) return mcpError(range.code);
+    if (!range.ok) {
+      return mcpError(range.code);
+    }
     const scope = input.scope ?? "personal";
     const granularity = input.granularity ?? "month";
     const includeEmpty = input.include_empty_periods ?? true;
@@ -7918,7 +7926,11 @@ var get_cashflow_projection_default = defineTool26({
         granularity,
         OCCURRENCE_CAP2
       );
-      if (!projection2.ok) return mcpError(projection2.code);
+      if (!projection2.ok) {
+        return mcpError(
+          projection2.code
+        );
+      }
       for (const warning of projection2.warnings) {
         if (warning === "MISSING_START_DATE_USING_CREATED_AT") {
           warnings.add("RECURRING_START_DATE_FALLBACK");

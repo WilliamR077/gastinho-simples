@@ -222,13 +222,13 @@ async function references(
   const recurringRows = recurring.data ?? [];
   const goalRows = (goalResult.data ?? []).filter((goal) =>
     kind === "expense"
-      ? expenseGoalReferenceMatchesCategory(goal.category, category)
+      ? expenseGoalReferenceMatchesCategory(goal.category, category as never)
       : goal.category === category.id,
   );
   const hasNameDependentExpenseGoal =
     kind === "expense" &&
     goalRows.some((goal) =>
-      expenseGoalReferenceDependsOnName(goal.category, category),
+      expenseGoalReferenceDependsOnName(goal.category, category as never),
     );
   const today = todayIso();
   const dates = transactionRows.map((row) =>
@@ -241,7 +241,7 @@ async function references(
   const future = dates.length - historical;
   const activeRecurring = recurringRows.filter((row) => row.is_active).length;
   if (kind === "expense") {
-    const installments = transactionRows.filter(
+    const installments = (transactionRows as InstallmentRefRow[]).filter(
       (row) =>
         row.installment_group_id !== null ||
         (row.installment_number ?? 0) > 1 ||

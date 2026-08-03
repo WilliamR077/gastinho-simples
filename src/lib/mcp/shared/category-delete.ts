@@ -155,7 +155,7 @@ async function inspectReferences(
     const legacyGoals = matchingGoals.filter((goal) =>
       expenseGoalReferenceDependsOnName(goal.category, row),
     ).length;
-    const installmentCount = transactionRows.filter(
+    const installmentCount = (transactionRows as InstallmentRefRow[]).filter(
       (item) =>
         item.installment_group_id !== null ||
         (item.installment_number ?? 0) > 1 ||

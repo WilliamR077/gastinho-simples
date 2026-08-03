@@ -543,7 +543,9 @@ export async function listSharedGroupMembers(
     const profileByUser = new Map(
       profiles.map((profile) => [profile.user_id, profile.display_name]),
     );
-    const warnings: SharedGroupMemberWarning[] = inspected.warnings.filter(
+    const warnings: SharedGroupMemberWarning[] = (
+      inspected.warnings as SharedGroupMemberWarning[]
+    ).filter(
       (warning): warning is SharedGroupMemberWarning =>
         SHARED_GROUP_MEMBER_WARNINGS.includes(
           warning as SharedGroupMemberWarning,

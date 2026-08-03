@@ -89,7 +89,9 @@ export default defineTool({
     const userId = ctx.getUserId();
     if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
     const range = validateBoundedDateRange(input.start_date, input.end_date);
-    if (!range.ok) return mcpError(range.code);
+    if (!range.ok) {
+      return mcpError((range as Extract<typeof range, { ok: false }>).code);
+    }
     const scope: McpScope = input.scope ?? "personal";
     const granularity = input.granularity ?? "month";
     const includeEmptyPeriods = input.include_empty_periods ?? true;
@@ -153,9 +155,7 @@ export default defineTool({
       while (offset <= TRANSACTION_CAP) {
         const end = Math.min(offset + 999, TRANSACTION_CAP);
         let query = applyScope(
-          supabase
-            .from(table)
-            .select(columns),
+          supabase.from(table).select(columns) as never,
         );
         if (table === "expenses") {
           query = query
@@ -173,7 +173,7 @@ export default defineTool({
           .order(dateColumn, { ascending: true })
           .range(offset, end);
         if (error) return { ok: false, tooLarge: false };
-        const page = (data ?? []) as Array<
+        const page = (data ?? []) as unknown as Array<
           ExpenseCashflowRow | IncomeCashflowRow
         >;
         rows.push(...page);

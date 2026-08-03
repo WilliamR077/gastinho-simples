@@ -125,7 +125,9 @@ export default defineTool({
     const userId = ctx.getUserId();
     if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
     const range = validateBoundedDateRange(input.start_date, input.end_date);
-    if (!range.ok) return mcpError(range.code);
+    if (!range.ok) {
+      return mcpError((range as Extract<typeof range, { ok: false }>).code);
+    }
     const scope: McpScope = input.scope ?? "personal";
     const granularity = input.granularity ?? "month";
     const includeEmpty = input.include_empty_periods ?? true;
@@ -166,7 +168,7 @@ export default defineTool({
       input.end_date,
       granularity,
     )) {
-      warnings.add(warning);
+      warnings.add(warning as never);
     }
     const supabase = supabaseForUser(ctx);
     const configure = <
@@ -335,7 +337,11 @@ export default defineTool({
         granularity,
         OCCURRENCE_CAP,
       );
-      if (!projection.ok) return mcpError(projection.code);
+      if (!projection.ok) {
+        return mcpError(
+          (projection as Extract<typeof projection, { ok: false }>).code,
+        );
+      }
       for (const warning of projection.warnings) {
         if (warning === "MISSING_START_DATE_USING_CREATED_AT") {
           warnings.add("RECURRING_START_DATE_FALLBACK");
