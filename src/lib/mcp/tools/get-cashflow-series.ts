@@ -17,7 +17,7 @@ import {
   validateBoundedDateRange,
 } from "../shared/phase-1.1b-core";
 import type { McpScope } from "../shared/scope";
-import { supabaseForUser } from "../shared/supabase-client";
+import { supabaseForUser, type McpQueryLike } from "../shared/supabase-client";
 
 const TRANSACTION_CAP = 10_000;
 const warningSchema = z.enum(CASHFLOW_WARNINGS);
@@ -155,7 +155,7 @@ export default defineTool({
       while (offset <= TRANSACTION_CAP) {
         const end = Math.min(offset + 999, TRANSACTION_CAP);
         let query = applyScope(
-          supabase.from(table).select(columns) as never,
+          supabase.from(table).select(columns) as unknown as McpQueryLike,
         );
         if (table === "expenses") {
           query = query

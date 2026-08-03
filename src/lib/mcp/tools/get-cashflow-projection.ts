@@ -26,7 +26,7 @@ import {
   type RecurringRow,
 } from "../shared/recurring";
 import type { McpScope } from "../shared/scope";
-import { supabaseForUser } from "../shared/supabase-client";
+import { supabaseForUser, type McpQueryLike } from "../shared/supabase-client";
 
 const TRANSACTION_CAP = 10_000;
 const TEMPLATE_CAP = 100;
@@ -304,14 +304,14 @@ export default defineTool({
           .from("recurring_expenses")
           .select(
             "id,user_id,description,amount,day_of_month,start_date,end_date,is_active,category_id,category_name,shared_group_id,created_at,updated_at,payment_method,card_id,card_name",
-          ),
+          ) as unknown as McpQueryLike,
       ).eq("is_active", true).limit(TEMPLATE_CAP + 1);
       const incomeTemplatesPromise = configure(
         supabase
           .from("recurring_incomes")
           .select(
             "id,user_id,description,amount,day_of_month,start_date,end_date,is_active,income_category_id,category_name,shared_group_id,created_at,updated_at",
-          ),
+          ) as unknown as McpQueryLike,
       ).eq("is_active", true).limit(TEMPLATE_CAP + 1);
       const [expenseTemplates, incomeTemplates] = await Promise.all([
         expenseTemplatesPromise,
