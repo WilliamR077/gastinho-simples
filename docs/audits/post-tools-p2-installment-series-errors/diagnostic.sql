@@ -63,7 +63,7 @@ WITH source_rows AS (
     e.installment_group_id,
     e.installment_number,
     e.total_installments,
-    e.expense_date::date AS transaction_date,
+    (e.expense_date AT TIME ZONE 'America/Sao_Paulo')::date AS transaction_date,
     e.user_id,
     e.shared_group_id,
     (e.card_id IS NOT NULL) AS eligible_for_card_tool
@@ -100,7 +100,7 @@ WITH source_rows AS (
     r.source_table,
     r.installment_group_id,
     CASE WHEN count(DISTINCT r.user_id) = 1 THEN (array_agg(r.user_id))[1] END AS user_id,
-    CASE WHEN count(DISTINCT pg_catalog.coalesce(r.shared_group_id::text, '__NULL__')) = 1
+    CASE WHEN count(DISTINCT coalesce(r.shared_group_id::text, '__NULL__')) = 1
       THEN (array_agg(r.shared_group_id))[1] END AS shared_group_id,
     count(*)::integer AS row_count,
     count(DISTINCT r.installment_number)::integer AS distinct_installment_numbers,
@@ -112,7 +112,7 @@ WITH source_rows AS (
     max(r.transaction_date) AS last_date,
     count(*) FILTER (WHERE r.installment_number IS NULL OR r.installment_number <= 0)::integer AS invalid_number_count,
     (count(DISTINCT r.total_installments) > 1 OR count(*) FILTER (WHERE r.total_installments IS NULL) > 0) AS divergent_total_installments,
-    pg_catalog.coalesce(bool_or(r.installment_number > r.total_installments), false) AS total_less_than_max_number,
+    coalesce(bool_or(r.installment_number > r.total_installments), false) AS total_less_than_max_number,
     count(*) FILTER (
       WHERE r.total_installments IS NOT NULL AND r.installment_number > r.total_installments
     )::integer AS extra_rows_beyond_expected,
@@ -133,14 +133,14 @@ WITH source_rows AS (
           - (extract(year FROM r.previous_date)::integer * 12 + extract(month FROM r.previous_date)::integer) < 0
     )::integer AS backwards_months,
     count(DISTINCT r.user_id)::integer AS distinct_user_count,
-    count(DISTINCT pg_catalog.coalesce(r.shared_group_id::text, '__NULL__'))::integer AS distinct_shared_group_count,
+    count(DISTINCT coalesce(r.shared_group_id::text, '__NULL__'))::integer AS distinct_shared_group_count,
     bool_or(r.eligible_for_card_tool) AS eligible_for_card_tool
   FROM ordered_rows AS r
   GROUP BY r.source_table, r.installment_group_id
 ), enriched AS (
   SELECT
     s.*,
-    pg_catalog.coalesce((
+    coalesce((
       SELECT jsonb_agg(n.number_value ORDER BY n.number_value)
       FROM generate_series(
         1,
@@ -154,7 +154,7 @@ WITH source_rows AS (
           AND present.installment_number = n.number_value
       )
     ), '[]'::jsonb) AS missing_numbers,
-    pg_catalog.coalesce((
+    coalesce((
       SELECT jsonb_agg(nc.installment_number ORDER BY nc.installment_number)
       FROM number_counts AS nc
       WHERE nc.source_table = s.source_table
@@ -231,7 +231,7 @@ ORDER BY c.source_table, c.installment_group_id;
 -- Resumo. Repete o CTE de forma autocontida para execução isolada.
 WITH source_rows AS (
   SELECT 'expenses'::text AS source_table, installment_group_id, installment_number,
-    total_installments, expense_date::date AS transaction_date, user_id, shared_group_id,
+    total_installments, (expense_date AT TIME ZONE 'America/Sao_Paulo')::date AS transaction_date, user_id, shared_group_id,
     (card_id IS NOT NULL) AS eligible_for_card_tool
   FROM public.expenses WHERE installment_group_id IS NOT NULL
   UNION ALL
@@ -250,7 +250,7 @@ WITH source_rows AS (
     count(DISTINCT total_installments)::integer AS total_variants,
     count(*) FILTER (WHERE total_installments IS NULL)::integer AS null_totals,
     count(DISTINCT user_id)::integer AS user_contexts,
-    count(DISTINCT pg_catalog.coalesce(shared_group_id::text, '__NULL__'))::integer AS group_contexts,
+    count(DISTINCT coalesce(shared_group_id::text, '__NULL__'))::integer AS group_contexts,
     bool_or(eligible_for_card_tool) AS eligible_for_card_tool,
     count(DISTINCT (extract(year FROM transaction_date)::integer * 12 + extract(month FROM transaction_date)::integer))::integer AS distinct_months,
     min(extract(year FROM transaction_date)::integer * 12 + extract(month FROM transaction_date)::integer) AS first_month,
