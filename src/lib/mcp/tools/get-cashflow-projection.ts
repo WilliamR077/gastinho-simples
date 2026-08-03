@@ -213,7 +213,9 @@ export default defineTool({
       while (offset <= TRANSACTION_CAP) {
         const end = Math.min(offset + 999, TRANSACTION_CAP);
         let query = configure(
-          supabase.from(table).select(`amount,${dateColumn}`),
+          supabase
+            .from(table)
+            .select(`amount,${dateColumn}`) as unknown as McpQueryLike,
         );
         if (table === "expenses") {
           query = query
