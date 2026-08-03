@@ -19,6 +19,8 @@ import { useSubscription } from "@/hooks/use-subscription";
 import { useCategories } from "@/hooks/use-categories";
 import { buildReportViewModel } from "@/utils/report-view-model";
 import { UpgradeDialog } from "@/components/upgrade-dialog";
+import { AiHelpHint } from "@/components/ai/ai-help-hint";
+import { AI_CONTEXTUAL_HINTS, buildReportsPrompt } from "@/lib/mcp/aiContextualHints";
 
 interface GroupMember {
   user_id: string;
