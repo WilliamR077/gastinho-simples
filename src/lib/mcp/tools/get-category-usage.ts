@@ -90,9 +90,7 @@ export default defineTool({
     const userId = ctx.getUserId();
     if (!ctx.isAuthenticated() || !userId) return mcpError("UNAUTHENTICATED");
     const range = validateBoundedDateRange(input.start_date, input.end_date);
-    if (!range.ok) {
-      return mcpError((range as Extract<typeof range, { ok: false }>).code);
-    }
+    if (!range.ok) return mcpError(range.code);
     const includeInactive = input.include_inactive ?? true;
     const includeUnused = input.include_unused ?? true;
     const limit = input.limit ?? 50;
@@ -131,7 +129,7 @@ export default defineTool({
         const page = data ?? [];
         for (const raw of page) {
           if (input.kind === "expense") {
-            const row = raw as unknown as ExpenseUsageRow;
+            const row = raw as ExpenseUsageRow;
             rows.push({
               id: row.id,
               amount: Number(row.amount),
@@ -141,7 +139,7 @@ export default defineTool({
               category_icon: row.category_icon,
             });
           } else {
-            const row = raw as unknown as IncomeUsageRow;
+            const row = raw as IncomeUsageRow;
             rows.push({
               id: row.id,
               amount: Number(row.amount),
@@ -164,10 +162,7 @@ export default defineTool({
     const transactionResult = await fetchTransactions();
     if (!transactionResult.ok) {
       return mcpError(
-        (transactionResult as Extract<typeof transactionResult, { ok: false }>)
-          .tooLarge
-          ? "RESULT_SET_TOO_LARGE"
-          : "INTERNAL_ERROR",
+        transactionResult.tooLarge ? "RESULT_SET_TOO_LARGE" : "INTERNAL_ERROR",
       );
     }
     const usage = calculateCategoryUsage(

@@ -127,7 +127,7 @@ export function cardWriteView(
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
-  return cardViewSchema.safeParse(view).success ? (view as CardWriteView) : null;
+  return cardViewSchema.safeParse(view).success ? view : null;
 }
 
 export function supportsCredit(type: CardType): boolean {

@@ -152,9 +152,8 @@ export async function updateProfile(rawInput: unknown, ctx: ProfileContextLike) 
   const input = parsed.data;
 
   try {
-    const currentRaw = await latestOwnProfile(ctx);
-    if (currentRaw && "isError" in currentRaw) return currentRaw;
-    const current = currentRaw as ProfileRow | null;
+    const current = await latestOwnProfile(ctx);
+    if (current && "isError" in current) return current;
     const supabase = supabaseForUser(ctx as never);
 
     if (!current) {
@@ -227,9 +226,8 @@ export async function updateProfile(rawInput: unknown, ctx: ProfileContextLike) 
       .maybeSingle();
     if (updateResult.error) return mcpError("WRITE_FAILED");
     if (!updateResult.data) {
-      const latestRaw = await latestOwnProfile(ctx);
-      if (latestRaw && "isError" in latestRaw) return latestRaw;
-      const latest = latestRaw as ProfileRow | null;
+      const latest = await latestOwnProfile(ctx);
+      if (latest && "isError" in latest) return latest;
       if (!latest || latest.updated_at !== input.expected_updated_at) {
         return concurrent("O perfil mudou ou deixou de estar acessível durante a atualização.");
       }

@@ -11,13 +11,6 @@ import {
 import { supabaseForUser } from "./supabase-client";
 import { expectedUpdatedAtSchema } from "./transaction-update";
 
-type InstallmentRefRow = {
-  installment_group_id?: string | null;
-  installment_number?: number | null;
-  total_installments?: number | null;
-};
-
-
 export type CategoryKind = "expense" | "income";
 
 export const EXPENSE_CATEGORY_ICONS = [
@@ -229,13 +222,13 @@ async function references(
   const recurringRows = recurring.data ?? [];
   const goalRows = (goalResult.data ?? []).filter((goal) =>
     kind === "expense"
-      ? expenseGoalReferenceMatchesCategory(goal.category, category as never)
+      ? expenseGoalReferenceMatchesCategory(goal.category, category)
       : goal.category === category.id,
   );
   const hasNameDependentExpenseGoal =
     kind === "expense" &&
     goalRows.some((goal) =>
-      expenseGoalReferenceDependsOnName(goal.category, category as never),
+      expenseGoalReferenceDependsOnName(goal.category, category),
     );
   const today = todayIso();
   const dates = transactionRows.map((row) =>
@@ -248,7 +241,7 @@ async function references(
   const future = dates.length - historical;
   const activeRecurring = recurringRows.filter((row) => row.is_active).length;
   if (kind === "expense") {
-    const installments = (transactionRows as InstallmentRefRow[]).filter(
+    const installments = transactionRows.filter(
       (row) =>
         row.installment_group_id !== null ||
         (row.installment_number ?? 0) > 1 ||

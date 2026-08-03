@@ -363,8 +363,8 @@ export async function decodeCursor(
     const validSignature = await crypto.subtle.verify(
       "HMAC",
       await hmacKey(secret),
-      signatureBytes as unknown as ArrayBuffer,
-      payloadBytes as unknown as ArrayBuffer,
+      signatureBytes,
+      payloadBytes,
     );
     if (!validSignature) return null;
 

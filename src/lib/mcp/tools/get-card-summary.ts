@@ -104,7 +104,7 @@ export default defineTool({
     const parsedCard = cardSchema.safeParse(card);
     if (!parsedCard.success) return mcpError("INVALID_DATA");
 
-    const resolvedPeriod = resolveCardBillingPeriod(billingMonth, parsedCard.data as never);
+    const resolvedPeriod = resolveCardBillingPeriod(billingMonth, parsedCard.data);
     if (!resolvedPeriod) {
       return mcpError(
         "INVALID_DATA",
