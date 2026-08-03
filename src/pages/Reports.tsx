@@ -259,7 +259,14 @@ const Reports = () => {
               <h1 className="text-lg sm:text-2xl font-bold text-foreground truncate">
                 Relatórios
               </h1>
+              <AiHelpHint
+                title={AI_CONTEXTUAL_HINTS.reports.title}
+                description={AI_CONTEXTUAL_HINTS.reports.description}
+                prompt={buildReportsPrompt(periodLabel)}
+                ariaLabel={AI_CONTEXTUAL_HINTS.reports.ariaLabel}
+              />
             </div>
+
             <Button
               variant="default"
               size="sm"
