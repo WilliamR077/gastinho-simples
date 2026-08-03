@@ -16,6 +16,13 @@ import {
 import { supabaseForUser } from "./supabase-client";
 import { expectedUpdatedAtSchema } from "./transaction-update";
 
+type InstallmentRefRow = {
+  installment_group_id?: string | null;
+  installment_number?: number | null;
+  total_installments?: number | null;
+};
+
+
 const COLUMNS =
   "id,user_id,name,icon,color,is_default,is_active,display_order,created_at,updated_at";
 

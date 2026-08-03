@@ -11,6 +11,13 @@ import {
 import { supabaseForUser } from "./supabase-client";
 import { expectedUpdatedAtSchema } from "./transaction-update";
 
+type InstallmentRefRow = {
+  installment_group_id?: string | null;
+  installment_number?: number | null;
+  total_installments?: number | null;
+};
+
+
 export type CategoryKind = "expense" | "income";
 
 export const EXPENSE_CATEGORY_ICONS = [

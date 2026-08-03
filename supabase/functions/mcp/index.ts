@@ -2799,8 +2799,9 @@ async function updateProfile(rawInput, ctx) {
   if (!parsed.success) return mcpError("INVALID_INPUT");
   const input = parsed.data;
   try {
-    const current = await latestOwnProfile(ctx);
-    if (current && "isError" in current) return current;
+    const currentRaw = await latestOwnProfile(ctx);
+    if (currentRaw && "isError" in currentRaw) return currentRaw;
+    const current = currentRaw;
     const supabase = supabaseForUser(ctx);
     if (!current) {
       if (input.expected_updated_at !== void 0 && input.expected_updated_at !== null) {
@@ -2860,8 +2861,9 @@ async function updateProfile(rawInput, ctx) {
     const updateResult = await supabase.from("profiles").update({ display_name: input.changes.display_name }).eq("user_id", userId).eq("updated_at", input.expected_updated_at).select("display_name,created_at,updated_at").maybeSingle();
     if (updateResult.error) return mcpError("WRITE_FAILED");
     if (!updateResult.data) {
-      const latest = await latestOwnProfile(ctx);
-      if (latest && "isError" in latest) return latest;
+      const latestRaw = await latestOwnProfile(ctx);
+      if (latestRaw && "isError" in latestRaw) return latestRaw;
+      const latest = latestRaw;
       if (!latest || latest.updated_at !== input.expected_updated_at) {
         return concurrent("O perfil mudou ou deixou de estar acess\xEDvel durante a atualiza\xE7\xE3o.");
       }
@@ -3187,8 +3189,9 @@ async function updateNotificationSettings(rawInput, ctx) {
   if (!parsed.success) return mcpError("INVALID_INPUT");
   const input = parsed.data;
   try {
-    const current = await currentRow(ctx);
-    if (current && "isError" in current) return current;
+    const currentRaw = await currentRow(ctx);
+    if (currentRaw && "isError" in currentRaw) return currentRaw;
+    const current = currentRaw;
     const supabase = supabaseForUser(ctx);
     if (!current) {
       if (input.expected_updated_at !== void 0 && input.expected_updated_at !== null) {
@@ -3272,8 +3275,9 @@ async function updateNotificationSettings(rawInput, ctx) {
     ).maybeSingle();
     if (updateResult.error) return mcpError("WRITE_FAILED");
     if (!updateResult.data) {
-      const latest = await currentRow(ctx);
-      if (latest && "isError" in latest) return latest;
+      const latestRaw = await currentRow(ctx);
+      if (latestRaw && "isError" in latestRaw) return latestRaw;
+      const latest = latestRaw;
       if (!latest || latest.updated_at !== input.expected_updated_at) {
         return concurrent2(
           "As prefer\xEAncias mudaram ou deixaram de estar acess\xEDveis durante a atualiza\xE7\xE3o."
