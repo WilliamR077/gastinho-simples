@@ -112,7 +112,7 @@ export function AiAssistantCarousel() {
           return (
             <article
               key={client.id}
-              className="flex w-[82%] shrink-0 snap-start flex-col gap-2 rounded-lg border bg-card p-4 shadow-sm sm:w-[46%] lg:w-[31%]"
+              className="flex w-[calc(100%-1.25rem)] shrink-0 snap-start flex-col gap-2 rounded-lg border bg-card p-4 shadow-sm sm:w-[46%] lg:w-[31%]"
             >
               <div className="flex items-start justify-between gap-2">
                 <ClientIcon
