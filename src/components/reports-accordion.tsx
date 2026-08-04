@@ -1,15 +1,14 @@
 import { useMemo, useState } from "react";
 import { Card as CardType } from "@/types/card";
-import { Expense, PaymentMethod, categoryLabels } from "@/types/expense";
+import { Expense } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
 import { Income, RecurringIncome } from "@/types/income";
 import { ResponsiveContainer, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, BarChart, Bar, Legend, ReferenceLine, PieChart, Pie, Cell } from "recharts";
-import { format, parseISO } from "date-fns";
+import { format } from "date-fns";
 import { TrendingUp, TrendingDown, Crown, Lock, CreditCard, Users, CalendarClock, DollarSign, ArrowUpDown, Sparkles, Target, Trophy, Wallet, BarChart3 } from "lucide-react";
 import { useSubscription } from "@/hooks/use-subscription";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { parseLocalDate } from "@/lib/utils";
 import { PeriodType } from "./period-selector";
 import {
   Accordion,
@@ -21,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Progress } from "@/components/ui/progress";
 import { ReportViewModel, applyCumulativeMode, applyWeeklyMode } from "@/utils/report-view-model";
+import { parseReportDate } from "@/utils/report-business-rules";
 import { paymentMethodColor, paymentMethodLabel } from "@/lib/payment-methods";
 
 interface GroupMember {
@@ -75,9 +75,10 @@ export function ReportsAccordion({
 
   // All data comes from viewModel now
   const {
-    filteredExpenses, filteredRecurringExpenses,
-    filteredIncomes, filteredRecurringIncomes,
-    monthsInPeriod, totalPeriod, totalIncomes, balance,
+    filteredExpenses, filteredIncomes,
+    recurringExpenseProjections, recurringIncomeProjections,
+    totalPeriod, totalIncomes, balance,
+    projectedExpenses, projectedIncomes,
     previousPeriodDates, previousTotalExpenses, previousTotalIncomes, previousBalance,
     expenseDelta, incomeDelta, balanceDelta, savingsRate,
     topCategory, mostExpensiveDay,
@@ -162,7 +163,7 @@ export function ReportsAccordion({
           </div>
           <div className="space-y-2 text-sm text-muted-foreground">
             <p>
-              Você gastou <span className="font-semibold text-red-500">{formatCurrency(totalPeriod)}</span>
+              Você gastou <span className="font-semibold text-red-500">{formatCurrency(totalPeriod)}</span> em despesas realizadas
               {previousPeriodDates && (
                 <span className={totalPeriod > previousTotalExpenses ? "text-red-500" : "text-green-500"}>
                   {" "}({formatDeltaWithAbsolute(expenseDelta, totalPeriod, previousTotalExpenses)})
@@ -179,6 +180,12 @@ export function ReportsAccordion({
                 Dia mais caro: <span className="font-semibold text-foreground">{mostExpensiveDay.date}</span> ({formatCurrency(mostExpensiveDay.value)})
               </p>
             )}
+            {projectedExpenses > 0 && (
+              <p>
+                Compromissos recorrentes previstos no período: <span className="font-semibold text-foreground">{formatCurrency(projectedExpenses)}</span>.
+                <span className="block text-xs">Esse valor não é somado ao realizado porque não há vínculo de lançamento.</span>
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -189,23 +196,23 @@ export function ReportsAccordion({
           <div className="space-y-1">
             <div className="flex items-center justify-center gap-1">
               <TrendingUp className="h-3 w-3 text-green-500" />
-              <span className="text-xs text-muted-foreground">Entradas</span>
+              <span className="text-xs text-muted-foreground">Entradas realizadas</span>
             </div>
             <div className="text-lg font-bold text-green-500">{formatCurrency(totalIncomes)}</div>
-            <div className="text-[10px] text-muted-foreground">{filteredIncomes.length}+{filteredRecurringIncomes.length} fixas</div>
+            <div className="text-[10px] text-muted-foreground">{filteredIncomes.length} lançamentos</div>
           </div>
           <div className="space-y-1 border-x border-border">
             <div className="flex items-center justify-center gap-1">
               <TrendingDown className="h-3 w-3 text-red-500" />
-              <span className="text-xs text-muted-foreground">Saídas</span>
+              <span className="text-xs text-muted-foreground">Saídas realizadas</span>
             </div>
             <div className="text-lg font-bold text-red-500">{formatCurrency(totalPeriod)}</div>
-            <div className="text-[10px] text-muted-foreground">{filteredExpenses.length}+{filteredRecurringExpenses.length} fixas</div>
+            <div className="text-[10px] text-muted-foreground">{filteredExpenses.length} lançamentos</div>
           </div>
           <div className="space-y-1">
             <div className="flex items-center justify-center gap-1">
               <DollarSign className="h-3 w-3 text-blue-500" />
-              <span className="text-xs text-muted-foreground">Saldo</span>
+              <span className="text-xs text-muted-foreground">Resultado realizado</span>
             </div>
             <div className={`text-lg font-bold ${balance >= 0 ? 'text-blue-500' : 'text-orange-500'}`}>
               {formatCurrency(balance)}
@@ -237,6 +244,33 @@ export function ReportsAccordion({
         </div>
       </div>
 
+      {(projectedExpenses > 0 || projectedIncomes > 0) && (
+        <div className="p-4 rounded-lg bg-muted/40 border border-dashed border-border" data-onboarding="reports-recurring-planning">
+          <div className="flex items-center gap-2 mb-3">
+            <CalendarClock className="h-4 w-4 text-teal-500" />
+            <div>
+              <p className="text-sm font-semibold">Planejamento recorrente</p>
+              <p className="text-[10px] text-muted-foreground">Previsto, não somado ao resultado realizado</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <p className="text-xs text-muted-foreground">Entradas previstas</p>
+              <p className="font-semibold text-green-600">{formatCurrency(projectedIncomes)}</p>
+              <p className="text-[10px] text-muted-foreground">{recurringIncomeProjections.length} templates</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Despesas previstas</p>
+              <p className="font-semibold text-red-500">{formatCurrency(projectedExpenses)}</p>
+              <p className="text-[10px] text-muted-foreground">{recurringExpenseProjections.length} templates</p>
+            </div>
+          </div>
+          <p className="mt-3 text-[10px] text-muted-foreground">
+            Sem confirmação de lançamento: o modelo atual não liga templates a movimentações reais.
+          </p>
+        </div>
+      )}
+
       <Accordion type="multiple" className="space-y-3" defaultValue={["category", "payment-method"]}>
         {/* === BLOCO 2A: Gastos por Categoria === */}
         <AccordionItem value="category" className="border rounded-lg bg-card" data-onboarding="reports-category">
@@ -244,8 +278,8 @@ export function ReportsAccordion({
             <div className="flex items-center gap-3">
               <BarChart3 className="w-5 h-5 text-orange-500" />
               <div className="text-left">
-                <span className="font-semibold">Gastos por Categoria</span>
-                <span className="text-xs text-muted-foreground block">{categoryData.length} categorias</span>
+                <span className="font-semibold">Gastos Realizados por Categoria</span>
+                <span className="text-xs text-muted-foreground block">{categoryData.length} categorias com lançamentos</span>
               </div>
             </div>
           </AccordionTrigger>
@@ -289,7 +323,7 @@ export function ReportsAccordion({
               <Wallet className="w-5 h-5 text-blue-500" />
               <div className="text-left">
                 <span className="font-semibold">Forma de Pagamento</span>
-                <span className="text-xs text-muted-foreground block">{formatCurrency(totalPeriod)} no período</span>
+                <span className="text-xs text-muted-foreground block">{formatCurrency(totalPeriod)} realizado no período</span>
               </div>
             </div>
           </AccordionTrigger>
@@ -379,7 +413,7 @@ export function ReportsAccordion({
                   <span className="font-semibold">Fluxo de Caixa</span>
                   {!showCashflow && <Crown className="h-4 w-4 text-yellow-500" />}
                 </div>
-                <span className="text-xs text-muted-foreground">Entradas vs Saídas</span>
+                <span className="text-xs text-muted-foreground">Entradas vs Saídas realizadas</span>
               </div>
             </div>
           </AccordionTrigger>
@@ -422,7 +456,7 @@ export function ReportsAccordion({
                   <span className="font-semibold">Evolução dos Gastos</span>
                   {!showEvolution && <Crown className="h-4 w-4 text-yellow-500" />}
                 </div>
-                <span className="text-xs text-muted-foreground">Gastos por {periodType === "month" ? "dia" : "mês"}</span>
+                <span className="text-xs text-muted-foreground">Gastos realizados por {periodType === "month" ? "dia" : "mês"}</span>
               </div>
             </div>
           </AccordionTrigger>
@@ -469,7 +503,7 @@ export function ReportsAccordion({
               <Trophy className="w-5 h-5 text-yellow-500" />
               <div className="text-left">
                 <span className="font-semibold">Maiores Gastos</span>
-                <span className="text-xs text-muted-foreground block">Top 10 do período</span>
+                <span className="text-xs text-muted-foreground block">Top 10 de lançamentos realizados</span>
               </div>
             </div>
           </AccordionTrigger>
@@ -487,11 +521,10 @@ export function ReportsAccordion({
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{e.description}</p>
                       <p className="text-xs text-muted-foreground">
-                        {e.type === 'recurring' && `Fixa • Dia ${e.dayOfMonth}`}
-                        {e.type === 'expense' && format(parseLocalDate(e.date), "dd/MM")}
+                        {e.type === 'expense' && format(parseReportDate(e.date), "dd/MM")}
                         {e.type === 'installment-group' && e.dateRange && (
                           <>
-                            {format(parseLocalDate(e.dateRange.start), "dd/MM")} → {format(parseLocalDate(e.dateRange.end), "dd/MM")}
+                            {format(parseReportDate(e.dateRange.start), "dd/MM")} → {format(parseReportDate(e.dateRange.end), "dd/MM")}
                             <span className="ml-1 text-[10px] opacity-75">
                               ({e.installmentsInPeriod} de {e.totalInstallments} parcelas)
                             </span>
@@ -526,9 +559,9 @@ export function ReportsAccordion({
             <AccordionContent className="px-4 pb-4">
               <div className="space-y-3">
                 {[
-                  { label: "Entradas", current: totalIncomes, previous: previousTotalIncomes, delta: incomeDelta, goodUp: true },
-                  { label: "Saídas", current: totalPeriod, previous: previousTotalExpenses, delta: expenseDelta, goodUp: false },
-                  { label: "Saldo", current: balance, previous: previousBalance, delta: balanceDelta, goodUp: true },
+                  { label: "Entradas realizadas", current: totalIncomes, previous: previousTotalIncomes, delta: incomeDelta, goodUp: true },
+                  { label: "Saídas realizadas", current: totalPeriod, previous: previousTotalExpenses, delta: expenseDelta, goodUp: false },
+                  { label: "Resultado realizado", current: balance, previous: previousBalance, delta: balanceDelta, goodUp: true },
                 ].map((item) => {
                   const isNew = item.previous === 0 && item.current > 0;
                   const isEmpty = item.previous === 0 && item.current === 0;
@@ -573,8 +606,8 @@ export function ReportsAccordion({
               <div className="flex items-center gap-3">
                 <DollarSign className="w-5 h-5 text-blue-500" />
                 <div className="text-left">
-                  <span className="font-semibold">Taxa de Economia</span>
-                  <span className="text-xs text-muted-foreground block">Savings rate do período</span>
+                  <span className="font-semibold">Taxa de Economia Realizada</span>
+                  <span className="text-xs text-muted-foreground block">Somente entradas e saídas realizadas</span>
                 </div>
               </div>
             </AccordionTrigger>
@@ -633,42 +666,35 @@ export function ReportsAccordion({
               <CalendarClock className="w-5 h-5 text-teal-500" />
               <div className="text-left">
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold">Despesas Fixas</span>
+                  <span className="font-semibold">Despesas Fixas Previstas</span>
                   <Button variant="link" size="sm" className="text-xs text-muted-foreground p-0 h-auto" onClick={(e) => { e.stopPropagation(); navigate("/"); }}>
                     Gerenciar
                   </Button>
                 </div>
-                <span className="text-xs text-muted-foreground block">{filteredRecurringExpenses.length} despesas ativas</span>
+                <span className="text-xs text-muted-foreground block">{recurringExpenseProjections.length} compromissos no período</span>
               </div>
             </div>
           </AccordionTrigger>
           <AccordionContent className="px-4 pb-4">
-            {filteredRecurringExpenses.length > 0 ? (
+            {recurringExpenseProjections.length > 0 ? (
               <div className="space-y-3">
                 <div className="p-3 rounded-lg bg-muted">
-                  <div className="text-xs text-muted-foreground">
-                    {periodType === "month" ? "Total Mensal" : `Total (${monthsInPeriod} ${monthsInPeriod === 1 ? 'mês' : 'meses'})`}
-                  </div>
+                  <div className="text-xs text-muted-foreground">Total previsto, separado do realizado</div>
                   <div className="text-xl font-bold text-red-500">
-                    {formatCurrency(filteredRecurringExpenses.reduce((s, e) => s + Number(e.amount), 0) * (periodType === "month" ? 1 : monthsInPeriod))}
+                    {formatCurrency(projectedExpenses)}
                   </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">Sem confirmação de lançamento</p>
                 </div>
-                {filteredRecurringExpenses.sort((a, b) => Number(b.amount) - Number(a.amount)).map((expense) => {
+                {[...recurringExpenseProjections].sort((a, b) => b.projectedTotal - a.projectedTotal).map((projection) => {
+                  const expense = projection.template;
                   const card = cards.find(c => c.id === expense.card_id);
-                  const today = new Date().getDate();
-                  const daysUntil = expense.day_of_month >= today ? expense.day_of_month - today : (30 - today) + expense.day_of_month;
-                  const isPaid = expense.day_of_month < today;
                   return (
                     <div key={expense.id} className="flex items-center justify-between p-3 rounded-lg border bg-background">
                       <div className="flex-1 min-w-0">
                         <div className="font-medium text-sm truncate">{expense.description}</div>
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
-                          <Badge variant={isPaid ? "secondary" : "outline"} className="text-[10px]">
-                            {isPaid ? "Paga" : "Pendente"}
-                          </Badge>
-                          <span className="text-[10px] text-muted-foreground">
-                            {isPaid ? `Dia ${expense.day_of_month}` : `Vence em ${daysUntil}d`}
-                          </span>
+                          <Badge variant="outline" className="text-[10px]">{projection.statusLabel}</Badge>
+                          <span className="text-[10px] text-muted-foreground">{projection.dueLabel}</span>
                           {card && (
                             <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                               <div className="w-2 h-2 rounded-full" style={{ backgroundColor: card.color }} />
@@ -678,7 +704,7 @@ export function ReportsAccordion({
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="font-semibold text-sm text-red-500">{formatCurrency(Number(expense.amount))}</div>
+                        <div className="font-semibold text-sm text-red-500">{formatCurrency(projection.projectedTotal)}</div>
                         <Badge variant="secondary" className="text-[10px]">{paymentMethodLabel(expense.payment_method)}</Badge>
                       </div>
                     </div>
@@ -686,7 +712,7 @@ export function ReportsAccordion({
                 })}
               </div>
             ) : (
-              <div className="h-[100px] flex items-center justify-center text-muted-foreground text-sm">Nenhuma despesa fixa ativa</div>
+              <div className="h-[100px] flex items-center justify-center text-muted-foreground text-sm">Nenhuma despesa fixa prevista no período</div>
             )}
           </AccordionContent>
         </AccordionItem>

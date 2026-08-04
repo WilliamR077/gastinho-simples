@@ -42,7 +42,9 @@
     "test:mcp:1.2f-f": "node scripts/mcp-phase-1.2f-f-tests.mjs",
     "test:g1-c": "node scripts/post-tools-g1-c-tests.mjs",
     "test:g1-c:h1": "node scripts/g1-c1-h1-tests.mjs",
-    "test:p1:installment-safety": "node scripts/post-tools-p1-installment-safety-tests.mjs"
+    "test:p1:installment-safety": "node scripts/post-tools-p1-installment-safety-tests.mjs",
+    "typecheck:p3a:reports": "tsc -p tsconfig.p3a-reports.json",
+    "test:p3a:reports": "node scripts/post-tools-p3-a-reports-business-rules-tests.mjs"
   },
   "dependencies": {
     "@capacitor-community/admob": "^7.2.0",

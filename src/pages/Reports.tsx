@@ -1,6 +1,6 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Expense } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
@@ -52,18 +52,6 @@ const Reports = () => {
   const isGroupContext = currentContext.type === 'group';
 
   useEffect(() => {
-    if (!user) {
-      navigate("/auth");
-      return;
-    }
-    fetchExpenses();
-    fetchRecurringExpenses();
-    fetchCards();
-    fetchIncomes();
-    fetchRecurringIncomes();
-  }, [user, navigate, currentContext]);
-
-  useEffect(() => {
     const fetchGroupMembersData = async () => {
       if (isGroupContext && currentContext.groupId) {
         const members = await getGroupMembers(currentContext.groupId);
@@ -75,7 +63,7 @@ const Reports = () => {
     fetchGroupMembersData();
   }, [isGroupContext, currentContext.groupId, getGroupMembers]);
 
-  const fetchExpenses = async () => {
+  const fetchExpenses = useCallback(async () => {
     if (!user) return;
 
     let query = supabase
@@ -97,15 +85,14 @@ const Reports = () => {
     }
 
     setExpenses(data || []);
-  };
+  }, [currentContext.groupId, isGroupContext, user]);
 
-  const fetchRecurringExpenses = async () => {
+  const fetchRecurringExpenses = useCallback(async () => {
     if (!user) return;
 
     let query = supabase
       .from("recurring_expenses")
       .select("*")
-      .eq("is_active", true)
       .order("created_at", { ascending: false });
 
     if (isGroupContext && currentContext.groupId) {
@@ -122,9 +109,9 @@ const Reports = () => {
     }
 
     setRecurringExpenses(data || []);
-  };
+  }, [currentContext.groupId, isGroupContext, user]);
 
-  const fetchCards = async () => {
+  const fetchCards = useCallback(async () => {
     if (!user) return;
 
     const { data, error } = await supabase
@@ -140,9 +127,9 @@ const Reports = () => {
     }
 
     setCards(data || []);
-  };
+  }, [user]);
 
-  const fetchIncomes = async () => {
+  const fetchIncomes = useCallback(async () => {
     if (!user) return;
 
     let query = supabase
@@ -164,15 +151,14 @@ const Reports = () => {
     }
 
     setIncomes(data || []);
-  };
+  }, [currentContext.groupId, isGroupContext, user]);
 
-  const fetchRecurringIncomes = async () => {
+  const fetchRecurringIncomes = useCallback(async () => {
     if (!user) return;
 
     let query = supabase
       .from("recurring_incomes")
       .select("*")
-      .eq("is_active", true)
       .order("created_at", { ascending: false });
 
     if (isGroupContext && currentContext.groupId) {
@@ -189,7 +175,19 @@ const Reports = () => {
     }
 
     setRecurringIncomes(data || []);
-  };
+  }, [currentContext.groupId, isGroupContext, user]);
+
+  useEffect(() => {
+    if (!user) {
+      navigate("/auth");
+      return;
+    }
+    fetchExpenses();
+    fetchRecurringExpenses();
+    fetchCards();
+    fetchIncomes();
+    fetchRecurringIncomes();
+  }, [fetchCards, fetchExpenses, fetchIncomes, fetchRecurringExpenses, fetchRecurringIncomes, navigate, user]);
 
   const handlePeriodChange = (newStartDate: Date, newEndDate: Date, label: string, type: PeriodType) => {
     setStartDate(newStartDate);

@@ -4,15 +4,23 @@ import { Card } from "@/types/card";
 import { Income, RecurringIncome } from "@/types/income";
 import { UserCategory } from "@/types/user-category";
 import { PeriodType } from "@/components/period-selector";
-import { parseLocalDate } from "@/lib/utils";
 import {
   format, startOfMonth, endOfMonth, eachMonthOfInterval, eachDayOfInterval,
-  isSameDay, parseISO, subMonths, subYears, subQuarters, differenceInDays
+  isSameDay, subMonths, subYears, subQuarters, differenceInDays
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { calculateBillingPeriod, CreditCardConfig } from "@/utils/billing-period";
 import { PAYMENT_METHOD_LIST, paymentMethodLabel, usesCard } from "@/lib/payment-methods";
 import { getMemberDisplayName } from "@/utils/member-display";
+import {
+  buildRecurringProjections,
+  calculatePercentageDelta,
+  calculateRealizedSavingsRate,
+  classifyReportPeriod,
+  parseReportDate,
+  RecurringProjection,
+  ReportPeriodRelation,
+  sumRealizedAmounts,
+} from "@/utils/report-business-rules";
 
 export interface CategoryDataItem {
   name: string;
@@ -57,8 +65,7 @@ export interface TopExpenseItem {
   description: string;
   amount: number;
   date: string;
-  type: 'expense' | 'recurring' | 'installment-group';
-  dayOfMonth: number | undefined;
+  type: 'expense' | 'installment-group';
   // Campos opcionais para grupos de parcelas (em períodos > mês)
   installmentsInPeriod?: number;
   totalInstallments?: number;
@@ -76,10 +83,15 @@ export interface ReportViewModel {
   filteredRecurringExpenses: RecurringExpense[];
   filteredIncomes: Income[];
   filteredRecurringIncomes: RecurringIncome[];
+  recurringExpenseProjections: RecurringProjection<RecurringExpense>[];
+  recurringIncomeProjections: RecurringProjection<RecurringIncome>[];
+  periodRelation: ReportPeriodRelation;
   monthsInPeriod: number;
   totalPeriod: number;
   totalIncomes: number;
   balance: number;
+  projectedExpenses: number;
+  projectedIncomes: number;
   previousPeriodDates: { start: Date; end: Date } | null;
   previousTotalExpenses: number;
   previousTotalIncomes: number;
@@ -134,6 +146,9 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
       const found = categories.find(c => c.id === categoryId);
       if (found) return { key: found.name, name: found.name, icon: found.icon };
     }
+    if (categoryId) {
+      return { key: `unresolved:${categoryId}`, name: 'Categoria não resolvida', icon: '📦' };
+    }
     if (categoryEnum) {
       const label = categoryLabels[categoryEnum] || categoryEnum;
       return { key: label, name: label, icon: '📦' };
@@ -141,69 +156,32 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
     return { key: 'Outros', name: 'Outros', icon: '📦' };
   };
 
-  // Build cards config map for billing period calculation
-  const cardsConfigMap = new Map<string, CreditCardConfig>();
-  cards.forEach(card => {
-    cardsConfigMap.set(card.id, {
-      opening_day: card.opening_day || 1,
-      closing_day: card.closing_day || 15,
-      due_day: (card as any).due_day,
-      days_before_due: (card as any).days_before_due,
-    });
-  });
-
-  const periodStr = format(startDate, "yyyy-MM");
-
-  // Filter expenses by period — credit uses billing period (competência)
+  // Realizado usa a data da movimentação persistida. Templates não entram aqui.
   const filteredExpenses = expenses.filter(e => {
-    const d = parseLocalDate(e.expense_date);
-    
-    if (e.payment_method === "credit" && e.card_id && cardsConfigMap.has(e.card_id)) {
-      const config = cardsConfigMap.get(e.card_id)!;
-      const billingPeriod = calculateBillingPeriod(d, config);
-      // For monthly view, match billing period to selected month
-      if (periodType === "month") {
-        return billingPeriod === periodStr;
-      }
-      // For other periods, check if billing period falls within range
-      const [bYear, bMonth] = billingPeriod.split("-").map(Number);
-      const billingDate = new Date(bYear, bMonth - 1, 1);
-      return billingDate >= startOfMonth(startDate) && billingDate <= endOfMonth(endDate);
-    }
-    
+    const d = parseReportDate(e.expense_date);
     return d >= startDate && d <= endDate;
-  });
-
-  const filteredRecurringExpenses = recurringExpenses.filter(re => {
-    if (!re.is_active && !re.end_date) return false;
-    const sd = re.start_date ? parseISO(re.start_date) : parseLocalDate(re.created_at);
-    const ed = re.end_date ? parseISO(re.end_date) : null;
-    return sd <= endDate && (!ed || ed >= startDate);
   });
 
   const filteredIncomes = incomes.filter(i => {
-    const d = parseLocalDate(i.income_date);
+    const d = parseReportDate(i.income_date);
     return d >= startDate && d <= endDate;
   });
 
-  const filteredRecurringIncomes = recurringIncomes.filter(ri => {
-    if (!ri.is_active && !ri.end_date) return false;
-    const sd = ri.start_date ? parseISO(ri.start_date) : parseLocalDate(ri.created_at);
-    const ed = ri.end_date ? parseISO(ri.end_date) : null;
-    return sd <= endDate && (!ed || ed >= startDate);
-  });
+  // Não existe no schema um vínculo template -> movimentação. Nenhum template é
+  // deduzido por descrição, valor, categoria, dia ou forma de pagamento.
+  const recurringExpenseProjections = buildRecurringProjections(recurringExpenses, startDate, endDate);
+  const recurringIncomeProjections = buildRecurringProjections(recurringIncomes, startDate, endDate);
+  const filteredRecurringExpenses = recurringExpenseProjections.map(item => item.template);
+  const filteredRecurringIncomes = recurringIncomeProjections.map(item => item.template);
+  const periodRelation = classifyReportPeriod(startDate, endDate);
 
   const monthsInPeriod = eachMonthOfInterval({ start: startDate, end: endDate }).length;
-  const rm = periodType === "month" ? 1 : monthsInPeriod;
 
-  // Totals
-  const totalPeriod = filteredExpenses.reduce((s, e) => s + Number(e.amount), 0)
-    + filteredRecurringExpenses.reduce((s, e) => s + Number(e.amount), 0) * rm;
-
-  const totalIncomes = filteredIncomes.reduce((s, i) => s + Number(i.amount), 0)
-    + filteredRecurringIncomes.reduce((s, i) => s + Number(i.amount), 0) * rm;
-
+  const totalPeriod = sumRealizedAmounts(filteredExpenses);
+  const totalIncomes = sumRealizedAmounts(filteredIncomes);
   const balance = totalIncomes - totalPeriod;
+  const projectedExpenses = Number(recurringExpenseProjections.reduce((sum, item) => sum + item.projectedTotal, 0).toFixed(2));
+  const projectedIncomes = Number(recurringIncomeProjections.reduce((sum, item) => sum + item.projectedTotal, 0).toFixed(2));
 
   // Previous period — abrange month, quarter, year e custom (all = sem comparação)
   let previousPeriodDates: { start: Date; end: Date } | null = null;
@@ -228,55 +206,26 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
     previousPeriodDates = { start: prevStart, end: prevEnd };
   }
 
-  // Helper interno: replica EXATAMENTE a lógica usada para o período atual,
-  // incluindo competência de crédito e recorrentes — assim o "anterior" não diverge.
+  // A comparação usa a mesma base realizada do período atual.
   const computeTotalsForPeriod = (
     pStart: Date,
     pEnd: Date,
-    pType: PeriodType
+    _pType: PeriodType
   ): { totalExpenses: number; totalIncomes: number } => {
-    const pStr = format(pStart, "yyyy-MM");
-    const monthsCount = eachMonthOfInterval({ start: pStart, end: pEnd }).length;
-    const rmLocal = pType === "month" ? 1 : monthsCount;
-
     const expFiltered = expenses.filter(e => {
-      const d = parseLocalDate(e.expense_date);
-      if (e.payment_method === "credit" && e.card_id && cardsConfigMap.has(e.card_id)) {
-        const config = cardsConfigMap.get(e.card_id)!;
-        const billingPeriod = calculateBillingPeriod(d, config);
-        if (pType === "month") return billingPeriod === pStr;
-        const [bYear, bMonth] = billingPeriod.split("-").map(Number);
-        const billingDate = new Date(bYear, bMonth - 1, 1);
-        return billingDate >= startOfMonth(pStart) && billingDate <= endOfMonth(pEnd);
-      }
+      const d = parseReportDate(e.expense_date);
       return d >= pStart && d <= pEnd;
-    });
-
-    const recExpFiltered = recurringExpenses.filter(re => {
-      if (!re.is_active && !re.end_date) return false;
-      const sd = re.start_date ? parseISO(re.start_date) : parseLocalDate(re.created_at);
-      const ed = re.end_date ? parseISO(re.end_date) : null;
-      return sd <= pEnd && (!ed || ed >= pStart);
     });
 
     const incFiltered = incomes.filter(i => {
-      const d = parseLocalDate(i.income_date);
+      const d = parseReportDate(i.income_date);
       return d >= pStart && d <= pEnd;
     });
 
-    const recIncFiltered = recurringIncomes.filter(ri => {
-      if (!ri.is_active && !ri.end_date) return false;
-      const sd = ri.start_date ? parseISO(ri.start_date) : parseLocalDate(ri.created_at);
-      const ed = ri.end_date ? parseISO(ri.end_date) : null;
-      return sd <= pEnd && (!ed || ed >= pStart);
-    });
-
-    const totalExpenses = expFiltered.reduce((s, e) => s + Number(e.amount), 0)
-      + recExpFiltered.reduce((s, e) => s + Number(e.amount), 0) * rmLocal;
-    const totalIncomesLocal = incFiltered.reduce((s, i) => s + Number(i.amount), 0)
-      + recIncFiltered.reduce((s, i) => s + Number(i.amount), 0) * rmLocal;
-
-    return { totalExpenses, totalIncomes: totalIncomesLocal };
+    return {
+      totalExpenses: sumRealizedAmounts(expFiltered),
+      totalIncomes: sumRealizedAmounts(incFiltered),
+    };
   };
 
   let previousTotalExpenses = 0;
@@ -289,10 +238,10 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
   const previousBalance = previousTotalIncomes - previousTotalExpenses;
 
   // Delta apenas é null quando o valor anterior é exatamente 0 (sem base real)
-  const expenseDelta = previousTotalExpenses > 0 ? ((totalPeriod - previousTotalExpenses) / previousTotalExpenses) * 100 : null;
-  const incomeDelta = previousTotalIncomes > 0 ? ((totalIncomes - previousTotalIncomes) / previousTotalIncomes) * 100 : null;
+  const expenseDelta = calculatePercentageDelta(totalPeriod, previousTotalExpenses);
+  const incomeDelta = calculatePercentageDelta(totalIncomes, previousTotalIncomes);
   const balanceDelta = previousBalance !== 0 ? ((balance - previousBalance) / Math.abs(previousBalance)) * 100 : null;
-  const savingsRate = totalIncomes > 0 ? (balance / totalIncomes) * 100 : 0;
+  const savingsRate = calculateRealizedSavingsRate(totalIncomes, totalPeriod);
 
   // Top category
   const catTotals: Record<string, { name: string; value: number }> = {};
@@ -315,7 +264,7 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
   });
   const daySorted = Object.values(dayTotals).sort((a, b) => b.total - a.total);
   const mostExpensiveDay = daySorted.length > 0
-    ? { date: format(parseLocalDate(daySorted[0].date), "dd/MM"), value: daySorted[0].total }
+    ? { date: format(parseReportDate(daySorted[0].date), "dd/MM"), value: daySorted[0].total }
     : null;
 
   // Category data
@@ -324,11 +273,6 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
     const c = getCategoryDisplay(e.category_name, e.category_icon, e.category_id, e.category);
     if (!categoryDataMap[c.key]) categoryDataMap[c.key] = { name: c.name, icon: c.icon, value: 0 };
     categoryDataMap[c.key].value += Number(e.amount);
-  });
-  filteredRecurringExpenses.forEach(r => {
-    const c = getCategoryDisplay(r.category_name, r.category_icon, r.category_id, r.category);
-    if (!categoryDataMap[c.key]) categoryDataMap[c.key] = { name: c.name, icon: c.icon, value: 0 };
-    categoryDataMap[c.key].value += Number(r.amount) * rm;
   });
   const catDataTotal = Object.values(categoryDataMap).reduce((s, i) => s + i.value, 0);
   // Mostra todas as categorias reais (sem agrupar em "Outros") — espelha o card da Início
@@ -347,7 +291,6 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
     return acc;
   }, {} as Record<PaymentMethod, number>);
   filteredExpenses.forEach(e => { pmTotals[e.payment_method] = (pmTotals[e.payment_method] ?? 0) + Number(e.amount); });
-  filteredRecurringExpenses.forEach(r => { pmTotals[r.payment_method] = (pmTotals[r.payment_method] ?? 0) + Number(r.amount) * rm; });
   const pmTotal = Object.values(pmTotals).reduce((s, v) => s + v, 0);
   const paymentMethodData: PaymentMethodDataItem[] = PAYMENT_METHOD_LIST
     .map((m) => ({
@@ -396,7 +339,6 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
   };
 
   filteredExpenses.forEach(e => accumulateCardExpense(e.card_id, e.payment_method, Number(e.amount)));
-  filteredRecurringExpenses.forEach(r => accumulateCardExpense(r.card_id, r.payment_method, Number(r.amount) * rm));
 
   // Conta tipos distintos por cartão para decidir sufixo
   const methodsPerCard: Record<string, Set<PaymentMethod>> = {};
@@ -444,32 +386,13 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
       .sort((a, b) => b.value - a.value);
   }
 
-  // Helper: verifica se uma despesa/entrada fixa ocorre em um dado dia do mês visualizado
-  const recurringHitsDay = (
-    r: { day_of_month: number; start_date: string | null; end_date: string | null; created_at: string },
-    day: Date
-  ): boolean => {
-    if (r.day_of_month !== day.getDate()) return false;
-    const sd = r.start_date ? parseISO(r.start_date) : parseLocalDate(r.created_at);
-    const ed = r.end_date ? parseISO(r.end_date) : null;
-    return sd <= day && (!ed || ed >= day);
-  };
-
-  // Cash flow data (raw = daily/monthly without cumulative)
+  // Fluxo realizado: somente linhas persistidas de expenses/incomes.
   const cashFlowDataRaw: CashFlowDataItem[] = periodType === "month"
     ? eachDayOfInterval({ start: startDate, end: endDate }).map(day => {
-        const dayExp = filteredExpenses.filter(e => isSameDay(parseLocalDate(e.expense_date), day));
-        const dayInc = filteredIncomes.filter(i => isSameDay(parseLocalDate(i.income_date), day));
-        let entradas = dayInc.reduce((s, i) => s + Number(i.amount), 0);
-        let saidas = dayExp.reduce((s, e) => s + Number(e.amount), 0);
-        // Incluir entradas fixas no dia configurado
-        filteredRecurringIncomes.forEach(r => {
-          if (recurringHitsDay(r, day)) entradas += Number(r.amount);
-        });
-        // Incluir despesas fixas no dia configurado
-        filteredRecurringExpenses.forEach(r => {
-          if (recurringHitsDay(r, day)) saidas += Number(r.amount);
-        });
+        const dayExp = filteredExpenses.filter(e => isSameDay(parseReportDate(e.expense_date), day));
+        const dayInc = filteredIncomes.filter(i => isSameDay(parseReportDate(i.income_date), day));
+        const entradas = dayInc.reduce((s, i) => s + Number(i.amount), 0);
+        const saidas = dayExp.reduce((s, e) => s + Number(e.amount), 0);
         return {
           label: format(day, "dd"),
           entradas: Number(entradas.toFixed(2)),
@@ -478,42 +401,24 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
       })
     : eachMonthOfInterval({ start: startDate, end: endDate }).map(month => {
         const ms = startOfMonth(month), me = endOfMonth(month);
-        const mExp = filteredExpenses.filter(e => { const d = parseLocalDate(e.expense_date); return d >= ms && d <= me; });
-        const mInc = filteredIncomes.filter(i => { const d = parseLocalDate(i.income_date); return d >= ms && d <= me; });
-        let totalE = mExp.reduce((s, e) => s + Number(e.amount), 0);
-        let totalI = mInc.reduce((s, i) => s + Number(i.amount), 0);
-        filteredRecurringExpenses.forEach(r => {
-          const sd = r.start_date ? parseISO(r.start_date) : parseLocalDate(r.created_at);
-          const ed = r.end_date ? parseISO(r.end_date) : null;
-          if (sd <= me && (!ed || ed >= ms)) totalE += Number(r.amount);
-        });
-        filteredRecurringIncomes.forEach(r => {
-          const sd = r.start_date ? parseISO(r.start_date) : parseLocalDate(r.created_at);
-          const ed = r.end_date ? parseISO(r.end_date) : null;
-          if (sd <= me && (!ed || ed >= ms)) totalI += Number(r.amount);
-        });
+        const mExp = filteredExpenses.filter(e => { const d = parseReportDate(e.expense_date); return d >= ms && d <= me; });
+        const mInc = filteredIncomes.filter(i => { const d = parseReportDate(i.income_date); return d >= ms && d <= me; });
+        const totalE = mExp.reduce((s, e) => s + Number(e.amount), 0);
+        const totalI = mInc.reduce((s, i) => s + Number(i.amount), 0);
         return { label: format(month, "MMM/yy", { locale: ptBR }), entradas: Number(totalI.toFixed(2)), saidas: Number(totalE.toFixed(2)) };
       });
 
-  // Evolution data (raw = daily)
+  // Evolução realizada: templates recorrentes ficam fora da série.
   const evolutionDataRaw: EvolutionDataItem[] = periodType === "month"
     ? eachDayOfInterval({ start: startDate, end: endDate }).map(day => {
-        const dayExp = filteredExpenses.filter(e => isSameDay(parseLocalDate(e.expense_date), day));
-        let total = dayExp.reduce((s, e) => s + Number(e.amount), 0);
-        filteredRecurringExpenses.forEach(r => {
-          if (recurringHitsDay(r, day)) total += Number(r.amount);
-        });
+        const dayExp = filteredExpenses.filter(e => isSameDay(parseReportDate(e.expense_date), day));
+        const total = dayExp.reduce((s, e) => s + Number(e.amount), 0);
         return { label: format(day, "dd"), total: Number(total.toFixed(2)) };
       })
     : eachMonthOfInterval({ start: startDate, end: endDate }).map(month => {
         const ms = startOfMonth(month), me = endOfMonth(month);
-        const mExp = filteredExpenses.filter(e => { const d = parseLocalDate(e.expense_date); return d >= ms && d <= me; });
-        let total = mExp.reduce((s, e) => s + Number(e.amount), 0);
-        filteredRecurringExpenses.forEach(r => {
-          const sd = r.start_date ? parseISO(r.start_date) : parseLocalDate(r.created_at);
-          const ed = r.end_date ? parseISO(r.end_date) : null;
-          if (sd <= me && (!ed || ed >= ms)) total += Number(r.amount);
-        });
+        const mExp = filteredExpenses.filter(e => { const d = parseReportDate(e.expense_date); return d >= ms && d <= me; });
+        const total = mExp.reduce((s, e) => s + Number(e.amount), 0);
         return { label: format(month, "MMM/yy", { locale: ptBR }), total: Number(total.toFixed(2)) };
       });
 
@@ -531,7 +436,6 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
       amount: Number(e.amount),
       date: e.expense_date,
       type: 'expense' as const,
-      dayOfMonth: undefined,
     }));
   } else {
     // Visões maiores: agrupa parcelas do mesmo installment_group_id
@@ -553,7 +457,6 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
           amount: Number(e.amount),
           date: e.expense_date,
           type: 'expense' as const,
-          dayOfMonth: undefined,
         });
         return;
       }
@@ -588,7 +491,6 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
           amount: g.amount,
           date: g.sampleDate,
           type: 'expense' as const,
-          dayOfMonth: undefined,
         });
       } else {
         standalone.push({
@@ -596,7 +498,6 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
           amount: g.amount,
           date: g.minDate,
           type: 'installment-group' as const,
-          dayOfMonth: undefined,
           installmentsInPeriod: g.count,
           totalInstallments: g.totalInstallments || g.count,
           dateRange: { start: g.minDate, end: g.maxDate },
@@ -607,26 +508,24 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
     topExpenseItems = standalone;
   }
 
-  const topExpenses: TopExpenseItem[] = [
-    ...topExpenseItems,
-    ...filteredRecurringExpenses.map(r => ({
-      description: r.description,
-      amount: Number(r.amount) * rm,
-      date: '',
-      type: 'recurring' as const,
-      dayOfMonth: r.day_of_month,
-    })),
-  ].sort((a, b) => b.amount - a.amount).slice(0, 10);
+  const topExpenses: TopExpenseItem[] = topExpenseItems
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 10);
 
   return {
     filteredExpenses,
     filteredRecurringExpenses,
     filteredIncomes,
     filteredRecurringIncomes,
+    recurringExpenseProjections,
+    recurringIncomeProjections,
+    periodRelation,
     monthsInPeriod,
     totalPeriod,
     totalIncomes,
     balance,
+    projectedExpenses,
+    projectedIncomes,
     previousPeriodDates,
     previousTotalExpenses,
     previousTotalIncomes,

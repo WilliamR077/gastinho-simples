@@ -1,15 +1,16 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import type { CellHookData } from 'jspdf-autotable';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { PaymentMethod } from '@/types/expense';
 import { Card } from '@/types/card';
 import { PeriodType } from '@/components/period-selector';
-import { parseLocalDate } from '@/lib/utils';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { ReportViewModel, CashFlowDataItem } from '@/utils/report-view-model';
+import { parseReportDate } from '@/utils/report-business-rules';
 import { paymentMethodLabel } from '@/lib/payment-methods';
 
 const isNativeApp = () => Capacitor.isNativePlatform();
@@ -60,6 +61,8 @@ interface ChartData {
   value: number;
   color: string;
 }
+
+type JsPdfWithAutoTable = jsPDF & { lastAutoTable: { finalY: number } };
 
 // ============ CANVAS HELPERS ============
 
@@ -341,9 +344,10 @@ export async function exportReportsToPDF(params: ExportReportParams) {
 
   // Destructure all data from shared view model — same data the UI renders
   const {
-    filteredExpenses, filteredRecurringExpenses,
-    filteredIncomes, filteredRecurringIncomes,
-    monthsInPeriod, totalPeriod, totalIncomes, balance,
+    filteredExpenses, filteredIncomes,
+    recurringExpenseProjections,
+    totalPeriod, totalIncomes, balance,
+    projectedExpenses, projectedIncomes,
     previousPeriodDates, previousTotalExpenses, previousTotalIncomes, previousBalance,
     expenseDelta, incomeDelta, balanceDelta, savingsRate,
     topCategory, mostExpensiveDay,
@@ -351,9 +355,8 @@ export async function exportReportsToPDF(params: ExportReportParams) {
     cashFlowDataRaw, evolutionDataRaw, dailyAverage, topExpenses,
   } = viewModel;
 
-  const rm = periodType === "month" ? 1 : monthsInPeriod;
-
   const doc = new jsPDF();
+  const finalTableY = () => (doc as JsPdfWithAutoTable).lastAutoTable.finalY;
   const pageWidth = doc.internal.pageSize.getWidth();
   let yPosition = 20;
 
@@ -397,7 +400,7 @@ export async function exportReportsToPDF(params: ExportReportParams) {
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
 
-    let line1 = `Você gastou ${formatCurrency(totalPeriod)}`;
+    let line1 = `Você gastou ${formatCurrency(totalPeriod)} em despesas realizadas`;
     if (previousPeriodDates) {
       line1 += ` (${formatDeltaWithAbsolute(expenseDelta, totalPeriod, previousTotalExpenses)})`;
     }
@@ -410,6 +413,10 @@ export async function exportReportsToPDF(params: ExportReportParams) {
     }
     if (mostExpensiveDay) {
       doc.text(`Dia mais caro: ${mostExpensiveDay.date} (${formatCurrency(mostExpensiveDay.value)})`, 14, yPosition);
+      yPosition += 5;
+    }
+    if (projectedExpenses > 0) {
+      doc.text(`Compromissos recorrentes previstos: ${formatCurrency(projectedExpenses)} (não somados ao realizado)`, 14, yPosition);
       yPosition += 5;
     }
     yPosition += 5;
@@ -426,10 +433,10 @@ export async function exportReportsToPDF(params: ExportReportParams) {
 
   autoTable(doc, {
     startY: yPosition,
-    head: [['', 'Entradas', 'Saídas', 'Saldo']],
+    head: [['', 'Entradas realizadas', 'Saídas realizadas', 'Resultado realizado']],
     body: [
       ['Valor', formatCurrency(totalIncomes), formatCurrency(totalPeriod), formatCurrency(balance)],
-      ['Contagem', `${filteredIncomes.length}+${filteredRecurringIncomes.length} fixas`, `${filteredExpenses.length}+${filteredRecurringExpenses.length} fixas`, periodLabel || '—'],
+      ['Contagem', `${filteredIncomes.length} lançamentos`, `${filteredExpenses.length} lançamentos`, periodLabel || '—'],
       ['Economia', savingsLabel, '', ''],
     ],
     theme: 'grid',
@@ -438,14 +445,32 @@ export async function exportReportsToPDF(params: ExportReportParams) {
     columnStyles: { 0: { fontStyle: 'bold', cellWidth: 30 }, 1: { cellWidth: 45 }, 2: { cellWidth: 45 }, 3: { cellWidth: 45 } },
     margin: { left: 14, right: 14 }
   });
-  yPosition = (doc as any).lastAutoTable.finalY + 10;
+  yPosition = finalTableY() + 10;
+
+  if (projectedExpenses > 0 || projectedIncomes > 0) {
+    checkPageBreak(35);
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Planejamento Recorrente', 14, yPosition);
+    yPosition += 7;
+    autoTable(doc, {
+      startY: yPosition,
+      head: [['Entradas previstas', 'Despesas previstas', 'Confirmação']],
+      body: [[formatCurrency(projectedIncomes), formatCurrency(projectedExpenses), 'Sem confirmação de lançamento']],
+      theme: 'grid',
+      headStyles: { fillColor: [20, 184, 166], fontSize: 8 },
+      styles: { fontSize: 8 },
+      margin: { left: 14, right: 14 },
+    });
+    yPosition = finalTableY() + 10;
+  }
 
   // ============ SECTION 4: GASTOS POR CATEGORIA ============
   if (categoryData.length > 0) {
     checkPageBreak(50);
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.text('Gastos por Categoria', 14, yPosition);
+    doc.text('Gastos Realizados por Categoria', 14, yPosition);
     yPosition += 7;
 
     autoTable(doc, {
@@ -467,7 +492,7 @@ export async function exportReportsToPDF(params: ExportReportParams) {
         3: { cellWidth: 60 },
       },
       margin: { left: 14, right: 14 },
-      didDrawCell: (data: any) => {
+      didDrawCell: (data: CellHookData) => {
         if (data.section === 'body' && data.column.index === 3) {
           const cat = categoryData[data.row.index];
           if (cat) {
@@ -480,7 +505,7 @@ export async function exportReportsToPDF(params: ExportReportParams) {
         }
       }
     });
-    yPosition = (doc as any).lastAutoTable.finalY + 10;
+    yPosition = finalTableY() + 10;
   }
 
   // ============ SECTION 5: FORMA DE PAGAMENTO ============
@@ -488,7 +513,7 @@ export async function exportReportsToPDF(params: ExportReportParams) {
     checkPageBreak(40);
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.text('Forma de Pagamento', 14, yPosition);
+    doc.text('Forma de Pagamento — Realizado', 14, yPosition);
     yPosition += 7;
 
     autoTable(doc, {
@@ -510,7 +535,7 @@ export async function exportReportsToPDF(params: ExportReportParams) {
         3: { cellWidth: 65 },
       },
       margin: { left: 14, right: 14 },
-      didDrawCell: (data: any) => {
+      didDrawCell: (data: CellHookData) => {
         if (data.section === 'body' && data.column.index === 3) {
           const pm = paymentMethodData[data.row.index];
           if (pm) {
@@ -526,7 +551,7 @@ export async function exportReportsToPDF(params: ExportReportParams) {
         }
       }
     });
-    yPosition = (doc as any).lastAutoTable.finalY + 10;
+    yPosition = finalTableY() + 10;
   }
 
   // ============ SECTION 6: GASTOS POR CARTÃO ============
@@ -534,7 +559,7 @@ export async function exportReportsToPDF(params: ExportReportParams) {
     checkPageBreak(80);
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.text('Gastos por Cartão', 14, yPosition);
+    doc.text('Gastos Realizados por Cartão', 14, yPosition);
     yPosition += 6;
 
     doc.setFontSize(8);
@@ -580,7 +605,7 @@ export async function exportReportsToPDF(params: ExportReportParams) {
     checkPageBreak(80);
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.text('Fluxo de Caixa', 14, yPosition);
+    doc.text('Fluxo de Caixa Realizado', 14, yPosition);
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(128);
@@ -600,7 +625,7 @@ export async function exportReportsToPDF(params: ExportReportParams) {
     checkPageBreak(80);
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.text('Evolução dos Gastos', 14, yPosition);
+    doc.text('Evolução dos Gastos Realizados', 14, yPosition);
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(128);
@@ -651,12 +676,10 @@ export async function exportReportsToPDF(params: ExportReportParams) {
       head: [['#', 'Descrição', 'Data', 'Valor']],
       body: topExpenses.map((e, i) => {
         let dateCell: string;
-        if (e.type === 'recurring') {
-          dateCell = `Fixa • Dia ${e.dayOfMonth}`;
-        } else if (e.type === 'installment-group' && e.dateRange) {
-          dateCell = `${format(parseLocalDate(e.dateRange.start), "dd/MM")} → ${format(parseLocalDate(e.dateRange.end), "dd/MM")} (${e.installmentsInPeriod}/${e.totalInstallments})`;
+        if (e.type === 'installment-group' && e.dateRange) {
+          dateCell = `${format(parseReportDate(e.dateRange.start), "dd/MM")} → ${format(parseReportDate(e.dateRange.end), "dd/MM")} (${e.installmentsInPeriod}/${e.totalInstallments})`;
         } else {
-          dateCell = format(parseLocalDate(e.date), "dd/MM");
+          dateCell = format(parseReportDate(e.date), "dd/MM");
         }
         return [
           `${i + 1}`,
@@ -676,7 +699,7 @@ export async function exportReportsToPDF(params: ExportReportParams) {
       },
       margin: { left: 14, right: 14 }
     });
-    yPosition = (doc as any).lastAutoTable.finalY + 10;
+    yPosition = finalTableY() + 10;
   }
 
   // ============ SECTION 10: COMPARAÇÃO VS ANTERIOR ============
@@ -695,9 +718,9 @@ export async function exportReportsToPDF(params: ExportReportParams) {
     yPosition += 5;
 
     const compData = [
-      { label: 'Entradas', current: totalIncomes, previous: previousTotalIncomes, delta: incomeDelta },
-      { label: 'Saídas', current: totalPeriod, previous: previousTotalExpenses, delta: expenseDelta },
-      { label: 'Saldo', current: balance, previous: previousBalance, delta: balanceDelta },
+      { label: 'Entradas realizadas', current: totalIncomes, previous: previousTotalIncomes, delta: incomeDelta },
+      { label: 'Saídas realizadas', current: totalPeriod, previous: previousTotalExpenses, delta: expenseDelta },
+      { label: 'Resultado realizado', current: balance, previous: previousBalance, delta: balanceDelta },
     ];
 
     autoTable(doc, {
@@ -720,7 +743,7 @@ export async function exportReportsToPDF(params: ExportReportParams) {
       },
       margin: { left: 14, right: 14 }
     });
-    yPosition = (doc as any).lastAutoTable.finalY + 10;
+    yPosition = finalTableY() + 10;
   }
 
   // ============ SECTION 11: TAXA DE ECONOMIA ============
@@ -728,7 +751,7 @@ export async function exportReportsToPDF(params: ExportReportParams) {
     checkPageBreak(25);
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.text('Taxa de Economia', 14, yPosition);
+    doc.text('Taxa de Economia Realizada', 14, yPosition);
     yPosition += 8;
 
     doc.setFontSize(22);
@@ -751,53 +774,51 @@ export async function exportReportsToPDF(params: ExportReportParams) {
   }
 
   // ============ SECTION 12: DESPESAS FIXAS ============
-  if (filteredRecurringExpenses.length > 0) {
+  if (recurringExpenseProjections.length > 0) {
     checkPageBreak(50);
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.text('Despesas Fixas', 14, yPosition);
+    doc.text('Despesas Fixas Previstas', 14, yPosition);
     yPosition += 7;
 
-    const recurringTotal = filteredRecurringExpenses.reduce((s, e) => s + Number(e.amount), 0) * rm;
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Total: ${formatCurrency(recurringTotal)}`, 14, yPosition);
+    doc.text(`Total previsto: ${formatCurrency(projectedExpenses)} — não somado ao realizado`, 14, yPosition);
     yPosition += 6;
 
-    const today = new Date().getDate();
-    const recurringData = [...filteredRecurringExpenses]
-      .sort((a, b) => Number(b.amount) - Number(a.amount))
-      .map(e => {
+    const recurringData = [...recurringExpenseProjections]
+      .sort((a, b) => b.projectedTotal - a.projectedTotal)
+      .map(projection => {
+        const e = projection.template;
         const card = cards.find(c => c.id === e.card_id);
-        const isPaid = e.day_of_month < today;
         return [
           e.description,
-          isPaid ? 'Paga' : 'Pendente',
-          `Dia ${e.day_of_month}`,
+          projection.statusLabel,
+          projection.dueLabel,
           paymentMethodLabel(e.payment_method),
           card?.name || '-',
-          formatCurrency(Number(e.amount)),
+          formatCurrency(projection.projectedTotal),
         ];
       });
 
     autoTable(doc, {
       startY: yPosition,
-      head: [['Descrição', 'Status', 'Dia', 'Método', 'Cartão', 'Valor']],
+      head: [['Descrição', 'Status', 'Previsão', 'Método', 'Cartão', 'Valor']],
       body: recurringData,
       theme: 'striped',
       headStyles: { fillColor: [20, 184, 166], fontSize: 8 },
       styles: { fontSize: 8 },
       columnStyles: {
-        0: { cellWidth: 45 },
-        1: { cellWidth: 20 },
-        2: { cellWidth: 18 },
-        3: { cellWidth: 25 },
-        4: { cellWidth: 30 },
-        5: { cellWidth: 30, halign: 'right' }
+        0: { cellWidth: 38 },
+        1: { cellWidth: 27 },
+        2: { cellWidth: 36 },
+        3: { cellWidth: 22 },
+        4: { cellWidth: 24 },
+        5: { cellWidth: 27, halign: 'right' }
       },
       margin: { left: 14, right: 14 }
     });
-    yPosition = (doc as any).lastAutoTable.finalY + 10;
+    yPosition = finalTableY() + 10;
   }
 
   // ============ FOOTER ============
