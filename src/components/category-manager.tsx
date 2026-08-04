@@ -319,7 +319,7 @@ export function CategoryManager({ open, onOpenChange, context = "expense" }: Cat
                     <AiHelpHint
                       title={AI_CONTEXTUAL_HINTS.expenseCategories.title}
                       description={AI_CONTEXTUAL_HINTS.expenseCategories.description}
-                      prompt={AI_CONTEXTUAL_HINTS.expenseCategories.prompt}
+                      prompts={AI_CONTEXTUAL_HINTS.expenseCategories.prompts}
                       ariaLabel={AI_CONTEXTUAL_HINTS.expenseCategories.ariaLabel}
                     />
                   )}
