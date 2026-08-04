@@ -20,7 +20,7 @@ import { useCategories } from "@/hooks/use-categories";
 import { buildReportViewModel } from "@/utils/report-view-model";
 import { UpgradeDialog } from "@/components/upgrade-dialog";
 import { AiHelpHint } from "@/components/ai/ai-help-hint";
-import { AI_CONTEXTUAL_HINTS, buildReportsPrompt } from "@/lib/mcp/aiContextualHints";
+import { AI_CONTEXTUAL_HINTS, buildReportsPrompts } from "@/lib/mcp/aiContextualHints";
 
 interface GroupMember {
   user_id: string;
@@ -264,7 +264,7 @@ const Reports = () => {
               <AiHelpHint
                 title={AI_CONTEXTUAL_HINTS.reports.title}
                 description={AI_CONTEXTUAL_HINTS.reports.description}
-                prompt={buildReportsPrompt(periodLabel)}
+                prompts={buildReportsPrompts(periodLabel)}
                 ariaLabel={AI_CONTEXTUAL_HINTS.reports.ariaLabel}
               />
             </div>
