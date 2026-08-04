@@ -40,21 +40,53 @@ function datePartsInReportZone(date: Date): { year: number; month: number; day: 
 }
 
 /**
- * Converte DATEs como datas civis e TIMESTAMPTZs para o dia civil de São Paulo.
- * O meio-dia local evita que operações de calendário recuem o dia em fusos negativos.
+ * Interpreta expense_date/income_date como datas civis financeiras.
+ * O prefixo persistido YYYY-MM-DD é a fonte canônica, mesmo quando o banco
+ * devolve um timestamptz à meia-noite UTC ou com offset explícito.
  */
-export function parseReportDate(value: string): Date {
-  const dateOnly = value.match(/^(\d{4})-(\d{2})-(\d{2})$/u);
-  if (dateOnly) {
-    return localDate(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]));
-  }
+export function parseReportCivilDate(value: string): Date {
+  const civil = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|[T ])/u);
+  if (!civil) throw new RangeError(`Data civil inválida no relatório: ${value}`);
 
+  const year = Number(civil[1]);
+  const monthIndex = Number(civil[2]) - 1;
+  const day = Number(civil[3]);
+  const parsed = localDate(year, monthIndex, day);
+  if (
+    parsed.getFullYear() !== year
+    || parsed.getMonth() !== monthIndex
+    || parsed.getDate() !== day
+  ) {
+    throw new RangeError(`Data civil inválida no relatório: ${value}`);
+  }
+  return parsed;
+}
+
+export function reportCivilDateKey(value: string): string {
+  return reportDateKey(parseReportCivilDate(value));
+}
+
+function parseReportInstantDate(value: string): Date {
   const instant = new Date(value);
   if (Number.isNaN(instant.getTime())) {
-    throw new RangeError(`Data inválida no relatório: ${value}`);
+    throw new RangeError(`Instante inválido no relatório: ${value}`);
   }
   const { year, month, day } = datePartsInReportZone(instant);
   return localDate(year, month - 1, day);
+}
+
+export function filterRowsByCivilPeriod<T>(
+  rows: T[],
+  getDate: (row: T) => string,
+  startDate: Date,
+  endDate: Date,
+): T[] {
+  const startKey = reportDateKey(startDate);
+  const endKey = reportDateKey(endDate);
+  return rows.filter((row) => {
+    const key = reportCivilDateKey(getDate(row));
+    return key >= startKey && key <= endKey;
+  });
 }
 
 export function reportDateKey(date: Date): string {
@@ -108,8 +140,10 @@ export function recurringOccurrencesInPeriod<T extends RecurringTemplateLike>(
 ): Date[] {
   if (!template.is_active && !template.end_date) return [];
 
-  const activeStart = parseReportDate(template.start_date || template.created_at);
-  const activeEnd = template.end_date ? parseReportDate(template.end_date) : null;
+  const activeStart = template.start_date
+    ? parseReportCivilDate(template.start_date)
+    : parseReportInstantDate(template.created_at);
+  const activeEnd = template.end_date ? parseReportCivilDate(template.end_date) : null;
   const occurrences: Date[] = [];
 
   for (

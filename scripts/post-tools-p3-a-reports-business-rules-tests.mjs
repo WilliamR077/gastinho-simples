@@ -26,7 +26,7 @@ const {
   calculatePercentageDelta,
   calculateRealizedSavingsRate,
   classifyReportPeriod,
-  parseReportDate,
+  parseReportCivilDate,
   recurringOccurrencesInPeriod,
   reportDateKey,
   sumRealizedAmounts,
@@ -115,12 +115,12 @@ assert.ok(Math.abs(oracleDelta - 161.9795) < 0.001);
 assert.notEqual(Math.round(oracleDelta), 241);
 
 // 26–27: histórico e timezone America/Sao_Paulo, incluindo bordas.
-assert.equal(reportDateKey(parseReportDate("2026-02-01")), "2026-02-01");
-assert.equal(reportDateKey(parseReportDate("2026-02-01T02:59:59Z")), "2026-01-31");
-assert.equal(reportDateKey(parseReportDate("2026-02-01T03:00:00Z")), "2026-02-01");
-assert.equal(reportDateKey(parseReportDate("2026-03-01T02:59:59Z")), "2026-02-28");
-assert.equal(reportDateKey(parseReportDate("2024-02-29")), "2024-02-29");
-assert.equal(reportDateKey(parseReportDate("2027-01-01T02:59:59Z")), "2026-12-31");
+assert.equal(reportDateKey(parseReportCivilDate("2026-02-01")), "2026-02-01");
+assert.equal(reportDateKey(parseReportCivilDate("2026-02-01T00:00:00Z")), "2026-02-01");
+assert.equal(reportDateKey(parseReportCivilDate("2026-02-01T00:00:00-03:00")), "2026-02-01");
+assert.equal(reportDateKey(parseReportCivilDate("2026-03-01T00:00:00Z")), "2026-03-01");
+assert.equal(reportDateKey(parseReportCivilDate("2024-02-29")), "2024-02-29");
+assert.equal(reportDateKey(parseReportCivilDate("2027-01-01T00:00:00Z")), "2027-01-01");
 assert.equal(recurringOccurrencesInPeriod(recurring({ day_of_month: 31, start_date: "2020-01-01" }), month(2024, 1).start, month(2024, 1).end)[0].getDate(), 29);
 
 // 28–33: escopo, exportação, ausência de mutação remota e responsividade/tema.
@@ -133,7 +133,9 @@ assert.doesNotMatch(
 );
 const pdfSource = read("src", "services", "pdf-export-service.ts");
 assert.match(pdfSource, /categoryData\.map/u, "PDF usa as mesmas categorias resolvidas da interface");
-assert.match(viewModelSource, /name: 'Categoria não resolvida'/u, "category_id válido não é mascarado como Outros");
+const categoryResolverSource = read("src", "utils", "report-category-resolver.ts");
+assert.match(categoryResolverSource, /name: "Categoria não resolvida"/u, "category_id válido não é mascarado como Outros");
+assert.match(viewModelSource, /resolveReportCategory/u, "interface e PDF compartilham o resolvedor canônico");
 const accordionSource = read("src", "components", "reports-accordion.tsx");
 assert.match(`${reportsSource}\n${accordionSource}`, /sm:/u, "layout contém variantes responsivas para desktop");
 assert.match(accordionSource, /grid-cols-2|grid-cols-3/u, "layout mobile mantém grade compacta");
@@ -145,17 +147,19 @@ const changed = [
   ...lines(git(["ls-files", "--others", "--exclude-standard"])),
 ].map((path) => path.replaceAll("\\", "/"));
 const allowed = [
-  "docs/audits/post-tools-p3-a-reports-business-rules/README.md",
   "package.json",
   "scripts/post-tools-p3-a-reports-business-rules-tests.mjs",
+  "scripts/post-tools-p3-a1-report-civil-dates-tests.mjs",
   "src/components/reports-accordion.tsx",
-  "src/pages/Reports.tsx",
   "src/services/pdf-export-service.ts",
   "src/utils/report-business-rules.ts",
+  "src/utils/report-category-resolver.ts",
   "src/utils/report-view-model.ts",
   "tsconfig.p3a-reports.json",
-].sort();
-assert.deepEqual(changed.sort(), allowed, "somente arquivos diretamente ligados à P3-A podem mudar");
+];
+for (const path of changed) {
+  assert.ok(allowed.includes(path), `arquivo fora do escopo P3-A/P3-A1: ${path}`);
+}
 for (const path of changed) {
   assert.doesNotMatch(path, /^(?:src\/lib\/mcp|supabase\/functions\/mcp)(?:\/|$)/u, "nenhum arquivo MCP alterado");
   assert.doesNotMatch(path, /^supabase\/migrations\//u, "nenhuma migration alterada ou criada");

@@ -16,11 +16,14 @@ import {
   calculatePercentageDelta,
   calculateRealizedSavingsRate,
   classifyReportPeriod,
-  parseReportDate,
+  filterRowsByCivilPeriod,
+  parseReportCivilDate,
+  reportCivilDateKey,
   RecurringProjection,
   ReportPeriodRelation,
   sumRealizedAmounts,
 } from "@/utils/report-business-rules";
+import { resolveReportCategory } from "@/utils/report-category-resolver";
 
 export interface CategoryDataItem {
   name: string;
@@ -134,38 +137,24 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
     isGroupContext, groupMembers
   } = params;
 
-  // Helper: prioriza dados denormalizados (cross-user em grupos)
+  // Mapa canônico compartilhado pela interface e pelo exportador PDF.
   const getCategoryDisplay = (
     categoryName: string | null | undefined,
     categoryIcon: string | null | undefined,
     categoryId: string | null | undefined,
     categoryEnum: ExpenseCategory | null | undefined
   ): { key: string; name: string; icon: string } => {
-    if (categoryName) return { key: categoryName, name: categoryName, icon: categoryIcon || '📦' };
-    if (categoryId && categories.length > 0) {
-      const found = categories.find(c => c.id === categoryId);
-      if (found) return { key: found.name, name: found.name, icon: found.icon };
-    }
-    if (categoryId) {
-      return { key: `unresolved:${categoryId}`, name: 'Categoria não resolvida', icon: '📦' };
-    }
-    if (categoryEnum) {
-      const label = categoryLabels[categoryEnum] || categoryEnum;
-      return { key: label, name: label, icon: '📦' };
-    }
-    return { key: 'Outros', name: 'Outros', icon: '📦' };
+    return resolveReportCategory({
+      categoryId,
+      categoryName,
+      categoryIcon,
+      legacyLabel: categoryEnum ? (categoryLabels[categoryEnum] || categoryEnum) : null,
+    }, categories);
   };
 
   // Realizado usa a data da movimentação persistida. Templates não entram aqui.
-  const filteredExpenses = expenses.filter(e => {
-    const d = parseReportDate(e.expense_date);
-    return d >= startDate && d <= endDate;
-  });
-
-  const filteredIncomes = incomes.filter(i => {
-    const d = parseReportDate(i.income_date);
-    return d >= startDate && d <= endDate;
-  });
+  const filteredExpenses = filterRowsByCivilPeriod(expenses, e => e.expense_date, startDate, endDate);
+  const filteredIncomes = filterRowsByCivilPeriod(incomes, i => i.income_date, startDate, endDate);
 
   // Não existe no schema um vínculo template -> movimentação. Nenhum template é
   // deduzido por descrição, valor, categoria, dia ou forma de pagamento.
@@ -212,15 +201,8 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
     pEnd: Date,
     _pType: PeriodType
   ): { totalExpenses: number; totalIncomes: number } => {
-    const expFiltered = expenses.filter(e => {
-      const d = parseReportDate(e.expense_date);
-      return d >= pStart && d <= pEnd;
-    });
-
-    const incFiltered = incomes.filter(i => {
-      const d = parseReportDate(i.income_date);
-      return d >= pStart && d <= pEnd;
-    });
+    const expFiltered = filterRowsByCivilPeriod(expenses, e => e.expense_date, pStart, pEnd);
+    const incFiltered = filterRowsByCivilPeriod(incomes, i => i.income_date, pStart, pEnd);
 
     return {
       totalExpenses: sumRealizedAmounts(expFiltered),
@@ -259,12 +241,13 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
   // Most expensive day
   const dayTotals: Record<string, { date: string; total: number }> = {};
   filteredExpenses.forEach(e => {
-    if (!dayTotals[e.expense_date]) dayTotals[e.expense_date] = { date: e.expense_date, total: 0 };
-    dayTotals[e.expense_date].total += Number(e.amount);
+    const dateKey = reportCivilDateKey(e.expense_date);
+    if (!dayTotals[dateKey]) dayTotals[dateKey] = { date: dateKey, total: 0 };
+    dayTotals[dateKey].total += Number(e.amount);
   });
   const daySorted = Object.values(dayTotals).sort((a, b) => b.total - a.total);
   const mostExpensiveDay = daySorted.length > 0
-    ? { date: format(parseReportDate(daySorted[0].date), "dd/MM"), value: daySorted[0].total }
+    ? { date: format(parseReportCivilDate(daySorted[0].date), "dd/MM"), value: daySorted[0].total }
     : null;
 
   // Category data
@@ -389,8 +372,8 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
   // Fluxo realizado: somente linhas persistidas de expenses/incomes.
   const cashFlowDataRaw: CashFlowDataItem[] = periodType === "month"
     ? eachDayOfInterval({ start: startDate, end: endDate }).map(day => {
-        const dayExp = filteredExpenses.filter(e => isSameDay(parseReportDate(e.expense_date), day));
-        const dayInc = filteredIncomes.filter(i => isSameDay(parseReportDate(i.income_date), day));
+        const dayExp = filteredExpenses.filter(e => isSameDay(parseReportCivilDate(e.expense_date), day));
+        const dayInc = filteredIncomes.filter(i => isSameDay(parseReportCivilDate(i.income_date), day));
         const entradas = dayInc.reduce((s, i) => s + Number(i.amount), 0);
         const saidas = dayExp.reduce((s, e) => s + Number(e.amount), 0);
         return {
@@ -401,8 +384,8 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
       })
     : eachMonthOfInterval({ start: startDate, end: endDate }).map(month => {
         const ms = startOfMonth(month), me = endOfMonth(month);
-        const mExp = filteredExpenses.filter(e => { const d = parseReportDate(e.expense_date); return d >= ms && d <= me; });
-        const mInc = filteredIncomes.filter(i => { const d = parseReportDate(i.income_date); return d >= ms && d <= me; });
+        const mExp = filterRowsByCivilPeriod(filteredExpenses, e => e.expense_date, ms, me);
+        const mInc = filterRowsByCivilPeriod(filteredIncomes, i => i.income_date, ms, me);
         const totalE = mExp.reduce((s, e) => s + Number(e.amount), 0);
         const totalI = mInc.reduce((s, i) => s + Number(i.amount), 0);
         return { label: format(month, "MMM/yy", { locale: ptBR }), entradas: Number(totalI.toFixed(2)), saidas: Number(totalE.toFixed(2)) };
@@ -411,13 +394,13 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
   // Evolução realizada: templates recorrentes ficam fora da série.
   const evolutionDataRaw: EvolutionDataItem[] = periodType === "month"
     ? eachDayOfInterval({ start: startDate, end: endDate }).map(day => {
-        const dayExp = filteredExpenses.filter(e => isSameDay(parseReportDate(e.expense_date), day));
+        const dayExp = filteredExpenses.filter(e => isSameDay(parseReportCivilDate(e.expense_date), day));
         const total = dayExp.reduce((s, e) => s + Number(e.amount), 0);
         return { label: format(day, "dd"), total: Number(total.toFixed(2)) };
       })
     : eachMonthOfInterval({ start: startDate, end: endDate }).map(month => {
         const ms = startOfMonth(month), me = endOfMonth(month);
-        const mExp = filteredExpenses.filter(e => { const d = parseReportDate(e.expense_date); return d >= ms && d <= me; });
+        const mExp = filterRowsByCivilPeriod(filteredExpenses, e => e.expense_date, ms, me);
         const total = mExp.reduce((s, e) => s + Number(e.amount), 0);
         return { label: format(month, "MMM/yy", { locale: ptBR }), total: Number(total.toFixed(2)) };
       });
@@ -434,7 +417,7 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
     topExpenseItems = filteredExpenses.map(e => ({
       description: e.description,
       amount: Number(e.amount),
-      date: e.expense_date,
+      date: reportCivilDateKey(e.expense_date),
       type: 'expense' as const,
     }));
   } else {
@@ -455,7 +438,7 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
         standalone.push({
           description: e.description,
           amount: Number(e.amount),
-          date: e.expense_date,
+          date: reportCivilDateKey(e.expense_date),
           type: 'expense' as const,
         });
         return;
@@ -467,9 +450,9 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
           amount: 0,
           count: 0,
           totalInstallments: e.total_installments || 0,
-          minDate: e.expense_date,
-          maxDate: e.expense_date,
-          sampleDate: e.expense_date,
+          minDate: reportCivilDateKey(e.expense_date),
+          maxDate: reportCivilDateKey(e.expense_date),
+          sampleDate: reportCivilDateKey(e.expense_date),
         };
       }
       const g = groupsMap[gid];
@@ -478,14 +461,15 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
       if (e.total_installments && e.total_installments > g.totalInstallments) {
         g.totalInstallments = e.total_installments;
       }
-      if (e.expense_date < g.minDate) g.minDate = e.expense_date;
-      if (e.expense_date > g.maxDate) g.maxDate = e.expense_date;
+      const expenseDateKey = reportCivilDateKey(e.expense_date);
+      if (expenseDateKey < g.minDate) g.minDate = expenseDateKey;
+      if (expenseDateKey > g.maxDate) g.maxDate = expenseDateKey;
     });
 
     Object.values(groupsMap).forEach(g => {
       if (g.count <= 1) {
         // Apenas 1 parcela no período → trata como avulsa (mantém descrição original com "x/y")
-        const original = filteredExpenses.find(e => e.expense_date === g.sampleDate && stripInstallmentSuffix(e.description) === g.description);
+        const original = filteredExpenses.find(e => reportCivilDateKey(e.expense_date) === g.sampleDate && stripInstallmentSuffix(e.description) === g.description);
         standalone.push({
           description: original?.description || g.description,
           amount: g.amount,

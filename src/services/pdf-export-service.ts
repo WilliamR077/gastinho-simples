@@ -10,7 +10,7 @@ import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { ReportViewModel, CashFlowDataItem } from '@/utils/report-view-model';
-import { parseReportDate } from '@/utils/report-business-rules';
+import { parseReportCivilDate } from '@/utils/report-business-rules';
 import { paymentMethodLabel } from '@/lib/payment-methods';
 
 const isNativeApp = () => Capacitor.isNativePlatform();
@@ -677,9 +677,9 @@ export async function exportReportsToPDF(params: ExportReportParams) {
       body: topExpenses.map((e, i) => {
         let dateCell: string;
         if (e.type === 'installment-group' && e.dateRange) {
-          dateCell = `${format(parseReportDate(e.dateRange.start), "dd/MM")} → ${format(parseReportDate(e.dateRange.end), "dd/MM")} (${e.installmentsInPeriod}/${e.totalInstallments})`;
+          dateCell = `${format(parseReportCivilDate(e.dateRange.start), "dd/MM")} → ${format(parseReportCivilDate(e.dateRange.end), "dd/MM")} (${e.installmentsInPeriod}/${e.totalInstallments})`;
         } else {
-          dateCell = format(parseReportDate(e.date), "dd/MM");
+          dateCell = format(parseReportCivilDate(e.date), "dd/MM");
         }
         return [
           `${i + 1}`,

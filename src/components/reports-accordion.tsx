@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Progress } from "@/components/ui/progress";
 import { ReportViewModel, applyCumulativeMode, applyWeeklyMode } from "@/utils/report-view-model";
-import { parseReportDate } from "@/utils/report-business-rules";
+import { parseReportCivilDate } from "@/utils/report-business-rules";
 import { paymentMethodColor, paymentMethodLabel } from "@/lib/payment-methods";
 
 interface GroupMember {
@@ -521,10 +521,10 @@ export function ReportsAccordion({
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{e.description}</p>
                       <p className="text-xs text-muted-foreground">
-                        {e.type === 'expense' && format(parseReportDate(e.date), "dd/MM")}
+                        {e.type === 'expense' && format(parseReportCivilDate(e.date), "dd/MM")}
                         {e.type === 'installment-group' && e.dateRange && (
                           <>
-                            {format(parseReportDate(e.dateRange.start), "dd/MM")} → {format(parseReportDate(e.dateRange.end), "dd/MM")}
+                            {format(parseReportCivilDate(e.dateRange.start), "dd/MM")} → {format(parseReportCivilDate(e.dateRange.end), "dd/MM")}
                             <span className="ml-1 text-[10px] opacity-75">
                               ({e.installmentsInPeriod} de {e.totalInstallments} parcelas)
                             </span>

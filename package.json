@@ -44,7 +44,8 @@
     "test:g1-c:h1": "node scripts/g1-c1-h1-tests.mjs",
     "test:p1:installment-safety": "node scripts/post-tools-p1-installment-safety-tests.mjs",
     "typecheck:p3a:reports": "tsc -p tsconfig.p3a-reports.json",
-    "test:p3a:reports": "node scripts/post-tools-p3-a-reports-business-rules-tests.mjs"
+    "test:p3a:reports": "node scripts/post-tools-p3-a-reports-business-rules-tests.mjs",
+    "test:p3a1:report-dates": "node scripts/post-tools-p3-a1-report-civil-dates-tests.mjs"
   },
   "dependencies": {
     "@capacitor-community/admob": "^7.2.0",
