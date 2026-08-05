@@ -335,7 +335,7 @@ export interface ExportReportParams {
   groupName?: string;
 }
 
-export async function exportReportsToPDF(params: ExportReportParams) {
+export async function exportSelectedReportToPDF(params: ExportReportParams) {
   const {
     viewModel, cards,
     startDate, endDate, periodType, periodLabel,
@@ -359,6 +359,8 @@ export async function exportReportsToPDF(params: ExportReportParams) {
   const finalTableY = () => (doc as JsPdfWithAutoTable).lastAutoTable.finalY;
   const pageWidth = doc.internal.pageSize.getWidth();
   let yPosition = 20;
+  const periodText = periodLabel || format(startDate, "MMMM 'de' yyyy", { locale: ptBR });
+  const reportTitle = `Relatório — ${periodText.charAt(0).toUpperCase() + periodText.slice(1)}`;
 
   const checkPageBreak = (requiredSpace: number) => {
     if (yPosition + requiredSpace > 270) {
@@ -370,7 +372,7 @@ export async function exportReportsToPDF(params: ExportReportParams) {
   // ============ SECTION 1: HEADER ============
   doc.setFontSize(20);
   doc.setFont('helvetica', 'bold');
-  doc.text('Relatórios', pageWidth / 2, yPosition, { align: 'center' });
+  doc.text(reportTitle, pageWidth / 2, yPosition, { align: 'center' });
   yPosition += 8;
 
   doc.setFontSize(11);
@@ -380,7 +382,6 @@ export async function exportReportsToPDF(params: ExportReportParams) {
   yPosition += 6;
 
   doc.setFontSize(10);
-  const periodText = periodLabel || format(startDate, "MMMM 'de' yyyy", { locale: ptBR });
   doc.text(periodText.charAt(0).toUpperCase() + periodText.slice(1), pageWidth / 2, yPosition, { align: 'center' });
   yPosition += 6;
 
@@ -793,6 +794,7 @@ export async function exportReportsToPDF(params: ExportReportParams) {
         const card = cards.find(c => c.id === e.card_id);
         return [
           e.description,
+          projection.category.name,
           projection.statusLabel,
           projection.dueLabel,
           paymentMethodLabel(e.payment_method),
@@ -803,18 +805,19 @@ export async function exportReportsToPDF(params: ExportReportParams) {
 
     autoTable(doc, {
       startY: yPosition,
-      head: [['Descrição', 'Status', 'Previsão', 'Método', 'Cartão', 'Valor']],
+      head: [['Descrição', 'Categoria', 'Status', 'Previsão', 'Método', 'Cartão', 'Valor']],
       body: recurringData,
       theme: 'striped',
       headStyles: { fillColor: [20, 184, 166], fontSize: 8 },
       styles: { fontSize: 8 },
       columnStyles: {
-        0: { cellWidth: 38 },
-        1: { cellWidth: 27 },
-        2: { cellWidth: 36 },
-        3: { cellWidth: 22 },
-        4: { cellWidth: 24 },
-        5: { cellWidth: 27, halign: 'right' }
+        0: { cellWidth: 31 },
+        1: { cellWidth: 29 },
+        2: { cellWidth: 22 },
+        3: { cellWidth: 30 },
+        4: { cellWidth: 20 },
+        5: { cellWidth: 20 },
+        6: { cellWidth: 22, halign: 'right' }
       },
       margin: { left: 14, right: 14 }
     });

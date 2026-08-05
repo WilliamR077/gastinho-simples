@@ -25,11 +25,16 @@ import { Capacitor } from "@capacitor/core";
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
 import { Footer } from "@/components/footer";
+import { useCategories } from "@/hooks/use-categories";
+import { resolveReportCategory, resolveReportGoalCategory } from "@/utils/report-category-resolver";
+import type { Json } from "@/integrations/supabase/types";
 
 
 
 // Helper para detectar se está no app nativo
 const isNativeApp = () => Capacitor.isNativePlatform();
+
+type JsPdfWithAutoTable = jsPDF & { lastAutoTable: { finalY: number } };
 
 // Helper para salvar e compartilhar arquivo no app
 const saveAndShareFile = async (base64Data: string, fileName: string, mimeType: string) => {
@@ -59,6 +64,7 @@ export default function Settings() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { canExportPdf, canExportExcel, canImportSpreadsheet, importLimit } = useSubscription();
+  const { categories } = useCategories();
   const [importSheetOpen, setImportSheetOpen] = useState(false);
   const { startOnboarding, getSetupProgress } = useOnboardingTour();
   const [setupProgress, setSetupProgress] = useState<{
@@ -75,7 +81,7 @@ export default function Settings() {
   }, [user, getSetupProgress]);
 
   // Audit log helper function
-  const logAuditAction = async (action: string, details?: any) => {
+  const logAuditAction = async (action: string, details?: Json) => {
     try {
       if (!user?.id) return;
       
@@ -135,7 +141,12 @@ export default function Settings() {
         Data: format(parseLocalDate(exp.expense_date), "dd/MM/yyyy"),
         Descrição: exp.description,
         Valor: `R$ ${Number(exp.amount).toFixed(2)}`,
-        Categoria: categoryLabels[exp.category as keyof typeof categoryLabels] || exp.category,
+        Categoria: resolveReportCategory({
+          categoryId: exp.category_id,
+          categoryName: exp.category_name,
+          categoryIcon: exp.category_icon,
+          legacyLabel: categoryLabels[exp.category as keyof typeof categoryLabels] || exp.category,
+        }, categories).name,
         "Forma de Pagamento": paymentMethodLabel(exp.payment_method as PaymentMethod),
         Parcelas: exp.total_installments > 1 ? `${exp.installment_number}/${exp.total_installments}` : "À vista",
       })) || [];
@@ -143,7 +154,12 @@ export default function Settings() {
       const recurringData = recurringExpenses?.map((rec) => ({
         Descrição: rec.description,
         Valor: `R$ ${Number(rec.amount).toFixed(2)}`,
-        Categoria: categoryLabels[rec.category as keyof typeof categoryLabels] || rec.category,
+        Categoria: resolveReportCategory({
+          categoryId: rec.category_id,
+          categoryName: rec.category_name,
+          categoryIcon: rec.category_icon,
+          legacyLabel: categoryLabels[rec.category as keyof typeof categoryLabels] || rec.category,
+        }, categories).name,
         "Forma de Pagamento": paymentMethodLabel(rec.payment_method as PaymentMethod),
         "Dia do Mês": rec.day_of_month,
         Status: rec.is_active ? "Ativa" : "Inativa",
@@ -151,7 +167,7 @@ export default function Settings() {
 
       const budgetData = budgetGoals?.map((goal) => ({
         Tipo: goal.type === "monthly_total" ? "Total Mensal" : "Por Categoria",
-        Categoria: goal.category ? categoryLabels[goal.category as keyof typeof categoryLabels] : "N/A",
+        Categoria: resolveReportGoalCategory(goal.category, categories, categoryLabels),
         Limite: `R$ ${Number(goal.limit_amount).toFixed(2)}`,
       })) || [];
 
@@ -185,7 +201,7 @@ export default function Settings() {
 
       // Log audit action
       await logAuditAction("data_exported_excel");
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Erro ao exportar",
         description: sanitizeErrorMessage(error),
@@ -256,7 +272,12 @@ export default function Settings() {
           format(parseLocalDate(exp.expense_date), "dd/MM/yyyy"),
           exp.description,
           `R$ ${Number(exp.amount).toFixed(2)}`,
-          categoryLabels[exp.category as keyof typeof categoryLabels] || exp.category,
+          resolveReportCategory({
+            categoryId: exp.category_id,
+            categoryName: exp.category_name,
+            categoryIcon: exp.category_icon,
+            legacyLabel: categoryLabels[exp.category as keyof typeof categoryLabels] || exp.category,
+          }, categories).name,
           paymentMethodLabel(exp.payment_method as PaymentMethod),
         ]);
 
@@ -269,7 +290,7 @@ export default function Settings() {
           headStyles: { fillColor: [59, 130, 246] },
         });
 
-        yPosition = (doc as any).lastAutoTable.finalY + 10;
+        yPosition = (doc as JsPdfWithAutoTable).lastAutoTable.finalY + 10;
       }
 
       // Recurring Expenses table
@@ -286,7 +307,12 @@ export default function Settings() {
         const recurringData = recurringExpenses.map((rec) => [
           rec.description,
           `R$ ${Number(rec.amount).toFixed(2)}`,
-          categoryLabels[rec.category as keyof typeof categoryLabels] || rec.category,
+          resolveReportCategory({
+            categoryId: rec.category_id,
+            categoryName: rec.category_name,
+            categoryIcon: rec.category_icon,
+            legacyLabel: categoryLabels[rec.category as keyof typeof categoryLabels] || rec.category,
+          }, categories).name,
           rec.day_of_month.toString(),
           rec.is_active ? "Ativa" : "Inativa",
         ]);
@@ -300,7 +326,7 @@ export default function Settings() {
           headStyles: { fillColor: [59, 130, 246] },
         });
 
-        yPosition = (doc as any).lastAutoTable.finalY + 10;
+        yPosition = (doc as JsPdfWithAutoTable).lastAutoTable.finalY + 10;
       }
 
       // Budget Goals table
@@ -316,7 +342,7 @@ export default function Settings() {
 
         const budgetData = budgetGoals.map((goal) => [
           goal.type === "monthly_total" ? "Total Mensal" : "Por Categoria",
-          goal.category ? categoryLabels[goal.category as keyof typeof categoryLabels] : "N/A",
+          resolveReportGoalCategory(goal.category, categories, categoryLabels),
           `R$ ${Number(goal.limit_amount).toFixed(2)}`,
         ]);
 
@@ -348,7 +374,7 @@ export default function Settings() {
 
       // Log audit action
       await logAuditAction("data_exported_pdf");
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Erro ao exportar",
         description: sanitizeErrorMessage(error),

@@ -23,7 +23,10 @@ import {
   ReportPeriodRelation,
   sumRealizedAmounts,
 } from "@/utils/report-business-rules";
-import { resolveReportCategory } from "@/utils/report-category-resolver";
+import {
+  resolveReportCategory,
+  ResolvedReportCategory,
+} from "@/utils/report-category-resolver";
 
 export interface CategoryDataItem {
   name: string;
@@ -75,6 +78,10 @@ export interface TopExpenseItem {
   dateRange?: { start: string; end: string };
 }
 
+export type ResolvedRecurringExpenseProjection = RecurringProjection<RecurringExpense> & {
+  category: ResolvedReportCategory;
+};
+
 interface GroupMember {
   user_id: string;
   user_email: string;
@@ -86,7 +93,7 @@ export interface ReportViewModel {
   filteredRecurringExpenses: RecurringExpense[];
   filteredIncomes: Income[];
   filteredRecurringIncomes: RecurringIncome[];
-  recurringExpenseProjections: RecurringProjection<RecurringExpense>[];
+  recurringExpenseProjections: ResolvedRecurringExpenseProjection[];
   recurringIncomeProjections: RecurringProjection<RecurringIncome>[];
   periodRelation: ReportPeriodRelation;
   monthsInPeriod: number;
@@ -158,7 +165,19 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
 
   // Não existe no schema um vínculo template -> movimentação. Nenhum template é
   // deduzido por descrição, valor, categoria, dia ou forma de pagamento.
-  const recurringExpenseProjections = buildRecurringProjections(recurringExpenses, startDate, endDate);
+  const recurringExpenseProjections: ResolvedRecurringExpenseProjection[] = buildRecurringProjections(
+    recurringExpenses,
+    startDate,
+    endDate,
+  ).map((projection) => ({
+    ...projection,
+    category: getCategoryDisplay(
+      projection.template.category_name,
+      projection.template.category_icon,
+      projection.template.category_id,
+      projection.template.category,
+    ),
+  }));
   const recurringIncomeProjections = buildRecurringProjections(recurringIncomes, startDate, endDate);
   const filteredRecurringExpenses = recurringExpenseProjections.map(item => item.template);
   const filteredRecurringIncomes = recurringIncomeProjections.map(item => item.template);

@@ -151,7 +151,7 @@ assert.deepEqual(Object.fromEntries(categoryTotals), {
 });
 assert.equal(resolveReportCategory({ categoryId: "cat-caldas", categoryName: "Outros" }, categories).name, "Caldas Novas");
 assert.equal(resolveReportCategory({ categoryId: "missing", categoryName: "Outros" }, categories).name, "Categoria não resolvida");
-assert.equal(resolveReportCategory({ categoryId: "group-category", categoryName: "Viagem" }, categories).name, "Viagem");
+assert.equal(resolveReportCategory({ categoryId: "group-category", categoryName: "Viagem" }, categories).name, "Categoria não resolvida");
 
 const viewModelSource = read("src", "utils", "report-view-model.ts");
 const accordionSource = read("src", "components", "reports-accordion.tsx");
@@ -173,14 +173,17 @@ const allowed = new Set([
   "package.json",
   "scripts/post-tools-p3-a-reports-business-rules-tests.mjs",
   "scripts/post-tools-p3-a1-report-civil-dates-tests.mjs",
+  "scripts/post-tools-p3-a2-report-categories-export-tests.mjs",
   "src/components/reports-accordion.tsx",
+  "src/pages/Reports.tsx",
+  "src/pages/Settings.tsx",
   "src/services/pdf-export-service.ts",
   "src/utils/report-business-rules.ts",
   "src/utils/report-category-resolver.ts",
   "src/utils/report-view-model.ts",
   "tsconfig.p3a-reports.json",
 ]);
-for (const path of changed) assert.ok(allowed.has(path), `arquivo fora do escopo P3-A1: ${path}`);
+for (const path of changed) assert.ok(allowed.has(path), `arquivo fora do escopo P3-A1/P3-A2: ${path}`);
 assert.equal(git(["diff", "--name-only", "HEAD", "--", "src/lib/mcp/shared", "src/lib/mcp/tools", "supabase/functions/mcp"]).trim(), "");
 assert.equal(git(["diff", "--name-only", "HEAD", "--", "supabase/migrations"]).trim(), "");
 assert.equal(readdirSync(join(root, "supabase", "migrations")).filter((name) => name.endsWith(".sql")).length, 64);

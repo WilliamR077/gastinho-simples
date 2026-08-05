@@ -695,6 +695,9 @@ export function ReportsAccordion({
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
                           <Badge variant="outline" className="text-[10px]">{projection.statusLabel}</Badge>
                           <span className="text-[10px] text-muted-foreground">{projection.dueLabel}</span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {projection.category.icon} {projection.category.name}
+                          </span>
                           {card && (
                             <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                               <div className="w-2 h-2 rounded-full" style={{ backgroundColor: card.color }} />

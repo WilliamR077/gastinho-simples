@@ -5,6 +5,7 @@
   },
   "include": [
     "src/pages/Reports.tsx",
+    "src/pages/Settings.tsx",
     "src/components/reports-accordion.tsx",
     "src/services/pdf-export-service.ts",
     "src/utils/report-view-model.ts",

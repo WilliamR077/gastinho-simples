@@ -13,7 +13,7 @@ import { useSharedGroups } from "@/hooks/use-shared-groups";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Download, Loader2, Lock } from "lucide-react";
 import { startOfMonth, endOfMonth } from "date-fns";
-import { exportReportsToPDF } from "@/services/pdf-export-service";
+import { exportSelectedReportToPDF } from "@/services/pdf-export-service";
 import { toast } from "sonner";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useCategories } from "@/hooks/use-categories";
@@ -33,7 +33,7 @@ const Reports = () => {
   const navigate = useNavigate();
   const { currentContext, getGroupMembers } = useSharedGroups();
   const { canExportPdf } = useSubscription();
-  const { categories } = useCategories();
+  const { categories, loading: categoriesLoading } = useCategories();
   
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>([]);
@@ -218,10 +218,15 @@ const Reports = () => {
       setShowUpgradeDialog(true);
       return;
     }
+
+    if (categoriesLoading) {
+      toast.info("Aguarde o carregamento das categorias antes de exportar.");
+      return;
+    }
     
     try {
       setIsExporting(true);
-      await exportReportsToPDF({
+      await exportSelectedReportToPDF({
         viewModel,
         cards,
         startDate,
@@ -271,7 +276,7 @@ const Reports = () => {
               variant="default"
               size="sm"
               onClick={handleExportPDF}
-              disabled={isExporting}
+              disabled={isExporting || categoriesLoading}
               className="flex items-center gap-1.5 text-xs sm:text-sm shrink-0"
               data-onboarding="reports-export-btn"
             >
