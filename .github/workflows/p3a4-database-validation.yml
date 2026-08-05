@@ -46,14 +46,20 @@ jobs:
         shell: bash
     env:
       P3A4_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-      P3A4_ARTIFACT_DIR: ${{ runner.temp }}/p3a4-artifacts
-      P3A4_LOCAL_PROJECT: ${{ runner.temp }}/p3a4-local-project
 
     steps:
       - name: Check out the repository
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+
+      - name: Prepare CI paths
+        run: |
+          echo "P3A4_ARTIFACT_DIR=$RUNNER_TEMP/p3a4-artifacts" >> "$GITHUB_ENV"
+          echo "P3A4_LOCAL_PROJECT=$RUNNER_TEMP/p3a4-local-project" >> "$GITHUB_ENV"
+          mkdir -p \
+            "$RUNNER_TEMP/p3a4-artifacts" \
+            "$RUNNER_TEMP/p3a4-local-project"
 
       - name: Set up Node.js 22
         uses: actions/setup-node@v6
@@ -226,7 +232,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: p3a4-database-validation-${{ github.run_id }}
-          path: ${{ runner.temp }}/p3a4-artifacts
+          path: ${{ env.P3A4_ARTIFACT_DIR }}
           if-no-files-found: warn
           retention-days: 14
 
