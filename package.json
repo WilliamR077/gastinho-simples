@@ -46,7 +46,8 @@
     "typecheck:p3a:reports": "tsc -p tsconfig.p3a-reports.json",
     "test:p3a:reports": "node scripts/post-tools-p3-a-reports-business-rules-tests.mjs",
     "test:p3a1:report-dates": "node scripts/post-tools-p3-a1-report-civil-dates-tests.mjs",
-    "test:p3a2:report-export": "node scripts/post-tools-p3-a2-report-categories-export-tests.mjs"
+    "test:p3a2:report-export": "node scripts/post-tools-p3-a2-report-categories-export-tests.mjs",
+    "test:p3a3:report-category-state": "node scripts/post-tools-p3-a3-report-category-state-tests.mjs"
   },
   "dependencies": {
     "@capacitor-community/admob": "^7.2.0",

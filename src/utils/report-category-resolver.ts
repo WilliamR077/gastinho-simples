@@ -37,7 +37,7 @@ export function resolveReportCategory(
     }
 
     return {
-      key: `unresolved:${input.categoryId}`,
+      key: "unresolved",
       name: "Categoria não resolvida",
       icon: FALLBACK_ICON,
     };

@@ -29,6 +29,7 @@ import {
 } from "@/utils/report-category-resolver";
 
 export interface CategoryDataItem {
+  key: string;
   name: string;
   icon: string;
   value: number;
@@ -278,12 +279,13 @@ export function buildReportViewModel(params: BuildReportViewModelParams): Report
   });
   const catDataTotal = Object.values(categoryDataMap).reduce((s, i) => s + i.value, 0);
   // Mostra todas as categorias reais (sem agrupar em "Outros") — espelha o card da Início
-  const categoryData: CategoryDataItem[] = Object.values(categoryDataMap)
-    .filter(i => i.value > 0)
-    .map(i => ({
-      ...i,
-      value: Number(i.value.toFixed(2)),
-      percentage: catDataTotal > 0 ? (i.value / catDataTotal) * 100 : 0,
+  const categoryData: CategoryDataItem[] = Object.entries(categoryDataMap)
+    .filter(([, item]) => item.value > 0)
+    .map(([key, item]) => ({
+      key,
+      ...item,
+      value: Number(item.value.toFixed(2)),
+      percentage: catDataTotal > 0 ? (item.value / catDataTotal) * 100 : 0,
     }))
     .sort((a, b) => b.value - a.value);
 

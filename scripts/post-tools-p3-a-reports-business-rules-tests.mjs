@@ -151,17 +151,19 @@ const allowed = [
   "scripts/post-tools-p3-a-reports-business-rules-tests.mjs",
   "scripts/post-tools-p3-a1-report-civil-dates-tests.mjs",
   "scripts/post-tools-p3-a2-report-categories-export-tests.mjs",
+  "scripts/post-tools-p3-a3-report-category-state-tests.mjs",
   "src/components/reports-accordion.tsx",
   "src/pages/Reports.tsx",
   "src/pages/Settings.tsx",
   "src/services/pdf-export-service.ts",
   "src/utils/report-business-rules.ts",
   "src/utils/report-category-resolver.ts",
+  "src/utils/report-load-state.ts",
   "src/utils/report-view-model.ts",
   "tsconfig.p3a-reports.json",
 ];
 for (const path of changed) {
-  assert.ok(allowed.includes(path), `arquivo fora do escopo P3-A/P3-A1/P3-A2: ${path}`);
+  assert.ok(allowed.includes(path), `arquivo fora do escopo P3-A/P3-A1/P3-A2/P3-A3: ${path}`);
 }
 for (const path of changed) {
   assert.doesNotMatch(path, /^(?:src\/lib\/mcp|supabase\/functions\/mcp)(?:\/|$)/u, "nenhum arquivo MCP alterado");

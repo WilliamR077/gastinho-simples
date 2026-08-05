@@ -10,6 +10,7 @@
     "src/services/pdf-export-service.ts",
     "src/utils/report-view-model.ts",
     "src/utils/report-business-rules.ts",
-    "src/utils/report-category-resolver.ts"
+    "src/utils/report-category-resolver.ts",
+    "src/utils/report-load-state.ts"
   ]
 }

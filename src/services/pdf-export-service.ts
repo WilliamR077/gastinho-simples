@@ -607,12 +607,13 @@ export async function exportSelectedReportToPDF(params: ExportReportParams) {
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('Fluxo de Caixa Realizado', 14, yPosition);
+    yPosition += 5;
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(128);
-    doc.text('Entradas vs Saídas — Por dia', 60, yPosition);
+    doc.text('Entradas vs Saídas — Por dia', 14, yPosition);
     doc.setTextColor(0);
-    yPosition += 5;
+    yPosition += 6;
 
     const cfImage = createDualBarChartCanvas(cashFlowDataRaw, 500, 200);
     if (cfImage) {
@@ -627,12 +628,13 @@ export async function exportSelectedReportToPDF(params: ExportReportParams) {
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('Evolução dos Gastos Realizados', 14, yPosition);
+    yPosition += 5;
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(128);
-    doc.text(`Diário — Média: ${formatCurrency(dailyAverage)}`, 62, yPosition);
+    doc.text(`Diário — Média: ${formatCurrency(dailyAverage)}`, 14, yPosition);
     doc.setTextColor(0);
-    yPosition += 5;
+    yPosition += 6;
 
     const evoImage = createLineChartCanvas(
       evolutionDataRaw.map(d => d.label),

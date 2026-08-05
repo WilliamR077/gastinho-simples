@@ -1,6 +1,6 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useNavigate } from "react-router-dom";
-import { useCallback, useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Expense } from "@/types/expense";
 import { RecurringExpense } from "@/types/recurring-expense";
@@ -21,12 +21,37 @@ import { buildReportViewModel } from "@/utils/report-view-model";
 import { UpgradeDialog } from "@/components/upgrade-dialog";
 import { AiHelpHint } from "@/components/ai/ai-help-hint";
 import { AI_CONTEXTUAL_HINTS, buildReportsPrompts } from "@/lib/mcp/aiContextualHints";
+import {
+  initialReportLoadState,
+  isReportViewReady,
+  reduceReportLoadState,
+  ReportLoadAction,
+  ReportLoadState,
+} from "@/utils/report-load-state";
 
 interface GroupMember {
   user_id: string;
   user_email: string;
   role: string;
 }
+
+interface ReportDataSets {
+  expenses: Expense[];
+  recurringExpenses: RecurringExpense[];
+  cards: Card[];
+  incomes: Income[];
+  recurringIncomes: RecurringIncome[];
+  groupMembers: GroupMember[];
+}
+
+const EMPTY_REPORT_DATA: ReportDataSets = {
+  expenses: [],
+  recurringExpenses: [],
+  cards: [],
+  incomes: [],
+  recurringIncomes: [],
+  groupMembers: [],
+};
 
 const Reports = () => {
   const { user } = useAuth();
@@ -35,12 +60,14 @@ const Reports = () => {
   const { canExportPdf } = useSubscription();
   const { categories, loading: categoriesLoading } = useCategories();
   
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>([]);
-  const [cards, setCards] = useState<Card[]>([]);
-  const [incomes, setIncomes] = useState<Income[]>([]);
-  const [recurringIncomes, setRecurringIncomes] = useState<RecurringIncome[]>([]);
-  const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
+  const [reportLoadState, dispatchReportLoad] = useReducer(
+    (
+      state: ReportLoadState<ReportDataSets>,
+      action: ReportLoadAction<ReportDataSets>,
+    ) => reduceReportLoadState(state, action),
+    initialReportLoadState<ReportDataSets>(),
+  );
+  const reportRequestId = useRef(0);
   const [isExporting, setIsExporting] = useState(false);
   const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
   
@@ -51,20 +78,8 @@ const Reports = () => {
 
   const isGroupContext = currentContext.type === 'group';
 
-  useEffect(() => {
-    const fetchGroupMembersData = async () => {
-      if (isGroupContext && currentContext.groupId) {
-        const members = await getGroupMembers(currentContext.groupId);
-        setGroupMembers(members as GroupMember[]);
-      } else {
-        setGroupMembers([]);
-      }
-    };
-    fetchGroupMembersData();
-  }, [isGroupContext, currentContext.groupId, getGroupMembers]);
-
-  const fetchExpenses = useCallback(async () => {
-    if (!user) return;
+  const fetchExpenses = useCallback(async (): Promise<Expense[]> => {
+    if (!user) return [];
 
     let query = supabase
       .from("expenses")
@@ -80,15 +95,14 @@ const Reports = () => {
     const { data, error } = await query;
 
     if (error) {
-      console.error("Error fetching expenses:", error);
-      return;
+      throw error;
     }
 
-    setExpenses(data || []);
+    return data || [];
   }, [currentContext.groupId, isGroupContext, user]);
 
-  const fetchRecurringExpenses = useCallback(async () => {
-    if (!user) return;
+  const fetchRecurringExpenses = useCallback(async (): Promise<RecurringExpense[]> => {
+    if (!user) return [];
 
     let query = supabase
       .from("recurring_expenses")
@@ -104,15 +118,14 @@ const Reports = () => {
     const { data, error } = await query;
 
     if (error) {
-      console.error("Error fetching recurring expenses:", error);
-      return;
+      throw error;
     }
 
-    setRecurringExpenses(data || []);
+    return data || [];
   }, [currentContext.groupId, isGroupContext, user]);
 
-  const fetchCards = useCallback(async () => {
-    if (!user) return;
+  const fetchCards = useCallback(async (): Promise<Card[]> => {
+    if (!user) return [];
 
     const { data, error } = await supabase
       .from("cards")
@@ -122,15 +135,14 @@ const Reports = () => {
       .order("name", { ascending: true });
 
     if (error) {
-      console.error("Error fetching cards:", error);
-      return;
+      throw error;
     }
 
-    setCards(data || []);
+    return data || [];
   }, [user]);
 
-  const fetchIncomes = useCallback(async () => {
-    if (!user) return;
+  const fetchIncomes = useCallback(async (): Promise<Income[]> => {
+    if (!user) return [];
 
     let query = supabase
       .from("incomes")
@@ -146,15 +158,14 @@ const Reports = () => {
     const { data, error } = await query;
 
     if (error) {
-      console.error("Error fetching incomes:", error);
-      return;
+      throw error;
     }
 
-    setIncomes(data || []);
+    return (data || []) as Income[];
   }, [currentContext.groupId, isGroupContext, user]);
 
-  const fetchRecurringIncomes = useCallback(async () => {
-    if (!user) return;
+  const fetchRecurringIncomes = useCallback(async (): Promise<RecurringIncome[]> => {
+    if (!user) return [];
 
     let query = supabase
       .from("recurring_incomes")
@@ -170,24 +181,67 @@ const Reports = () => {
     const { data, error } = await query;
 
     if (error) {
-      console.error("Error fetching recurring incomes:", error);
-      return;
+      throw error;
     }
 
-    setRecurringIncomes(data || []);
+    return (data || []) as RecurringIncome[];
   }, [currentContext.groupId, isGroupContext, user]);
+
+  const contextSelectionKey = isGroupContext && currentContext.groupId
+    ? `group:${currentContext.groupId}`
+    : `personal:${user?.id || "anonymous"}`;
 
   useEffect(() => {
     if (!user) {
       navigate("/auth");
       return;
     }
-    fetchExpenses();
-    fetchRecurringExpenses();
-    fetchCards();
-    fetchIncomes();
-    fetchRecurringIncomes();
-  }, [fetchCards, fetchExpenses, fetchIncomes, fetchRecurringExpenses, fetchRecurringIncomes, navigate, user]);
+
+    const requestId = ++reportRequestId.current;
+    dispatchReportLoad({ type: "start", selectionKey: contextSelectionKey, requestId });
+
+    const groupMembersRequest: Promise<GroupMember[]> = isGroupContext && currentContext.groupId
+      ? getGroupMembers(currentContext.groupId).then((members) => members as GroupMember[])
+      : Promise.resolve([]);
+
+    Promise.all([
+      fetchExpenses(),
+      fetchRecurringExpenses(),
+      fetchCards(),
+      fetchIncomes(),
+      fetchRecurringIncomes(),
+      groupMembersRequest,
+    ]).then(([
+      expenses,
+      recurringExpenses,
+      cards,
+      incomes,
+      recurringIncomes,
+      groupMembers,
+    ]) => {
+      dispatchReportLoad({
+        type: "success",
+        selectionKey: contextSelectionKey,
+        requestId,
+        data: { expenses, recurringExpenses, cards, incomes, recurringIncomes, groupMembers },
+      });
+    }).catch((error: unknown) => {
+      console.error("Error fetching report data:", error);
+      dispatchReportLoad({ type: "failure", selectionKey: contextSelectionKey, requestId });
+    });
+  }, [
+    contextSelectionKey,
+    currentContext.groupId,
+    fetchCards,
+    fetchExpenses,
+    fetchIncomes,
+    fetchRecurringExpenses,
+    fetchRecurringIncomes,
+    getGroupMembers,
+    isGroupContext,
+    navigate,
+    user,
+  ]);
 
   const handlePeriodChange = (newStartDate: Date, newEndDate: Date, label: string, type: PeriodType) => {
     setStartDate(newStartDate);
@@ -196,7 +250,12 @@ const Reports = () => {
     setPeriodType(type);
   };
 
-  // Compute shared view model
+  const reportData = reportLoadState.data || EMPTY_REPORT_DATA;
+  const { expenses, recurringExpenses, cards, incomes, recurringIncomes, groupMembers } = reportData;
+  const reportViewReady = isReportViewReady(reportLoadState, categoriesLoading);
+  const reportRenderKey = `${contextSelectionKey}:${startDate.getTime()}:${endDate.getTime()}:${periodType}`;
+
+  // Compute shared view model from one atomic context snapshot.
   const viewModel = useMemo(() => {
     return buildReportViewModel({
       expenses,
@@ -219,8 +278,8 @@ const Reports = () => {
       return;
     }
 
-    if (categoriesLoading) {
-      toast.info("Aguarde o carregamento das categorias antes de exportar.");
+    if (!reportViewReady) {
+      toast.info("Aguarde o carregamento do relatório antes de exportar.");
       return;
     }
     
@@ -276,7 +335,7 @@ const Reports = () => {
               variant="default"
               size="sm"
               onClick={handleExportPDF}
-              disabled={isExporting || categoriesLoading}
+              disabled={isExporting || !reportViewReady}
               className="flex items-center gap-1.5 text-xs sm:text-sm shrink-0"
               data-onboarding="reports-export-btn"
             >
@@ -302,20 +361,23 @@ const Reports = () => {
       </div>
 
       <main className="container mx-auto px-4 py-4">
-        <ReportsAccordion 
-          expenses={expenses}
-          recurringExpenses={recurringExpenses}
-          cards={cards}
-          incomes={incomes}
-          recurringIncomes={recurringIncomes}
-          startDate={startDate}
-          endDate={endDate}
-          periodType={periodType}
-          periodLabel={periodLabel}
-          isGroupContext={isGroupContext}
-          groupMembers={groupMembers}
-          viewModel={viewModel}
-        />
+        {reportViewReady ? (
+          <ReportsAccordion
+            key={reportRenderKey}
+            cards={cards}
+            periodType={periodType}
+            periodLabel={periodLabel}
+            isGroupContext={isGroupContext}
+            groupMembers={groupMembers}
+            viewModel={viewModel}
+          />
+        ) : (
+          <div className="space-y-3" aria-busy="true" aria-label="Carregando relatório">
+            <div className="h-24 rounded-lg bg-muted animate-pulse" />
+            <div className="h-40 rounded-lg bg-muted animate-pulse" />
+            <div className="h-40 rounded-lg bg-muted animate-pulse" />
+          </div>
+        )}
       </main>
 
       <UpgradeDialog

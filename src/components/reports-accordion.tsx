@@ -1,8 +1,5 @@
 import { useMemo, useState } from "react";
 import { Card as CardType } from "@/types/card";
-import { Expense } from "@/types/expense";
-import { RecurringExpense } from "@/types/recurring-expense";
-import { Income, RecurringIncome } from "@/types/income";
 import { ResponsiveContainer, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, BarChart, Bar, Legend, ReferenceLine, PieChart, Pie, Cell } from "recharts";
 import { format } from "date-fns";
 import { TrendingUp, TrendingDown, Crown, Lock, CreditCard, Users, CalendarClock, DollarSign, ArrowUpDown, Sparkles, Target, Trophy, Wallet, BarChart3 } from "lucide-react";
@@ -30,13 +27,7 @@ interface GroupMember {
 }
 
 interface ReportsAccordionProps {
-  expenses: Expense[];
-  recurringExpenses: RecurringExpense[];
   cards: CardType[];
-  incomes: Income[];
-  recurringIncomes: RecurringIncome[];
-  startDate: Date;
-  endDate: Date;
   periodType: PeriodType;
   periodLabel: string;
   isGroupContext: boolean;
@@ -58,8 +49,6 @@ const MEMBER_COLORS = [
 
 export function ReportsAccordion({ 
   cards,
-  startDate,
-  endDate,
   periodType,
   periodLabel,
   isGroupContext,
@@ -290,7 +279,7 @@ export function ReportsAccordion({
                   const maxValue = categoryData[0]?.value || 1;
                   const barWidth = (cat.value / maxValue) * 100;
                   return (
-                    <div key={cat.name} className="space-y-1">
+                    <div key={cat.key} className="space-y-1">
                       <div className="flex items-center justify-between text-sm">
                         <span className="flex items-center gap-1.5 truncate">
                           <span>{cat.icon}</span>
