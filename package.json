@@ -47,7 +47,9 @@
     "test:p3a:reports": "node scripts/post-tools-p3-a-reports-business-rules-tests.mjs",
     "test:p3a1:report-dates": "node scripts/post-tools-p3-a1-report-civil-dates-tests.mjs",
     "test:p3a2:report-export": "node scripts/post-tools-p3-a2-report-categories-export-tests.mjs",
-    "test:p3a3:report-category-state": "node scripts/post-tools-p3-a3-report-category-state-tests.mjs"
+    "test:p3a3:report-category-state": "node scripts/post-tools-p3-a3-report-category-state-tests.mjs",
+    "test:p3a4:category-history": "node scripts/post-tools-p3-a4-category-history-tests.mjs",
+    "typecheck:p3a4:category-history": "tsc -p tsconfig.p3a4-category-history.json"
   },
   "dependencies": {
     "@capacitor-community/admob": "^7.2.0",

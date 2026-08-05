@@ -45,14 +45,18 @@ export function CategorySummary({
     categoryId: string | null,
     categoryEnum: string
   ): { key: string; name: string; icon: string } => {
+    if (categoryId) {
+      const current = categories.find(category => category.id === categoryId);
+      if (current) return { key: current.id, name: current.name, icon: current.icon };
+    }
     // 1. Dados denormalizados (confiáveis para grupo)
     if (categoryName) {
-      return { key: categoryName, name: categoryName, icon: categoryIcon || "📦" };
+      return { key: categoryId ? `snapshot:${categoryId}:${categoryName}` : `snapshot-name:${categoryName}`, name: categoryName, icon: categoryIcon || "📦" };
     }
     // 2. Lookup local (funciona para despesas do próprio usuário)
     if (categoryId) {
       const uc = categories.find(c => c.id === categoryId);
-      if (uc) return { key: uc.name, name: uc.name, icon: uc.icon };
+      if (uc) return { key: uc.id, name: uc.name, icon: uc.icon };
     }
     // 3. Fallback enum
     const fb = categories.find(c => c.name.toLowerCase() === categoryEnum.toLowerCase());

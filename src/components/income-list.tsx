@@ -62,6 +62,13 @@ export function IncomeList({
     }
     return { icon: incomeCategoryIcons[income.category] || "📦", name: incomeCategoryLabels[income.category] || income.category };
   };
+  const getIncomeCategorySnapshot = (income: Income) => {
+    const current = getIncomeCatInfo(income);
+    if ((income as any).income_category_id) return current;
+    return (income as any).category_name
+      ? { icon: (income as any).category_icon || "📦", name: (income as any).category_name }
+      : current;
+  };
   const currentIncomes = incomes.slice(0, visibleCount);
 
   const formatCurrency = (amount: number) => {
@@ -102,7 +109,7 @@ export function IncomeList({
         <CardContent className="p-0">
           <div className="divide-y divide-border/30">
             {currentIncomes.map((income) => {
-              const catInfo = getIncomeCatInfo(income);
+              const catInfo = getIncomeCategorySnapshot(income);
               const createdByUserId = (income as any).user_id;
               return (
                 <div

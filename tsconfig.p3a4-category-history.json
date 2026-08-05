@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "src/components/category-history-dialog.tsx",
+    "src/hooks/use-categories.tsx",
+    "src/hooks/use-income-categories.tsx",
+    "src/types/category-history.ts",
+    "src/utils/category-edit-preservation.ts",
+    "src/utils/report-category-resolver.ts"
+  ]
+}

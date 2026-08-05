@@ -45,6 +45,10 @@ export function RecurringExpenseList({
     isHidden ? "R$ ***,**" : `R$ ${value.toFixed(2).replace('.', ',')}`
 
   const getCategoryDisplay = (expense: RecurringExpense) => {
+    if (expense.category_id) {
+      const current = categories.find(category => category.id === expense.category_id);
+      if (current) return { icon: current.icon, label: current.name };
+    }
     if (expense.category_name) {
       return { icon: expense.category_icon || '📦', label: expense.category_name };
     }

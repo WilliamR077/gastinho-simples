@@ -17,6 +17,7 @@ import { Income, IncomeCategory } from "@/types/income";
 import { cn, parseLocalDate, normalizeToLocalDate, stripInstallmentSuffix } from "@/lib/utils";
 import { IncomeCategorySelector } from "@/components/income-category-selector";
 import { useIncomeCategories } from "@/hooks/use-income-categories";
+import { expenseSelectionForEdit } from "@/utils/category-edit-preservation";
 
 const incomeEditSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
@@ -46,7 +47,12 @@ interface IncomeEditDialogProps {
 
 export function IncomeEditDialog({ income, open, onOpenChange, onSave }: IncomeEditDialogProps) {
   const lastIncomeIdRef = useRef<string | null>(null);
-  const { activeCategories } = useIncomeCategories();
+  const { categories } = useIncomeCategories();
+  const currentCategorySelection = expenseSelectionForEdit(
+    (income as Income & { income_category_id?: string | null })?.income_category_id,
+    income?.category,
+    categories,
+  );
 
   const form = useForm<IncomeEditFormData>({
     resolver: zodResolver(incomeEditSchema),
@@ -71,7 +77,7 @@ export function IncomeEditDialog({ income, open, onOpenChange, onSave }: IncomeE
       form.reset({
         description: baseDescription,
         amount: Number(income.amount),
-        category: (income as any).income_category_id || income.category,
+        category: expenseSelectionForEdit((income as any).income_category_id, income.category, categories) || "",
         incomeDate: parseLocalDate(income.income_date),
       });
     }
@@ -80,13 +86,13 @@ export function IncomeEditDialog({ income, open, onOpenChange, onSave }: IncomeE
       lastIncomeIdRef.current = null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [income]);
+  }, [income, categories]);
 
   const handleSubmit = (data: IncomeEditFormData) => {
     if (!income) return;
     
     const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.category);
-    const selectedCategory = isUUID ? activeCategories.find(c => c.id === data.category) : null;
+    const selectedCategory = isUUID ? categories.find(c => c.id === data.category) : null;
 
     const formData: IncomeFormData = {
       description: data.description,
@@ -148,7 +154,7 @@ export function IncomeEditDialog({ income, open, onOpenChange, onSave }: IncomeE
                 <FormItem>
                   <FormLabel>Categoria</FormLabel>
                   <FormControl>
-                    <IncomeCategorySelector value={field.value} onValueChange={field.onChange} />
+                    <IncomeCategorySelector value={field.value} onValueChange={field.onChange} includeArchivedId={currentCategorySelection} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

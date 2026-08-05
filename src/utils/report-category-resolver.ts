@@ -18,46 +18,39 @@ export interface ResolvedReportCategory {
 }
 
 const FALLBACK_ICON = "📦";
-const UNCATEGORIZED_NAME = "Outros";
+const normalizedName = (value?: string | null) => value?.trim() || null;
+const normalizedKeyName = (value: string) =>
+  value.trim().toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-const normalizedName = (value?: string | null): string | null => {
-  const name = value?.trim();
-  return name ? name : null;
-};
-
-/** Resolve uma categoria uma única vez para interface e PDF. */
+/**
+ * Canonical historical precedence shared by UI and exports:
+ * resolvable ID (active or archived), snapshot, legacy label, uncategorized.
+ * A broken ID is only unresolved when it has no usable snapshot.
+ */
 export function resolveReportCategory(
   input: ReportCategoryInput,
   categories: ReportCategoryDefinition[],
 ): ResolvedReportCategory {
   if (input.categoryId) {
-    const category = categories.find((item) => item.id === input.categoryId);
-    if (category) {
-      return { key: category.id, name: category.name, icon: category.icon || FALLBACK_ICON };
-    }
-
-    return {
-      key: "unresolved",
-      name: "Categoria não resolvida",
-      icon: FALLBACK_ICON,
-    };
+    const category = categories.find(item => item.id === input.categoryId);
+    if (category) return { key: category.id, name: category.name, icon: category.icon || FALLBACK_ICON };
   }
 
-  const categoryName = normalizedName(input.categoryName);
-  if (categoryName) {
-    return {
-      key: `name:${categoryName}`,
-      name: categoryName,
-      icon: input.categoryIcon || FALLBACK_ICON,
-    };
+  const snapshot = normalizedName(input.categoryName);
+  if (snapshot && input.categoryId) {
+    return { key: `snapshot:${input.categoryId}:${normalizedKeyName(snapshot)}`, name: snapshot, icon: input.categoryIcon || FALLBACK_ICON };
+  }
+  if (snapshot) {
+    return { key: `snapshot-name:${normalizedKeyName(snapshot)}`, name: snapshot, icon: input.categoryIcon || FALLBACK_ICON };
   }
 
-  const legacyLabel = normalizedName(input.legacyLabel);
-  if (legacyLabel) {
-    return { key: `legacy:${legacyLabel}`, name: legacyLabel, icon: FALLBACK_ICON };
+  if (input.categoryId) {
+    return { key: `unresolved:${input.categoryId}`, name: "Categoria não resolvida", icon: FALLBACK_ICON };
   }
 
-  return { key: "uncategorized", name: UNCATEGORIZED_NAME, icon: FALLBACK_ICON };
+  const legacy = normalizedName(input.legacyLabel);
+  if (legacy) return { key: `legacy:${legacy}`, name: legacy, icon: FALLBACK_ICON };
+  return { key: "uncategorized", name: "Outros", icon: FALLBACK_ICON };
 }
 
 export function resolveReportGoalCategory(
@@ -67,21 +60,12 @@ export function resolveReportGoalCategory(
 ): string {
   const reference = normalizedName(categoryReference);
   if (!reference) return "Não se aplica";
-
-  const knownById = categories.some((category) => category.id === reference);
-  if (knownById) {
+  if (categories.some(category => category.id === reference)) {
     return resolveReportCategory({ categoryId: reference }, categories).name;
   }
-
   const legacyLabel = legacyLabels[reference];
-  if (legacyLabel) {
-    return resolveReportCategory({ categoryName: legacyLabel }, categories).name;
-  }
-
+  if (legacyLabel) return resolveReportCategory({ categoryName: legacyLabel }, categories).name;
   const looksLikeId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(reference);
-  if (looksLikeId) {
-    return resolveReportCategory({ categoryId: reference }, categories).name;
-  }
-
+  if (looksLikeId) return resolveReportCategory({ categoryId: reference }, categories).name;
   return resolveReportCategory({ categoryName: reference }, categories).name;
 }

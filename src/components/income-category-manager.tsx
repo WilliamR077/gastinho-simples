@@ -13,16 +13,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { CategoryHistoryDialog } from "@/components/category-history-dialog";
 
 // P2: Expanded emoji list for income categories
 const EMOJI_OPTIONS = [
@@ -50,7 +41,7 @@ interface EditingCategory {
 }
 
 const isOutrosCategory = (category: UserIncomeCategory) =>
-  category.name.toLowerCase() === "outros";
+  category.system_key === "other" || category.name.trim().toLowerCase() === "outros";
 
 export function IncomeCategoryManager({ open, onOpenChange }: IncomeCategoryManagerProps) {
   const {
@@ -60,6 +51,9 @@ export function IncomeCategoryManager({ open, onOpenChange }: IncomeCategoryMana
     addCategory,
     updateCategory,
     deleteCategory,
+    archiveCategory,
+    getCategoryReferences,
+    replaceCategory,
     toggleCategoryVisibility,
   } = useIncomeCategories();
 
@@ -114,14 +108,6 @@ export function IncomeCategoryManager({ open, onOpenChange }: IncomeCategoryMana
     setEditingCategory(null);
   };
 
-  const handleDelete = async () => {
-    if (!deletingCategory) return;
-    setSaving(true);
-    await deleteCategory(deletingCategory.id);
-    setSaving(false);
-    setDeletingCategory(null);
-  };
-
   const startEditing = (category: UserIncomeCategory) => {
     setEditingCategory({ id: category.id, name: category.name, icon: category.icon });
   };
@@ -173,6 +159,7 @@ export function IncomeCategoryManager({ open, onOpenChange }: IncomeCategoryMana
             <div className="flex items-center gap-3">
               <span className="text-xl">{category.icon}</span>
               <span className={isHidden ? "line-through text-muted-foreground" : ""}>{category.name}</span>
+              {isHidden ? <span className="rounded bg-muted px-2 py-0.5 text-xs">Arquivada</span> : null}
               {isOutros ? (
                 <span className="text-xs bg-amber-500/10 text-amber-600 px-2 py-0.5 rounded">🔒 Fixa</span>
               ) : category.is_default && (
@@ -315,27 +302,16 @@ export function IncomeCategoryManager({ open, onOpenChange }: IncomeCategoryMana
         </SheetContent>
       </Sheet>
 
-      <AlertDialog open={!!deletingCategory} onOpenChange={(open) => !open && setDeletingCategory(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir categoria?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Se houver entradas nesta categoria, elas serão movidas para "Outros".
-              Esta ação não pode ser desfeita.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Excluir
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <CategoryHistoryDialog
+        category={deletingCategory}
+        kindLabel="entradas"
+        activeCategories={activeCategories}
+        onClose={() => setDeletingCategory(null)}
+        getReferences={getCategoryReferences}
+        archive={archiveCategory}
+        replace={replaceCategory}
+        permanentlyDelete={deleteCategory}
+      />
     </>
   );
 }

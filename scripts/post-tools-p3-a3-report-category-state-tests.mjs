@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { P3A4_ALLOWED_PATHS, P3A4_INFRASTRUCTURE_MIGRATION } from "./p3a4-scope-files.mjs";
 import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -134,12 +135,15 @@ assert.deepEqual(categoryData.map(({ name, value }) => ({ name, value })), [
   { name: "Educação", value: 32.09 },
 ]);
 
-// 12–13: não resolvidos atuais agregam; não resolvidos externos não contaminam.
+// 12–13: IDs não resolvidos preservam identidade; externos não contaminam.
 const currentUnresolved = summarize([
   expense("current-a", 10, "2026-02-10T00:00:00Z", "missing-a"),
   expense("current-b", 5, "2026-02-11T00:00:00Z", "missing-b"),
 ]);
-assert.deepEqual(currentUnresolved, [{ key: "unresolved", name: "Categoria não resolvida", value: 15 }]);
+assert.deepEqual(currentUnresolved, [
+  { key: "unresolved:missing-a", name: "Categoria não resolvida", value: 10 },
+  { key: "unresolved:missing-b", name: "Categoria não resolvida", value: 5 },
+]);
 assert.equal(categoryData.some((item) => [320.52, 39, 24.9].includes(item.value)), false);
 assert.equal(Number(categoryData.reduce((sum, item) => sum + item.value, 0).toFixed(2)), 717.3);
 
@@ -158,7 +162,7 @@ assert.doesNotMatch(accordionSource, /supabase|useCategories|resolveReportCatego
 assert.match(accordionSource, /categoryData\.map/u);
 assert.match(accordionSource, /key=\{cat\.key\}/u);
 assert.match(viewModelSource, /filteredExpenses\.forEach/u);
-assert.match(resolverSource, /key: "unresolved"/u);
+assert.match(resolverSource, /key: `unresolved:\$\{input\.categoryId\}`/u);
 assert.match(pdfSource, /body: categoryData\.map/u);
 assert.match(pdfSource, /Fluxo de Caixa Realizado'[\s\S]{0,160}yPosition \+= 5;[\s\S]{0,220}Entradas vs Saídas — Por dia'[\s\S]{0,160}yPosition \+= 6;/u);
 assert.match(pdfSource, /Evolução dos Gastos Realizados'[\s\S]{0,160}yPosition \+= 5;[\s\S]{0,240}Diário — Média:[\s\S]{0,180}yPosition \+= 6;/u);
@@ -182,9 +186,10 @@ const allowed = new Set([
   "src/utils/report-view-model.ts",
   "tsconfig.p3a-reports.json",
 ]);
-for (const path of changed) assert.ok(allowed.has(path), `arquivo fora do escopo P3-A3: ${path}`);
+for (const path of changed) assert.ok(allowed.has(path) || P3A4_ALLOWED_PATHS.has(path), `arquivo fora do escopo P3-A3/P3-A4: ${path}`);
 assert.equal(git(["diff", "--name-only", "HEAD", "--", "src/lib/mcp/shared", "src/lib/mcp/tools", "supabase/functions/mcp"]).trim(), "");
-assert.equal(git(["diff", "--name-only", "HEAD", "--", "supabase/migrations"]).trim(), "");
-assert.equal(readdirSync(join(root, "supabase", "migrations")).filter((name) => name.endsWith(".sql")).length, 64);
+assert.deepEqual(git(["diff", "--name-only", "HEAD", "--", "supabase/migrations"]).trim().split(/\r?\n/u).filter(Boolean), []);
+assert.equal(readdirSync(join(root, "supabase", "migrations")).filter((name) => name.endsWith(".sql")).length, 65);
+assert.ok(P3A4_INFRASTRUCTURE_MIGRATION.endsWith("p3a4_category_history_operations.sql"));
 
 console.log("P3-A3: 14 grupos validados; estado por período/contexto e títulos do PDF corretos.");

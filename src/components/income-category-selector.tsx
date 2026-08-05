@@ -13,6 +13,7 @@ interface IncomeCategorySelectorProps {
   onValueChange: (value: string) => void;
   className?: string;
   triggerClassName?: string;
+  includeArchivedId?: string | null;
 }
 
 export function IncomeCategorySelector({
@@ -20,8 +21,12 @@ export function IncomeCategorySelector({
   onValueChange,
   className,
   triggerClassName,
+  includeArchivedId,
 }: IncomeCategorySelectorProps) {
-  const { activeCategories, loading, refresh } = useIncomeCategories();
+  const { categories, activeCategories, loading, refresh } = useIncomeCategories();
+  const includedArchived = includeArchivedId
+    ? categories.find(category => category.id === includeArchivedId && !category.is_active)
+    : undefined;
   const [showManager, setShowManager] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
 
@@ -67,7 +72,7 @@ export function IncomeCategorySelector({
       const cat = value as IncomeCategory;
       return cat ? `${incomeCategoryIcons[cat] || ''} ${incomeCategoryLabels[cat] || value}` : "";
     }
-    const category = activeCategories.find(c => c.id === value);
+    const category = categories.find(c => c.id === value);
     if (category) {
       return `${category.icon} ${category.name}`;
     }
@@ -111,9 +116,9 @@ export function IncomeCategorySelector({
               </SelectItem>
             ))
           ) : (
-            activeCategories.map((category) => (
+            [...(includedArchived ? [includedArchived] : []), ...activeCategories].map((category) => (
               <SelectItem key={category.id} value={category.id}>
-                {category.icon} {category.name}
+                {category.icon} {category.name}{category.is_active ? "" : " (arquivada)"}
               </SelectItem>
             ))
           )}

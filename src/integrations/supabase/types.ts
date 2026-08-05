@@ -716,6 +716,7 @@ export type Database = {
           is_active: boolean | null
           max_members: number | null
           name: string
+          system_key: string | null
           updated_at: string | null
         }
         Insert: {
@@ -728,6 +729,7 @@ export type Database = {
           is_active?: boolean | null
           max_members?: number | null
           name: string
+          system_key?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -740,6 +742,7 @@ export type Database = {
           is_active?: boolean | null
           max_members?: number | null
           name?: string
+          system_key?: string | null
           updated_at?: string | null
         }
         Relationships: []
@@ -799,6 +802,7 @@ export type Database = {
           is_active: boolean | null
           is_default: boolean | null
           name: string
+          system_key: string | null
           updated_at: string | null
           user_id: string
         }
@@ -811,6 +815,7 @@ export type Database = {
           is_active?: boolean | null
           is_default?: boolean | null
           name: string
+          system_key?: string | null
           updated_at?: string | null
           user_id: string
         }
@@ -823,6 +828,7 @@ export type Database = {
           is_active?: boolean | null
           is_default?: boolean | null
           name?: string
+          system_key?: string | null
           updated_at?: string | null
           user_id?: string
         }
@@ -856,6 +862,7 @@ export type Database = {
         Relationships: []
       }
       user_income_categories: {
+        // P3-A4 manual schema sync; regenerate officially after controlled migration apply.
         Row: {
           color: string | null
           created_at: string | null
@@ -865,6 +872,7 @@ export type Database = {
           is_active: boolean | null
           is_default: boolean | null
           name: string
+          system_key: string | null
           updated_at: string | null
           user_id: string
         }
@@ -877,6 +885,7 @@ export type Database = {
           is_active?: boolean | null
           is_default?: boolean | null
           name: string
+          system_key?: string | null
           updated_at?: string | null
           user_id: string
         }
@@ -889,6 +898,7 @@ export type Database = {
           is_active?: boolean | null
           is_default?: boolean | null
           name?: string
+          system_key?: string | null
           updated_at?: string | null
           user_id?: string
         }
@@ -920,6 +930,26 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      p3a4_archive_category: {
+        Args: { p_category_id: string; p_kind: string }
+        Returns: Json
+      }
+      p3a4_category_reference_counts: {
+        Args: { p_category_id: string; p_kind: string }
+        Returns: Json
+      }
+      p3a4_delete_category: {
+        Args: { p_category_id: string; p_kind: string }
+        Returns: Json
+      }
+      p3a4_replace_category: {
+        Args: {
+          p_destination_category_id: string
+          p_kind: string
+          p_source_category_id: string
+        }
+        Returns: Json
+      }
       can_add_budget_goal: { Args: { user_id_param: string }; Returns: boolean }
       can_add_card: { Args: { user_id_param: string }; Returns: boolean }
       can_create_group: { Args: { user_id_param: string }; Returns: boolean }

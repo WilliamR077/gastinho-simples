@@ -1,7 +1,7 @@
 import { useState, useEffect, type CSSProperties, type ReactNode } from "react";
 import { adMobService } from "@/services/admob-service";
 import { Expense, categoryLabels, categoryIcons, ExpenseCategory } from "@/types/expense";
-import { Income, incomeCategoryLabels, incomeCategoryIcons } from "@/types/income";
+import { Income, incomeCategoryLabels } from "@/types/income";
 import { RecurringExpense } from "@/types/recurring-expense";
 import { RecurringIncome } from "@/types/income";
 import { useCategories } from "@/hooks/use-categories";
@@ -31,6 +31,7 @@ import {
 import { getMemberColor } from "@/components/group-member-summary";
 import { SharedGroupMember } from "@/types/shared-group";
 import { getMemberDisplayName } from "@/utils/member-display";
+import { resolveReportCategory } from "@/utils/report-category-resolver";
 
 interface TransactionDetailSheetProps {
   expense?: Expense | null;
@@ -162,7 +163,11 @@ const createdByColor =
   let catName = "Outros";
 
   if (expense) {
-    if (expense.category_name) {
+    const current = expense.category_id ? categories.find(category => category.id === expense.category_id) : null;
+    if (current) {
+      catIcon = current.icon;
+      catName = current.name;
+    } else if (expense.category_name) {
       catIcon = expense.category_icon || "📦";
       catName = expense.category_name;
     } else if (expense.category_id) {
@@ -173,7 +178,11 @@ const createdByColor =
       catName = categoryLabels[expense.category as ExpenseCategory] || "Outros";
     }
   } else if (recurringExpense) {
-    if (recurringExpense.category_name) {
+    const current = recurringExpense.category_id ? categories.find(category => category.id === recurringExpense.category_id) : null;
+    if (current) {
+      catIcon = current.icon;
+      catName = current.name;
+    } else if (recurringExpense.category_name) {
       catIcon = recurringExpense.category_icon || "📦";
       catName = recurringExpense.category_name;
     } else if (recurringExpense.category_id) {
@@ -185,26 +194,24 @@ const createdByColor =
     }
   } else if (income) {
     const catId = (income as any).income_category_id;
-    if (catId) {
-      const custom = incomeCats.find((c) => c.id === catId);
-      if (custom) { catIcon = custom.icon; catName = custom.name; }
-      else if ((income as any).category_name) { catIcon = (income as any).category_icon || "📦"; catName = (income as any).category_name; }
-      else { catIcon = incomeCategoryIcons[income.category] || "📦"; catName = incomeCategoryLabels[income.category] || income.category; }
-    } else {
-      catIcon = incomeCategoryIcons[income.category] || "📦";
-      catName = incomeCategoryLabels[income.category] || income.category;
-    }
+    const resolved = resolveReportCategory({
+      categoryId: catId,
+      categoryName: (income as any).category_name,
+      categoryIcon: (income as any).category_icon,
+      legacyLabel: incomeCategoryLabels[income.category],
+    }, incomeCats);
+    catIcon = resolved.icon;
+    catName = resolved.name;
   } else if (recurringIncome) {
     const catId = (recurringIncome as any).income_category_id;
-    if (catId) {
-      const custom = incomeCats.find((c) => c.id === catId);
-      if (custom) { catIcon = custom.icon; catName = custom.name; }
-      else if ((recurringIncome as any).category_name) { catIcon = (recurringIncome as any).category_icon || "📦"; catName = (recurringIncome as any).category_name; }
-      else { catIcon = incomeCategoryIcons[recurringIncome.category] || "📦"; catName = incomeCategoryLabels[recurringIncome.category] || recurringIncome.category; }
-    } else {
-      catIcon = incomeCategoryIcons[recurringIncome.category] || "📦";
-      catName = incomeCategoryLabels[recurringIncome.category] || recurringIncome.category;
-    }
+    const resolved = resolveReportCategory({
+      categoryId: catId,
+      categoryName: (recurringIncome as any).category_name,
+      categoryIcon: (recurringIncome as any).category_icon,
+      legacyLabel: incomeCategoryLabels[recurringIncome.category],
+    }, incomeCats);
+    catIcon = resolved.icon;
+    catName = resolved.name;
   }
 
   const amount = transaction.amount;

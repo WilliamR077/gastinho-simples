@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, createContext, useContext, R
 import { supabase } from "@/integrations/supabase/client";
 import { UserIncomeCategory, UserIncomeCategoryInsert, UserIncomeCategoryUpdate } from "@/types/user-income-category";
 import { useToast } from "@/hooks/use-toast";
+import { CategoryReferenceCounts, CategoryReplacementResult, parseCategoryReferenceCounts } from "@/types/category-history";
 
 interface IncomeCategoriesContextType {
   categories: UserIncomeCategory[];
@@ -11,6 +12,9 @@ interface IncomeCategoriesContextType {
   addCategory: (data: UserIncomeCategoryInsert) => Promise<UserIncomeCategory | null>;
   updateCategory: (id: string, data: UserIncomeCategoryUpdate) => Promise<boolean>;
   deleteCategory: (id: string) => Promise<boolean>;
+  archiveCategory: (id: string) => Promise<boolean>;
+  getCategoryReferences: (id: string) => Promise<CategoryReferenceCounts | null>;
+  replaceCategory: (sourceId: string, destinationId: string) => Promise<CategoryReplacementResult | null>;
   toggleCategoryVisibility: (id: string) => Promise<boolean>;
   refresh: () => Promise<void>;
 }
@@ -153,70 +157,76 @@ export function IncomeCategoriesProvider({ children }: { children: ReactNode }) 
     }
   }, [toast]);
 
-  const toggleCategoryVisibility = useCallback(async (id: string): Promise<boolean> => {
-    const category = categories.find(c => c.id === id);
-    if (!category) return false;
-    return updateCategory(id, { is_active: !category.is_active });
-  }, [categories, updateCategory]);
+  const getCategoryReferences = useCallback(async (id: string): Promise<CategoryReferenceCounts | null> => {
+    const { data, error } = await supabase.rpc("p3a4_category_reference_counts", {
+      p_kind: "income",
+      p_category_id: id,
+    });
+    if (error) {
+      toast({ title: "Erro", description: "Não foi possível verificar o uso da categoria", variant: "destructive" });
+      return null;
+    }
+    return parseCategoryReferenceCounts(data);
+  }, [toast]);
+
+  const archiveCategory = useCallback(async (id: string): Promise<boolean> => {
+    const { error } = await supabase.rpc("p3a4_archive_category", { p_kind: "income", p_category_id: id });
+    if (error) {
+      toast({ title: "Erro", description: "Não foi possível arquivar a categoria", variant: "destructive" });
+      return false;
+    }
+    setCategories(prev => prev.map(category => category.id === id ? { ...category, is_active: false } : category));
+    toast({ title: "Categoria arquivada", description: "O histórico foi preservado" });
+    return true;
+  }, [toast]);
+
+  const replaceCategory = useCallback(async (sourceId: string, destinationId: string): Promise<CategoryReplacementResult | null> => {
+    const { data, error } = await supabase.rpc("p3a4_replace_category", {
+      p_kind: "income",
+      p_source_category_id: sourceId,
+      p_destination_category_id: destinationId,
+    });
+    if (error) {
+      const legacyGoal = error.message?.includes("LEGACY_GOAL_REFERENCE_REQUIRES_REVIEW");
+      toast({
+        title: "Não foi possível substituir a categoria",
+        description: legacyGoal
+          ? "Existe uma meta antiga cuja categoria precisa ser revisada antes desta operação."
+          : "Nenhuma alteração foi realizada",
+        variant: "destructive",
+      });
+      return null;
+    }
+    await loadCategories();
+    toast({ title: "Categoria substituída", description: "Referências e snapshots foram atualizados" });
+    return data as unknown as CategoryReplacementResult;
+  }, [loadCategories, toast]);
 
   const deleteCategory = useCallback(async (id: string): Promise<boolean> => {
     try {
-      const category = categories.find(c => c.id === id);
-      if (!category) return false;
-
-      if (category.name.toLowerCase() === "outros") {
-        toast({
-          title: "Ação não permitida",
-          description: "A categoria 'Outros' não pode ser excluída",
-          variant: "destructive",
-        });
-        return false;
-      }
-
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return false;
-
-      const outrosCategory = categories.find(c => c.name.toLowerCase() === "outros");
-
-      if (outrosCategory) {
-        await supabase
-          .from("incomes")
-          .update({ income_category_id: outrosCategory.id })
-          .eq("user_id", user.id)
-          .eq("income_category_id", id);
-
-        await supabase
-          .from("recurring_incomes")
-          .update({ income_category_id: outrosCategory.id })
-          .eq("user_id", user.id)
-          .eq("income_category_id", id);
-      }
-
-      const { error } = await supabase
-        .from("user_income_categories")
-        .delete()
-        .eq("id", id);
-
+      const { error } = await supabase.rpc("p3a4_delete_category", { p_kind: "income", p_category_id: id });
       if (error) throw error;
-
       setCategories(prev => prev.filter(c => c.id !== id));
-      toast({
-        title: "Categoria excluída",
-        description: outrosCategory
-          ? "Entradas relacionadas foram movidas para 'Outros'"
-          : "Categoria removida com sucesso",
-      });
+      toast({ title: "Categoria excluída permanentemente", description: "Nenhum histórico foi alterado" });
       return true;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao excluir categoria de entrada:", error);
       toast({
-        title: "Erro",
-        description: "Não foi possível excluir a categoria",
+        title: "Exclusão bloqueada",
+        description: error?.message?.includes("LEGACY_GOAL_REFERENCE_REQUIRES_REVIEW")
+          ? "Existe uma meta antiga cuja categoria precisa ser revisada antes desta operação."
+          : "Somente categorias personalizadas, arquivadas e sem referências podem ser excluídas",
         variant: "destructive",
       });
       return false;
     }
-  }, [categories, toast]);
+  }, [toast]);
+
+  const toggleCategoryVisibility = useCallback(async (id: string): Promise<boolean> => {
+    const category = categories.find(c => c.id === id);
+    if (!category) return false;
+    return category.is_active ? archiveCategory(id) : updateCategory(id, { is_active: true });
+  }, [archiveCategory, categories, updateCategory]);
 
   const activeCategories = useMemo(() => categories.filter(c => c.is_active), [categories]);
   const hiddenCategories = useMemo(() => categories.filter(c => !c.is_active), [categories]);
@@ -229,11 +239,15 @@ export function IncomeCategoriesProvider({ children }: { children: ReactNode }) 
     addCategory,
     updateCategory,
     deleteCategory,
+    archiveCategory,
+    getCategoryReferences,
+    replaceCategory,
     toggleCategoryVisibility,
     refresh: loadCategories,
   }), [
     categories, activeCategories, hiddenCategories, loading,
-    addCategory, updateCategory, deleteCategory, toggleCategoryVisibility, loadCategories,
+    addCategory, updateCategory, deleteCategory, archiveCategory, getCategoryReferences,
+    replaceCategory, toggleCategoryVisibility, loadCategories,
   ]);
 
   return (

@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RecurringIncome, IncomeCategory } from "@/types/income";
 import { IncomeCategorySelector } from "@/components/income-category-selector";
 import { useIncomeCategories } from "@/hooks/use-income-categories";
+import { expenseSelectionForEdit } from "@/utils/category-edit-preservation";
 
 const recurringIncomeEditSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
@@ -40,7 +41,12 @@ interface RecurringIncomeEditDialogProps {
 
 export function RecurringIncomeEditDialog({ income, open, onOpenChange, onSave }: RecurringIncomeEditDialogProps) {
   const lastIncomeIdRef = useRef<string | null>(null);
-  const { activeCategories } = useIncomeCategories();
+  const { categories } = useIncomeCategories();
+  const currentCategorySelection = expenseSelectionForEdit(
+    (income as RecurringIncome & { income_category_id?: string | null })?.income_category_id,
+    income?.category,
+    categories,
+  );
 
   const form = useForm<RecurringIncomeEditFormData>({
     resolver: zodResolver(recurringIncomeEditSchema),
@@ -60,7 +66,7 @@ export function RecurringIncomeEditDialog({ income, open, onOpenChange, onSave }
       form.reset({
         description: income.description,
         amount: Number(income.amount),
-        category: (income as any).income_category_id || income.category,
+        category: expenseSelectionForEdit((income as any).income_category_id, income.category, categories) || "",
         dayOfMonth: income.day_of_month,
       });
     }
@@ -69,13 +75,13 @@ export function RecurringIncomeEditDialog({ income, open, onOpenChange, onSave }
       lastIncomeIdRef.current = null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [income]);
+  }, [income, categories]);
 
   const handleSubmit = (data: RecurringIncomeEditFormData) => {
     if (!income) return;
     
     const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.category);
-    const selectedCategory = isUUID ? activeCategories.find(c => c.id === data.category) : null;
+    const selectedCategory = isUUID ? categories.find(c => c.id === data.category) : null;
 
     const formData: RecurringIncomeFormData = {
       description: data.description,
@@ -137,7 +143,7 @@ export function RecurringIncomeEditDialog({ income, open, onOpenChange, onSave }
                 <FormItem>
                   <FormLabel>Categoria</FormLabel>
                   <FormControl>
-                    <IncomeCategorySelector value={field.value} onValueChange={field.onChange} />
+                    <IncomeCategorySelector value={field.value} onValueChange={field.onChange} includeArchivedId={currentCategorySelection} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

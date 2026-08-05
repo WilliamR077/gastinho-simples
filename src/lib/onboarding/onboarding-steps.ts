@@ -330,7 +330,7 @@ const EXPENSE_SUBSTEPS: OnboardingSubstep[] = [
     targetSelector: "category-manager-delete-btn",
     title: "Excluir Categoria",
     description:
-      'Use excluir apenas quando quiser remover a categoria de vez. As despesas vinculadas são movidas para "Outros".',
+      "Arquivar preserva o histórico. Substituir altera relatórios antigos; excluir definitivamente só é permitido quando não há referências.",
     emoji: "🗑️",
     scrollToTarget: true,
     placement: "above",

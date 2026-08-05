@@ -12,6 +12,7 @@ import { RecurringExpense, RecurringExpenseFormData } from "@/types/recurring-ex
 import { CategorySelector } from "@/components/category-selector";
 import { CardSelector } from "@/components/card-selector";
 import { useCategories } from "@/hooks/use-categories";
+import { expenseSelectionForEdit } from "@/utils/category-edit-preservation";
 import {
   PAYMENT_METHOD_LIST,
   requiresCard,
@@ -37,7 +38,8 @@ interface RecurringExpenseEditDialogProps {
 }
 
 export function RecurringExpenseEditDialog({ expense, open, onOpenChange, onSave }: RecurringExpenseEditDialogProps) {
-  const { activeCategories } = useCategories();
+  const { categories } = useCategories();
+  const currentCategorySelection = expenseSelectionForEdit(expense?.category_id, expense?.category, categories);
   const lastExpenseIdRef = useRef<string | null>(null);
 
   const form = useForm<RecurringExpenseEditFormData>({
@@ -59,13 +61,7 @@ export function RecurringExpenseEditDialog({ expense, open, onOpenChange, onSave
       lastExpenseIdRef.current = expense.id;
       
       // Encontrar a categoria pelo category_id ou pelo nome
-      let categoryId = expense.category_id || "";
-      if (!categoryId && expense.category) {
-        const found = activeCategories.find(c => 
-          c.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_") === expense.category
-        );
-        if (found) categoryId = found.id;
-      }
+      const categoryId = expenseSelectionForEdit(expense.category_id, expense.category, categories) || "";
 
       form.reset({
         description: expense.description,
@@ -82,7 +78,7 @@ export function RecurringExpenseEditDialog({ expense, open, onOpenChange, onSave
       lastExpenseIdRef.current = null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expense, activeCategories]);
+  }, [expense, categories]);
 
   const handleSubmit = (data: RecurringExpenseEditFormData) => {
     if (!expense) return;
@@ -91,7 +87,7 @@ export function RecurringExpenseEditDialog({ expense, open, onOpenChange, onSave
     // a despesa é salva sem vínculo. Para métodos sem cartão (pix/cash), garante undefined.
     const sanitizedCardId = requiresCard(data.paymentMethod) ? (data.cardId || undefined) : undefined;
 
-    const selectedCategory = activeCategories.find(c => c.id === data.categoryId);
+    const selectedCategory = categories.find(c => c.id === data.categoryId);
 
     const formData: RecurringExpenseFormData = {
       description: data.description,
@@ -154,6 +150,7 @@ export function RecurringExpenseEditDialog({ expense, open, onOpenChange, onSave
                   <FormLabel>Categoria</FormLabel>
                   <FormControl>
                     <CategorySelector
+                      includeArchivedId={currentCategorySelection}
                       value={field.value}
                       onValueChange={field.onChange}
                     />

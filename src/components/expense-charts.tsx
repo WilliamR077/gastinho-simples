@@ -11,6 +11,8 @@ import { useSubscription } from "@/hooks/use-subscription";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { parseLocalDate } from "@/lib/utils";
+import { useCategories } from "@/hooks/use-categories";
+import { resolveReportCategory } from "@/utils/report-category-resolver";
 import {
   PAYMENT_METHOD_LIST,
   paymentMethodColor,
@@ -49,6 +51,7 @@ export function ExpenseCharts({
   category
 }: ExpenseChartsProps) {
   const { hasAdvancedReports } = useSubscription();
+  const { categories } = useCategories();
   const navigate = useNavigate();
   
   // Filtrar despesas para o período selecionado
@@ -135,30 +138,34 @@ export function ExpenseCharts({
 
   // Dados para gráfico de pizza - Por categoria
   const categoryData = useMemo(() => {
-    const totals: Partial<Record<ExpenseCategory, number>> = {};
+    const totals: Record<string, { name: string; value: number }> = {};
 
     filteredExpenses.forEach(expense => {
-      const category = expense.category || 'outros';
-      totals[category] = (totals[category] || 0) + Number(expense.amount);
+      const resolved = resolveReportCategory({ categoryId: expense.category_id, categoryName: expense.category_name,
+        categoryIcon: expense.category_icon, legacyLabel: categoryLabels[expense.category] }, categories);
+      totals[resolved.key] ??= { name: resolved.name, value: 0 };
+      totals[resolved.key].value += Number(expense.amount);
     });
 
     // Adicionar despesas recorrentes
     activeRecurringExpenses.forEach(recurring => {
-      const category = recurring.category || 'outros';
-      totals[category] = (totals[category] || 0) + Number(recurring.amount);
+      const resolved = resolveReportCategory({ categoryId: recurring.category_id, categoryName: recurring.category_name,
+        categoryIcon: recurring.category_icon, legacyLabel: categoryLabels[recurring.category] }, categories);
+      totals[resolved.key] ??= { name: resolved.name, value: 0 };
+      totals[resolved.key].value += Number(recurring.amount);
     });
 
-    const total = Object.values(totals).reduce((sum, value) => sum + value, 0);
+    const total = Object.values(totals).reduce((sum, item) => sum + item.value, 0);
 
-    return Object.entries(totals)
-      .filter(([_, value]) => value > 0)
-      .map(([category, value]) => ({
-        name: categoryLabels[category as ExpenseCategory],
-        value: Number(value.toFixed(2)),
-        percentage: total > 0 ? ((value / total) * 100).toFixed(1) : 0
+    return Object.values(totals)
+      .filter(item => item.value > 0)
+      .map(item => ({
+        name: item.name,
+        value: Number(item.value.toFixed(2)),
+        percentage: total > 0 ? ((item.value / total) * 100).toFixed(1) : 0
       }))
       .sort((a, b) => b.value - a.value);
-  }, [filteredExpenses, activeRecurringExpenses]);
+  }, [filteredExpenses, activeRecurringExpenses, categories]);
 
   // Dados para gráfico de linha - Gastos ao longo dos meses
   const monthlyData = useMemo(() => {

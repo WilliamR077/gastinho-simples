@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { P3A4_ALLOWED_PATHS, P3A4_INFRASTRUCTURE_MIGRATION } from "./p3a4-scope-files.mjs";
 import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -163,13 +164,13 @@ const allowed = [
   "tsconfig.p3a-reports.json",
 ];
 for (const path of changed) {
-  assert.ok(allowed.includes(path), `arquivo fora do escopo P3-A/P3-A1/P3-A2/P3-A3: ${path}`);
+  assert.ok(allowed.includes(path) || P3A4_ALLOWED_PATHS.has(path), `arquivo fora do escopo P3-A/P3-A1/P3-A2/P3-A3/P3-A4: ${path}`);
 }
 for (const path of changed) {
   assert.doesNotMatch(path, /^(?:src\/lib\/mcp|supabase\/functions\/mcp)(?:\/|$)/u, "nenhum arquivo MCP alterado");
-  assert.doesNotMatch(path, /^supabase\/migrations\//u, "nenhuma migration alterada ou criada");
+  if (path.startsWith("supabase/migrations/")) assert.equal(path, P3A4_INFRASTRUCTURE_MIGRATION);
 }
-assert.equal(readdirSync(join(root, "supabase", "migrations")).filter((name) => name.endsWith(".sql")).length, 64);
+assert.equal(readdirSync(join(root, "supabase", "migrations")).filter((name) => name.endsWith(".sql")).length, 65);
 assert.equal(git(["diff", "--name-only", "HEAD", "--", "src/lib/mcp/shared", "src/lib/mcp/tools", "supabase/functions/mcp"]).trim(), "");
 
 console.log("P3-A: 33 grupos de regressão validados; realizado e previsão permanecem separados.");

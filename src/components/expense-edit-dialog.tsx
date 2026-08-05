@@ -21,6 +21,7 @@ import { CategorySelector } from "@/components/category-selector";
 import { CardSelector } from "@/components/card-selector";
 import { useCategories } from "@/hooks/use-categories";
 import { ExpenseSplitSection } from "@/components/expense-split-section";
+import { expenseSelectionForEdit } from "@/utils/category-edit-preservation";
 import {
   PAYMENT_METHOD_LIST,
   requiresCard,
@@ -58,7 +59,8 @@ export function ExpenseEditDialog({
   currentUserId = '',
   isGroupContext = false,
 }: ExpenseEditDialogProps) {
-  const { activeCategories } = useCategories();
+  const { categories, activeCategories } = useCategories();
+  const currentCategorySelection = expenseSelectionForEdit(expense?.category_id, expense?.category, categories);
   const lastExpenseIdRef = useRef<string | null>(null);
 
   // Split state
@@ -85,13 +87,7 @@ export function ExpenseEditDialog({
     if (expense && activeCategories.length > 0 && expense.id !== lastExpenseIdRef.current) {
       lastExpenseIdRef.current = expense.id;
       
-      let categoryId = expense.category_id || "";
-      if (!categoryId && expense.category) {
-        const found = activeCategories.find(c => 
-          c.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_") === expense.category
-        );
-        if (found) categoryId = found.id;
-      }
+      const categoryId = expenseSelectionForEdit(expense.category_id, expense.category, categories) || "";
 
       const baseDescription = expense.total_installments > 1 
         ? stripInstallmentSuffix(expense.description) 
@@ -125,7 +121,7 @@ export function ExpenseEditDialog({
       setSplitError(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expense, activeCategories]);
+  }, [expense, categories]);
 
   const handleSubmit = (data: ExpenseEditFormData) => {
     if (!expense) return;
@@ -136,7 +132,7 @@ export function ExpenseEditDialog({
     // garante card_id sempre undefined.
     const sanitizedCardId = requiresCard(data.paymentMethod) ? (data.cardId || undefined) : undefined;
 
-    const selectedCategory = activeCategories.find(c => c.id === data.categoryId);
+    const selectedCategory = categories.find(c => c.id === data.categoryId);
     
     // Validate split
     if (isGroupContext && isShared) {
@@ -245,6 +241,7 @@ export function ExpenseEditDialog({
                   <FormLabel>Categoria</FormLabel>
                   <FormControl>
                     <CategorySelector
+                      includeArchivedId={currentCategorySelection}
                       value={field.value}
                       onValueChange={field.onChange}
                     />

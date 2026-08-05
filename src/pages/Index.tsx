@@ -21,6 +21,7 @@ import { BudgetGoalFormSheet } from "@/components/budget-goal-form-sheet";
 import { ContextSelector } from "@/components/context-selector";
 import { useSharedGroups } from "@/hooks/use-shared-groups";
 import { useCategories } from "@/hooks/use-categories";
+import { useIncomeCategories } from "@/hooks/use-income-categories";
 
 import { BalanceSummary } from "@/components/balance-summary";
 import { GroupMemberSummary } from "@/components/group-member-summary";
@@ -58,6 +59,7 @@ import { startOfMonth, endOfMonth, format } from "date-fns";
 import { parseLocalDate, cn } from "@/lib/utils";
 import { useOnboardingTour } from "@/hooks/use-onboarding-tour";
 import { buildCardLimitSummaryMap } from "@/utils/card-limit-view-model";
+import { categoryEditPatch, expenseSelectionForEdit } from "@/utils/category-edit-preservation";
 
 export default function Index() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -127,6 +129,7 @@ export default function Index() {
   const navigate = useNavigate();
   const { currentContext, groups, getGroupMembers } = useSharedGroups();
   const { categories } = useCategories();
+  const { categories: incomeCategories } = useIncomeCategories();
   const [groupMembers, setGroupMembers] = useState<SharedGroupMember[]>([]);
   const { isExpenseFormGuidedFlow, currentStep } = useOnboardingTour();
 
@@ -573,6 +576,18 @@ export default function Index() {
   const updateIncome = async (id: string, data: IncomeFormData) => {
     try {
       const inc = incomes.find((i) => i.id === id);
+      const incomeCategoryPatch = categoryEditPatch({
+        currentSelection: expenseSelectionForEdit((inc as any)?.income_category_id, inc?.category, incomeCategories),
+        nextSelection: data.incomeCategoryId || data.category,
+        selectedCategory: data.incomeCategoryId ? {
+          id: data.incomeCategoryId,
+          name: data.categoryName || "Outros",
+          icon: data.categoryIcon || "📦",
+        } : null,
+        explicitName: data.categoryName,
+        explicitIcon: data.categoryIcon,
+        idColumn: "income_category_id",
+      });
       // Guard: block update of secondary installments
       if (inc && (inc as any).installment_group_id && ((inc as any).installment_number ?? 1) > 1) {
         toast({ title: "Ação bloqueada", description: "Use a 1ª parcela para gerenciar esta série.", variant: "destructive" });
@@ -614,9 +629,7 @@ export default function Index() {
                 amount: data.amount,
                 category: data.category,
                 income_date: formatDateLocal(newDate),
-                income_category_id: data.incomeCategoryId || null,
-                category_name: data.categoryName || null,
-                category_icon: data.categoryIcon || null,
+                ...incomeCategoryPatch,
               } as any)
               .eq("id", sib.id);
           }
@@ -634,9 +647,7 @@ export default function Index() {
                 amount: data.amount,
                 category: data.category,
                 income_date: formatDateLocal(newDate),
-                income_category_id: data.incomeCategoryId || null,
-                category_name: data.categoryName || null,
-                category_icon: data.categoryIcon || null,
+                ...incomeCategoryPatch,
               };
             })
           );
@@ -653,9 +664,7 @@ export default function Index() {
         amount: data.amount,
         category: data.category,
         income_date: formatDateLocal(data.incomeDate),
-        income_category_id: data.incomeCategoryId || null,
-        category_name: data.categoryName || null,
-        category_icon: data.categoryIcon || null
+        ...incomeCategoryPatch,
       } as any).
       eq("id", id);
 
@@ -670,9 +679,7 @@ export default function Index() {
         amount: data.amount,
         category: data.category,
         income_date: formatDateLocal(data.incomeDate),
-        income_category_id: data.incomeCategoryId || null,
-        category_name: data.categoryName || null,
-        category_icon: data.categoryIcon || null
+        ...incomeCategoryPatch,
       } :
       i
       )
@@ -694,6 +701,17 @@ export default function Index() {
 
   const updateRecurringIncome = async (id: string, data: RecurringIncomeFormData) => {
     try {
+      const current = recurringIncomes.find(income => income.id === id);
+      const incomeCategoryPatch = categoryEditPatch({
+        currentSelection: expenseSelectionForEdit((current as any)?.income_category_id, current?.category, incomeCategories),
+        nextSelection: data.incomeCategoryId || data.category,
+        selectedCategory: data.incomeCategoryId ? {
+          id: data.incomeCategoryId, name: data.categoryName || "Outros", icon: data.categoryIcon || "📦",
+        } : null,
+        explicitName: data.categoryName,
+        explicitIcon: data.categoryIcon,
+        idColumn: "income_category_id",
+      });
       const { error } = await supabase.
       from("recurring_incomes").
       update({
@@ -701,9 +719,7 @@ export default function Index() {
         amount: data.amount,
         category: data.category,
         day_of_month: data.dayOfMonth,
-        income_category_id: data.incomeCategoryId || null,
-        category_name: data.categoryName || null,
-        category_icon: data.categoryIcon || null
+        ...incomeCategoryPatch,
       } as any).
       eq("id", id);
 
@@ -718,9 +734,7 @@ export default function Index() {
         amount: data.amount,
         category: data.category,
         day_of_month: data.dayOfMonth,
-        income_category_id: data.incomeCategoryId || null,
-        category_name: data.categoryName || null,
-        category_icon: data.categoryIcon || null
+        ...incomeCategoryPatch,
       } :
       i
       )
@@ -1233,6 +1247,12 @@ export default function Index() {
       // Buscar dados desnormalizados
       const selectedCategory = data.categoryId ? categories.find((c) => c.id === data.categoryId) : null;
       const selectedCard = data.cardId ? cards.find((c) => c.id === data.cardId) : null;
+      const expenseCategoryPatch = categoryEditPatch({
+        currentSelection: expenseSelectionForEdit(exp?.category_id, exp?.category, categories),
+        nextSelection: data.categoryId,
+        selectedCategory,
+        idColumn: "category_id",
+      });
 
       // Series batch update
       if (exp && exp.installment_group_id && (exp.total_installments ?? 1) > 1) {
@@ -1260,10 +1280,8 @@ export default function Index() {
                 amount: data.amount,
                 payment_method: data.paymentMethod,
                 expense_date: formatDateLocal(newDate),
-                ...(data.categoryId && { category_id: data.categoryId }),
+                ...expenseCategoryPatch,
                 ...(data.cardId && { card_id: data.cardId }),
-                category_name: selectedCategory?.name || null,
-                category_icon: selectedCategory?.icon || null,
                 card_name: selectedCard?.name || null,
                 card_color: selectedCard?.color || null,
                 // Preserve individual paid_by per installment
@@ -1288,11 +1306,9 @@ export default function Index() {
         amount: data.amount,
         payment_method: data.paymentMethod,
         expense_date: formatDateLocal(data.expenseDate),
-        ...(data.categoryId && { category_id: data.categoryId }),
+        ...expenseCategoryPatch,
         ...(data.cardId && { card_id: data.cardId }),
-        // Update denormalized fields
-        category_name: selectedCategory?.name || null,
-        category_icon: selectedCategory?.icon || null,
+        // Category snapshot keys are present only after a deliberate change.
         card_name: selectedCard?.name || null,
         card_color: selectedCard?.color || null,
         // Split fields
@@ -1363,6 +1379,14 @@ export default function Index() {
 
   const updateRecurringExpense = async (id: string, data: RecurringExpenseFormData) => {
     try {
+      const current = recurringExpenses.find(expense => expense.id === id);
+      const selectedCategory = data.categoryId ? categories.find(category => category.id === data.categoryId) : null;
+      const expenseCategoryPatch = categoryEditPatch({
+        currentSelection: expenseSelectionForEdit(current?.category_id, current?.category, categories),
+        nextSelection: data.categoryId,
+        selectedCategory,
+        idColumn: "category_id",
+      });
       const { data: updatedData, error } = await supabase.
       from("recurring_expenses").
       update({
@@ -1370,7 +1394,7 @@ export default function Index() {
         amount: data.amount,
         payment_method: data.paymentMethod,
         day_of_month: data.dayOfMonth,
-        ...(data.categoryId && { category_id: data.categoryId }),
+        ...expenseCategoryPatch,
         ...(data.cardId && { card_id: data.cardId })
       }).
       eq("id", id).

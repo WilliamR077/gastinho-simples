@@ -14,6 +14,7 @@ interface CategorySelectorProps {
   className?: string;
   triggerClassName?: string;
   onboardingTarget?: string;
+  includeArchivedId?: string | null;
   /**
    * Contexto do fluxo onde este seletor está sendo usado. Determina qual
    * evento de onboarding o CategoryManager irá despachar ao abrir/fechar.
@@ -28,9 +29,13 @@ export function CategorySelector({
   className,
   triggerClassName,
   onboardingTarget,
+  includeArchivedId,
   context = "expense",
 }: CategorySelectorProps) {
-  const { activeCategories, loading, refresh } = useCategories();
+  const { categories, activeCategories, loading, refresh } = useCategories();
+  const includedArchived = includeArchivedId
+    ? categories.find(category => category.id === includeArchivedId && !category.is_active)
+    : undefined;
   const [showManager, setShowManager] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
 
@@ -92,7 +97,7 @@ export function CategorySelector({
       const cat = value as ExpenseCategory;
       return cat ? `${categoryIcons[cat] || ''} ${categoryLabels[cat] || value}` : "";
     }
-    const category = activeCategories.find(c => c.id === value);
+    const category = categories.find(c => c.id === value);
     if (category) {
       return `${category.icon} ${category.name}`;
     }
@@ -135,9 +140,9 @@ export function CategorySelector({
             ))
           ) : (
             // Categorias personalizadas do usuário
-            activeCategories.map((category) => (
+            [...(includedArchived ? [includedArchived] : []), ...activeCategories].map((category) => (
               <SelectItem key={category.id} value={category.id}>
-                {category.icon} {category.name}
+                {category.icon} {category.name}{category.is_active ? "" : " (arquivada)"}
               </SelectItem>
             ))
           )}

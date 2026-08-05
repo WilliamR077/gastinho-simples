@@ -37,10 +37,14 @@ export function CategoryInsightCard({
     categoryId: string | null,
     categoryEnum: string
   ): { key: string; name: string; icon: string } => {
-    if (categoryName) return { key: categoryName, name: categoryName, icon: categoryIcon || "📦" };
+    if (categoryId) {
+      const current = categories.find(category => category.id === categoryId);
+      if (current) return { key: current.id, name: current.name, icon: current.icon };
+    }
+    if (categoryName) return { key: categoryId ? `snapshot:${categoryId}:${categoryName}` : `snapshot-name:${categoryName}`, name: categoryName, icon: categoryIcon || "📦" };
     if (categoryId) {
       const uc = categories.find(c => c.id === categoryId);
-      if (uc) return { key: uc.name, name: uc.name, icon: uc.icon };
+      if (uc) return { key: uc.id, name: uc.name, icon: uc.icon };
     }
     const fb = categories.find(c => c.name.toLowerCase() === categoryEnum.toLowerCase());
     if (fb) return { key: fb.name, name: fb.name, icon: fb.icon };

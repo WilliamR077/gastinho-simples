@@ -48,6 +48,9 @@ export function IncomeCategorySummary({
         return { key: incomeCatId, name: (income as any).category_name, icon: (income as any).category_icon || "📦" };
       }
     }
+    if (income.category_name) {
+      return { key: `name:${income.category_name}`, name: income.category_name, icon: income.category_icon || "📦" };
+    }
     const cat = income.category as IncomeCategory;
     return { key: cat, name: incomeCategoryLabels[cat] || cat, icon: incomeCategoryIcons[cat] || "📦" };
   }

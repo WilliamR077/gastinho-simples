@@ -6,6 +6,7 @@ export interface UserCategory {
   color: string | null;
   is_default: boolean;
   is_active: boolean;
+  system_key: string | null;
   display_order: number;
   created_at: string;
   updated_at: string;

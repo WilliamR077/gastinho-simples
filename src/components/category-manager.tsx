@@ -15,19 +15,10 @@ import { Eye, EyeOff, Pencil, Plus, Check, X, Loader2, Trash2 } from "lucide-rea
 import { UserCategory } from "@/types/user-category";
 import { useCategories } from "@/hooks/use-categories";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { useAdBannerLock } from "@/services/admob-visibility-coordinator";
 import { AiHelpHint } from "@/components/ai/ai-help-hint";
 import { AI_CONTEXTUAL_HINTS } from "@/lib/mcp/aiContextualHints";
+import { CategoryHistoryDialog } from "@/components/category-history-dialog";
 
 // P2: Expanded emoji list for personal finance categories
 const EMOJI_OPTIONS = [
@@ -77,7 +68,7 @@ interface EditingCategory {
 }
 
 const isOutrosCategory = (category: UserCategory) =>
-  category.name.toLowerCase() === "outros";
+  category.system_key === "other" || category.name.trim().toLowerCase() === "outros";
 
 export function CategoryManager({ open, onOpenChange, context = "expense" }: CategoryManagerProps) {
   const {
@@ -87,6 +78,9 @@ export function CategoryManager({ open, onOpenChange, context = "expense" }: Cat
     addCategory,
     updateCategory,
     deleteCategory,
+    archiveCategory,
+    getCategoryReferences,
+    replaceCategory,
     toggleCategoryVisibility,
   } = useCategories();
 
@@ -158,14 +152,6 @@ export function CategoryManager({ open, onOpenChange, context = "expense" }: Cat
     });
     setSaving(false);
     setEditingCategory(null);
-  };
-
-  const handleDelete = async () => {
-    if (!deletingCategory) return;
-    setSaving(true);
-    await deleteCategory(deletingCategory.id);
-    setSaving(false);
-    setDeletingCategory(null);
   };
 
   const startEditing = (category: UserCategory) => {
@@ -247,6 +233,7 @@ export function CategoryManager({ open, onOpenChange, context = "expense" }: Cat
               <span className={`truncate ${isHidden ? "line-through text-muted-foreground" : ""}`}>
                 {category.name}
               </span>
+              {isHidden ? <span className="rounded bg-muted px-2 py-0.5 text-xs">Arquivada</span> : null}
               {isOutros ? (
                 <span className="rounded bg-amber-500/10 px-2 py-0.5 text-xs text-amber-600 shrink-0">
                   🔒 Fixa
@@ -466,30 +453,16 @@ export function CategoryManager({ open, onOpenChange, context = "expense" }: Cat
         </SheetContent>
       </Sheet>
 
-      <AlertDialog
-        open={!!deletingCategory}
-        onOpenChange={(nextOpen) => !nextOpen && setDeletingCategory(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir categoria?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Se houver despesas nesta categoria, elas serão movidas para "Outros". Esta ação não
-              pode ser desfeita.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Excluir
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <CategoryHistoryDialog
+        category={deletingCategory}
+        kindLabel="despesas"
+        activeCategories={activeCategories}
+        onClose={() => setDeletingCategory(null)}
+        getReferences={getCategoryReferences}
+        archive={archiveCategory}
+        replace={replaceCategory}
+        permanentlyDelete={deleteCategory}
+      />
     </>
   );
 }

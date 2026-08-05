@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { P3A4_ALLOWED_PATHS, P3A4_INFRASTRUCTURE_MIGRATION } from "./p3a4-scope-files.mjs";
 import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -150,8 +151,8 @@ assert.deepEqual(Object.fromEntries(categoryTotals), {
   "Educação": 32.09,
 });
 assert.equal(resolveReportCategory({ categoryId: "cat-caldas", categoryName: "Outros" }, categories).name, "Caldas Novas");
-assert.equal(resolveReportCategory({ categoryId: "missing", categoryName: "Outros" }, categories).name, "Categoria não resolvida");
-assert.equal(resolveReportCategory({ categoryId: "group-category", categoryName: "Viagem" }, categories).name, "Categoria não resolvida");
+assert.equal(resolveReportCategory({ categoryId: "missing", categoryName: "Outros" }, categories).name, "Outros");
+assert.equal(resolveReportCategory({ categoryId: "group-category", categoryName: "Viagem" }, categories).name, "Viagem");
 
 const viewModelSource = read("src", "utils", "report-view-model.ts");
 const accordionSource = read("src", "components", "reports-accordion.tsx");
@@ -185,9 +186,10 @@ const allowed = new Set([
   "src/utils/report-view-model.ts",
   "tsconfig.p3a-reports.json",
 ]);
-for (const path of changed) assert.ok(allowed.has(path), `arquivo fora do escopo P3-A1/P3-A2/P3-A3: ${path}`);
+for (const path of changed) assert.ok(allowed.has(path) || P3A4_ALLOWED_PATHS.has(path), `arquivo fora do escopo P3-A1/P3-A2/P3-A3/P3-A4: ${path}`);
 assert.equal(git(["diff", "--name-only", "HEAD", "--", "src/lib/mcp/shared", "src/lib/mcp/tools", "supabase/functions/mcp"]).trim(), "");
-assert.equal(git(["diff", "--name-only", "HEAD", "--", "supabase/migrations"]).trim(), "");
-assert.equal(readdirSync(join(root, "supabase", "migrations")).filter((name) => name.endsWith(".sql")).length, 64);
+assert.deepEqual(git(["diff", "--name-only", "HEAD", "--", "supabase/migrations"]).trim().split(/\r?\n/u).filter(Boolean), []);
+assert.equal(readdirSync(join(root, "supabase", "migrations")).filter((name) => name.endsWith(".sql")).length, 65);
+assert.ok(P3A4_INFRASTRUCTURE_MIGRATION.endsWith("p3a4_category_history_operations.sql"));
 
 console.log("P3-A1: 18 grupos validados; datas civis, oráculos e categorias do PDF corretos.");
