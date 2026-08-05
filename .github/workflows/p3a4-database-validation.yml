@@ -1,0 +1,244 @@
+name: P3-A4 Database Validation
+
+on:
+  push:
+    branches:
+      - codex/p3-a4-category-history-preservation
+    paths:
+      - .github/workflows/p3a4-database-validation.yml
+      - supabase/**
+      - scripts/ci/**
+      - scripts/test/**
+      - scripts/post-tools-p3-**
+      - src/**
+      - package.json
+      - package-lock.json
+      - tsconfig*.json
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/p3a4-database-validation.yml
+      - supabase/**
+      - scripts/ci/**
+      - scripts/test/**
+      - scripts/post-tools-p3-**
+      - src/**
+      - package.json
+      - package-lock.json
+      - tsconfig*.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Local PostgreSQL integration laboratory
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    defaults:
+      run:
+        shell: bash
+    env:
+      P3A4_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      P3A4_ARTIFACT_DIR: ${{ runner.temp }}/p3a4-artifacts
+      P3A4_LOCAL_PROJECT: ${{ runner.temp }}/p3a4-local-project
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Install project dependencies
+        run: npm ci
+
+      - name: Validate workflow policy and YAML
+        run: node scripts/ci/p3a4-validate-workflow.mjs
+
+      - name: Set up Supabase CLI 2.111.0
+        uses: supabase/setup-cli@v3
+        with:
+          version: 2.111.0
+
+      - name: Record tool versions
+        run: |
+          node --version
+          npm --version
+          supabase --version
+          docker --version
+          psql --version
+
+      - name: Prepare isolated local Supabase project
+        run: |
+          mkdir -p "$P3A4_ARTIFACT_DIR" "$P3A4_LOCAL_PROJECT/supabase"
+          find supabase -mindepth 1 -maxdepth 1 ! -name .temp \
+            -exec cp -R '{}' "$P3A4_LOCAL_PROJECT/supabase/" \;
+          test ! -e "$P3A4_LOCAL_PROJECT/supabase/.temp"
+          sed -i -E 's/^project_id = .*/project_id = "p3a4-ci"/' "$P3A4_LOCAL_PROJECT/supabase/config.toml"
+          grep -q '^project_id = "p3a4-ci"$' "$P3A4_LOCAL_PROJECT/supabase/config.toml"
+
+      - name: Start disposable local Supabase services
+        run: supabase start --workdir "$P3A4_LOCAL_PROJECT"
+
+      - name: Detect the migration immediately before P3-A4
+        run: |
+          previous_migration=$(bash scripts/ci/p3a4-detect-previous-migration.sh "$P3A4_LOCAL_PROJECT/supabase/migrations")
+          echo "P3A4_PREVIOUS_MIGRATION=$previous_migration" >> "$GITHUB_ENV"
+          echo "Detected previous migration: $previous_migration"
+
+      - name: Prove ambiguous backfill aborts safely
+        run: |
+          supabase db reset --local --version "$P3A4_PREVIOUS_MIGRATION" --no-seed --workdir "$P3A4_LOCAL_PROJECT"
+          psql "$P3A4_DB_URL" -v ON_ERROR_STOP=1 -f scripts/ci/p3a4-backfill-ambiguous-fixture.sql
+          set +e
+          supabase migration up --local --workdir "$P3A4_LOCAL_PROJECT" >"$P3A4_ARTIFACT_DIR/backfill-ambiguous.log" 2>&1
+          migration_status=$?
+          set -e
+          if [[ $migration_status -eq 0 ]]; then
+            echo "The P3-A4 migration unexpectedly accepted an ambiguous default fallback." >&2
+            exit 1
+          fi
+          grep -q "P3-A4 aborted: ambiguous default income fallback category" "$P3A4_ARTIFACT_DIR/backfill-ambiguous.log"
+          echo "Expected migration failure confirmed for the ambiguous fixture."
+
+      - name: Validate the successful pre-P3-A4 backfill transition
+        run: |
+          supabase db reset --local --version "$P3A4_PREVIOUS_MIGRATION" --no-seed --workdir "$P3A4_LOCAL_PROJECT"
+          psql "$P3A4_DB_URL" -v ON_ERROR_STOP=1 -f scripts/ci/p3a4-backfill-fixture.sql
+          supabase migration up --local --workdir "$P3A4_LOCAL_PROJECT" 2>&1 | tee "$P3A4_ARTIFACT_DIR/backfill-migration-up.log"
+          psql "$P3A4_DB_URL" -v ON_ERROR_STOP=1 -f scripts/ci/p3a4-backfill-assertions.sql \
+            2>&1 | tee "$P3A4_ARTIFACT_DIR/backfill-assertions.log"
+
+      - name: Reproduce every migration from zero
+        run: supabase db reset --local --no-seed --workdir "$P3A4_LOCAL_PROJECT" 2>&1 | tee "$P3A4_ARTIFACT_DIR/full-reset.log"
+
+      - name: Lint the local database
+        run: supabase db lint --local --level error --workdir "$P3A4_LOCAL_PROJECT" 2>&1 | tee "$P3A4_ARTIFACT_DIR/database-lint.log"
+
+      - name: Capture function, trigger, and grant catalog evidence
+        run: |
+          psql "$P3A4_DB_URL" -v ON_ERROR_STOP=1 -P pager=off >"$P3A4_ARTIFACT_DIR/catalog-evidence.txt" <<'SQL'
+          SELECT p.oid::regprocedure AS function_signature,
+                 p.prosecdef AS security_definer,
+                 p.proconfig AS function_configuration,
+                 pg_get_userbyid(p.proowner) AS owner,
+                 p.proacl AS access_control_list
+          FROM pg_proc p
+          JOIN pg_namespace n ON n.oid = p.pronamespace
+          WHERE n.nspname = 'public' AND p.proname LIKE 'p3a4_%'
+          ORDER BY p.oid::regprocedure::text;
+
+          SELECT t.tgname, t.tgenabled, t.tgtype,
+                 pg_get_triggerdef(t.oid, true) AS definition
+          FROM pg_trigger t
+          WHERE t.tgname = 'p3a4_budget_goal_write_lock';
+
+          SELECT indexname, indexdef
+          FROM pg_indexes
+          WHERE schemaname = 'public'
+            AND indexname IN ('user_categories_one_system_key_per_user',
+                              'user_income_categories_one_system_key_per_user')
+          ORDER BY indexname;
+          SQL
+
+      - name: Run PostgreSQL pgTAP tests
+        run: supabase test db --workdir "$P3A4_LOCAL_PROJECT" 2>&1 | tee "$P3A4_ARTIFACT_DIR/pgtap.log"
+
+      - name: Run two-connection concurrency tests
+        run: bash scripts/ci/p3a4-concurrency.sh 2>&1 | tee "$P3A4_ARTIFACT_DIR/concurrency.log"
+
+      - name: Generate and compare official Supabase types
+        run: |
+          supabase gen types --lang typescript --local --workdir "$P3A4_LOCAL_PROJECT" >"$P3A4_ARTIFACT_DIR/types.generated.ts"
+          node scripts/ci/p3a4-compare-types.mjs \
+            "$P3A4_ARTIFACT_DIR/types.generated.ts" \
+            src/integrations/supabase/types.ts \
+            "$P3A4_ARTIFACT_DIR/types.diff"
+
+      - name: Run P3-A4 category-history tests
+        run: npm run test:p3a4:category-history
+
+      - name: Run P3-A reports tests
+        run: npm run test:p3a:reports
+
+      - name: Run P3-A1 civil-date tests
+        run: npm run test:p3a1:report-dates
+
+      - name: Run P3-A2 report-export tests
+        run: npm run test:p3a2:report-export
+
+      - name: Run P3-A3 category-state tests
+        run: npm run test:p3a3:report-category-state
+
+      - name: Run P3-A4 typecheck
+        run: npm run typecheck:p3a4:category-history
+
+      - name: Run targeted ESLint
+        run: >-
+          npx eslint
+          src/components/category-history-dialog.tsx
+          src/types/category-history.ts
+          src/utils/category-edit-preservation.ts
+          src/utils/report-category-resolver.ts
+
+      - name: Build the frontend
+        run: npm run build
+
+      - name: Confirm the runner did not modify tracked or MCP files
+        run: |
+          git status --short | tee "$P3A4_ARTIFACT_DIR/git-status-final.txt"
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git diff --stat
+            git diff
+            exit 1
+          fi
+
+      - name: Collect sanitized local service logs
+        if: always()
+        run: bash scripts/ci/p3a4-collect-local-logs.sh
+
+      - name: Publish execution summary
+        if: always()
+        run: |
+          {
+            echo "## P3-A4 database validation"
+            echo
+            echo "- Job result: **${{ job.status }}**"
+            echo "- Database: disposable PostgreSQL provided by local Supabase"
+            echo "- Remote access: no login, link, remote push, deploy, or production credentials"
+            echo "- Evidence bundle: \`p3a4-database-validation-${{ github.run_id }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p3a4-database-validation-${{ github.run_id }}
+          path: ${{ runner.temp }}/p3a4-artifacts
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Stop and remove local Supabase services
+        if: always()
+        run: |
+          set +e
+          supabase stop --no-backup --workdir "$P3A4_LOCAL_PROJECT"
+          stop_status=$?
+          set -e
+          case "$P3A4_LOCAL_PROJECT" in
+            "$RUNNER_TEMP"/*) rm -rf -- "$P3A4_LOCAL_PROJECT" ;;
+            *) echo "Refusing to remove unexpected temporary path" >&2; exit 1 ;;
+          esac
+          exit "$stop_status"
