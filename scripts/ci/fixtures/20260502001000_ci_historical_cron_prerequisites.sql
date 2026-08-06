@@ -7,13 +7,17 @@ DECLARE
   v_job_5 bigint;
   v_last_value bigint;
   v_is_called boolean;
-  v_updated integer;
+  v_unscheduled boolean;
 BEGIN
-  IF to_regclass('cron.job') IS NULL THEN
+  IF pg_catalog.current_setting('cron.launch_active_jobs', true) IS DISTINCT FROM 'off' THEN
+    RAISE EXCEPTION 'P3-A4 CI cron prerequisite failed: cron.launch_active_jobs is not off';
+  END IF;
+
+  IF pg_catalog.to_regclass('cron.job') IS NULL THEN
     RAISE EXCEPTION 'P3-A4 CI cron prerequisite failed: cron.job is missing';
   END IF;
 
-  IF (SELECT array_agg(jobid ORDER BY jobid) FROM cron.job)
+  IF (SELECT pg_catalog.array_agg(jobid ORDER BY jobid) FROM cron.job)
      IS DISTINCT FROM ARRAY[1, 2]::bigint[] THEN
     RAISE EXCEPTION 'P3-A4 CI cron prerequisite failed: expected only job IDs 1 and 2';
   END IF;
@@ -36,26 +40,20 @@ BEGIN
     RAISE EXCEPTION 'P3-A4 CI cron prerequisite failed: job sequence is not positioned at 2';
   END IF;
 
-  -- Fresh replay assigns the first two versioned jobs to IDs 1 and 2. The
-  -- historical database already had two occupied slots, so neutralize these
-  -- replay-only rows before recreating the historical IDs below.
-  UPDATE cron.job
-  SET jobname = CASE jobid
-        WHEN 1 THEN 'p3a4-ci-historical-slot-1'
-        WHEN 2 THEN 'p3a4-ci-historical-slot-2'
-      END,
-      schedule = '0 0 31 2 *',
-      command = 'SELECT 1',
-      active = false
-  WHERE jobid IN (1, 2);
-  GET DIAGNOSTICS v_updated = ROW_COUNT;
-
-  IF v_updated <> 2 THEN
-    RAISE EXCEPTION 'P3-A4 CI cron prerequisite failed: could not neutralize jobs 1 and 2';
+  SELECT cron.unschedule(job_id := 1) INTO v_unscheduled;
+  IF v_unscheduled IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'P3-A4 CI cron prerequisite failed: could not remove replay job 1';
   END IF;
 
-  -- These inserts are invisible to the cron launcher until commit. They are
-  -- disabled below in the same transaction, so no active state is committed.
+  SELECT cron.unschedule(job_id := 2) INTO v_unscheduled;
+  IF v_unscheduled IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'P3-A4 CI cron prerequisite failed: could not remove replay job 2';
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM cron.job) THEN
+    RAISE EXCEPTION 'P3-A4 CI cron prerequisite failed: replay jobs 1 and 2 were not removed';
+  END IF;
+
   SELECT cron.schedule(
     'check-recurring-reminders-daily', '0 0 31 2 *', 'SELECT 1'
   ) INTO v_job_3;
@@ -70,15 +68,23 @@ BEGIN
     RAISE EXCEPTION 'P3-A4 CI cron prerequisite failed: expected deterministic job IDs 3, 4 and 5';
   END IF;
 
-  UPDATE cron.job
-  SET active = false
-  WHERE jobid IN (3, 4, 5);
-  GET DIAGNOSTICS v_updated = ROW_COUNT;
+  PERFORM cron.alter_job(job_id := v_job_3, active := false);
+  PERFORM cron.alter_job(job_id := v_job_4, active := false);
+  PERFORM cron.alter_job(job_id := v_job_5, active := false);
 
-  IF v_updated <> 3 OR EXISTS (
-    SELECT 1 FROM cron.job WHERE jobid BETWEEN 1 AND 5 AND active
+  IF (SELECT pg_catalog.array_agg(jobid ORDER BY jobid) FROM cron.job)
+     IS DISTINCT FROM ARRAY[3, 4, 5]::bigint[]
+     OR EXISTS (SELECT 1 FROM cron.job WHERE active) THEN
+    RAISE EXCEPTION 'P3-A4 CI cron prerequisite failed: historical jobs are incomplete or active';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM cron.job
+    WHERE schedule <> '0 0 31 2 *'
+       OR command <> 'SELECT 1'
   ) THEN
-    RAISE EXCEPTION 'P3-A4 CI cron prerequisite failed: all historical jobs must remain inactive';
+    RAISE EXCEPTION 'P3-A4 CI cron prerequisite failed: historical jobs are not inert';
   END IF;
 
   IF EXISTS (

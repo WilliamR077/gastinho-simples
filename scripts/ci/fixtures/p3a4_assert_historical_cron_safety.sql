@@ -4,31 +4,17 @@ DO $p3a4_ci_cron_assertions$
 DECLARE
   v_has_rows boolean;
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM pg_trigger
-    WHERE tgrelid = 'cron.job'::regclass
-      AND tgname = 'p3a4_ci_force_job_inactive'
-      AND tgenabled <> 'D'
-  ) THEN
-    RAISE EXCEPTION 'P3-A4 CI cron safety failed: inactive-job guard is missing';
+  IF pg_catalog.current_setting('cron.launch_active_jobs', true) IS DISTINCT FROM 'off' THEN
+    RAISE EXCEPTION 'P3-A4 CI cron safety failed: cron.launch_active_jobs is not off';
   END IF;
 
-  IF (SELECT array_agg(jobid ORDER BY jobid) FROM cron.job WHERE jobid BETWEEN 1 AND 5)
-     IS DISTINCT FROM ARRAY[1, 2, 3, 4, 5]::bigint[] THEN
-    RAISE EXCEPTION 'P3-A4 CI cron safety failed: historical job IDs 1 through 5 are incomplete';
+  IF (SELECT pg_catalog.array_agg(jobid ORDER BY jobid) FROM cron.job)
+     IS DISTINCT FROM ARRAY[3, 4, 5, 6]::bigint[] THEN
+    RAISE EXCEPTION 'P3-A4 CI cron safety failed: expected only historical job IDs 3 through 6';
   END IF;
 
   IF EXISTS (SELECT 1 FROM cron.job WHERE active) THEN
     RAISE EXCEPTION 'P3-A4 CI cron safety failed: a local job is active';
-  END IF;
-
-  IF EXISTS (
-    SELECT 1 FROM cron.job
-    WHERE (jobid = 1 AND (jobname <> 'p3a4-ci-historical-slot-1' OR command <> 'SELECT 1'))
-       OR (jobid = 2 AND (jobname <> 'p3a4-ci-historical-slot-2' OR command <> 'SELECT 1'))
-  ) THEN
-    RAISE EXCEPTION 'P3-A4 CI cron safety failed: replay-only slots are not neutralized';
   END IF;
 
   IF NOT EXISTS (
@@ -37,8 +23,10 @@ BEGIN
     SELECT 1 FROM cron.job WHERE jobid = 4 AND jobname = 'check-budget-goals-daily'
   ) OR NOT EXISTS (
     SELECT 1 FROM cron.job WHERE jobid = 5 AND jobname = 'check-budget-goals-morning'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM cron.job WHERE jobid = 6 AND jobname = 'cleanup-rate-limit-events'
   ) THEN
-    RAISE EXCEPTION 'P3-A4 CI cron safety failed: historical job names do not match IDs 3, 4 and 5';
+    RAISE EXCEPTION 'P3-A4 CI cron safety failed: historical job names do not match IDs 3 through 6';
   END IF;
 
   IF EXISTS (
@@ -48,12 +36,12 @@ BEGIN
   END IF;
 
   IF EXISTS (
-    SELECT 1 FROM cron.job_run_details WHERE jobid BETWEEN 1 AND 5
+    SELECT 1 FROM cron.job_run_details WHERE jobid BETWEEN 3 AND 6
   ) THEN
     RAISE EXCEPTION 'P3-A4 CI cron safety failed: a historical job produced an execution record';
   END IF;
 
-  IF to_regclass('net.http_request_queue') IS NULL THEN
+  IF pg_catalog.to_regclass('net.http_request_queue') IS NULL THEN
     RAISE EXCEPTION 'P3-A4 CI cron safety failed: local request queue cannot be audited';
   END IF;
   EXECUTE 'SELECT EXISTS (SELECT 1 FROM net.http_request_queue)' INTO v_has_rows;
@@ -61,7 +49,7 @@ BEGIN
     RAISE EXCEPTION 'P3-A4 CI cron safety failed: local request queue is not empty';
   END IF;
 
-  IF to_regclass('net._http_response') IS NULL THEN
+  IF pg_catalog.to_regclass('net._http_response') IS NULL THEN
     RAISE EXCEPTION 'P3-A4 CI cron safety failed: local response table cannot be audited';
   END IF;
   EXECUTE 'SELECT EXISTS (SELECT 1 FROM net._http_response)' INTO v_has_rows;
@@ -77,4 +65,4 @@ ORDER BY jobid;
 
 SELECT count(*) AS historical_job_run_count
 FROM cron.job_run_details
-WHERE jobid BETWEEN 1 AND 5;
+WHERE jobid BETWEEN 3 AND 6;

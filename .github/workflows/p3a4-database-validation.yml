@@ -95,6 +95,8 @@ jobs:
             "$P3A4_LOCAL_PROJECT/supabase/migrations/"
           cp scripts/ci/fixtures/20260502001000_ci_historical_cron_prerequisites.sql \
             "$P3A4_LOCAL_PROJECT/supabase/migrations/"
+          cp scripts/ci/fixtures/20260504014235_ci_deactivate_historical_cron_jobs.sql \
+            "$P3A4_LOCAL_PROJECT/supabase/migrations/"
           test ! -e "$P3A4_LOCAL_PROJECT/supabase/.temp"
           sed -i -E 's/^project_id = .*/project_id = "p3a4-ci"/' "$P3A4_LOCAL_PROJECT/supabase/config.toml"
           grep -q '^project_id = "p3a4-ci"$' "$P3A4_LOCAL_PROJECT/supabase/config.toml"

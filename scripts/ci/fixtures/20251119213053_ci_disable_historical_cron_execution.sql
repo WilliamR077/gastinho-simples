@@ -1,34 +1,11 @@
-BEGIN;
+ALTER SYSTEM SET cron.launch_active_jobs = 'off';
 
-CREATE EXTENSION IF NOT EXISTS pg_cron;
+SELECT pg_catalog.pg_reload_conf();
 
-CREATE OR REPLACE FUNCTION public.p3a4_ci_force_job_inactive()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = pg_catalog
-AS $p3a4_ci_force_job_inactive$
+DO $p3a4_ci_verify_cron_launcher$
 BEGIN
-  NEW.active := false;
-  RETURN NEW;
-END;
-$p3a4_ci_force_job_inactive$;
-
-REVOKE ALL ON FUNCTION public.p3a4_ci_force_job_inactive() FROM PUBLIC;
-
-DO $p3a4_ci_revoke_trigger_function$
-BEGIN
-  IF pg_catalog.to_regrole('anon') IS NOT NULL THEN
-    EXECUTE 'REVOKE ALL ON FUNCTION public.p3a4_ci_force_job_inactive() FROM anon';
-  END IF;
-  IF pg_catalog.to_regrole('authenticated') IS NOT NULL THEN
-    EXECUTE 'REVOKE ALL ON FUNCTION public.p3a4_ci_force_job_inactive() FROM authenticated';
+  IF pg_catalog.current_setting('cron.launch_active_jobs', true) IS DISTINCT FROM 'off' THEN
+    RAISE EXCEPTION 'P3-A4 CI cron safety failed: cron.launch_active_jobs is not off';
   END IF;
 END;
-$p3a4_ci_revoke_trigger_function$;
-
-DROP TRIGGER IF EXISTS p3a4_ci_force_job_inactive ON cron.job;
-CREATE TRIGGER p3a4_ci_force_job_inactive
-BEFORE INSERT OR UPDATE ON cron.job
-FOR EACH ROW EXECUTE FUNCTION public.p3a4_ci_force_job_inactive();
-
-COMMIT;
+$p3a4_ci_verify_cron_launcher$;
