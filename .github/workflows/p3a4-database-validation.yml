@@ -91,12 +91,21 @@ jobs:
           mkdir -p "$P3A4_ARTIFACT_DIR" "$P3A4_LOCAL_PROJECT/supabase"
           find supabase -mindepth 1 -maxdepth 1 ! -name .temp \
             -exec cp -R '{}' "$P3A4_LOCAL_PROJECT/supabase/" \;
+          cp scripts/ci/fixtures/20251119213053_ci_disable_historical_cron_execution.sql \
+            "$P3A4_LOCAL_PROJECT/supabase/migrations/"
+          cp scripts/ci/fixtures/20260502001000_ci_historical_cron_prerequisites.sql \
+            "$P3A4_LOCAL_PROJECT/supabase/migrations/"
           test ! -e "$P3A4_LOCAL_PROJECT/supabase/.temp"
           sed -i -E 's/^project_id = .*/project_id = "p3a4-ci"/' "$P3A4_LOCAL_PROJECT/supabase/config.toml"
           grep -q '^project_id = "p3a4-ci"$' "$P3A4_LOCAL_PROJECT/supabase/config.toml"
 
       - name: Start disposable local Supabase services
         run: supabase start --workdir "$P3A4_LOCAL_PROJECT"
+
+      - name: Verify historical cron jobs remain disabled after start
+        run: >-
+          psql "$P3A4_DB_URL" -v ON_ERROR_STOP=1
+          -f scripts/ci/fixtures/p3a4_assert_historical_cron_safety.sql
 
       - name: Detect the migration immediately before P3-A4
         run: |
@@ -107,6 +116,7 @@ jobs:
       - name: Prove ambiguous backfill aborts safely
         run: |
           supabase db reset --local --version "$P3A4_PREVIOUS_MIGRATION" --no-seed --workdir "$P3A4_LOCAL_PROJECT"
+          psql "$P3A4_DB_URL" -v ON_ERROR_STOP=1 -f scripts/ci/fixtures/p3a4_assert_historical_cron_safety.sql
           psql "$P3A4_DB_URL" -v ON_ERROR_STOP=1 -f scripts/ci/p3a4-backfill-ambiguous-fixture.sql
           set +e
           supabase migration up --local --workdir "$P3A4_LOCAL_PROJECT" >"$P3A4_ARTIFACT_DIR/backfill-ambiguous.log" 2>&1
@@ -117,18 +127,27 @@ jobs:
             exit 1
           fi
           grep -q "P3-A4 aborted: ambiguous default income fallback category" "$P3A4_ARTIFACT_DIR/backfill-ambiguous.log"
+          psql "$P3A4_DB_URL" -v ON_ERROR_STOP=1 -f scripts/ci/fixtures/p3a4_assert_historical_cron_safety.sql
           echo "Expected migration failure confirmed for the ambiguous fixture."
 
       - name: Validate the successful pre-P3-A4 backfill transition
         run: |
           supabase db reset --local --version "$P3A4_PREVIOUS_MIGRATION" --no-seed --workdir "$P3A4_LOCAL_PROJECT"
+          psql "$P3A4_DB_URL" -v ON_ERROR_STOP=1 -f scripts/ci/fixtures/p3a4_assert_historical_cron_safety.sql
           psql "$P3A4_DB_URL" -v ON_ERROR_STOP=1 -f scripts/ci/p3a4-backfill-fixture.sql
           supabase migration up --local --workdir "$P3A4_LOCAL_PROJECT" 2>&1 | tee "$P3A4_ARTIFACT_DIR/backfill-migration-up.log"
           psql "$P3A4_DB_URL" -v ON_ERROR_STOP=1 -f scripts/ci/p3a4-backfill-assertions.sql \
             2>&1 | tee "$P3A4_ARTIFACT_DIR/backfill-assertions.log"
+          psql "$P3A4_DB_URL" -v ON_ERROR_STOP=1 -f scripts/ci/fixtures/p3a4_assert_historical_cron_safety.sql
 
       - name: Reproduce every migration from zero
         run: supabase db reset --local --no-seed --workdir "$P3A4_LOCAL_PROJECT" 2>&1 | tee "$P3A4_ARTIFACT_DIR/full-reset.log"
+
+      - name: Verify historical cron jobs remain disabled after full reset
+        run: |
+          psql "$P3A4_DB_URL" -v ON_ERROR_STOP=1 \
+            -f scripts/ci/fixtures/p3a4_assert_historical_cron_safety.sql \
+            2>&1 | tee "$P3A4_ARTIFACT_DIR/historical-cron-safety.log"
 
       - name: Lint the local database
         run: supabase db lint --local --level error --workdir "$P3A4_LOCAL_PROJECT" 2>&1 | tee "$P3A4_ARTIFACT_DIR/database-lint.log"
