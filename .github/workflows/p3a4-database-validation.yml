@@ -97,6 +97,8 @@ jobs:
           supabase db reset --workdir "$P3A4_LOCAL_PROJECT" --yes \
             2>&1 | tee "$P3A4_ARTIFACT_DIR/initial-full-reset.log"
           bash scripts/ci/p3a4-assert-local-cron-off.sh after-initial-reset
+          echo "cron_launcher_after_reset=off" >> \
+            "$P3A4_ARTIFACT_DIR/bootstrap-metadata.txt"
           psql "$P3A4_DB_URL" -v ON_ERROR_STOP=1 \
             -f scripts/ci/fixtures/p3a4_assert_historical_cron_safety.sql
           psql "$P3A4_DB_URL" -v ON_ERROR_STOP=1 -Atc \
@@ -170,7 +172,7 @@ jobs:
                  p.prosecdef AS security_definer,
                  p.proconfig AS function_configuration,
                  pg_get_userbyid(p.proowner) AS owner,
-                 p.proacl AS access_control_list
+                 p.proacl IS NOT NULL AS has_explicit_access_control
           FROM pg_proc p
           JOIN pg_namespace n ON n.oid = p.pronamespace
           WHERE n.nspname = 'public' AND p.proname LIKE 'p3a4_%'
@@ -245,6 +247,11 @@ jobs:
         if: always()
         run: bash scripts/ci/p3a4-collect-local-logs.sh
 
+      - name: Scan artifacts for credential material
+        id: artifact_scan
+        if: always()
+        run: bash scripts/ci/p3a4-collect-local-logs.sh --scan-only
+
       - name: Publish execution summary
         if: always()
         run: |
@@ -258,7 +265,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload validation evidence
-        if: always()
+        if: always() && steps.artifact_scan.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: p3a4-database-validation-${{ github.run_id }}

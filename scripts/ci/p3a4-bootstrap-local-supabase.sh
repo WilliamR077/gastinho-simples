@@ -16,6 +16,8 @@ target_supabase="$P3A4_LOCAL_PROJECT/supabase"
 holding_dir="$P3A4_LOCAL_PROJECT/.p3a4-replay-inputs"
 config_backup="$holding_dir/config.toml.replay"
 bootstrap_log="$P3A4_ARTIFACT_DIR/bootstrap-metadata.txt"
+raw_start_log="$RUNNER_TEMP/p3a4-supabase-start.raw.log"
+raw_inspect_error="$RUNNER_TEMP/p3a4-db-inspect.raw.err"
 moved_inputs=()
 restore_required=false
 database_container_id=""
@@ -33,6 +35,7 @@ on_exit() {
   local status=$?
   trap - EXIT
   set +e
+  rm -f -- "$raw_start_log" "$raw_inspect_error"
   if [[ "$restore_required" == true ]]; then
     restore_inputs
     if [[ $? -ne 0 ]]; then
@@ -158,33 +161,96 @@ fi
   echo "bootstrap_seed_visible=false"
 } >"$bootstrap_log"
 
-supabase start --workdir "$P3A4_LOCAL_PROJECT" \
-  2>&1 | tee "$P3A4_ARTIFACT_DIR/bootstrap-start.log"
+umask 077
+: >"$raw_start_log"
+chmod 600 "$raw_start_log"
+set +e
+supabase start --workdir "$P3A4_LOCAL_PROJECT" >"$raw_start_log" 2>&1
+start_status=$?
+set -e
+bash "$repository_root/scripts/ci/p3a4-collect-local-logs.sh" --sanitize \
+  <"$raw_start_log" >"$P3A4_ARTIFACT_DIR/bootstrap-start.log"
+rm -f -- "$raw_start_log"
+if [[ $start_status -ne 0 ]]; then
+  echo "Sanitized Supabase start diagnostics:" >&2
+  tail -n 80 "$P3A4_ARTIFACT_DIR/bootstrap-start.log" >&2
+  exit "$start_status"
+fi
+cat "$P3A4_ARTIFACT_DIR/bootstrap-start.log"
 
-mapfile -t project_containers < <(
-  docker ps --filter "label=com.supabase.cli.project=$project_id" \
-    --format '{{.ID}}|{{.Names}}|{{.Image}}'
-)
-database_containers=()
-for container_row in "${project_containers[@]}"; do
-  IFS='|' read -r candidate_id candidate_name candidate_image <<<"$container_row"
-  if [[ "$candidate_name" == "supabase_db_${project_id}" ]] \
-     && { [[ "$candidate_image" == supabase/postgres:* ]] \
-          || [[ "$candidate_image" == public.ecr.aws/supabase/postgres:* ]]; }; then
-    database_containers+=("$container_row")
-  fi
-done
-if [[ ${#database_containers[@]} -ne 1 ]]; then
-  echo "Expected exactly one labeled local Supabase database container; found ${#database_containers[@]}" >&2
+db_container_name="supabase_db_${project_id}"
+if ! inspect_json=$(docker container inspect "$db_container_name" 2>"$raw_inspect_error"); then
+  {
+    echo "database_container_inspect=failed"
+    docker ps -a --format '{{.ID}} {{.Names}} {{.Image}} {{.Status}}'
+    bash "$repository_root/scripts/ci/p3a4-collect-local-logs.sh" --sanitize \
+      <"$raw_inspect_error"
+  } >"$P3A4_ARTIFACT_DIR/bootstrap-container-discovery.txt"
+  rm -f -- "$raw_inspect_error"
+  echo "The exact local database container does not exist: $db_container_name" >&2
   exit 1
 fi
-IFS='|' read -r database_container_id database_container_name database_container_image \
-  <<<"${database_containers[0]}"
+rm -f -- "$raw_inspect_error"
+
+if ! inspect_fields=$(printf '%s' "$inspect_json" | node -e '
+  let input = "";
+  process.stdin.setEncoding("utf8");
+  process.stdin.on("data", (chunk) => { input += chunk; });
+  process.stdin.on("end", () => {
+    const objects = JSON.parse(input);
+    if (!Array.isArray(objects) || objects.length !== 1) process.exit(2);
+    const item = objects[0];
+    const label = item.Config?.Labels?.["com.supabase.cli.project"] ?? "";
+    console.log([
+      item.Id ?? "",
+      item.Name ?? "",
+      item.Config?.Image ?? "",
+      String(item.State?.Running ?? false),
+      item.State?.Health?.Status ?? "",
+      label,
+    ].join("\t"));
+  });
+'); then
+  echo "docker container inspect did not return exactly one valid object" >&2
+  exit 1
+fi
+
+IFS=$'\t' read -r \
+  database_container_id \
+  inspected_container_name \
+  database_container_image \
+  database_container_running \
+  database_container_health \
+  project_label <<<"$inspect_fields"
+
+if [[ -z "$database_container_id" ]] \
+   || [[ "$inspected_container_name" != "/$db_container_name" ]] \
+   || [[ "$database_container_image" != ghcr.io/supabase/postgres:* ]] \
+   || [[ "$database_container_running" != "true" ]] \
+   || [[ "$database_container_health" != "healthy" ]]; then
+  echo "The exact local database container failed identity or health validation" >&2
+  exit 1
+fi
+
+if [[ -z "$project_label" ]]; then
+  project_label_present=false
+  project_label_match=not_applicable
+elif [[ "$project_label" == "$project_id" ]]; then
+  project_label_present=true
+  project_label_match=true
+else
+  echo "The optional project label conflicts with the isolated local project_id" >&2
+  exit 1
+fi
 
 {
-  echo "container_id=$database_container_id"
-  echo "container_name=$database_container_name"
-  echo "container_image=$database_container_image"
+  echo "db_container_name=$db_container_name"
+  echo "db_container_id=$database_container_id"
+  echo "db_container_image=$database_container_image"
+  echo "db_container_running=$database_container_running"
+  echo "db_container_health=$database_container_health"
+  echo "project_label_present=$project_label_present"
+  echo "project_label_match=$project_label_match"
 } >>"$bootstrap_log"
 
 role_state=$(docker exec "$database_container_id" \
@@ -220,7 +286,7 @@ if [[ "$effective_value" != "off" ]]; then
   echo "cron.launch_active_jobs is not off in the new database session" >&2
   exit 1
 fi
-echo "cron.launch_active_jobs_before_reset=off" >>"$bootstrap_log"
+echo "cron_launcher_before_reset=off" >>"$bootstrap_log"
 
 setting_source=$(docker exec "$database_container_id" \
   psql --username supabase_admin --dbname postgres --no-psqlrc \

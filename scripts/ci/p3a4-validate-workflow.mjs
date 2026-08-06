@@ -26,6 +26,7 @@ const contentByPath = new Map(policyPaths.map((path, index) => [path, policyCont
 const workflow = contentByPath.get(workflowPath);
 const bootstrap = contentByPath.get(bootstrapPath);
 const cronOffAssertion = contentByPath.get(cronOffAssertionPath);
+const collectLogs = contentByPath.get("scripts/ci/p3a4-collect-local-logs.sh");
 const cronGuard = contentByPath.get(cronGuardPath);
 const cronFixture = contentByPath.get(cronFixturePath);
 const cronFinal = contentByPath.get(cronFinalPath);
@@ -64,6 +65,11 @@ const workflowRequired = [
   "npm run build",
   "last-migration-after-initial-reset.txt",
   "last-migration-after-final-reset.txt",
+  "cron_launcher_after_reset=off",
+  "Scan artifacts for credential material",
+  "id: artifact_scan",
+  "p3a4-collect-local-logs.sh --scan-only",
+  "steps.artifact_scan.outcome == 'success'",
 ];
 for (const token of workflowRequired) {
   if (!workflow.includes(token)) failures.push(`missing required workflow token: ${token}`);
@@ -132,10 +138,20 @@ const bootstrapRequired = [
   "[db.seed]",
   "sql_paths",
   'supabase start --workdir "$P3A4_LOCAL_PROJECT"',
-  "label=com.supabase.cli.project=$project_id",
-  '"supabase_db_${project_id}"',
-  "supabase/postgres:",
-  "${#database_containers[@]} -ne 1",
+  'db_container_name="supabase_db_${project_id}"',
+  'docker container inspect "$db_container_name"',
+  "objects.length !== 1",
+  "item.Name",
+  "item.Config?.Image",
+  "item.State?.Running",
+  "item.State?.Health?.Status",
+  '"com.supabase.cli.project"',
+  '"/$db_container_name"',
+  "ghcr.io/supabase/postgres:",
+  'project_label_present=false',
+  'project_label_match=not_applicable',
+  'project_label_match=true',
+  'docker exec "$database_container_id"',
   "--username supabase_admin",
   "SELECT rolname, rolsuper FROM pg_catalog.pg_roles WHERE rolname = current_user;",
   "supabase_admin|t",
@@ -152,6 +168,19 @@ const bootstrapRequired = [
   "bootstrap-container-status.txt",
   "bootstrap-metadata.txt",
   "cron_setting_source=",
+  'raw_start_log="$RUNNER_TEMP/',
+  'chmod 600 "$raw_start_log"',
+  '>"$raw_start_log" 2>&1',
+  'p3a4-collect-local-logs.sh" --sanitize',
+  'rm -f -- "$raw_start_log"',
+  "db_container_name=",
+  "db_container_id=",
+  "db_container_image=",
+  "db_container_running=",
+  "db_container_health=",
+  "project_label_present=",
+  "project_label_match=",
+  "cron_launcher_before_reset=off",
 ];
 for (const token of bootstrapRequired) {
   if (!bootstrap.includes(token)) failures.push(`missing required bootstrap token: ${token}`);
@@ -160,15 +189,31 @@ if (bootstrap.includes("eval")) failures.push("bootstrap must not use eval");
 if (/docker\s+ps[^\n]*\|\s*grep/i.test(bootstrap)) {
   failures.push("database container selection must not use broad docker ps grep");
 }
+if (/docker\s+ps[^\n]*\|\s*(?:head|tail)\b/i.test(bootstrap)) {
+  failures.push("database container selection must not depend on docker ps position");
+}
+if (/docker\s+ps[^\n]*--filter[^\n]*com\.supabase\.cli\.project/i.test(bootstrap)) {
+  failures.push("project label must not be a mandatory container-selection filter");
+}
+if (/supabase start[^\n]*(?:\n[^\n]*)?\|\s*tee/i.test(bootstrap)) {
+  failures.push("raw supabase start output must not be piped through tee");
+}
+const dockerExecCalls = bootstrap.match(/docker exec\s+"[^"]+"/g) ?? [];
+if (dockerExecCalls.length < 5
+    || dockerExecCalls.some((call) => call !== 'docker exec "$database_container_id"')) {
+  failures.push("every privileged container command must use the confirmed database container ID");
+}
 const startPosition = bootstrap.indexOf('supabase start --workdir "$P3A4_LOCAL_PROJECT"');
 const movePosition = bootstrap.indexOf('mv "$input_path" "$holding_dir/$relative_path"');
+const inspectPosition = bootstrap.indexOf('docker container inspect "$db_container_name"');
 const privilegedPosition = bootstrap.indexOf(privilegedSettingCommand);
 const reloadPosition = bootstrap.indexOf("SELECT pg_catalog.pg_reload_conf();");
 const effectivePosition = bootstrap.indexOf("SELECT pg_catalog.current_setting('cron.launch_active_jobs');");
 const restorePosition = bootstrap.lastIndexOf("restore_inputs\n");
 const fixtureCopyPosition = bootstrap.indexOf("fixtures/20251119213053_ci_disable_historical_cron_execution.sql");
 if (!(movePosition >= 0 && movePosition < startPosition
-    && startPosition < privilegedPosition
+    && startPosition < inspectPosition
+    && inspectPosition < privilegedPosition
     && privilegedPosition < reloadPosition
     && reloadPosition < effectivePosition
     && effectivePosition < restorePosition
@@ -179,6 +224,31 @@ if ((bootstrap.match(/supabase start --workdir/g) ?? []).length !== 1) {
   failures.push("bootstrap must start exactly one disposable Supabase stack");
 }
 
+const collectorRequired = [
+  "set -Eeuo pipefail",
+  '"--sanitize"',
+  '"--scan-only"',
+  "artifact_secret_scan=failed",
+  "artifact_secret_scan=passed",
+  "artifact_file=",
+  "pattern=",
+  "supabase_secret_key",
+  "supabase_publishable_key",
+  "service_role_marker",
+  "jwt",
+  "postgres_credentials",
+  "secret_key_line",
+  "access_key_line",
+  'db_container_id=',
+  'docker logs "$database_container_id"',
+  '[[ "$container_name" != supabase_db_* ]]',
+];
+for (const token of collectorRequired) {
+  if (!collectLogs.includes(token)) failures.push(`missing required artifact protection token: ${token}`);
+}
+if (/docker logs\s+"\$container_name"/i.test(collectLogs)) {
+  failures.push("docker logs must use inspected container IDs rather than names");
+}
 if (!cronOffAssertion.includes("set -Eeuo pipefail")
     || !cronOffAssertion.includes("SELECT pg_catalog.current_setting('cron.launch_active_jobs');")
     || !cronOffAssertion.includes('[[ "$effective_value" != "off" ]]')) {
@@ -193,6 +263,16 @@ const fixtureEntries = await Promise.all(fixtureNames.map(async (name) => ({
   name,
   sql: await readFile(`${fixtureDirectory}/${name}`, "utf8"),
 })));
+const unsafeRuntimeContent = [
+  workflow,
+  bootstrap,
+  cronOffAssertion,
+  ...fixtureEntries.map(({ sql }) => sql),
+].join("\n");
+if (/sb_(?:secret|publishable)_[A-Za-z0-9_-]{8,}/i.test(unsafeRuntimeContent)
+    || /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/.test(unsafeRuntimeContent)) {
+  failures.push("CI runtime files contain concrete local credential material");
+}
 const forbiddenFixturePatterns = [
   [/alter\s+system\b/i, "privileged parameter change"],
   [/create\s+(?:or\s+replace\s+)?function\s+cron\s*\./i, "CREATE FUNCTION in schema cron"],
