@@ -246,6 +246,7 @@ fi
 {
   echo "db_container_name=$db_container_name"
   echo "db_container_id=$database_container_id"
+  echo "bootstrap_container_id=$database_container_id"
   echo "db_container_image=$database_container_image"
   echo "db_container_running=$database_container_running"
   echo "db_container_health=$database_container_health"

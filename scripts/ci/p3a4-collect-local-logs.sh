@@ -11,7 +11,10 @@ sanitize() {
     -e 's/sb_secret_[A-Za-z0-9_-]+/[REDACTED_LOCAL_KEY]/g' \
     -e 's/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/[REDACTED_JWT]/g' \
     -e 's/((api[_-]?key|password|secret|token)[=:][[:space:]]*)[^[:space:]]+/\1[REDACTED]/Ig' \
-    -e 's#postgres(ql)?://[^:/[:space:]]+:[^@[:space:]]+@#postgresql://[REDACTED]@#Ig' \
+    -e 's#postgres(ql)?://[^[:space:]]+#[REDACTED_POSTGRES_URL]#Ig' \
+    -e 's#https?://[a-z0-9-]+\.supabase\.(co|net)[^[:space:]]*#[REDACTED_SUPABASE_URL]#Ig' \
+    -e "s/((project[ _-]?ref)[=:][[:space:]]*['\"]?)[a-z0-9-]+/\1[REDACTED]/Ig" \
+    -e 's/(--project-ref[=[:space:]]+)[a-z0-9-]+/\1[REDACTED]/Ig' \
     -e 's/\b[[:xdigit:]]{32,}\b/[REDACTED_HEX_KEY]/g'
 }
 
@@ -38,6 +41,10 @@ scan_artifacts() {
   scan_pattern "service_role_marker" 'service[_ -]?role' || status=1
   scan_pattern "jwt" 'eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+' || status=1
   scan_pattern "postgres_credentials" 'postgres(ql)?://[^:/[:space:]]+:[^@[:space:]]+@' || status=1
+  scan_pattern "postgres_url" 'postgres(ql)?://[^[:space:]]+' || status=1
+  scan_pattern "remote_supabase_url" 'https?://[a-z0-9-]+\.supabase\.(co|net)' || status=1
+  scan_pattern "project_ref_line" 'project[ _-]?ref[=:][[:space:]]*["'"']?[a-z0-9-]+' || status=1
+  scan_pattern "project_ref_argument" '--project-ref[=[:space:]]+[a-z0-9-]+' || status=1
   scan_pattern "secret_key_line" 'Secret[[:space:]]+Key' || status=1
   scan_pattern "access_key_line" 'Access[[:space:]]+Key' || status=1
   if [[ $status -ne 0 ]]; then

@@ -45,7 +45,8 @@ jobs:
       run:
         shell: bash
     env:
-      P3A4_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      P3A4_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres?sslmode=disable
+      PGSSLMODE: disable
 
     steps:
       - name: Check out the repository
@@ -93,12 +94,20 @@ jobs:
 
       - name: Replay all project migrations after privileged bootstrap
         run: |
-          bash scripts/ci/p3a4-assert-local-cron-off.sh before-initial-reset
-          supabase db reset --workdir "$P3A4_LOCAL_PROJECT" --yes \
-            2>&1 | tee "$P3A4_ARTIFACT_DIR/initial-full-reset.log"
-          bash scripts/ci/p3a4-assert-local-cron-off.sh after-initial-reset
-          echo "cron_launcher_after_reset=off" >> \
-            "$P3A4_ARTIFACT_DIR/bootstrap-metadata.txt"
+          bootstrap_container_id=$(sed -n 's/^bootstrap_container_id=//p' \
+            "$P3A4_ARTIFACT_DIR/bootstrap-metadata.txt")
+          if [[ ! "$bootstrap_container_id" =~ ^[[:xdigit:]]{64}$ ]]; then
+            echo "Bootstrap database container ID is invalid" >&2
+            exit 1
+          fi
+          echo "P3A4_DB_CONTAINER_ID=$bootstrap_container_id" >> "$GITHUB_ENV"
+          echo "bootstrap_container_id=$bootstrap_container_id" >> \
+            "$P3A4_ARTIFACT_DIR/database-operations-metadata.txt"
+          P3A4_DB_CONTAINER_ID=$bootstrap_container_id \
+            bash scripts/ci/p3a4-reset-local-database-in-place.sh \
+              --scenario initial_reset \
+              --log-name initial-full-reset.log \
+              --expected-version 20260805130000
           psql "$P3A4_DB_URL" -v ON_ERROR_STOP=1 \
             -f scripts/ci/fixtures/p3a4_assert_historical_cron_safety.sql
           psql "$P3A4_DB_URL" -v ON_ERROR_STOP=1 -Atc \
@@ -111,16 +120,34 @@ jobs:
           echo "P3A4_PREVIOUS_MIGRATION=$previous_migration" >> "$GITHUB_ENV"
           echo "Detected previous migration: $previous_migration"
 
+      - name: Prove the pre-P3-A4 version target in place
+        run: |
+          bash scripts/ci/p3a4-reset-local-database-in-place.sh \
+            --scenario pre_p3a4_reset \
+            --log-name pre-p3a4-reset.log \
+            --expected-version "$P3A4_PREVIOUS_MIGRATION" \
+            --version "$P3A4_PREVIOUS_MIGRATION" \
+            --no-seed
+          psql "$P3A4_DB_URL" -v ON_ERROR_STOP=1 \
+            -f scripts/ci/fixtures/p3a4_assert_historical_cron_safety.sql
+
       - name: Prove ambiguous backfill aborts safely
         run: |
-          bash scripts/ci/p3a4-assert-local-cron-off.sh before-negative-reset
-          supabase db reset --local --version "$P3A4_PREVIOUS_MIGRATION" --no-seed --workdir "$P3A4_LOCAL_PROJECT"
-          bash scripts/ci/p3a4-assert-local-cron-off.sh after-negative-reset
+          bash scripts/ci/p3a4-reset-local-database-in-place.sh \
+            --scenario negative_backfill_reset \
+            --log-name negative-backfill-reset.log \
+            --expected-version "$P3A4_PREVIOUS_MIGRATION" \
+            --version "$P3A4_PREVIOUS_MIGRATION" \
+            --no-seed
           psql "$P3A4_DB_URL" -v ON_ERROR_STOP=1 -f scripts/ci/fixtures/p3a4_assert_historical_cron_safety.sql
           psql "$P3A4_DB_URL" -v ON_ERROR_STOP=1 -f scripts/ci/p3a4-backfill-ambiguous-fixture.sql
           bash scripts/ci/p3a4-assert-local-cron-off.sh before-negative-migration-up
           set +e
-          supabase migration up --local --workdir "$P3A4_LOCAL_PROJECT" >"$P3A4_ARTIFACT_DIR/backfill-ambiguous.log" 2>&1
+          bash scripts/ci/p3a4-migrate-local-database-in-place.sh \
+            --scenario negative_migration_up \
+            --log-name backfill-ambiguous.log \
+            --expected-version "$P3A4_PREVIOUS_MIGRATION" \
+            --history-through-version
           migration_status=$?
           set -e
           bash scripts/ci/p3a4-assert-local-cron-off.sh after-negative-migration-up
@@ -134,13 +161,19 @@ jobs:
 
       - name: Validate the successful pre-P3-A4 backfill transition
         run: |
-          bash scripts/ci/p3a4-assert-local-cron-off.sh before-positive-reset
-          supabase db reset --local --version "$P3A4_PREVIOUS_MIGRATION" --no-seed --workdir "$P3A4_LOCAL_PROJECT"
-          bash scripts/ci/p3a4-assert-local-cron-off.sh after-positive-reset
+          bash scripts/ci/p3a4-reset-local-database-in-place.sh \
+            --scenario positive_reset \
+            --log-name positive-backfill-reset.log \
+            --expected-version "$P3A4_PREVIOUS_MIGRATION" \
+            --version "$P3A4_PREVIOUS_MIGRATION" \
+            --no-seed
           psql "$P3A4_DB_URL" -v ON_ERROR_STOP=1 -f scripts/ci/fixtures/p3a4_assert_historical_cron_safety.sql
           psql "$P3A4_DB_URL" -v ON_ERROR_STOP=1 -f scripts/ci/p3a4-backfill-fixture.sql
           bash scripts/ci/p3a4-assert-local-cron-off.sh before-positive-migration-up
-          supabase migration up --local --workdir "$P3A4_LOCAL_PROJECT" 2>&1 | tee "$P3A4_ARTIFACT_DIR/backfill-migration-up.log"
+          bash scripts/ci/p3a4-migrate-local-database-in-place.sh \
+            --scenario positive_migration_up \
+            --log-name backfill-migration-up.log \
+            --expected-version 20260805130000
           bash scripts/ci/p3a4-assert-local-cron-off.sh after-positive-migration-up
           psql "$P3A4_DB_URL" -v ON_ERROR_STOP=1 -f scripts/ci/p3a4-backfill-assertions.sql \
             2>&1 | tee "$P3A4_ARTIFACT_DIR/backfill-assertions.log"
@@ -148,10 +181,15 @@ jobs:
 
       - name: Reproduce every migration from zero
         run: |
-          bash scripts/ci/p3a4-assert-local-cron-off.sh before-final-reset
-          supabase db reset --local --no-seed --workdir "$P3A4_LOCAL_PROJECT" \
-            2>&1 | tee "$P3A4_ARTIFACT_DIR/full-reset.log"
-          bash scripts/ci/p3a4-assert-local-cron-off.sh after-final-reset
+          bash scripts/ci/p3a4-reset-local-database-in-place.sh \
+            --scenario final_reset \
+            --log-name final-full-reset.log \
+            --expected-version 20260805130000 \
+            --no-seed
+          printf '%s\n' \
+            "cron_launcher_before_each_operation=off" \
+            "cron_launcher_after_each_operation=off" \
+            >> "$P3A4_ARTIFACT_DIR/database-operations-metadata.txt"
 
       - name: Verify historical cron jobs remain disabled after full reset
         run: |
@@ -272,16 +310,3 @@ jobs:
           path: ${{ env.P3A4_ARTIFACT_DIR }}
           if-no-files-found: warn
           retention-days: 14
-
-      - name: Stop and remove local Supabase services
-        if: always()
-        run: |
-          set +e
-          supabase stop --no-backup --workdir "$P3A4_LOCAL_PROJECT"
-          stop_status=$?
-          set -e
-          case "$P3A4_LOCAL_PROJECT" in
-            "$RUNNER_TEMP"/*) rm -rf -- "$P3A4_LOCAL_PROJECT" ;;
-            *) echo "Refusing to remove unexpected temporary path" >&2; exit 1 ;;
-          esac
-          exit "$stop_status"
